@@ -157,6 +157,7 @@ examples/
 5. **Error Handling**: Always validate input, handle malformed ISO files gracefully
 6. **Memory Safety**: Use smart pointers, avoid raw memory manipulation where possible
 7. **Logging**: Add detailed logging for debugging (use levels: DEBUG, INFO, WARN, ERROR)
+8. **Maintainability**: Refactor large files into focused helpers or smaller modules to keep functions readable and testable
 
 ## Resources for Agents
 

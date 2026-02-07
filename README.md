@@ -98,7 +98,7 @@ For agent collaboration, see [agents.md](agents.md).
 ## Roadmap
 
 - [x] Initial project structure
-- [ ] ISO/BIN parser implementation
+- [x] ISO/BIN parser implementation
 - [ ] PSX-EXE loader
 - [ ] Basic MIPS R3000 disassembler
 - [ ] IR design and implementation
