@@ -48,8 +48,7 @@ set(DISASM_SOURCES
 )
 
 set(IR_SOURCES
-    # src/ir/ir_generator.cpp
-    # src/ir/basic_block.cpp
+    src/ir/ir.cpp
 )
 
 set(RECOMPILER_SOURCES
@@ -113,6 +112,13 @@ if(BUILD_TESTS)
     )
     target_include_directories(disasm_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME disasm_test COMMAND disasm_test)
+
+    add_executable(ir_test
+        tests/unit/ir_test.cpp
+        ${IR_SOURCES}
+    )
+    target_include_directories(ir_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME ir_test COMMAND ir_test)
 endif()
 
 # Examples
