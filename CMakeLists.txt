@@ -28,8 +28,7 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # Source files will be organized by component
 set(ISO_SOURCES
-    # src/iso/iso_parser.cpp
-    # Will be added as implementation progresses
+    src/iso/iso_parser.cpp
 )
 
 set(DISASM_SOURCES
@@ -68,7 +67,12 @@ set(RUNTIME_SOURCES
 # Testing
 if(BUILD_TESTS)
     enable_testing()
-    # add_subdirectory(tests)
+    add_executable(iso_parser_test
+        tests/unit/iso_parser_test.cpp
+        ${ISO_SOURCES}
+    )
+    target_include_directories(iso_parser_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME iso_parser_test COMMAND iso_parser_test)
 endif()
 
 # Examples
