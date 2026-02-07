@@ -118,6 +118,10 @@ Note: `li` (load immediate) is a pseudo-instruction that expands to `lui` + `ori
 |------------|--------|-----------|---------|
 | MFC0       | - | rt = COP0[rd] | `mfc0 $t0, $12` |
 | MTC0       | - | COP0[rd] = rt | `mtc0 $t0, $12` |
+| TLBP       | - | Probe TLB | `tlbp` |
+| TLBR       | - | Read indexed TLB entry | `tlbr` |
+| TLBWI      | - | Write indexed TLB entry | `tlbwi` |
+| TLBWR      | - | Write random TLB entry | `tlbwr` |
 | RFE        | - | Return from exception | `rfe` |
 
 ## Encoding Formats
@@ -144,3 +148,24 @@ Note: `li` (load immediate) is a pseudo-instruction that expands to `lui` + `ori
 3. **Unaligned Access**: Use LWL/LWR and SWL/SWR pairs for unaligned word access
 4. **Overflow**: Only ADD, ADDI, SUB trap on overflow; U versions don't
 5. **Multiply/Divide**: Results go to HI/LO registers, retrieved with MFHI/MFLO
+
+## Disassembler Coverage
+
+The current disassembler implementation focuses on the core R3000 integer instruction set plus
+COP0 register moves and TLB/system ops (MFC0/MTC0/CFC0/CTC0, TLBP/TLBR/TLBWI/TLBWR, RFE) plus full COP2/GTE
+command decoding (MFC2/MTC2/CFC2/CTC2,
+GTE command mnemonics, and LWC2/SWC2). Common pseudo-instructions (`nop`, `move`, `li`) are emitted
+where appropriate. Unknown or unsupported encodings are surfaced as `UNKNOWN` instructions so
+downstream analysis can
+differentiate unimplemented opcodes from valid decodes.
+
+## Planned Instruction Coverage
+
+The remaining MIPS R3000 coverage will be implemented in phases to keep the decoder maintainable:
+
+1. **System/exception instructions**: TLB/cache ops (if needed for PSX), additional COP0 moves, and
+   verified exception variants with proper formatting.
+2. **Expand COP2/GTE formatting**: add operand detail/flag decoding for GTE commands and align output
+   with canonical register naming.
+3. **Validation suite growth**: expand opcode tables and add fixtures for unaligned access pairs,
+   corner-case branch targets, and known PSX BIOS instruction sequences.

@@ -95,8 +95,37 @@ enum class Opcode
     MTC0,
     CFC0,
     CTC0,
+    TLBR,
+    TLBWI,
+    TLBWR,
+    TLBP,
     RFE,
-    COP2, // GTE instructions
+    MFC2,
+    MTC2,
+    CFC2,
+    CTC2,
+    GTE_RTPS,
+    GTE_RTPT,
+    GTE_NCLIP,
+    GTE_OP,
+    GTE_DPCS,
+    GTE_INTPL,
+    GTE_MVMVA,
+    GTE_NCDS,
+    GTE_CDP,
+    GTE_NCDT,
+    GTE_NCCS,
+    GTE_CC,
+    GTE_NCS,
+    GTE_NCT,
+    GTE_SQR,
+    GTE_DCPL,
+    GTE_DPCT,
+    GTE_AVSZ3,
+    GTE_AVSZ4,
+    GTE_GPF,
+    GTE_GPL,
+    GTE_NCCT,
     LWC2,
     SWC2,
 
@@ -123,6 +152,7 @@ struct Instruction
 
     // Branch delay slot flag
     bool isInDelaySlot;
+    std::optional<Address> delaySlotOwner;
 
     /**
      * @brief Convert instruction to assembly string
@@ -179,12 +209,16 @@ class MipsDisassembler
      */
     static std::vector<Instruction> disassemble(const u8* data, size_t size, Address baseAddress);
 
+    /**
+     * @brief Get register name for the given index.
+     */
+    static std::string getRegisterName(Register reg);
+
   private:
     static Instruction decodeRType(u32 encoding, Address address);
     static Instruction decodeIType(u32 encoding, Address address);
     static Instruction decodeJType(u32 encoding, Address address);
     static Instruction decodeCoprocessor(u32 encoding, Address address);
-    static std::string getRegisterName(Register reg);
 };
 
 } // namespace disasm

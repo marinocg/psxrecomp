@@ -39,7 +39,10 @@ Offset  Size  Description
 **Input**: MIPS R3000 binary code  
 **Output**: Decoded instruction stream
 
-The disassembler converts raw MIPS machine code into structured instruction objects.
+The disassembler converts raw MIPS machine code into structured instruction objects. The current
+implementation decodes core R3000 integer instructions, branch/jump targets, COP0 register moves,
+and full COP2/GTE command mnemonics, while flagging delay slots (including the owning instruction)
+for downstream analysis.
 
 Challenges:
 - Identifying code vs. data

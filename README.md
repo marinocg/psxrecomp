@@ -11,7 +11,7 @@ PSXRecomp aims to bring classic PlayStation games to modern platforms through st
 ## Features
 
 - 🎮 **PSX ISO Parsing**: Extract and parse PlayStation ISO/BIN files
-- 🔄 **MIPS R3000 Disassembly**: Disassemble PSX executable code
+- 🔄 **MIPS R3000 Disassembly**: Disassemble PSX executable code into structured instructions
 - ⚡ **Static Recompilation**: Convert MIPS assembly to optimized C++ code
 - 🎯 **Cross-platform**: Generated code can run on Windows, Linux, macOS
 - 🔧 **Modular Architecture**: Clean separation of concerns for easy extension
@@ -102,7 +102,7 @@ For agent collaboration, see [agents.md](agents.md).
 - [x] Initial project structure
 - [x] ISO/BIN parser implementation
 - [x] PSX-EXE loader
-- [ ] Basic MIPS R3000 disassembler
+- [x] Basic MIPS R3000 disassembler
 - [ ] IR design and implementation
 - [ ] Simple function recompiler
 - [ ] Runtime library basics
