@@ -67,6 +67,7 @@ bool decodeWithTable(const std::array<OpcodeMapEntry, N>& table, u32 encoding, O
     return false;
 }
 
+// clang-format off
 constexpr std::array<OpcodeMapEntry, 28> kRTypeTable = {{
     {0x20, Opcode::ADD},  {0x21, Opcode::ADDU},  {0x22, Opcode::SUB},     {0x23, Opcode::SUBU},
     {0x24, Opcode::AND},  {0x25, Opcode::OR},    {0x26, Opcode::XOR},     {0x27, Opcode::NOR},
@@ -76,7 +77,9 @@ constexpr std::array<OpcodeMapEntry, 28> kRTypeTable = {{
     {0x10, Opcode::MFHI}, {0x11, Opcode::MTHI},  {0x12, Opcode::MFLO},    {0x13, Opcode::MTLO},
     {0x08, Opcode::JR},   {0x09, Opcode::JALR},  {0x0C, Opcode::SYSCALL}, {0x0D, Opcode::BREAK},
 }};
+// clang-format on
 
+// clang-format off
 constexpr std::array<OpcodeMapEntry, 24> kITypeTable = {{
     {0x08, Opcode::ADDI}, {0x09, Opcode::ADDIU}, {0x0C, Opcode::ANDI},  {0x0D, Opcode::ORI},
     {0x0E, Opcode::XORI}, {0x0A, Opcode::SLTI},  {0x0B, Opcode::SLTIU}, {0x0F, Opcode::LUI},
@@ -85,6 +88,7 @@ constexpr std::array<OpcodeMapEntry, 24> kITypeTable = {{
     {0x29, Opcode::SH},   {0x2B, Opcode::SW},    {0x2A, Opcode::SWL},   {0x2E, Opcode::SWR},
     {0x04, Opcode::BEQ},  {0x05, Opcode::BNE},   {0x06, Opcode::BLEZ},  {0x07, Opcode::BGTZ},
 }};
+// clang-format on
 
 constexpr std::array<OpcodeMapEntry, 4> kRegimmTable = {{
     {0x00, Opcode::BLTZ},
@@ -93,6 +97,7 @@ constexpr std::array<OpcodeMapEntry, 4> kRegimmTable = {{
     {0x11, Opcode::BGEZAL},
 }};
 
+// clang-format off
 constexpr std::array<OpcodeMapEntry, 22> kCop2CommandTable = {{
     {0x00, Opcode::GTE_RTPS},  {0x01, Opcode::GTE_RTPT}, {0x06, Opcode::GTE_NCLIP},
     {0x0C, Opcode::GTE_OP},    {0x10, Opcode::GTE_DPCS}, {0x11, Opcode::GTE_INTPL},
@@ -103,6 +108,7 @@ constexpr std::array<OpcodeMapEntry, 22> kCop2CommandTable = {{
     {0x2E, Opcode::GTE_AVSZ4}, {0x3D, Opcode::GTE_GPF},  {0x3E, Opcode::GTE_GPL},
     {0x3F, Opcode::GTE_NCCT},
 }};
+// clang-format on
 } // namespace
 
 Instruction MipsDisassembler::decode(u32 encoding, Address address)
