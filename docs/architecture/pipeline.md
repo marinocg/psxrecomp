@@ -1,0 +1,184 @@
+# PSXRecomp Architecture
+
+## Overview
+
+PSXRecomp uses a multi-stage pipeline to convert PlayStation 1 games into native C++ code.
+
+## Pipeline Stages
+
+### 1. ISO Parsing
+**Input**: PSX ISO/BIN file  
+**Output**: Extracted PSX-EXE executable
+
+The ISO parser reads PlayStation CD-ROM images using the ISO 9660 filesystem format. It handles PSX-specific extensions like Mode 2 sectors and XA data.
+
+Key responsibilities:
+- Parse ISO 9660 directory structure
+- Locate SYSTEM.CNF configuration file
+- Extract PSX-EXE executable file
+- Handle multi-track and multi-session discs
+
+### 2. Executable Loading
+**Input**: PSX-EXE file  
+**Output**: Memory image with code sections
+
+The executable loader parses the PSX-EXE format and loads code into the simulated PSX memory space.
+
+PSX-EXE format:
+```
+Offset  Size  Description
+0x00    8     "PS-X EXE" header
+0x08    4     Initial PC
+0x0C    4     Initial GP
+0x10    4     Load address
+0x14    4     File size
+...
+```
+
+### 3. Disassembly
+**Input**: MIPS R3000 binary code  
+**Output**: Decoded instruction stream
+
+The disassembler converts raw MIPS machine code into structured instruction objects.
+
+Challenges:
+- Identifying code vs. data
+- Handling branch delay slots
+- Resolving indirect jumps
+- Detecting function boundaries
+
+### 4. Control Flow Analysis
+**Input**: Instruction stream  
+**Output**: Control flow graph (CFG)
+
+Builds a graph of basic blocks connected by control flow edges.
+
+Basic block properties:
+- Single entry point
+- Single exit point
+- No internal branches
+- Linear instruction sequence
+
+### 5. IR Generation
+**Input**: Control flow graph  
+**Output**: Intermediate representation
+
+Converts MIPS instructions to a platform-independent IR.
+
+IR features:
+- SSA form (Single Static Assignment)
+- Explicit register dataflow
+- Memory operations as load/store
+- Hardware calls as intrinsics
+
+### 6. Optimization
+**Input**: IR  
+**Output**: Optimized IR
+
+Optional optimization passes:
+- Constant propagation
+- Dead code elimination
+- Common subexpression elimination
+- Loop invariant code motion
+- Register allocation hints
+
+### 7. Code Generation
+**Input**: Optimized IR  
+**Output**: C++ source code
+
+Generates readable C++ that preserves game behavior.
+
+Output structure:
+```cpp
+// Generated from GAME.EXE
+
+#include "psxrecomp/runtime.h"
+
+namespace game {
+
+// Memory regions
+extern u8 g_ram[2*1024*1024];
+
+// Recompiled functions
+void func_80010000();
+void func_80010100();
+
+// Main entry point
+void main() {
+    // Initialize PSX system
+    psxrecomp::runtime::PsxSystem system;
+    system.initialize();
+    
+    // Run game code
+    func_80010000();
+}
+
+} // namespace game
+```
+
+### 8. Compilation
+**Input**: Generated C++ files  
+**Output**: Native executable
+
+The generated C++ is compiled using standard compilers (GCC, Clang, MSVC) with the runtime library.
+
+## Memory Model
+
+PSXRecomp maintains the PSX memory layout:
+
+```
+0x00000000 - 0x001FFFFF: Main RAM (2MB)
+0x1F800000 - 0x1F8003FF: Scratchpad (1KB)
+0x1F801000 - 0x1F801FFF: I/O Ports
+0x1FC00000 - 0x1FC7FFFF: BIOS ROM (512KB)
+```
+
+Memory accesses in recompiled code are translated to:
+```cpp
+// Original PSX: lw $t0, 0($a0)
+u32 value = system.read<u32>(a0);
+
+// Original PSX: sw $t1, 4($a0)
+system.write<u32>(a0 + 4, t1);
+```
+
+## Hardware Emulation
+
+Recompiled code calls into the runtime library for hardware access:
+
+- **GPU**: Graphics commands translated to OpenGL/Vulkan
+- **SPU**: Audio synthesis using modern APIs
+- **CD-ROM**: Disc I/O abstracted
+- **Controllers**: Input mapping to modern controllers
+- **Memory Cards**: Save data management
+
+## Challenges
+
+### Self-Modifying Code
+PSX games sometimes modify code at runtime. Detection strategies:
+1. Write protection on code pages
+2. Trap and recompile modified code
+3. Fall back to interpretation for dynamic regions
+
+### Timing Accuracy
+PSX has precise CPU/GPU timing. Strategies:
+1. Cycle-accurate mode (slower but accurate)
+2. Frame-based synchronization (faster)
+3. Configurable accuracy levels
+
+### Hardware Quirks
+PSX hardware has many quirks that games depend on:
+- GPU rasterization bugs
+- DMA timing
+- CPU pipeline stalls
+- Interrupt handling
+
+These must be preserved in the runtime library.
+
+## Future Enhancements
+
+- JIT compilation for dynamic code regions
+- Profile-guided optimization
+- Multi-threaded recompilation
+- Advanced GPU features (resolution scaling, texture filtering)
+- Shader-based rendering for effects

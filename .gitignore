@@ -1,0 +1,98 @@
+# Build directories
+build/
+out/
+bin/
+lib/
+cmake-build-*/
+
+# Compiled Object files
+*.o
+*.obj
+*.ko
+*.elf
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+*.la
+*.lo
+
+# Executables
+*.exe
+*.out
+*.app
+psxrecomp
+psxrecomp.exe
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# IDE specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test outputs
+Testing/
+test_output/
+*.test
+
+# Coverage reports
+*.gcov
+*.gcda
+*.gcno
+coverage/
+*.profdata
+*.profraw
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+core
+
+# Package files
+*.zip
+*.tar.gz
+*.7z
+
+# PSX specific
+*.bin
+*.iso
+*.cue
+*.img
+test_roms/commercial/
+
+# Generated code
+generated/
+
+# Documentation builds
+docs/_build/
+docs/html/
+docs/latex/
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Misc
+.cache/
