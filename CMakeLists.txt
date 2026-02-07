@@ -1,0 +1,89 @@
+cmake_minimum_required(VERSION 3.15)
+project(psxrecomp VERSION 0.1.0 LANGUAGES CXX)
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Export compile commands for IDEs
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Build options
+option(BUILD_TESTS "Build unit tests" ON)
+option(BUILD_EXAMPLES "Build examples" ON)
+option(ENABLE_WARNINGS "Enable compiler warnings" ON)
+
+# Compiler warnings
+if(ENABLE_WARNINGS)
+    if(MSVC)
+        add_compile_options(/W4 /WX-)
+    else()
+        add_compile_options(-Wall -Wextra -Wpedantic)
+    endif()
+endif()
+
+# Include directories
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
+# Source files will be organized by component
+set(ISO_SOURCES
+    # src/iso/iso_parser.cpp
+    # Will be added as implementation progresses
+)
+
+set(DISASM_SOURCES
+    # src/disasm/mips_decoder.cpp
+    # src/disasm/instruction.cpp
+)
+
+set(IR_SOURCES
+    # src/ir/ir_generator.cpp
+    # src/ir/basic_block.cpp
+)
+
+set(RECOMPILER_SOURCES
+    # src/recompiler/codegen.cpp
+    # src/recompiler/optimizer.cpp
+)
+
+set(RUNTIME_SOURCES
+    # src/runtime/psx_system.cpp
+    # src/runtime/gpu.cpp
+    # src/runtime/spu.cpp
+)
+
+# Main executable (commented out until we have source files)
+# add_executable(psxrecomp
+#     src/main.cpp
+#     ${ISO_SOURCES}
+#     ${DISASM_SOURCES}
+#     ${IR_SOURCES}
+#     ${RECOMPILER_SOURCES}
+#     ${RUNTIME_SOURCES}
+# )
+
+# target_include_directories(psxrecomp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+# Testing
+if(BUILD_TESTS)
+    enable_testing()
+    # add_subdirectory(tests)
+endif()
+
+# Examples
+if(BUILD_EXAMPLES)
+    # add_subdirectory(examples)
+endif()
+
+# Installation rules
+# install(TARGETS psxrecomp DESTINATION bin)
+# install(DIRECTORY include/ DESTINATION include)
+
+# Print configuration summary
+message(STATUS "PSXRecomp Configuration:")
+message(STATUS "  Version: ${PROJECT_VERSION}")
+message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "  Build Tests: ${BUILD_TESTS}")
+message(STATUS "  Build Examples: ${BUILD_EXAMPLES}")
+message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID}")
