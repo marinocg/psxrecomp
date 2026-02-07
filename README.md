@@ -103,7 +103,7 @@ For agent collaboration, see [agents.md](agents.md).
 - [x] ISO/BIN parser implementation
 - [x] PSX-EXE loader
 - [x] Basic MIPS R3000 disassembler
-- [ ] IR design and implementation
+- [x] IR design and implementation
 - [ ] Simple function recompiler
 - [ ] Runtime library basics
 - [ ] First recompiled demo
@@ -116,6 +116,7 @@ For agent collaboration, see [agents.md](agents.md).
 - [PSX Specifications](http://problemkaputt.de/psx-spx.htm)
 - [MIPS R3000 Reference](https://www.linux-mips.org/wiki/R3000)
 - [PSX ISO Format](http://wiki.osdev.org/ISO_9660)
+- [IR Implementation Roadmap](docs/architecture/ir_roadmap.md)
 
 ## License
 
