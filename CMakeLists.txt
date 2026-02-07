@@ -43,8 +43,8 @@ set(ISO_SOURCES
 )
 
 set(DISASM_SOURCES
-    # src/disasm/mips_decoder.cpp
-    # src/disasm/instruction.cpp
+    src/disasm/mips_disassembler.cpp
+    src/disasm/instruction.cpp
 )
 
 set(IR_SOURCES
@@ -106,6 +106,13 @@ if(BUILD_TESTS)
     )
     target_include_directories(psx_exe_loader_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME psx_exe_loader_test COMMAND psx_exe_loader_test)
+
+    add_executable(disasm_test
+        tests/unit/disasm_test.cpp
+        ${DISASM_SOURCES}
+    )
+    target_include_directories(disasm_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME disasm_test COMMAND disasm_test)
 endif()
 
 # Examples

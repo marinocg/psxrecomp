@@ -96,11 +96,12 @@ Follow the coding standards in [agents.md](../agents.md):
 cd build
 cmake --build .
 
-# Run tests (when available)
+# Run tests
 ctest --output-on-failure
 
 # Or run specific tests
 ./tests/unit/iso_parser_test
+./tests/unit/disasm_test
 ```
 
 ### 4. Format Your Code
@@ -249,7 +250,7 @@ Start with:
 ### Adding a MIPS Instruction
 
 1. Add opcode to `include/psxrecomp/disasm/instruction.h`
-2. Implement decoder in `src/disasm/mips_decoder.cpp`
+2. Implement decoder in `src/disasm/mips_disassembler.cpp`
 3. Add IR generation
 4. Add C++ code generation
 5. Write test
@@ -264,22 +265,9 @@ Start with:
 
 ### Writing Tests
 
-```cpp
-// tests/unit/example_test.cpp
-#include <gtest/gtest.h>
-#include "psxrecomp/component.h"
-
-TEST(ComponentTest, BasicFunctionality) {
-    // Arrange
-    Component comp;
-    
-    // Act
-    bool result = comp.doSomething();
-    
-    // Assert
-    EXPECT_TRUE(result);
-}
-```
+PSXRecomp unit tests are currently simple C++ executables that use `assert()` for validation.
+Keep tests focused, cover edge cases (branch targets, delay slots, unknown opcodes), and add new
+test executables to `CMakeLists.txt` as needed.
 
 ## Useful Resources
 
