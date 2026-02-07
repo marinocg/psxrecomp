@@ -5,6 +5,7 @@ This roadmap outlines the steps needed to implement the PSX SPU emulation layer 
 ## Current Status
 - [ ] SPU register map and voice/channel model definitions.
 - [ ] Audio backend integration.
+- [ ] SPU architecture proposal documented.
 
 ## Phase 1: Core SPU Model
 - [ ] Define SPU registers, voices, and ADSR envelopes.

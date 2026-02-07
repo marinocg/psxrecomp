@@ -5,6 +5,7 @@ This roadmap tracks the steps needed to implement a PSX GPU emulation layer for 
 ## Current Status
 - [ ] GPU register map definitions and command list decoding.
 - [ ] Rendering backend integration.
+- [ ] GPU architecture proposal documented.
 
 ## Phase 1: Command & Register Coverage
 - [ ] Define GPU register set and status flags.

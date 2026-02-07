@@ -138,6 +138,7 @@ For agent collaboration, see [agents.md](agents.md).
 - [First Recompiled Demo Roadmap](docs/architecture/demo_roadmap.md)
 - [GPU Emulation Roadmap](docs/architecture/gpu_emulation_roadmap.md)
 - [SPU Emulation Roadmap](docs/architecture/spu_emulation_roadmap.md)
+- [GPU/SPU Architecture Proposal](docs/architecture/gpu_spu_architecture.md)
 - [Full Game Support Roadmap](docs/architecture/full_game_support_roadmap.md)
 
 ## License
