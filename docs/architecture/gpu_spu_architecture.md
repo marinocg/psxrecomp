@@ -44,8 +44,8 @@ The GPU is modeled as a deterministic, command-driven device. It consumes GP0/GP
 flowchart LR
     A[GP0/GP1 Writes] --> B[Command Decoder]
     B --> C[GPU State + VRAM]
-    C --> D[Software Renderer (Reference)]
-    C --> E[Hardware Renderer (Optional)]
+    C --> D["Software Renderer (Reference)"]
+    C --> E["Hardware Renderer (Optional)"]
     D --> F[Frame Output]
     E --> F
     D --> G[Image Comparison / Capture]
@@ -136,7 +136,7 @@ flowchart LR
     C --> D[Voice + ADSR Engine]
     D --> E[Reverb + Mix]
     E --> F[Audio Buffer]
-    F --> G[Audio Backend (SDL/CoreAudio/Wasapi)]
+    F --> G["Audio Backend (SDL/CoreAudio/Wasapi)"]
     E --> H[Capture/Comparison]
 ```
 
