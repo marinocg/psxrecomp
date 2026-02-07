@@ -21,6 +21,7 @@ This roadmap tracks the steps needed to implement a PSX GPU emulation layer for 
 - [ ] Define a renderer interface for pluggable backends (software + hardware).
 - [ ] Add an optional GPU-accelerated backend (OpenGL/Vulkan/Metal).
 - [ ] Implement a semi-accurate hardware backend that targets speed while staying close to reference output.
+- [ ] Support runtime switching between software and hardware backends (state sync + frame boundary swap).
 
 ## Phase 4: Timing & Effects
 - [ ] Model GPU timing and command FIFO behavior.
