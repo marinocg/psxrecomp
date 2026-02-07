@@ -7,28 +7,28 @@
 #include <string>
 #include <vector>
 
-namespace {
+namespace
+{
 
 constexpr uint32_t kSectorSize = 2048;
 
-void writeLe16(std::vector<uint8_t>& buffer, size_t offset, uint16_t value) {
+void writeLe16(std::vector<uint8_t>& buffer, size_t offset, uint16_t value)
+{
     buffer[offset] = static_cast<uint8_t>(value & 0xFF);
     buffer[offset + 1] = static_cast<uint8_t>((value >> 8) & 0xFF);
 }
 
-void writeLe32(std::vector<uint8_t>& buffer, size_t offset, uint32_t value) {
+void writeLe32(std::vector<uint8_t>& buffer, size_t offset, uint32_t value)
+{
     buffer[offset] = static_cast<uint8_t>(value & 0xFF);
     buffer[offset + 1] = static_cast<uint8_t>((value >> 8) & 0xFF);
     buffer[offset + 2] = static_cast<uint8_t>((value >> 16) & 0xFF);
     buffer[offset + 3] = static_cast<uint8_t>((value >> 24) & 0xFF);
 }
 
-size_t writeDirectoryRecord(std::vector<uint8_t>& buffer,
-                            size_t offset,
-                            const std::string& name,
-                            uint32_t extent,
-                            uint32_t size,
-                            uint8_t flags) {
+size_t writeDirectoryRecord(std::vector<uint8_t>& buffer, size_t offset, const std::string& name,
+                            uint32_t extent, uint32_t size, uint8_t flags)
+{
     uint8_t nameLength = static_cast<uint8_t>(name.size());
     uint8_t recordLength = static_cast<uint8_t>(33 + nameLength + (nameLength % 2 == 0 ? 1 : 0));
     buffer[offset] = recordLength;
@@ -44,7 +44,8 @@ size_t writeDirectoryRecord(std::vector<uint8_t>& buffer,
     return recordLength;
 }
 
-std::filesystem::path createTestIso() {
+std::filesystem::path createTestIso()
+{
     const uint32_t totalSectors = 24;
     std::vector<uint8_t> image(totalSectors * kSectorSize, 0);
 
@@ -85,8 +86,10 @@ std::filesystem::path createTestIso() {
     // Root directory entries.
     size_t rootDirOffset = rootDirSector * kSectorSize;
     size_t cursor = rootDirOffset;
-    cursor += writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector, rootDirSize, 0x02);
-    cursor += writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector, rootDirSize, 0x02);
+    cursor +=
+        writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector, rootDirSize, 0x02);
+    cursor +=
+        writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector, rootDirSize, 0x02);
     cursor += writeDirectoryRecord(image, cursor, "SYSTEM.CNF;1", systemCnfSector, 40, 0x00);
     cursor += writeDirectoryRecord(image, cursor, "GAME.EXE;1", exeSector, 16, 0x00);
     (void)cursor;
@@ -101,14 +104,16 @@ std::filesystem::path createTestIso() {
 
     auto path = std::filesystem::temp_directory_path() / "psxrecomp_test.iso";
     std::ofstream out(path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(image.data()), static_cast<std::streamsize>(image.size()));
+    out.write(reinterpret_cast<const char*>(image.data()),
+              static_cast<std::streamsize>(image.size()));
     out.close();
     return path;
 }
 
 } // namespace
 
-int main() {
+int main()
+{
     auto isoPath = createTestIso();
 
     psxrecomp::iso::IsoParser parser(isoPath.string());

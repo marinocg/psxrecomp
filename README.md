@@ -1,5 +1,7 @@
 # PSX Recompiler (psxrecomp)
 
+[![CI](https://github.com/marinocg/psxrecomp/actions/workflows/ci.yml/badge.svg)](https://github.com/marinocg/psxrecomp/actions/workflows/ci.yml)
+
 A static recompiler for PlayStation 1 (PSX) games that converts ISO game files into statically recompiled C++ binaries, enabling them to run on modern systems.
 
 ## Overview
@@ -99,7 +101,7 @@ For agent collaboration, see [agents.md](agents.md).
 
 - [x] Initial project structure
 - [x] ISO/BIN parser implementation
-- [ ] PSX-EXE loader
+- [x] PSX-EXE loader
 - [ ] Basic MIPS R3000 disassembler
 - [ ] IR design and implementation
 - [ ] Simple function recompiler

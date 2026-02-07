@@ -13,6 +13,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(BUILD_TESTS "Build unit tests" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
+option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
 # Compiler warnings
 if(ENABLE_WARNINGS)
@@ -23,12 +24,22 @@ if(ENABLE_WARNINGS)
     endif()
 endif()
 
+if(ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy)
+    if(CLANG_TIDY_EXE)
+        set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+    else()
+        message(WARNING "ENABLE_CLANG_TIDY is ON but clang-tidy was not found.")
+    endif()
+endif()
+
 # Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # Source files will be organized by component
 set(ISO_SOURCES
     src/iso/iso_parser.cpp
+    src/iso/psx_exe_loader.cpp
 )
 
 set(DISASM_SOURCES
@@ -52,6 +63,21 @@ set(RUNTIME_SOURCES
     # src/runtime/spu.cpp
 )
 
+file(GLOB_RECURSE ALL_FORMAT_SOURCES CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/*.cpp
+    ${CMAKE_SOURCE_DIR}/include/*.h
+    ${CMAKE_SOURCE_DIR}/tests/*.cpp
+)
+
+find_program(CLANG_FORMAT_EXE NAMES clang-format)
+if(CLANG_FORMAT_EXE)
+    add_custom_target(clang-format
+        COMMAND ${CLANG_FORMAT_EXE} -i ${ALL_FORMAT_SOURCES}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Running clang-format on project sources"
+    )
+endif()
+
 # Main executable (commented out until we have source files)
 # add_executable(psxrecomp
 #     src/main.cpp
@@ -73,6 +99,13 @@ if(BUILD_TESTS)
     )
     target_include_directories(iso_parser_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME iso_parser_test COMMAND iso_parser_test)
+
+    add_executable(psx_exe_loader_test
+        tests/unit/psx_exe_loader_test.cpp
+        ${ISO_SOURCES}
+    )
+    target_include_directories(psx_exe_loader_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME psx_exe_loader_test COMMAND psx_exe_loader_test)
 endif()
 
 # Examples
