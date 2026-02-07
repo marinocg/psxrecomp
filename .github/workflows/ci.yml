@@ -21,9 +21,6 @@ jobs:
       - name: Build (clang-tidy)
         run: cmake --build build
 
-      - name: Test (clang-tidy build)
-        run: ctest --test-dir build --output-on-failure
-
       - name: clang-format check
         run: |
           git ls-files '*.cpp' '*.h' | xargs -r clang-format --dry-run --Werror

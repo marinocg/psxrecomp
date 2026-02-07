@@ -36,9 +36,9 @@ std::string formatCopRegister(u8 reg)
 std::string formatGteDataRegister(u8 reg)
 {
     static constexpr std::array<const char*, 32> names = {
-        "$vxy0", "$vz0",  "$vxy1", "$vz1", "$vxy2", "$vz2",  "$rgbc", "$otz",
-        "$ir0",  "$ir1",  "$ir2",  "$ir3", "$sxy0", "$sxy1", "$sxy2", "$sxyp",
-        "$sz0",  "$sz1",  "$sz2",  "$sz3", "$rgb0", "$rgb1", "$rgb2", "$res1",
+        "$vxy0", "$vz0",  "$vxy1", "$vz1",  "$vxy2", "$vz2",  "$rgbc", "$otz",
+        "$ir0",  "$ir1",  "$ir2",  "$ir3",  "$sxy0", "$sxy1", "$sxy2", "$sxyp",
+        "$sz0",  "$sz1",  "$sz2",  "$sz3",  "$rgb0", "$rgb1", "$rgb2", "$res1",
         "$mac0", "$mac1", "$mac2", "$mac3", "$irgb", "$orgb", "$lzcs", "$lzcr"};
 
     if (reg < names.size())
@@ -52,11 +52,10 @@ std::string formatGteDataRegister(u8 reg)
 std::string formatGteControlRegister(u8 reg)
 {
     static constexpr std::array<const char*, 32> names = {
-        "$r11r12", "$r13r21", "$r22r23", "$r31r32", "$r33", "$trx", "$try",
-        "$trz",    "$l11l12", "$l13l21", "$l22l23", "$l31l32", "$l33", "$rbk",
-        "$gbk",    "$bbk",    "$lr1lr2", "$lr3lg1", "$lg2lg3", "$lb1lb2", "$lb3",
-        "$rfc",    "$gfc",    "$bfc",    "$ofx",    "$ofy",    "$h",      "$dqa",
-        "$dqb",    "$zsf3",   "$zsf4",   "$flag"};
+        "$r11r12", "$r13r21", "$r22r23", "$r31r32", "$r33", "$trx",  "$try",  "$trz",
+        "$l11l12", "$l13l21", "$l22l23", "$l31l32", "$l33", "$rbk",  "$gbk",  "$bbk",
+        "$lr1lr2", "$lr3lg1", "$lg2lg3", "$lb1lb2", "$lb3", "$rfc",  "$gfc",  "$bfc",
+        "$ofx",    "$ofy",    "$h",      "$dqa",    "$dqb", "$zsf3", "$zsf4", "$flag"};
 
     if (reg < names.size())
     {
@@ -123,31 +122,32 @@ std::string formatGteCommand(Opcode opcode)
 std::string Instruction::toString() const
 {
     const auto reg = [](Register r) { return MipsDisassembler::getRegisterName(r); };
-    const auto formatRrr = [&](const char* mnemonic) {
-        return std::string(mnemonic) + " " + reg(rd) + ", " + reg(rs) + ", " + reg(rt);
-    };
-    const auto formatRr = [&](const char* mnemonic, Register lhs, Register rhs) {
-        return std::string(mnemonic) + " " + reg(lhs) + ", " + reg(rhs);
-    };
-    const auto formatRtRsImmSigned = [&](const char* mnemonic) {
+    const auto formatRrr = [&](const char* mnemonic)
+    { return std::string(mnemonic) + " " + reg(rd) + ", " + reg(rs) + ", " + reg(rt); };
+    const auto formatRr = [&](const char* mnemonic, Register lhs, Register rhs)
+    { return std::string(mnemonic) + " " + reg(lhs) + ", " + reg(rhs); };
+    const auto formatRtRsImmSigned = [&](const char* mnemonic)
+    {
         return std::string(mnemonic) + " " + reg(rt) + ", " + reg(rs) + ", " +
                formatImmediateSigned(immediate);
     };
-    const auto formatRtRsImmUnsigned = [&](const char* mnemonic) {
+    const auto formatRtRsImmUnsigned = [&](const char* mnemonic)
+    {
         return std::string(mnemonic) + " " + reg(rt) + ", " + reg(rs) + ", " +
                formatImmediateUnsigned(static_cast<u16>(immediate));
     };
-    const auto formatLoadStore = [&](const char* mnemonic) {
+    const auto formatLoadStore = [&](const char* mnemonic)
+    {
         return std::string(mnemonic) + " " + reg(rt) + ", " + formatImmediateSigned(immediate) +
                "(" + reg(rs) + ")";
     };
-    const auto formatLoadStoreCop2 = [&](const char* mnemonic) {
+    const auto formatLoadStoreCop2 = [&](const char* mnemonic)
+    {
         return std::string(mnemonic) + " " + formatGteDataRegister(rt) + ", " +
                formatImmediateSigned(immediate) + "(" + reg(rs) + ")";
     };
-    const auto formatMove = [&](Register dst, Register src) {
-        return std::string("move ") + reg(dst) + ", " + reg(src);
-    };
+    const auto formatMove = [&](Register dst, Register src)
+    { return std::string("move ") + reg(dst) + ", " + reg(src); };
 
     switch (opcode)
     {
@@ -284,7 +284,8 @@ std::string Instruction::toString() const
     case Opcode::BLTZ:
     case Opcode::BGEZ:
     case Opcode::BLTZAL:
-    case Opcode::BGEZAL: {
+    case Opcode::BGEZAL:
+    {
         auto targetAddress = getTargetAddress();
         const std::string targetString = targetAddress ? formatHex(*targetAddress, 8) : "?";
         switch (opcode)
@@ -311,7 +312,8 @@ std::string Instruction::toString() const
         break;
     }
     case Opcode::J:
-    case Opcode::JAL: {
+    case Opcode::JAL:
+    {
         auto targetAddress = getTargetAddress();
         const std::string targetString = targetAddress ? formatHex(*targetAddress, 8) : "?";
         return (opcode == Opcode::J) ? "j " + targetString : "jal " + targetString;

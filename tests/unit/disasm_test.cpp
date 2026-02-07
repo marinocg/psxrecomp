@@ -162,68 +162,75 @@ int main()
     }
 
     {
-        Instruction mfc0 = MipsDisassembler::decode((0x10u << 26) | (0u << 21) | (2u << 16) | (12u << 11),
-                                                    0x80010020);
+        Instruction mfc0 = MipsDisassembler::decode(
+            (0x10u << 26) | (0u << 21) | (2u << 16) | (12u << 11), 0x80010020);
         assert(mfc0.opcode == Opcode::MFC0);
         assert(mfc0.toString() == "mfc0 $v0, $c12");
 
-        Instruction mtc0 = MipsDisassembler::decode((0x10u << 26) | (4u << 21) | (3u << 16) | (7u << 11),
-                                                    0x80010022);
+        Instruction mtc0 = MipsDisassembler::decode(
+            (0x10u << 26) | (4u << 21) | (3u << 16) | (7u << 11), 0x80010022);
         assert(mtc0.opcode == Opcode::MTC0);
         assert(mtc0.toString() == "mtc0 $v1, $c7");
 
-        Instruction cfc0 = MipsDisassembler::decode((0x10u << 26) | (2u << 21) | (9u << 16) | (5u << 11),
-                                                    0x80010024);
+        Instruction cfc0 = MipsDisassembler::decode(
+            (0x10u << 26) | (2u << 21) | (9u << 16) | (5u << 11), 0x80010024);
         assert(cfc0.opcode == Opcode::CFC0);
         assert(cfc0.toString() == "cfc0 $t1, $c5");
 
-        Instruction ctc0 = MipsDisassembler::decode((0x10u << 26) | (6u << 21) | (10u << 16) | (4u << 11),
-                                                    0x80010026);
+        Instruction ctc0 = MipsDisassembler::decode(
+            (0x10u << 26) | (6u << 21) | (10u << 16) | (4u << 11), 0x80010026);
         assert(ctc0.opcode == Opcode::CTC0);
         assert(ctc0.toString() == "ctc0 $t2, $c4");
 
-        Instruction rfe = MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x10u, 0x80010024);
+        Instruction rfe =
+            MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x10u, 0x80010024);
         assert(rfe.opcode == Opcode::RFE);
         assert(rfe.toString() == "rfe");
 
-        Instruction tlbp = MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x08u, 0x80010028);
+        Instruction tlbp =
+            MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x08u, 0x80010028);
         assert(tlbp.opcode == Opcode::TLBP);
         assert(tlbp.toString() == "tlbp");
 
-        Instruction tlbr = MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x01u, 0x8001002C);
+        Instruction tlbr =
+            MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x01u, 0x8001002C);
         assert(tlbr.opcode == Opcode::TLBR);
         assert(tlbr.toString() == "tlbr");
 
-        Instruction tlbwi = MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x02u, 0x80010030);
+        Instruction tlbwi =
+            MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x02u, 0x80010030);
         assert(tlbwi.opcode == Opcode::TLBWI);
         assert(tlbwi.toString() == "tlbwi");
 
-        Instruction tlbwr = MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x06u, 0x80010034);
+        Instruction tlbwr =
+            MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x06u, 0x80010034);
         assert(tlbwr.opcode == Opcode::TLBWR);
         assert(tlbwr.toString() == "tlbwr");
 
-        Instruction cop0Unknown = MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x0Fu, 0x80010038);
+        Instruction cop0Unknown =
+            MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x0Fu, 0x80010038);
         assert(cop0Unknown.opcode == Opcode::UNKNOWN);
         assert(cop0Unknown.toString() == "unknown 0x4200000F");
     }
 
     {
-        Instruction mfc2 = MipsDisassembler::decode((0x12u << 26) | (0u << 21) | (3u << 16) | (5u << 11),
-                                                    0x80010026);
+        Instruction mfc2 = MipsDisassembler::decode(
+            (0x12u << 26) | (0u << 21) | (3u << 16) | (5u << 11), 0x80010026);
         assert(mfc2.opcode == Opcode::MFC2);
         assert(mfc2.toString() == "mfc2 $v1, $vz2");
 
-        Instruction mtc2 = MipsDisassembler::decode((0x12u << 26) | (4u << 21) | (9u << 16) | (7u << 11),
-                                                    0x8001002A);
+        Instruction mtc2 = MipsDisassembler::decode(
+            (0x12u << 26) | (4u << 21) | (9u << 16) | (7u << 11), 0x8001002A);
         assert(mtc2.opcode == Opcode::MTC2);
         assert(mtc2.toString() == "mtc2 $t1, $otz");
 
-        Instruction cfc2 = MipsDisassembler::decode((0x12u << 26) | (2u << 21) | (10u << 16) | (4u << 11),
-                                                    0x8001002E);
+        Instruction cfc2 = MipsDisassembler::decode(
+            (0x12u << 26) | (2u << 21) | (10u << 16) | (4u << 11), 0x8001002E);
         assert(cfc2.opcode == Opcode::CFC2);
         assert(cfc2.toString() == "cfc2 $t2, $r33");
 
-        Instruction gteRtpt = MipsDisassembler::decode((0x12u << 26) | (0x10u << 21) | 0x01u, 0x80010032);
+        Instruction gteRtpt =
+            MipsDisassembler::decode((0x12u << 26) | (0x10u << 21) | 0x01u, 0x80010032);
         assert(gteRtpt.opcode == Opcode::GTE_RTPT);
         assert(gteRtpt.toString() == "rtpt");
     }
