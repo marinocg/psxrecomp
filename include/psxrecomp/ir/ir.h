@@ -19,6 +19,7 @@ namespace ir
 enum class Opcode
 {
     NOP,
+    PHI,
     MOVE,
     ADD,
     SUB,
