@@ -211,8 +211,8 @@ SsaResult convertFunctionToSSA(Function& function, const ControlFlowGraph& graph
             {
                 inputs.push_back(blockStates[predIndex].out[reg]);
             }
-            phiInstructions.push_back(
-                Instruction{Opcode::PHI, std::move(inputs), {*state.phiOutputs[reg]}, std::nullopt});
+            phiInstructions.push_back(Instruction{
+                Opcode::PHI, std::move(inputs), {*state.phiOutputs[reg]}, std::nullopt});
             InstructionOutputInfo phiInfo;
             phiInfo.outputRegisters.resize(1);
             phiInfos.push_back(std::move(phiInfo));

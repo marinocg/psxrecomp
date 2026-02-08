@@ -112,13 +112,13 @@ VerificationResult verifyFunction(const Function& function, const ControlFlowGra
             {
                 if (output.kind == ValueKind::TEMPORARY)
                 {
-                    auto [it, inserted] = tempDefinitions.emplace(
-                        output.temporaryId, "Block '" + block.name + "'");
+                    auto [it, inserted] =
+                        tempDefinitions.emplace(output.temporaryId, "Block '" + block.name + "'");
                     if (!inserted)
                     {
                         addError(result, "Temporary t" + std::to_string(output.temporaryId) +
-                                              " defined multiple times (first in " + it->second +
-                                              ")");
+                                             " defined multiple times (first in " + it->second +
+                                             ")");
                     }
                 }
             }
@@ -132,7 +132,7 @@ VerificationResult verifyFunction(const Function& function, const ControlFlowGra
                     if (!preds.empty() && instruction.inputs.size() != preds.size())
                     {
                         addError(result, "Phi in block '" + block.name +
-                                              "' has input count mismatch with predecessors");
+                                             "' has input count mismatch with predecessors");
                     }
                 }
             }

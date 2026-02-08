@@ -51,8 +51,8 @@ ControlFlowGraph buildControlFlowGraph(const Function& function, std::vector<std
             {
                 if (errors)
                 {
-                    errors->push_back("Missing successor block '" + successorName + "' referenced by '" +
-                                      block.name + "'");
+                    errors->push_back("Missing successor block '" + successorName +
+                                      "' referenced by '" + block.name + "'");
                 }
                 continue;
             }
