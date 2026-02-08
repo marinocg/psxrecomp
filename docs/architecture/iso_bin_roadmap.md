@@ -8,9 +8,9 @@ image formats needed by the recompiler pipeline.
 - [x] ISO 9660 directory record parsing and hierarchical path traversal.
 - [x] File extraction by path and sector streaming.
 - [x] SYSTEM.CNF BOOT line parsing with fallback to root .EXE scan.
-- [ ] BIN/CUE parsing for multi-track images and track-to-sector mapping.
-- [ ] Mode 2 Form 1/Form 2 sector handling (XA data/audio awareness).
-- [ ] Joliet or multi-extent file support (beyond basic ISO 9660 records).
+- [x] BIN/CUE parsing for multi-track images and track-to-sector mapping.
+- [x] Mode 2 Form 1/Form 2 sector handling (XA data/audio awareness).
+- [x] Joliet or multi-extent file support (beyond basic ISO 9660 records).
 
 ## Phase 1: Format Coverage
 - [ ] Parse CUE sheets and associate BIN files with track metadata.
