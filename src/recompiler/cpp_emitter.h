@@ -16,6 +16,7 @@ class CppEmitter
     void writeBlank();
     void openBlock(std::string_view header);
     void closeBlock();
+    void closeBlock(std::string_view suffix);
     std::string str() const;
 
   private:

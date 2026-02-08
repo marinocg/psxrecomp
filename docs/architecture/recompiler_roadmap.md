@@ -25,5 +25,5 @@ support end-to-end static recompilation.
 
 ## Phase 4: Validation & Testing
 - [x] Add unit tests for IR-to-C++ lowering.
-- [x] Add end-to-end tests for small PSX-EXE samples.
-- [x] Add compile-and-run checks for generated code.
+- [ ] Add end-to-end tests for small PSX-EXE samples.
+- [ ] Add compile-and-run checks for generated code.

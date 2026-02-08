@@ -2,6 +2,11 @@
 #include "psxrecomp/recompiler/codegen.h"
 
 #include <cassert>
+#include <chrono>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <string>
 
 int main()
 {
@@ -55,6 +60,42 @@ int main()
     assert(source.find("switch (block)") != std::string::npos);
     assert(source.find("if (") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
+
+    std::filesystem::path currentPath = std::filesystem::current_path();
+    std::filesystem::path repoRoot = currentPath;
+    for (int depth = 0; depth < 6; ++depth)
+    {
+        if (std::filesystem::exists(repoRoot / "include/psxrecomp/types.h"))
+        {
+            break;
+        }
+        repoRoot = repoRoot.parent_path();
+    }
+    assert(std::filesystem::exists(repoRoot / "include/psxrecomp/types.h"));
+
+    auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::filesystem::path outputDir =
+        std::filesystem::temp_directory_path() / ("psxrecomp_codegen_test_" + stamp);
+    std::filesystem::create_directories(outputDir);
+
+    std::filesystem::path headerPath = outputDir / "module.h";
+    std::filesystem::path sourcePath = outputDir / "module.cpp";
+    std::filesystem::path objectPath = outputDir / "module.o";
+
+    std::ofstream headerFile(headerPath);
+    headerFile << header;
+    headerFile.close();
+    std::ofstream sourceFile(sourcePath);
+    sourceFile << source;
+    sourceFile.close();
+
+    auto quote = [](const std::filesystem::path& path)
+    { return std::string("\"") + path.string() + "\""; };
+    std::string command = "c++ -std=c++17 -I" + quote(repoRoot / "include") + " -I" +
+                          quote(outputDir) + " -c " + quote(sourcePath) + " -o " +
+                          quote(objectPath);
+    int compileStatus = std::system(command.c_str());
+    assert(compileStatus == 0);
 
     return 0;
 }

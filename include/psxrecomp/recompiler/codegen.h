@@ -36,6 +36,7 @@ class CodeGenerator
 
     /**
      * @brief Generate C++ header file
+     * @param program IR program to emit declarations for
      * @param moduleName Name of the module
      * @return Generated header content
      */
@@ -43,6 +44,7 @@ class CodeGenerator
 
     /**
      * @brief Generate C++ source file
+     * @param program IR program to lower and emit definitions for
      * @param moduleName Name of the module
      * @return Generated source content
      */
@@ -58,8 +60,6 @@ class CodeGenerator
   private:
     CodeGenOptions m_options;
 
-    std::string generateIncludes() const;
-    std::string generateTypes() const;
     std::string generateGlobals(const ir::Program& program) const;
     std::string generateFunctionDeclarations(const ir::Program& program) const;
     std::string generateFunctionDefinitions(const ir::Program& program) const;

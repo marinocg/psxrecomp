@@ -2,9 +2,9 @@
 
 #include "cpp_emitter.h"
 
-#include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstring>
 #include <map>
 #include <set>
 #include <sstream>
@@ -21,7 +21,6 @@ struct LoweringContext
     bool generateComments = true;
     bool enableOptimizations = true;
 };
-
 std::string toIdentifier(std::string_view name)
 {
     std::string identifier;
@@ -45,9 +44,54 @@ std::string toIdentifier(std::string_view name)
     {
         identifier.insert(identifier.begin(), '_');
     }
+    static const std::set<std::string> reserved = {"alignas",      "alignof",
+                                                   "and",          "and_eq",
+                                                   "asm",          "auto",
+                                                   "bitand",       "bitor",
+                                                   "bool",         "break",
+                                                   "case",         "catch",
+                                                   "char",         "char16_t",
+                                                   "char32_t",     "class",
+                                                   "compl",        "const",
+                                                   "constexpr",    "const_cast",
+                                                   "continue",     "decltype",
+                                                   "default",      "delete",
+                                                   "do",           "double",
+                                                   "dynamic_cast", "else",
+                                                   "enum",         "explicit",
+                                                   "export",       "extern",
+                                                   "false",        "float",
+                                                   "for",          "friend",
+                                                   "goto",         "if",
+                                                   "inline",       "int",
+                                                   "long",         "mutable",
+                                                   "namespace",    "new",
+                                                   "noexcept",     "not",
+                                                   "not_eq",       "nullptr",
+                                                   "operator",     "or",
+                                                   "or_eq",        "private",
+                                                   "protected",    "public",
+                                                   "register",     "reinterpret_cast",
+                                                   "return",       "short",
+                                                   "signed",       "sizeof",
+                                                   "static",       "static_assert",
+                                                   "static_cast",  "struct",
+                                                   "switch",       "template",
+                                                   "this",         "thread_local",
+                                                   "throw",        "true",
+                                                   "try",          "typedef",
+                                                   "typeid",       "typename",
+                                                   "union",        "unsigned",
+                                                   "using",        "virtual",
+                                                   "void",         "volatile",
+                                                   "wchar_t",      "while",
+                                                   "xor",          "xor_eq"};
+    if (reserved.find(identifier) != reserved.end())
+    {
+        identifier.insert(identifier.begin(), '_');
+    }
     return identifier;
 }
-
 std::string valueToExpr(const ir::Value& value, LoweringContext& context)
 {
     switch (value.kind)
@@ -78,7 +122,6 @@ std::string valueToExpr(const ir::Value& value, LoweringContext& context)
     }
     return "0";
 }
-
 std::string opcodeToComment(ir::Opcode opcode)
 {
     switch (opcode)
@@ -114,7 +157,6 @@ std::string opcodeToComment(ir::Opcode opcode)
     }
     return "unknown";
 }
-
 std::set<u32> collectTemporaries(const ir::Function& function)
 {
     std::set<u32> temporaries;
@@ -140,12 +182,16 @@ std::set<u32> collectTemporaries(const ir::Function& function)
     }
     return temporaries;
 }
-
 std::string formatBlockId(std::string_view name)
 {
     return "BlockId::" + toIdentifier(name);
 }
-
+enum class ZeroOptimization
+{
+    None,
+    Elide,
+    ZeroResult
+};
 void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
                      LoweringContext& context, CppEmitter& emitter)
 {
@@ -161,7 +207,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         emitter.writeLine(comment);
     }
 
-    auto writeBinaryOp = [&](const char* op)
+    auto writeBinaryOp = [&](const char* op, ZeroOptimization optimization)
     {
         if (instruction.outputs.empty() || instruction.inputs.size() < 2)
         {
@@ -175,7 +221,16 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (context.enableOptimizations && instruction.inputs[1].kind == ir::ValueKind::IMMEDIATE &&
             instruction.inputs[1].immediate == 0)
         {
-            emitter.writeLine(lhs + " = " + rhsA + ";");
+            if (optimization == ZeroOptimization::Elide)
+            {
+                emitter.writeLine(lhs + " = " + rhsA + ";");
+                return;
+            }
+            if (optimization == ZeroOptimization::ZeroResult)
+            {
+                emitter.writeLine(lhs + " = 0;");
+                return;
+            }
             return;
         }
         emitter.writeLine(lhs + " = " + rhsA + " " + op + " " + rhsB + ";");
@@ -201,19 +256,19 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         }
         break;
     case ir::Opcode::ADD:
-        writeBinaryOp("+");
+        writeBinaryOp("+", ZeroOptimization::Elide);
         break;
     case ir::Opcode::SUB:
-        writeBinaryOp("-");
+        writeBinaryOp("-", ZeroOptimization::Elide);
         break;
     case ir::Opcode::AND:
-        writeBinaryOp("&");
+        writeBinaryOp("&", ZeroOptimization::ZeroResult);
         break;
     case ir::Opcode::OR:
-        writeBinaryOp("|");
+        writeBinaryOp("|", ZeroOptimization::Elide);
         break;
     case ir::Opcode::XOR:
-        writeBinaryOp("^");
+        writeBinaryOp("^", ZeroOptimization::Elide);
         break;
     case ir::Opcode::LOAD:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
@@ -235,12 +290,14 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (block.successors.size() >= 2 && !instruction.inputs.empty())
         {
             std::string cond = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine("if (" + cond + ") {");
-            emitter.writeLine("    block = " + formatBlockId(block.successors[0]) + ";");
-            emitter.writeLine("} else {");
-            emitter.writeLine("    block = " + formatBlockId(block.successors[1]) + ";");
-            emitter.writeLine("}");
+            emitter.openBlock("if (" + cond + ")");
+            emitter.writeLine("block = " + formatBlockId(block.successors[0]) + ";");
             emitter.writeLine("continue;");
+            emitter.closeBlock();
+            emitter.openBlock("else");
+            emitter.writeLine("block = " + formatBlockId(block.successors[1]) + ";");
+            emitter.writeLine("continue;");
+            emitter.closeBlock();
         }
         break;
     case ir::Opcode::JUMP:
@@ -266,11 +323,8 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         break;
     }
 }
-
 } // namespace
-
 CodeGenerator::CodeGenerator(const CodeGenOptions& options) : m_options(options) {}
-
 std::string CodeGenerator::generateHeader(const ir::Program& program, const std::string& moduleName)
 {
     (void)moduleName;
@@ -280,22 +334,18 @@ std::string CodeGenerator::generateHeader(const ir::Program& program, const std:
     emitter.writeLine("#include \"psxrecomp/runtime/psx_system.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
     emitter.writeBlank();
-    emitter.writeLine("namespace psxrecomp");
-    emitter.openBlock("{");
-    emitter.writeLine("namespace recompiler");
-    emitter.openBlock("{");
+    emitter.openBlock("namespace psxrecomp");
+    emitter.openBlock("namespace recompiler");
     emitter.writeLine("struct RecompilerContext;");
-    emitter.writeLine("struct RecompiledModule");
-    emitter.openBlock("{");
+    emitter.openBlock("struct RecompiledModule");
     emitter.writeLine("static void run(runtime::PsxSystem& system);");
-    emitter.closeBlock();
+    emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.writeLine(generateFunctionDeclarations(program));
     emitter.closeBlock();
     emitter.closeBlock();
     return emitter.str();
 }
-
 std::string CodeGenerator::generateSource(const ir::Program& program, const std::string& moduleName)
 {
     CppEmitter emitter;
@@ -303,32 +353,35 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeBlank();
     emitter.writeLine("#include <array>");
     emitter.writeLine("#include <cstdint>");
+    emitter.writeLine("#include <cstring>");
     emitter.writeBlank();
-    emitter.writeLine("namespace psxrecomp");
-    emitter.openBlock("{");
-    emitter.writeLine("namespace recompiler");
-    emitter.openBlock("{");
-    emitter.writeLine("struct RecompilerContext");
-    emitter.openBlock("{");
+    emitter.openBlock("namespace psxrecomp");
+    emitter.openBlock("namespace recompiler");
+    emitter.openBlock("struct RecompilerContext");
     emitter.writeLine("runtime::PsxSystem& system;");
     emitter.writeLine("std::array<s32, Registers::NUM_REGISTERS> regs{};");
-    emitter.closeBlock();
+    emitter.closeBlock(";");
     emitter.writeBlank();
-    emitter.writeLine("namespace");
-    emitter.openBlock("{");
+    emitter.openBlock("namespace");
     emitter.writeLine("inline s32 readMemory32(runtime::PsxSystem& system, Address address)");
-    emitter.openBlock("{");
-    emitter.writeLine("return system.read<s32>(address);");
+    emitter.openBlock("");
+    emitter.writeLine("u8* ram = system.getRam();");
+    emitter.writeLine("Address offset = address % MemoryMap::RAM_SIZE;");
+    emitter.writeLine("s32 value = 0;");
+    emitter.writeLine("std::memcpy(&value, ram + offset, sizeof(s32));");
+    emitter.writeLine("return value;");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
         "inline void writeMemory32(runtime::PsxSystem& system, Address address, s32 value)");
-    emitter.openBlock("{");
-    emitter.writeLine("system.write<s32>(address, value);");
+    emitter.openBlock("");
+    emitter.writeLine("u8* ram = system.getRam();");
+    emitter.writeLine("Address offset = address % MemoryMap::RAM_SIZE;");
+    emitter.writeLine("std::memcpy(ram + offset, &value, sizeof(s32));");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void callIntrinsic(runtime::PsxSystem& system, Address address)");
-    emitter.openBlock("{");
+    emitter.openBlock("");
     emitter.writeLine("(void)system;");
     emitter.writeLine("(void)address;");
     emitter.writeLine("// TODO: dispatch GPU/SPU/CD-ROM intrinsics.");
@@ -340,7 +393,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeBlank();
 
     emitter.writeLine("void RecompiledModule::run(runtime::PsxSystem& system)");
-    emitter.openBlock("{");
+    emitter.openBlock("");
     emitter.writeLine("RecompilerContext context{system, {}};");
     if (!program.functions.empty())
     {
@@ -354,7 +407,6 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock();
     return emitter.str();
 }
-
 std::string CodeGenerator::generateBuildFile(const std::string& projectName)
 {
     std::ostringstream stream;
@@ -364,17 +416,6 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "target_include_directories(" << projectName << " PRIVATE include)\n";
     return stream.str();
 }
-
-std::string CodeGenerator::generateIncludes() const
-{
-    return "#include <array>\n#include <cstdint>\n";
-}
-
-std::string CodeGenerator::generateTypes() const
-{
-    return "using psxrecomp::s32;\nusing psxrecomp::Address;\n";
-}
-
 std::string CodeGenerator::generateGlobals(const ir::Program& program) const
 {
     CppEmitter emitter;
@@ -406,7 +447,6 @@ std::string CodeGenerator::generateGlobals(const ir::Program& program) const
     }
     return emitter.str();
 }
-
 std::string CodeGenerator::generateFunctionDeclarations(const ir::Program& program) const
 {
     std::ostringstream stream;
@@ -416,7 +456,6 @@ std::string CodeGenerator::generateFunctionDeclarations(const ir::Program& progr
     }
     return stream.str();
 }
-
 std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& program) const
 {
     CppEmitter emitter;
@@ -427,7 +466,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         context.enableOptimizations = m_options.enableOptimizations;
 
         emitter.writeLine("void " + toIdentifier(function.name) + "(RecompilerContext& context)");
-        emitter.openBlock("{");
+        emitter.openBlock("");
 
         auto temporaries = collectTemporaries(function);
         for (u32 temporaryId : temporaries)
@@ -448,13 +487,13 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         emitter.writeLine("BlockId block = BlockId::" + toIdentifier(function.blocks.front().name) +
                           ";");
         emitter.writeLine("while (true)");
-        emitter.openBlock("{");
+        emitter.openBlock("");
         emitter.writeLine("switch (block)");
-        emitter.openBlock("{");
+        emitter.openBlock("");
         for (const auto& block : function.blocks)
         {
             emitter.writeLine("case " + formatBlockId(block.name) + ":");
-            emitter.openBlock("{");
+            emitter.openBlock("");
             for (const auto& instruction : block.instructions)
             {
                 emitInstruction(instruction, block, context, emitter);
@@ -475,7 +514,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             emitter.closeBlock();
         }
         emitter.writeLine("default:");
-        emitter.openBlock("{");
+        emitter.openBlock("");
         emitter.writeLine("return;");
         emitter.closeBlock();
         emitter.closeBlock();
@@ -485,6 +524,5 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
     }
     return emitter.str();
 }
-
 } // namespace recompiler
 } // namespace psxrecomp

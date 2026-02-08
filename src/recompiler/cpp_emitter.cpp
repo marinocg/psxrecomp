@@ -18,7 +18,14 @@ void CppEmitter::writeBlank()
 
 void CppEmitter::openBlock(std::string_view header)
 {
-    writeLine(std::string(header) + " {");
+    if (header.empty())
+    {
+        writeLine("{");
+    }
+    else
+    {
+        writeLine(std::string(header) + " {");
+    }
     ++m_indentLevel;
 }
 
@@ -29,6 +36,16 @@ void CppEmitter::closeBlock()
         --m_indentLevel;
     }
     writeLine("}");
+}
+
+void CppEmitter::closeBlock(std::string_view suffix)
+{
+    if (m_indentLevel > 0)
+    {
+        --m_indentLevel;
+    }
+    writeIndent();
+    m_stream << "}" << suffix << "\n";
 }
 
 std::string CppEmitter::str() const
