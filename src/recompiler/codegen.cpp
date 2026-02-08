@@ -448,8 +448,8 @@ std::string CodeGenerator::generateGlobals(const ir::Program& program) const
     for (const auto& global : program.globals)
     {
         std::string name = toIdentifier(global.name);
-        emitter.writeLine("const std::array<u8, " + std::to_string(global.bytes.size()) + "> " +
-                          name + " = {");
+        emitter.writeLine("static const std::array<u8, " + std::to_string(global.bytes.size()) +
+                          "> " + name + " = {");
         if (!global.bytes.empty())
         {
             std::ostringstream stream;

@@ -94,9 +94,9 @@ class PsxSystem
      */
     u8* getRam();
 
-    void callGpuIntrinsic(Address address);
-    void callSpuIntrinsic(Address address);
-    void callCdromIntrinsic(Address address);
+    void callGpuIntrinsic(Address /*address*/) {}
+    void callSpuIntrinsic(Address /*address*/) {}
+    void callCdromIntrinsic(Address /*address*/) {}
 
   private:
     u8* m_ram;        // 2MB main RAM

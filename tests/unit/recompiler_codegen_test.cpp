@@ -76,6 +76,15 @@ int main()
     std::filesystem::path outputDir =
         std::filesystem::temp_directory_path() / ("psxrecomp_codegen_test_" + stamp);
     std::filesystem::create_directories(outputDir);
+    struct TempDirGuard
+    {
+        std::filesystem::path path;
+        ~TempDirGuard()
+        {
+            std::filesystem::remove_all(path);
+        }
+    };
+    TempDirGuard tempDirGuard{outputDir};
 
     std::filesystem::path includeDir = outputDir / "include/psxrecomp/runtime";
     std::filesystem::create_directories(includeDir);
