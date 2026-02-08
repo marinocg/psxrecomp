@@ -1,6 +1,8 @@
 #include "psxrecomp/iso/iso_parser.h"
 
 #include "cue_sheet.h"
+#include "iso_boot.h"
+#include "iso_sector.h"
 #include "iso_utils.h"
 #include "path_table.h"
 
@@ -9,7 +11,6 @@
 #include <cstring>
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <unordered_map>
 
 namespace psxrecomp
@@ -20,91 +21,8 @@ namespace iso
 namespace
 {
 
-constexpr u32 kUserDataSize = 2048;
-constexpr u32 kRawSectorSize = 2352;
-constexpr u8 kMode1 = 1;
-constexpr u8 kMode2 = 2;
-constexpr u8 kSubmodeForm2 = 0x20;
-
-struct SectorView
-{
-    size_t offset = 0;
-    size_t size = 0;
-};
-
-SectorView decodeSectorLayout(const std::vector<u8>& raw)
-{
-    if (raw.size() == kUserDataSize)
-    {
-        return {0, kUserDataSize};
-    }
-    if (raw.size() < kRawSectorSize)
-    {
-        return {0, 0};
-    }
-    u8 mode = raw[15];
-    if (mode == kMode1)
-    {
-        return {16, kUserDataSize};
-    }
-    if (mode == kMode2)
-    {
-        u8 submode = raw[18];
-        if ((submode & kSubmodeForm2) != 0)
-        {
-            return {24, 2324};
-        }
-        return {24, kUserDataSize};
-    }
-    return {0, 0};
-}
-
-std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
-{
-    if (systemCnf.empty())
-    {
-        return "";
-    }
-
-    std::string contents(systemCnf.begin(), systemCnf.end());
-    std::istringstream stream(contents);
-    std::string line;
-    while (std::getline(stream, line))
-    {
-        auto upper = detail::toUpper(line);
-        auto pos = upper.find("BOOT");
-        if (pos == std::string::npos)
-        {
-            continue;
-        }
-        auto equals = upper.find('=', pos);
-        if (equals == std::string::npos)
-        {
-            continue;
-        }
-        std::string value = line.substr(equals + 1);
-        value.erase(0, value.find_first_not_of(" \t"));
-        value.erase(value.find_last_not_of(" \t\r\n") + 1);
-        auto upperValue = detail::toUpper(value);
-        auto prefixPos = upperValue.find("CDROM");
-        if (prefixPos != std::string::npos)
-        {
-            auto colonPos = upperValue.find(':', prefixPos);
-            if (colonPos != std::string::npos)
-            {
-                value = value.substr(colonPos + 1);
-            }
-        }
-        while (!value.empty() && (value[0] == '\\' || value[0] == '/'))
-        {
-            value.erase(value.begin());
-        }
-        std::replace(value.begin(), value.end(), '\\', '/');
-        return detail::normalizeIsoName(value);
-    }
-
-    return "";
-}
+constexpr u32 kUserDataSize = detail::kUserDataSize;
+constexpr u32 kRawSectorSize = detail::kRawSectorSize;
 
 } // namespace
 
@@ -317,7 +235,7 @@ std::string IsoParser::findExecutable()
     }
 
     auto systemCnf = extractFile("SYSTEM.CNF");
-    auto bootPath = parseBootPathFromSystemCnf(systemCnf);
+    auto bootPath = detail::parseBootPathFromSystemCnf(systemCnf);
     if (!bootPath.empty())
     {
         return bootPath;
@@ -668,7 +586,7 @@ std::vector<u8> IsoParser::readSector(u32 sector)
     {
         return raw;
     }
-    auto view = decodeSectorLayout(raw);
+    auto view = detail::decodeSectorLayout(raw);
     if (view.size == 0 || view.offset + view.size > raw.size())
     {
         addError("Unsupported sector layout.");
@@ -734,7 +652,7 @@ bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
     {
         return false;
     }
-    auto view = decodeSectorLayout(m_rawSectorScratch);
+    auto view = detail::decodeSectorLayout(m_rawSectorScratch);
     if (view.size < size || view.offset + size > m_rawSectorScratch.size())
     {
         addError("Invalid sector view.");
