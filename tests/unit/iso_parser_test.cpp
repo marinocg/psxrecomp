@@ -1,5 +1,6 @@
 #include "psxrecomp/iso/iso_parser.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <filesystem>
@@ -70,6 +71,27 @@ size_t writeJolietDirectoryRecord(std::vector<uint8_t>& buffer, size_t offset,
     return recordLength;
 }
 
+size_t writePathTableEntry(std::vector<uint8_t>& buffer, size_t offset, const std::string& name,
+                           uint32_t extent, uint16_t parent)
+{
+    uint8_t nameLength = static_cast<uint8_t>(name.size());
+    buffer[offset] = nameLength;
+    buffer[offset + 1] = 0;
+    writeLe32(buffer, offset + 2, extent);
+    writeLe16(buffer, offset + 6, parent);
+    if (nameLength > 0)
+    {
+        std::memcpy(buffer.data() + offset + 8, name.data(), nameLength);
+    }
+    offset += 8 + nameLength;
+    if (nameLength % 2 == 1)
+    {
+        buffer[offset] = 0;
+        ++offset;
+    }
+    return offset;
+}
+
 void writeMode2Sector(std::vector<uint8_t>& image, uint32_t lba, const std::vector<uint8_t>& data,
                       bool form2)
 {
@@ -83,13 +105,15 @@ void writeMode2Sector(std::vector<uint8_t>& image, uint32_t lba, const std::vect
 
 std::filesystem::path createTestIso()
 {
-    const uint32_t totalSectors = 24;
+    const uint32_t totalSectors = 32;
     std::vector<uint8_t> image(totalSectors * kSectorSize, 0);
 
     const uint32_t rootDirSector = 20;
     const uint32_t rootDirSize = kSectorSize;
     const uint32_t systemCnfSector = 21;
-    const uint32_t exeSector = 22;
+    const uint32_t dataDirSector = 22;
+    const uint32_t exeSector = 23;
+    const uint32_t pathTableSector = 18;
 
     // Primary Volume Descriptor at sector 16.
     size_t pvdOffset = 16 * kSectorSize;
@@ -102,7 +126,16 @@ std::filesystem::path createTestIso()
     writeLe16(image, pvdOffset + 120, 1);
     writeLe16(image, pvdOffset + 124, 1);
     writeLe16(image, pvdOffset + 128, kSectorSize);
-    writeLe32(image, pvdOffset + 132, 0);
+    size_t pathTableOffset = pathTableSector * kSectorSize;
+    size_t pathTableCursor = pathTableOffset;
+    pathTableCursor =
+        writePathTableEntry(image, pathTableCursor, std::string("\0", 1), rootDirSector, 1);
+    pathTableCursor = writePathTableEntry(image, pathTableCursor, "DATA", dataDirSector, 1);
+    uint32_t pathTableSize = static_cast<uint32_t>(pathTableCursor - pathTableOffset);
+
+    writeLe32(image, pvdOffset + 132, pathTableSize);
+    writeLe32(image, pvdOffset + 140, pathTableSector);
+    writeLe32(image, pvdOffset + 148, 0);
 
     // Root directory record in PVD.
     size_t rootRecordOffset = pvdOffset + 156;
@@ -127,12 +160,21 @@ std::filesystem::path createTestIso()
         writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector, rootDirSize, 0x02);
     cursor +=
         writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector, rootDirSize, 0x02);
-    cursor += writeDirectoryRecord(image, cursor, "SYSTEM.CNF;1", systemCnfSector, 40, 0x00);
-    cursor += writeDirectoryRecord(image, cursor, "GAME.EXE;1", exeSector, 16, 0x00);
+    cursor += writeDirectoryRecord(image, cursor, "SYSTEM.CNF;1", systemCnfSector, 64, 0x00);
+    cursor += writeDirectoryRecord(image, cursor, "DATA", dataDirSector, kSectorSize, 0x02);
     (void)cursor;
 
+    // DATA directory entries.
+    size_t dataDirOffset = dataDirSector * kSectorSize;
+    size_t dataCursor = dataDirOffset;
+    dataCursor += writeDirectoryRecord(image, dataCursor, std::string("\0", 1), dataDirSector,
+                                       kSectorSize, 0x02);
+    dataCursor += writeDirectoryRecord(image, dataCursor, std::string("\1", 1), rootDirSector,
+                                       rootDirSize, 0x02);
+    writeDirectoryRecord(image, dataCursor, "GAME.EXE;1", exeSector, 16, 0x00);
+
     // SYSTEM.CNF contents.
-    std::string systemCnf = "BOOT = cdrom:\\GAME.EXE;1\n";
+    std::string systemCnf = "Boot = cdrom0:\\data\\game.exe;1\n";
     std::memcpy(image.data() + systemCnfSector * kSectorSize, systemCnf.data(), systemCnf.size());
 
     // Dummy executable data.
@@ -293,7 +335,16 @@ int main()
     assert(!systemCnf.empty());
 
     auto exeName = parser.findExecutable();
-    assert(exeName == "GAME.EXE");
+    assert(exeName == "DATA/GAME.EXE");
+
+    auto executableList = parser.listExecutables();
+    assert(std::find(executableList.begin(), executableList.end(), exeName) !=
+           executableList.end());
+
+    auto tracks = parser.getTracks();
+    assert(tracks.size() == 1);
+    assert(tracks.front().type == psxrecomp::iso::TrackType::Data);
+    assert(tracks.front().startLba == 0);
 
     std::filesystem::remove(isoPath);
 
@@ -303,6 +354,12 @@ int main()
     assert(cueParser.open());
     assert(cueParser.isValid());
     assert(cueParser.findExecutable() == "GAME.EXE");
+
+    auto cueTracks = cueParser.getTracks();
+    assert(cueTracks.size() == 1);
+    assert(cueTracks.front().type == psxrecomp::iso::TrackType::Data);
+    assert(cueTracks.front().startLba == 0);
+    assert(cueTracks.front().file == binPath.string());
 
     auto multiExtent = cueParser.extractFile("MULTI.BIN");
     assert(multiExtent.size() == kSectorSize * 2);

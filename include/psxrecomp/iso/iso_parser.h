@@ -1,8 +1,11 @@
 #pragma once
 
+#include "psxrecomp/iso/track_info.h"
 #include "psxrecomp/types.h"
 #include <fstream>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace psxrecomp
@@ -25,6 +28,8 @@ struct PrimaryVolumeDescriptor
     u32 volumeSequenceNumber;
     u16 logicalBlockSize;
     u32 pathTableSize;
+    u32 pathTableLba;
+    u32 optionalPathTableLba;
 };
 
 /**
@@ -91,13 +96,50 @@ class IsoParser
     std::string getVolumeLabel() const;
 
     /**
+     * @brief Get parsed track metadata.
+     * @return Track list (empty if unavailable)
+     */
+    const std::vector<TrackInfo>& getTracks() const;
+
+    /**
+     * @brief Get the first data track, if available.
+     * @return TrackInfo when available, std::nullopt otherwise
+     */
+    std::optional<TrackInfo> getDataTrack() const;
+
+    /**
+     * @brief Get accumulated parser errors.
+     * @return Error messages
+     */
+    const std::vector<std::string>& getErrors() const;
+
+    /**
+     * @brief Get the most recent parser error.
+     * @return Error message, or empty if none
+     */
+    std::string getLastError() const;
+
+    /**
      * @brief Check if ISO is valid PSX format
      * @return true if valid PSX ISO
      */
     bool isValid() const;
 
+    /**
+     * @brief List PSX-EXE candidates found on disc.
+     * @return Paths to executables
+     */
+    std::vector<std::string> listExecutables();
+
   private:
+    struct DirectoryInfo
+    {
+        u32 extent = 0;
+        u32 size = 0;
+    };
+
     std::string m_filename;
+    std::string m_inputFilename;
     bool m_isOpen;
     bool m_isValid;
     u32 m_rawSectorSize;
@@ -110,6 +152,11 @@ class IsoParser
     std::vector<DirectoryRecord> m_rootDirectory;
     u32 m_rootExtent;
     u32 m_rootSize;
+    u32 m_totalSectors;
+    std::vector<TrackInfo> m_tracks;
+    std::vector<std::string> m_errors;
+    std::unordered_map<std::string, u32> m_pathTable;
+    std::unordered_map<std::string, DirectoryInfo> m_directoryCache;
 
     bool readPVD();
     bool readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>& records);
@@ -117,7 +164,11 @@ class IsoParser
     bool readRawSector(u32 sector, std::vector<u8>& buffer);
     bool readSectorInto(u32 sector, u8* buffer, size_t size);
     bool openStream();
-    bool loadCueSheet();
+    void addError(const std::string& message);
+    bool loadPathTable();
+    bool validateVolumeMetadata(const PrimaryVolumeDescriptor& pvd);
+    bool getDirectoryInfo(const std::string& path, DirectoryInfo& info);
+    bool readDirectorySelfSize(u32 extent, u32& outSize);
 };
 
 } // namespace iso
