@@ -2,6 +2,8 @@
 
 #include <cassert>
 #include <cstdint>
+#include <optional>
+#include <string>
 #include <vector>
 
 namespace
@@ -104,6 +106,17 @@ int main()
     }
 
     {
+        Instruction beqz = MipsDisassembler::decode(encodeI(0x04, 8, 0, 1), 0x80010050);
+        assert(beqz.toString() == "beqz $t0, 0x80010058");
+
+        Instruction bnez = MipsDisassembler::decode(encodeI(0x05, 8, 0, 1), 0x80010054);
+        assert(bnez.toString() == "bnez $t0, 0x8001005C");
+
+        Instruction b = MipsDisassembler::decode(encodeI(0x04, 8, 8, 1), 0x80010058);
+        assert(b.toString() == "b 0x80010060");
+    }
+
+    {
         Instruction regimm = MipsDisassembler::decode(encodeI(0x01, 8, 0x10, 4), 0x80010018);
         assert(regimm.opcode == Opcode::BLTZAL);
         assert(regimm.isCall());
@@ -119,6 +132,14 @@ int main()
         assert(bgez.opcode == Opcode::BGEZ);
         assert(!bgez.isCall());
         assert(bgez.toString() == "bgez $t2, 0x80010012");
+
+        Instruction tgei = MipsDisassembler::decode(encodeI(0x01, 8, 0x08, -1), 0x80010040);
+        assert(tgei.opcode == Opcode::TGEI);
+        assert(tgei.toString() == "tgei $t0, -1");
+
+        Instruction tltiu = MipsDisassembler::decode(encodeI(0x01, 9, 0x0B, 7), 0x80010044);
+        assert(tltiu.opcode == Opcode::TLTIU);
+        assert(tltiu.toString() == "tltiu $t1, 0x0007");
     }
 
     {
@@ -128,6 +149,10 @@ int main()
         assert(target.has_value());
         assert(*target == 0x8048D158);
         assert(jump.toString() == "j 0x8048D158");
+
+        auto jumpTarget = jump.getJumpTarget();
+        assert(jumpTarget.has_value());
+        assert(*jumpTarget == 0x8048D158);
     }
 
     {
@@ -142,23 +167,39 @@ int main()
         assert(jalr.isCall());
         assert(jalr.toString() == "jalr $t0, $t1");
 
+        Instruction jalrRa = MipsDisassembler::decode(encodeR(9, 0, 31, 0, 0x09), 0x80010020);
+        assert(jalrRa.opcode == Opcode::JALR);
+        assert(jalrRa.toString() == "jalr $t1");
+
         Instruction syscall = MipsDisassembler::decode(encodeR(0, 0, 0, 0, 0x0C), 0x80010024);
         assert(syscall.opcode == Opcode::SYSCALL);
         assert(syscall.toString() == "syscall");
 
         Instruction syscallWithCode =
-            MipsDisassembler::decode(encodeR(0, 0, 0, 3, 0x0C) | (0x155u << 6), 0x80010028);
+            MipsDisassembler::decode(encodeR(0, 0, 0, 0, 0x0C) | (0x155u << 6), 0x80010028);
         assert(syscallWithCode.opcode == Opcode::SYSCALL);
-        assert(syscallWithCode.toString() == "syscall");
+        assert(syscallWithCode.toString() == "syscall 0x00155");
 
         Instruction brk = MipsDisassembler::decode(encodeR(0, 0, 0, 0, 0x0D), 0x8001002C);
         assert(brk.opcode == Opcode::BREAK);
         assert(brk.toString() == "break");
 
         Instruction breakWithCode =
-            MipsDisassembler::decode(encodeR(0, 0, 0, 1, 0x0D) | (0x2AAu << 6), 0x80010030);
+            MipsDisassembler::decode(encodeR(0, 0, 0, 0, 0x0D) | (0x2AAu << 6), 0x80010030);
         assert(breakWithCode.opcode == Opcode::BREAK);
-        assert(breakWithCode.toString() == "break");
+        assert(breakWithCode.toString() == "break 0x002AA");
+
+        Instruction sync = MipsDisassembler::decode(encodeR(0, 0, 0, 0, 0x0F), 0x80010032);
+        assert(sync.opcode == Opcode::SYNC);
+        assert(sync.toString() == "sync");
+
+        Instruction tge = MipsDisassembler::decode(encodeR(8, 9, 0, 0, 0x30), 0x80010034);
+        assert(tge.opcode == Opcode::TGE);
+        assert(tge.toString() == "tge $t0, $t1");
+
+        Instruction tltu = MipsDisassembler::decode(encodeR(10, 11, 0, 0, 0x33), 0x80010036);
+        assert(tltu.opcode == Opcode::TLTU);
+        assert(tltu.toString() == "tltu $t2, $t3");
     }
 
     {
@@ -211,6 +252,22 @@ int main()
             MipsDisassembler::decode((0x10u << 26) | (0x10u << 21) | 0x0Fu, 0x80010038);
         assert(cop0Unknown.opcode == Opcode::UNKNOWN);
         assert(cop0Unknown.toString() == "unknown 0x4200000F");
+
+        Instruction bc0f = MipsDisassembler::decode(encodeI(0x10, 0x08, 0x00, 2), 0x8001003C);
+        assert(bc0f.opcode == Opcode::BC0F);
+        assert(bc0f.toString() == "bc0f 0x80010048");
+
+        Instruction bc0t = MipsDisassembler::decode(encodeI(0x10, 0x08, 0x01, -1), 0x80010040);
+        assert(bc0t.opcode == Opcode::BC0T);
+        assert(bc0t.toString() == "bc0t 0x80010040");
+
+        Instruction lwc0 = MipsDisassembler::decode(encodeI(0x30, 8, 4, 12), 0x80010044);
+        assert(lwc0.opcode == Opcode::LWC0);
+        assert(lwc0.toString() == "lwc0 $c4, 12($t0)");
+
+        Instruction swc0 = MipsDisassembler::decode(encodeI(0x38, 9, 5, -8), 0x80010048);
+        assert(swc0.opcode == Opcode::SWC0);
+        assert(swc0.toString() == "swc0 $c5, -8($t1)");
     }
 
     {
@@ -261,6 +318,10 @@ int main()
         Instruction swr = MipsDisassembler::decode(encodeI(0x2E, 4, 8, -6), 0x8001004C);
         assert(swr.opcode == Opcode::SWR);
         assert(swr.toString() == "swr $t0, -6($a0)");
+
+        Instruction cache = MipsDisassembler::decode(encodeI(0x2F, 8, 0x1F, 16), 0x80010050);
+        assert(cache.opcode == Opcode::CACHE);
+        assert(cache.toString() == "cache 0x001F, 16($t0)");
     }
 
     {
@@ -311,11 +372,102 @@ int main()
     }
 
     {
+        Instruction neg = MipsDisassembler::decode(encodeR(0, 9, 8, 0, 0x22), 0x80010060);
+        assert(neg.toString() == "neg $t0, $t1");
+
+        Instruction negu = MipsDisassembler::decode(encodeR(0, 9, 8, 0, 0x23), 0x80010064);
+        assert(negu.toString() == "negu $t0, $t1");
+
+        Instruction notInstr = MipsDisassembler::decode(encodeR(9, 0, 8, 0, 0x27), 0x80010068);
+        assert(notInstr.toString() == "not $t0, $t1");
+    }
+
+    {
         Instruction backward = MipsDisassembler::decode(encodeI(0x05, 8, 9, -1), 0x80010050);
         auto target = backward.getTargetAddress();
         assert(target.has_value());
         assert(*target == 0x80010050);
         assert(backward.toString() == "bne $t0, $t1, 0x80010050");
+    }
+
+    {
+        Instruction load = MipsDisassembler::decode(encodeI(0x23, 8, 9, 4), 0x80010070);
+        assert(load.getMemoryAccessType() == psxrecomp::disasm::MemoryAccessType::LOAD);
+        assert(load.getMemoryAccessSize() == psxrecomp::disasm::MemoryAccessSize::WORD);
+        assert(load.getAddressingMode() == psxrecomp::disasm::AddressingMode::BASE_OFFSET);
+
+        Instruction branch = MipsDisassembler::decode(encodeI(0x05, 8, 9, 2), 0x80010074);
+        assert(branch.getAddressingMode() == psxrecomp::disasm::AddressingMode::PC_RELATIVE);
+        assert(branch.getBranchTarget() == 0x80010080);
+
+        Instruction jump = MipsDisassembler::decode(encodeJ(0x02, 0x00100000), 0x80010078);
+        assert(jump.getAddressingMode() == psxrecomp::disasm::AddressingMode::ABSOLUTE);
+
+        Instruction jr = MipsDisassembler::decode(encodeR(31, 0, 0, 0, 0x08), 0x8001007C);
+        assert(jr.getAddressingMode() == psxrecomp::disasm::AddressingMode::REGISTER);
+    }
+
+    {
+        Instruction labelBranch = MipsDisassembler::decode(encodeI(0x04, 8, 9, 1), 0x80010080);
+        auto labelString = labelBranch.toString(
+            [](Address address) -> std::optional<std::string>
+            {
+                if (address == 0x80010088)
+                {
+                    return std::string("label_80010088");
+                }
+                return std::nullopt;
+            });
+        assert(labelString == "beq $t0, $t1, label_80010088");
+    }
+
+    {
+        std::vector<uint32_t> encodings = {
+            encodeI(0x0F, 0, 4, 0x1F80),   // lui $a0, 0x1F80
+            encodeI(0x0D, 4, 4, 0x0010),   // ori $a0, $a0, 0x0010
+            encodeI(0x09, 0, 5, 0x0034),   // addiu $a1, $zero, 0x0034
+            encodeI(0x2B, 4, 5, 0),        // sw $a1, 0($a0)
+            encodeI(0x04, 5, 0, 2),        // beqz $a1, +2
+            encodeR(31, 0, 0, 0, 0x08),    // jr $ra
+            encodeR(0, 0, 0, 0, 0x00),     // nop
+            (0x12u << 26) | (0x10u << 21), // gte rtps
+            encodeI(0x10, 0x08, 0x01, 1)   // bc0t
+        };
+
+        std::vector<uint8_t> bytes(encodings.size() * sizeof(uint32_t), 0);
+        for (size_t i = 0; i < encodings.size(); ++i)
+        {
+            writeLe32(bytes, i * sizeof(uint32_t), encodings[i]);
+        }
+
+        auto instructions = MipsDisassembler::disassemble(bytes.data(), bytes.size(), 0x80020000);
+        assert(instructions.size() == encodings.size());
+        assert(instructions[0].toString() == "lui $a0, 0x1F80");
+        assert(instructions[1].toString() == "ori $a0, $a0, 0x0010");
+        assert(instructions[2].toString() == "li $a1, 52");
+        assert(instructions[3].toString() == "sw $a1, 0($a0)");
+        assert(instructions[4].toString() == "beqz $a1, 0x8002001C");
+        assert(instructions[5].toString() == "jr $ra");
+        assert(instructions[6].toString() == "nop");
+        assert(instructions[7].toString() == "rtps");
+        assert(instructions[8].toString() == "bc0t 0x80020028");
+    }
+
+    {
+        std::vector<uint32_t> invalidEncodings = {
+            0xFFFFFFFFu,
+            0xFC000000u,
+            0xF4000000u,
+            0x4200000Fu,
+        };
+
+        for (size_t i = 0; i < invalidEncodings.size(); ++i)
+        {
+            Instruction invalid =
+                MipsDisassembler::decode(invalidEncodings[i], 0x80030000 + (i * 4));
+            assert(invalid.opcode == Opcode::UNKNOWN);
+            assert(invalid.toString().rfind("unknown", 0) == 0);
+        }
     }
 
     return 0;
