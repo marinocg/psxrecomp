@@ -63,8 +63,8 @@ set(IR_SOURCES
 )
 
 set(RECOMPILER_SOURCES
-    # src/recompiler/codegen.cpp
-    # src/recompiler/optimizer.cpp
+    src/recompiler/codegen.cpp
+    src/recompiler/cpp_emitter.cpp
 )
 
 set(RUNTIME_SOURCES
@@ -137,6 +137,19 @@ if(BUILD_TESTS)
     )
     target_include_directories(ir_passes_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME ir_passes_test COMMAND ir_passes_test)
+
+    add_executable(recompiler_codegen_test
+        tests/unit/recompiler_codegen_test.cpp
+        ${IR_SOURCES}
+        ${RECOMPILER_SOURCES}
+    )
+    target_include_directories(recompiler_codegen_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(
+        recompiler_codegen_test
+        PRIVATE PSXRECOMP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+                PSXRECOMP_TEST_CXX="${CMAKE_CXX_COMPILER}"
+    )
+    add_test(NAME recompiler_codegen_test COMMAND recompiler_codegen_test)
 endif()
 
 # Examples

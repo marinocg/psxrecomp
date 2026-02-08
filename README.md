@@ -117,7 +117,7 @@ For agent collaboration, see [agents.md](agents.md).
 - [x] PSX-EXE loader
 - [x] Basic MIPS R3000 disassembler
 - [x] IR design and implementation
-- [ ] Simple function recompiler
+- [x] Simple function recompiler
 - [ ] Runtime library basics
 - [ ] First recompiled demo
 - [ ] GPU emulation layer

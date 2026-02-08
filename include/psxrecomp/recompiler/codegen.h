@@ -1,5 +1,6 @@
 #pragma once
 
+#include "psxrecomp/ir/ir.h"
 #include "psxrecomp/types.h"
 #include <string>
 #include <vector>
@@ -35,17 +36,19 @@ class CodeGenerator
 
     /**
      * @brief Generate C++ header file
+     * @param program IR program to emit declarations for
      * @param moduleName Name of the module
      * @return Generated header content
      */
-    std::string generateHeader(const std::string& moduleName);
+    std::string generateHeader(const ir::Program& program, const std::string& moduleName);
 
     /**
      * @brief Generate C++ source file
+     * @param program IR program to lower and emit definitions for
      * @param moduleName Name of the module
      * @return Generated source content
      */
-    std::string generateSource(const std::string& moduleName);
+    std::string generateSource(const ir::Program& program, const std::string& moduleName);
 
     /**
      * @brief Generate CMakeLists.txt for recompiled code
@@ -57,10 +60,9 @@ class CodeGenerator
   private:
     CodeGenOptions m_options;
 
-    std::string generateIncludes();
-    std::string generateTypes();
-    std::string generateGlobals();
-    std::string generateFunctions();
+    std::string generateGlobals(const ir::Program& program) const;
+    std::string generateFunctionDeclarations(const ir::Program& program) const;
+    std::string generateFunctionDefinitions(const ir::Program& program) const;
 };
 
 } // namespace recompiler
