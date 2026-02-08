@@ -2,6 +2,8 @@
 #include <iostream>
 #include <string>
 
+#include "psxrecomp/recompiler/pipeline.h"
+
 // Placeholder for command-line interface
 // This will be implemented as the project develops
 
@@ -95,19 +97,35 @@ int main(int argc, char* argv[])
     std::cout << "Symbols:       " << (preserveSymbols ? "Preserve" : "Strip") << "\n";
     std::cout << "Verbose:       " << (verbose ? "Yes" : "No") << "\n\n";
 
-    // TODO: Implement the actual recompilation pipeline
-    // 1. Parse ISO/BIN file
-    // 2. Extract PSX-EXE
-    // 3. Disassemble MIPS code
-    // 4. Generate IR
-    // 5. Optimize IR
-    // 6. Generate C++ code
-    // 7. Generate build files
+    psxrecomp::recompiler::PipelineOptions options;
+    options.outputDirectory = outputDir;
+    options.enableOptimizations = optimize;
+    options.preserveSymbols = preserveSymbols;
+    options.verbose = verbose;
 
-    std::cout << "⚠️  PSXRecomp is currently in early development.\n";
-    std::cout << "    The recompilation pipeline is not yet implemented.\n";
-    std::cout << "    Please check back later or contribute to the project!\n\n";
-    std::cout << "    GitHub: https://github.com/marinocg/psxrecomp\n";
+    psxrecomp::recompiler::RecompilationPipeline pipeline(options);
+    auto result = pipeline.run(inputFile);
+    if (!result.success)
+    {
+        std::cerr << "Recompilation failed:\n" << result.errorMessage << "\n";
+        return 1;
+    }
+
+    if (!result.warnings.empty())
+    {
+        std::cout << "Warnings:\n";
+        for (const auto& warning : result.warnings)
+        {
+            std::cout << " - " << warning << "\n";
+        }
+        std::cout << "\n";
+    }
+
+    std::cout << "Recompilation complete.\n";
+    std::cout << "Module:   " << result.artifacts.moduleName << "\n";
+    std::cout << "Header:   " << result.artifacts.headerPath << "\n";
+    std::cout << "Source:   " << result.artifacts.sourcePath << "\n";
+    std::cout << "CMake:    " << result.artifacts.buildPath << "\n";
 
     return 0;
 }

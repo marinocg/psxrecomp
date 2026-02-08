@@ -58,13 +58,16 @@ set(DISASM_SOURCES
 set(IR_SOURCES
     src/ir/ir.cpp
     src/ir/control_flow.cpp
+    src/ir/mips_ir_builder.cpp
     src/ir/ssa.cpp
     src/ir/verify.cpp
 )
 
 set(RECOMPILER_SOURCES
     src/recompiler/codegen.cpp
+    src/recompiler/codegen_lowering.cpp
     src/recompiler/cpp_emitter.cpp
+    src/recompiler/pipeline.cpp
 )
 
 set(RUNTIME_SOURCES
@@ -133,6 +136,7 @@ if(BUILD_TESTS)
     add_executable(ir_test
         tests/unit/ir_test.cpp
         ${IR_SOURCES}
+        ${DISASM_SOURCES}
     )
     target_include_directories(ir_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME ir_test COMMAND ir_test)
@@ -140,6 +144,7 @@ if(BUILD_TESTS)
     add_executable(ir_passes_test
         tests/unit/ir_passes_test.cpp
         ${IR_SOURCES}
+        ${DISASM_SOURCES}
     )
     target_include_directories(ir_passes_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME ir_passes_test COMMAND ir_passes_test)
@@ -147,7 +152,9 @@ if(BUILD_TESTS)
     add_executable(recompiler_codegen_test
         tests/unit/recompiler_codegen_test.cpp
         ${IR_SOURCES}
+        ${DISASM_SOURCES}
         ${RECOMPILER_SOURCES}
+        ${ISO_SOURCES}
     )
     target_include_directories(recompiler_codegen_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_compile_definitions(
@@ -156,6 +163,14 @@ if(BUILD_TESTS)
                 PSXRECOMP_TEST_CXX="${CMAKE_CXX_COMPILER}"
     )
     add_test(NAME recompiler_codegen_test COMMAND recompiler_codegen_test)
+
+    add_executable(mips_ir_builder_test
+        tests/unit/mips_ir_builder_test.cpp
+        ${IR_SOURCES}
+        ${DISASM_SOURCES}
+    )
+    target_include_directories(mips_ir_builder_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME mips_ir_builder_test COMMAND mips_ir_builder_test)
 
     add_executable(runtime_test
         tests/unit/runtime_test.cpp

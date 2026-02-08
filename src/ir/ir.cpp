@@ -29,6 +29,18 @@ std::string opcodeToString(Opcode opcode)
         return "or";
     case Opcode::XOR:
         return "xor";
+    case Opcode::COMPARE_EQ:
+        return "cmp_eq";
+    case Opcode::COMPARE_NE:
+        return "cmp_ne";
+    case Opcode::COMPARE_LT:
+        return "cmp_lt";
+    case Opcode::COMPARE_LE:
+        return "cmp_le";
+    case Opcode::COMPARE_GT:
+        return "cmp_gt";
+    case Opcode::COMPARE_GE:
+        return "cmp_ge";
     case Opcode::LOAD:
         return "load";
     case Opcode::STORE:
