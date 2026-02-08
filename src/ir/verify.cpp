@@ -129,7 +129,12 @@ VerificationResult verifyFunction(const Function& function, const ControlFlowGra
                 if (blockIndex.has_value())
                 {
                     const auto& preds = graph.predecessors[*blockIndex];
-                    if (!preds.empty() && instruction.inputs.size() != preds.size())
+                    if (preds.empty())
+                    {
+                        addError(result, "Phi in block '" + block.name +
+                                             "' has no predecessors");
+                    }
+                    if (instruction.inputs.size() != preds.size())
                     {
                         addError(result, "Phi in block '" + block.name +
                                              "' has input count mismatch with predecessors");
@@ -143,7 +148,7 @@ VerificationResult verifyFunction(const Function& function, const ControlFlowGra
     {
         if (tempDefinitions.find(useId) == tempDefinitions.end())
         {
-            addError(result, "Temporary t" + std::to_string(useId) + " used before definition");
+            addError(result, "Temporary t" + std::to_string(useId) + " used but never defined");
         }
     }
 

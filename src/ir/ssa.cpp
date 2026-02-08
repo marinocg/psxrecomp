@@ -153,6 +153,11 @@ SsaResult convertFunctionToSSA(Function& function, const ControlFlowGraph& graph
                     }
                     else
                     {
+                        if (state.phiOutputs[reg].has_value())
+                        {
+                            state.phiOutputs[reg].reset();
+                            changed = true;
+                        }
                         newIn[reg] = merged;
                     }
                 }

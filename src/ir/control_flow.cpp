@@ -10,7 +10,7 @@ namespace ir
 
 std::optional<size_t> ControlFlowGraph::indexOf(std::string_view name) const
 {
-    auto it = blockIndex.find(std::string(name));
+    auto it = blockIndex.find(name);
     if (it == blockIndex.end())
     {
         return std::nullopt;
@@ -38,7 +38,14 @@ ControlFlowGraph buildControlFlowGraph(const Function& function, std::vector<std
     {
         auto& block = function.blocks[index];
         graph.blocks.push_back(&block);
-        graph.blockIndex.emplace(block.name, index);
+        auto [it, inserted] = graph.blockIndex.emplace(block.name, index);
+        if (!inserted)
+        {
+            if (errors)
+            {
+                errors->push_back("Duplicate basic block name '" + block.name + "'");
+            }
+        }
     }
 
     for (size_t index = 0; index < function.blocks.size(); ++index)
@@ -73,30 +80,51 @@ std::vector<size_t> computeReversePostOrder(const ControlFlowGraph& graph)
         return order;
     }
 
-    std::vector<bool> visited(graph.blocks.size(), false);
-    std::stack<size_t> stack;
-    stack.push(0);
+    const size_t numBlocks = graph.blocks.size();
+    std::vector<bool> visited(numBlocks, false);
 
-    while (!stack.empty())
+    auto dfsFrom = [&](size_t start)
     {
-        size_t node = stack.top();
-        if (visited[node])
-        {
-            stack.pop();
-            if (node < graph.blocks.size())
-            {
-                order.push_back(node);
-            }
-            continue;
-        }
+        std::stack<size_t> stack;
+        stack.push(start);
 
-        visited[node] = true;
-        for (auto successor : graph.successors[node])
+        while (!stack.empty())
         {
-            if (!visited[successor])
+            size_t node = stack.top();
+            if (visited[node])
             {
-                stack.push(successor);
+                stack.pop();
+                if (node < numBlocks)
+                {
+                    order.push_back(node);
+                }
+                continue;
             }
+
+            visited[node] = true;
+            for (auto successor : graph.successors[node])
+            {
+                if (successor < numBlocks && !visited[successor])
+                {
+                    stack.push(successor);
+                }
+            }
+        }
+    };
+
+    for (size_t index = 0; index < numBlocks; ++index)
+    {
+        if (!visited[index] && graph.predecessors[index].empty())
+        {
+            dfsFrom(index);
+        }
+    }
+
+    for (size_t index = 0; index < numBlocks; ++index)
+    {
+        if (!visited[index])
+        {
+            dfsFrom(index);
         }
     }
 
