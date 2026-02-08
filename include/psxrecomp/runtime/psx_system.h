@@ -71,8 +71,7 @@ class PsxSystem
         }
         if (isInRange(physical, MemoryMap::BIOS_BASE, MemoryMap::BIOS_SIZE))
         {
-            return readFromRegion<T>(m_bios, physical - MemoryMap::BIOS_BASE,
-                                     MemoryMap::BIOS_SIZE);
+            return readFromRegion<T>(m_bios, physical - MemoryMap::BIOS_BASE, MemoryMap::BIOS_SIZE);
         }
         if (isInRange(physical, MemoryMap::IO_BASE, MemoryMap::IO_SIZE))
         {

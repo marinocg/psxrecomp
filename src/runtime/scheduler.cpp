@@ -28,17 +28,19 @@ void Scheduler::tick(uint64_t cycles)
         }
     }
 
-    auto it = std::remove_if(m_events.begin(), m_events.end(), [](const Event& event) {
-        if (event.cyclesRemaining == 0)
-        {
-            if (event.callback)
-            {
-                event.callback();
-            }
-            return true;
-        }
-        return false;
-    });
+    auto it = std::remove_if(m_events.begin(), m_events.end(),
+                             [](const Event& event)
+                             {
+                                 if (event.cyclesRemaining == 0)
+                                 {
+                                     if (event.callback)
+                                     {
+                                         event.callback();
+                                     }
+                                     return true;
+                                 }
+                                 return false;
+                             });
     m_events.erase(it, m_events.end());
 }
 

@@ -35,7 +35,8 @@ int main()
 
     assert(system.gpu().fifoDepth() == 2);
     assert(system.gpu().peekFifo() == 0x11111111);
-    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Dma)) != 0);
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Dma)) !=
+           0);
 
     Address spuBase = 0x1F801080 + 0x10 * static_cast<Address>(DmaPort::Spu);
     system.write<psxrecomp::u32>(0x00011000, 0xABCDEF01);

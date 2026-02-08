@@ -11,7 +11,7 @@ namespace
 {
 constexpr u32 CYCLES_PER_FRAME = 564480;
 constexpr u32 DMA_DIRECTION_FROM_RAM = 0x00000001;
-}
+} // namespace
 
 PsxSystem::PsxSystem() : m_ram(nullptr), m_scratchpad(nullptr), m_bios(nullptr)
 {
