@@ -38,7 +38,10 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # Source files will be organized by component
 set(ISO_SOURCES
+    src/iso/cue_sheet.cpp
+    src/iso/iso_utils.cpp
     src/iso/iso_parser.cpp
+    src/iso/path_table.cpp
     src/iso/psx_exe_loader.cpp
 )
 

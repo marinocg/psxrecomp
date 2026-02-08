@@ -1,12 +1,16 @@
 #include "psxrecomp/iso/iso_parser.h"
 
+#include "cue_sheet.h"
+#include "iso_utils.h"
+#include "path_table.h"
+
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <optional>
 #include <sstream>
+#include <unordered_map>
 
 namespace psxrecomp
 {
@@ -21,152 +25,6 @@ constexpr u32 kRawSectorSize = 2352;
 constexpr u8 kMode1 = 1;
 constexpr u8 kMode2 = 2;
 constexpr u8 kSubmodeForm2 = 0x20;
-
-u16 readLe16(const u8* data)
-{
-    return static_cast<u16>(data[0]) | (static_cast<u16>(data[1]) << 8);
-}
-
-u32 readLe32(const u8* data)
-{
-    return static_cast<u32>(data[0]) | (static_cast<u32>(data[1]) << 8) |
-           (static_cast<u32>(data[2]) << 16) | (static_cast<u32>(data[3]) << 24);
-}
-
-std::string trimSpaces(const std::string& value)
-{
-    auto start = value.find_first_not_of(' ');
-    if (start == std::string::npos)
-    {
-        return "";
-    }
-    auto end = value.find_last_not_of(' ');
-    return value.substr(start, end - start + 1);
-}
-
-std::string toUpper(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
-    return value;
-}
-
-std::string normalizeIsoName(const std::string& name)
-{
-    auto upper = toUpper(name);
-    auto semicolon = upper.find(';');
-    if (semicolon != std::string::npos)
-    {
-        upper.erase(semicolon);
-    }
-    return upper;
-}
-
-std::vector<std::string> splitPath(const std::string& path)
-{
-    std::vector<std::string> parts;
-    std::string current;
-    for (char ch : path)
-    {
-        if (ch == '/' || ch == '\\')
-        {
-            if (!current.empty())
-            {
-                parts.push_back(current);
-                current.clear();
-            }
-        }
-        else
-        {
-            current.push_back(ch);
-        }
-    }
-    if (!current.empty())
-    {
-        parts.push_back(current);
-    }
-    return parts;
-}
-
-std::string trim(const std::string& value)
-{
-    auto start = value.find_first_not_of(" \t\r\n");
-    if (start == std::string::npos)
-    {
-        return "";
-    }
-    auto end = value.find_last_not_of(" \t\r\n");
-    return value.substr(start, end - start + 1);
-}
-
-std::string decodeJolietName(const u8* data, size_t length)
-{
-    std::string result;
-    result.reserve((length / 2) * 3);
-    for (size_t i = 0; i + 1 < length; i += 2)
-    {
-        u16 code = static_cast<u16>(data[i] << 8) | static_cast<u16>(data[i + 1]);
-        if (code == 0)
-        {
-            continue;
-        }
-        if (code <= 0x7F)
-        {
-            result.push_back(static_cast<char>(code));
-        }
-        else if (code <= 0x07FF)
-        {
-            char b1 = static_cast<char>(0xC0 | ((code >> 6) & 0x1F));
-            char b2 = static_cast<char>(0x80 | (code & 0x3F));
-            result.push_back(b1);
-            result.push_back(b2);
-        }
-        else
-        {
-            if (code >= 0xD800 && code <= 0xDFFF)
-            {
-                result.push_back('?');
-                continue;
-            }
-            char b1 = static_cast<char>(0xE0 | ((code >> 12) & 0x0F));
-            char b2 = static_cast<char>(0x80 | ((code >> 6) & 0x3F));
-            char b3 = static_cast<char>(0x80 | (code & 0x3F));
-            result.push_back(b1);
-            result.push_back(b2);
-            result.push_back(b3);
-        }
-    }
-    return result;
-}
-
-std::string baseIsoName(const std::string& name)
-{
-    auto semicolon = name.find(';');
-    if (semicolon != std::string::npos)
-    {
-        return name.substr(0, semicolon);
-    }
-    return name;
-}
-
-int isoVersionNumber(const std::string& name)
-{
-    auto semicolon = name.find(';');
-    if (semicolon == std::string::npos)
-    {
-        return 0;
-    }
-    int value = 0;
-    for (size_t i = semicolon + 1; i < name.size(); ++i)
-    {
-        if (!std::isdigit(static_cast<unsigned char>(name[i])))
-        {
-            break;
-        }
-        value = (value * 10) + (name[i] - '0');
-    }
-    return value;
-}
 
 struct SectorView
 {
@@ -213,7 +71,7 @@ std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
     std::string line;
     while (std::getline(stream, line))
     {
-        auto upper = toUpper(line);
+        auto upper = detail::toUpper(line);
         auto pos = upper.find("BOOT");
         if (pos == std::string::npos)
         {
@@ -227,17 +85,22 @@ std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
         std::string value = line.substr(equals + 1);
         value.erase(0, value.find_first_not_of(" \t"));
         value.erase(value.find_last_not_of(" \t\r\n") + 1);
-        auto prefixPos = toUpper(value).find("CDROM:");
+        auto upperValue = detail::toUpper(value);
+        auto prefixPos = upperValue.find("CDROM");
         if (prefixPos != std::string::npos)
         {
-            value = value.substr(prefixPos + 6);
+            auto colonPos = upperValue.find(':', prefixPos);
+            if (colonPos != std::string::npos)
+            {
+                value = value.substr(colonPos + 1);
+            }
         }
         while (!value.empty() && (value[0] == '\\' || value[0] == '/'))
         {
             value.erase(value.begin());
         }
         std::replace(value.begin(), value.end(), '\\', '/');
-        return normalizeIsoName(value);
+        return detail::normalizeIsoName(value);
     }
 
     return "";
@@ -248,7 +111,8 @@ std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
 IsoParser::IsoParser(const std::string& filename)
     : m_filename(filename), m_isOpen(false), m_isValid(false), m_rawSectorSize(kUserDataSize),
       m_dataTrackStartLba(0), m_logicalBlockSize(kUserDataSize), m_useJoliet(false), m_stream(),
-      m_rawSectorScratch(), m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0)
+      m_rawSectorScratch(), m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0),
+      m_totalSectors(0), m_tracks(), m_errors()
 {
 }
 
@@ -262,6 +126,12 @@ IsoParser::~IsoParser()
 
 bool IsoParser::open()
 {
+    m_errors.clear();
+    m_tracks.clear();
+    m_directoryCache.clear();
+    m_pathTable.clear();
+    m_totalSectors = 0;
+
     if (!openStream())
     {
         return false;
@@ -279,7 +149,7 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
         return {};
     }
 
-    std::vector<std::string> components = splitPath(path);
+    std::vector<std::string> components = detail::splitPath(path);
     if (components.empty())
     {
         return {};
@@ -293,12 +163,38 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
 
     DirectoryRecord target{};
     std::vector<DirectoryRecord> targetExtents;
+    std::string currentPath;
     for (size_t i = 0; i < components.size(); ++i)
     {
-        std::string desired = normalizeIsoName(components[i]);
+        std::string desired = detail::normalizeIsoName(components[i]);
+        bool isLast = i == components.size() - 1;
+        std::string nextPath = currentPath;
+        if (!desired.empty())
+        {
+            if (!nextPath.empty())
+            {
+                nextPath += "/";
+            }
+            nextPath += desired;
+        }
+
+        if (!isLast && !m_pathTable.empty())
+        {
+            DirectoryInfo info{};
+            if (getDirectoryInfo(nextPath, info))
+            {
+                currentPath = nextPath;
+                if (!readDirectory(info.extent, info.size, records))
+                {
+                    return {};
+                }
+                continue;
+            }
+        }
+
         bool found = false;
         targetExtents.clear();
-        std::string desiredBase = normalizeIsoName(baseIsoName(components[i]));
+        std::string desiredBase = detail::normalizeIsoName(detail::baseIsoName(components[i]));
         bool desiredHasVersion = components[i].find(';') != std::string::npos;
         int bestVersion = -1;
         DirectoryRecord bestRecord{};
@@ -312,16 +208,18 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
             {
                 continue;
             }
-            auto recordName = normalizeIsoName(record.name);
+            auto recordName = detail::normalizeIsoName(record.name);
             if (recordName == desired)
             {
                 found = true;
+                target = record;
                 targetExtents.push_back(record);
                 continue;
             }
-            if (!desiredHasVersion && normalizeIsoName(baseIsoName(record.name)) == desiredBase)
+            if (!desiredHasVersion &&
+                detail::normalizeIsoName(detail::baseIsoName(record.name)) == desiredBase)
             {
-                int version = isoVersionNumber(record.name);
+                int version = detail::isoVersionNumber(record.name);
                 if (version > bestVersion)
                 {
                     bestVersion = version;
@@ -333,16 +231,18 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
         if (!found && bestVersion >= 0)
         {
             found = true;
+            target = bestRecord;
             targetExtents.clear();
             targetExtents.push_back(bestRecord);
         }
 
         if (!found)
         {
+            addError("Failed to locate ISO file: " + desired);
             return {};
         }
 
-        if (i < components.size() - 1)
+        if (!isLast)
         {
             if ((target.flags & 0x02) == 0)
             {
@@ -353,6 +253,7 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
             {
                 return {};
             }
+            currentPath = nextPath;
         }
     }
 
@@ -422,23 +323,10 @@ std::string IsoParser::findExecutable()
         return bootPath;
     }
 
-    std::vector<DirectoryRecord> records;
-    if (!readDirectory(m_rootExtent, m_rootSize, records))
+    auto executables = listExecutables();
+    if (!executables.empty())
     {
-        return "";
-    }
-
-    for (const auto& record : records)
-    {
-        if ((record.flags & 0x02) != 0)
-        {
-            continue;
-        }
-        auto name = normalizeIsoName(record.name);
-        if (name.size() >= 4 && name.substr(name.size() - 4) == ".EXE")
-        {
-            return name;
-        }
+        return executables.front();
     }
 
     return "";
@@ -452,12 +340,101 @@ std::string IsoParser::getVolumeLabel() const
     {
         label.erase(nullPos);
     }
-    return trimSpaces(label);
+    return detail::trimSpaces(label);
+}
+
+const std::vector<TrackInfo>& IsoParser::getTracks() const
+{
+    return m_tracks;
+}
+
+std::optional<TrackInfo> IsoParser::getDataTrack() const
+{
+    for (const auto& track : m_tracks)
+    {
+        if (track.type == TrackType::Data)
+        {
+            return track;
+        }
+    }
+    return std::nullopt;
+}
+
+const std::vector<std::string>& IsoParser::getErrors() const
+{
+    return m_errors;
+}
+
+std::string IsoParser::getLastError() const
+{
+    if (m_errors.empty())
+    {
+        return "";
+    }
+    return m_errors.back();
 }
 
 bool IsoParser::isValid() const
 {
     return m_isValid;
+}
+
+std::vector<std::string> IsoParser::listExecutables()
+{
+    std::vector<std::string> executables;
+    if (!m_isOpen)
+    {
+        return executables;
+    }
+
+    std::vector<std::pair<std::string, DirectoryInfo>> directories;
+    directories.emplace_back("", DirectoryInfo{m_rootExtent, m_rootSize});
+
+    if (!m_pathTable.empty())
+    {
+        directories.clear();
+        directories.reserve(m_pathTable.size());
+        for (const auto& entry : m_pathTable)
+        {
+            DirectoryInfo info{};
+            if (!getDirectoryInfo(entry.first, info))
+            {
+                continue;
+            }
+            directories.emplace_back(entry.first, info);
+        }
+    }
+
+    for (const auto& entry : directories)
+    {
+        std::vector<DirectoryRecord> records;
+        if (!readDirectory(entry.second.extent, entry.second.size, records))
+        {
+            continue;
+        }
+        for (const auto& record : records)
+        {
+            if ((record.flags & 0x02) != 0)
+            {
+                continue;
+            }
+            auto name = detail::normalizeIsoName(record.name);
+            if (name.size() >= 4 && name.substr(name.size() - 4) == ".EXE")
+            {
+                std::string path = entry.first;
+                if (!path.empty())
+                {
+                    path += "/";
+                }
+                path += name;
+                executables.push_back(path);
+            }
+        }
+    }
+
+    std::sort(executables.begin(), executables.end());
+    executables.erase(std::unique(executables.begin(), executables.end()), executables.end());
+    return executables;
 }
 
 bool IsoParser::readPVD()
@@ -470,7 +447,9 @@ bool IsoParser::readPVD()
     u32 trackStart = m_dataTrackStartLba;
     m_useJoliet = false;
 
-    for (u32 layoutSize : {kUserDataSize, kRawSectorSize})
+    std::array<u32, 2> layoutSizes = {
+        m_rawSectorSize, m_rawSectorSize == kUserDataSize ? kRawSectorSize : kUserDataSize};
+    for (u32 layoutSize : layoutSizes)
     {
         m_rawSectorSize = layoutSize;
         m_dataTrackStartLba = trackStart;
@@ -502,14 +481,21 @@ bool IsoParser::readPVD()
                 candidate.version = sector[6];
                 std::memcpy(candidate.systemId, sector.data() + 8, 32);
                 std::memcpy(candidate.volumeId, sector.data() + 40, 32);
-                candidate.volumeSpaceSize = readLe32(sector.data() + 80);
-                candidate.volumeSetSize = readLe16(sector.data() + 120);
-                candidate.volumeSequenceNumber = readLe16(sector.data() + 124);
-                candidate.logicalBlockSize = readLe16(sector.data() + 128);
-                candidate.pathTableSize = readLe32(sector.data() + 132);
+                candidate.volumeSpaceSize = detail::readLe32(sector.data() + 80);
+                candidate.volumeSetSize = detail::readLe16(sector.data() + 120);
+                candidate.volumeSequenceNumber = detail::readLe16(sector.data() + 124);
+                candidate.logicalBlockSize = detail::readLe16(sector.data() + 128);
+                candidate.pathTableSize = detail::readLe32(sector.data() + 132);
+                candidate.pathTableLba = detail::readLe32(sector.data() + 140);
+                candidate.optionalPathTableLba = detail::readLe32(sector.data() + 148);
+                if (!validateVolumeMetadata(candidate))
+                {
+                    continue;
+                }
                 pvd = candidate;
                 const u8* rootRecord = sector.data() + 156;
-                pvdRoot = std::make_pair(readLe32(rootRecord + 2), readLe32(rootRecord + 10));
+                pvdRoot = std::make_pair(detail::readLe32(rootRecord + 2),
+                                         detail::readLe32(rootRecord + 10));
             }
             if (type == 2)
             {
@@ -517,8 +503,8 @@ bool IsoParser::readPVD()
                     (sector[90] == 0x40 || sector[90] == 0x43 || sector[90] == 0x45))
                 {
                     const u8* rootRecord = sector.data() + 156;
-                    u32 rootExtent = readLe32(rootRecord + 2);
-                    u32 rootSize = readLe32(rootRecord + 10);
+                    u32 rootExtent = detail::readLe32(rootRecord + 2);
+                    u32 rootSize = detail::readLe32(rootRecord + 10);
                     jolietRoot = std::make_pair(rootExtent, rootSize);
                 }
             }
@@ -540,6 +526,10 @@ bool IsoParser::readPVD()
                 m_rootExtent = pvdRoot->first;
                 m_rootSize = pvdRoot->second;
             }
+            if (!loadPathTable())
+            {
+                addError("Failed to parse ISO path table.");
+            }
             m_rootDirectory.clear();
             if (!readDirectory(m_rootExtent, m_rootSize, m_rootDirectory))
             {
@@ -556,6 +546,7 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
 {
     if (size == 0)
     {
+        addError("Directory size is zero.");
         return false;
     }
 
@@ -570,6 +561,7 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
         auto data = readSector(sector);
         if (data.empty())
         {
+            addError("Failed to read directory sector.");
             return false;
         }
         u32 toCopy = std::min<u32>(remaining, static_cast<u32>(data.size()));
@@ -596,6 +588,7 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
         }
         if (offset + length > buffer.size())
         {
+            addError("Directory record exceeds buffer length.");
             break;
         }
 
@@ -603,19 +596,19 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
         DirectoryRecord record{};
         record.length = recordData[0];
         record.extendedLength = recordData[1];
-        record.extentLocation = readLe32(recordData + 2);
-        record.dataLength = readLe32(recordData + 10);
+        record.extentLocation = detail::readLe32(recordData + 2);
+        record.dataLength = detail::readLe32(recordData + 10);
         std::memcpy(record.recordingDateTime, recordData + 18, 7);
         record.flags = recordData[25];
         record.fileUnitSize = recordData[26];
         record.interleaveGapSize = recordData[27];
-        record.volumeSequenceNumber = readLe16(recordData + 28);
+        record.volumeSequenceNumber = detail::readLe16(recordData + 28);
         record.nameLength = recordData[32];
         if (record.nameLength > 0 && 33 + record.nameLength <= length)
         {
             if (m_useJoliet)
             {
-                record.name = decodeJolietName(recordData + 33, record.nameLength);
+                record.name = detail::decodeJolietName(recordData + 33, record.nameLength);
             }
             else
             {
@@ -646,6 +639,7 @@ std::vector<u8> IsoParser::readSector(u32 sector)
     std::vector<u8> raw(m_rawSectorSize);
     if (!readRawSector(sector, raw))
     {
+        addError("Failed to read raw sector.");
         return {};
     }
     if (m_rawSectorSize == kUserDataSize)
@@ -655,6 +649,7 @@ std::vector<u8> IsoParser::readSector(u32 sector)
     auto view = decodeSectorLayout(raw);
     if (view.size == 0 || view.offset + view.size > raw.size())
     {
+        addError("Unsupported sector layout.");
         return {};
     }
     return std::vector<u8>(raw.begin() + static_cast<std::ptrdiff_t>(view.offset),
@@ -665,6 +660,7 @@ bool IsoParser::readRawSector(u32 sector, std::vector<u8>& buffer)
 {
     if (!m_stream)
     {
+        addError("Stream not open for sector read.");
         return false;
     }
     m_stream.clear();
@@ -677,17 +673,24 @@ bool IsoParser::readRawSector(u32 sector, std::vector<u8>& buffer)
     m_stream.seekg(offset, std::ios::beg);
     if (!m_stream.good())
     {
+        addError("Failed to seek to sector offset.");
         return false;
     }
     m_stream.read(reinterpret_cast<char*>(buffer.data()),
                   static_cast<std::streamsize>(buffer.size()));
-    return m_stream.gcount() == static_cast<std::streamsize>(buffer.size());
+    if (m_stream.gcount() != static_cast<std::streamsize>(buffer.size()))
+    {
+        addError("Short read while reading sector.");
+        return false;
+    }
+    return true;
 }
 
 bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
 {
     if (!m_stream)
     {
+        addError("Stream not open for sector read.");
         return false;
     }
     if (m_rawSectorSize == kUserDataSize)
@@ -698,6 +701,7 @@ bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
         }
         if (size > m_rawSectorScratch.size())
         {
+            addError("Requested sector slice exceeds buffer size.");
             return false;
         }
         std::memcpy(buffer, m_rawSectorScratch.data(), size);
@@ -711,6 +715,7 @@ bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
     auto view = decodeSectorLayout(m_rawSectorScratch);
     if (view.size < size || view.offset + size > m_rawSectorScratch.size())
     {
+        addError("Invalid sector view.");
         return false;
     }
     std::memcpy(buffer, m_rawSectorScratch.data() + view.offset, size);
@@ -724,133 +729,220 @@ bool IsoParser::openStream()
         m_stream.close();
     }
 
-    if (loadCueSheet())
+    CueSheet cueSheet{};
+    std::string cueError;
+    std::filesystem::path inputPath(m_filename);
+    bool isCue =
+        inputPath.has_extension() && detail::toUpper(inputPath.extension().string()) == ".CUE";
+
+    if (isCue)
     {
-        m_stream.open(m_filename, std::ios::binary);
-        return m_stream.good();
+        if (!parseCueSheet(m_filename, cueSheet, cueError))
+        {
+            addError(cueError.empty() ? "Failed to parse CUE sheet." : cueError);
+            return false;
+        }
+
+        m_tracks = cueSheet.tracks;
+        const auto* dataTrack = cueSheet.findFirstDataTrack();
+        if (!dataTrack)
+        {
+            addError("No data track found in CUE sheet.");
+            return false;
+        }
+
+        for (auto& track : m_tracks)
+        {
+            if (!track.file.empty())
+            {
+                std::filesystem::path resolved = inputPath.parent_path() / track.file;
+                track.file = resolved.string();
+            }
+        }
+
+        std::filesystem::path binPath = inputPath.parent_path() / dataTrack->file;
+        m_filename = binPath.string();
+        m_rawSectorSize = dataTrack->sectorSize != 0 ? dataTrack->sectorSize : kRawSectorSize;
+        m_dataTrackStartLba = dataTrack->startLba;
+    }
+    else
+    {
+        m_dataTrackStartLba = 0;
+        m_rawSectorSize = kUserDataSize;
+        TrackInfo track{};
+        track.trackNumber = 1;
+        track.type = TrackType::Data;
+        track.sectorSize = m_rawSectorSize;
+        track.startLba = 0;
+        track.file = m_filename;
+        m_tracks = {track};
     }
 
-    m_dataTrackStartLba = 0;
     m_stream.open(m_filename, std::ios::binary);
-    return m_stream.good();
+    if (!m_stream.good())
+    {
+        addError("Failed to open image file: " + m_filename);
+        return false;
+    }
+
+    std::error_code error;
+    auto fileSize = std::filesystem::file_size(m_filename, error);
+    if (error)
+    {
+        addError("Failed to determine image file size.");
+    }
+    else if (m_rawSectorSize != 0)
+    {
+        m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
+        if (fileSize % m_rawSectorSize != 0)
+        {
+            addError("Image file size is not aligned to sector size.");
+        }
+    }
+
+    if (!isCue && !m_tracks.empty())
+    {
+        m_tracks.front().sectorSize = m_rawSectorSize;
+    }
+
+    return true;
 }
 
-bool IsoParser::loadCueSheet()
+void IsoParser::addError(const std::string& message)
 {
-    auto extensionPos = m_filename.find_last_of('.');
-    if (extensionPos == std::string::npos)
+    if (message.empty())
     {
+        return;
+    }
+    m_errors.push_back(message);
+}
+
+bool IsoParser::validateVolumeMetadata(const PrimaryVolumeDescriptor& pvd)
+{
+    if (pvd.logicalBlockSize == 0)
+    {
+        addError("Logical block size is zero.");
         return false;
     }
-    std::string extension = toUpper(m_filename.substr(extensionPos + 1));
-    if (extension != "CUE")
+    if ((pvd.logicalBlockSize & (pvd.logicalBlockSize - 1)) != 0)
     {
+        addError("Logical block size is not a power of two.");
         return false;
     }
-
-    std::ifstream cueStream(m_filename);
-    if (!cueStream)
+    if (pvd.logicalBlockSize != kUserDataSize)
     {
+        addError("Unsupported logical block size.");
         return false;
     }
-
-    std::filesystem::path cuePath(m_filename);
-    std::string line;
-    std::string currentFile;
-    struct TrackInfo
+    if (pvd.volumeSpaceSize == 0)
     {
-        u32 sectorSize = 0;
-        u32 index01 = 0;
-        std::string file;
-    };
-    std::optional<TrackInfo> dataTrack;
-    bool parsingDataTrack = false;
-
-    while (std::getline(cueStream, line))
-    {
-        auto trimmed = trim(line);
-        if (trimmed.empty())
-        {
-            continue;
-        }
-        auto upper = toUpper(trimmed);
-        if (upper.rfind("FILE", 0) == 0)
-        {
-            auto firstQuote = trimmed.find('"');
-            auto lastQuote = trimmed.find_last_of('"');
-            if (firstQuote != std::string::npos && lastQuote != std::string::npos &&
-                lastQuote > firstQuote)
-            {
-                currentFile = trimmed.substr(firstQuote + 1, lastQuote - firstQuote - 1);
-            }
-            continue;
-        }
-        if (upper.rfind("TRACK", 0) == 0)
-        {
-            std::istringstream stream(trimmed);
-            std::string token;
-            std::string type;
-            stream >> token;
-            stream >> token;
-            stream >> type;
-            type = toUpper(type);
-            if (type == "MODE1/2048")
-            {
-                if (!dataTrack)
-                {
-                    dataTrack = TrackInfo{2048, 0, currentFile};
-                }
-                parsingDataTrack =
-                    dataTrack && dataTrack->file == currentFile && dataTrack->sectorSize == 2048;
-            }
-            else if (type == "MODE2/2352")
-            {
-                if (!dataTrack)
-                {
-                    dataTrack = TrackInfo{2352, 0, currentFile};
-                }
-                parsingDataTrack =
-                    dataTrack && dataTrack->file == currentFile && dataTrack->sectorSize == 2352;
-            }
-            else
-            {
-                parsingDataTrack = false;
-            }
-            continue;
-        }
-        if (upper.rfind("INDEX 01", 0) == 0 && dataTrack && parsingDataTrack)
-        {
-            std::istringstream stream(trimmed);
-            std::string token;
-            std::string timecode;
-            stream >> token;
-            stream >> token;
-            stream >> timecode;
-            int minutes = 0;
-            int seconds = 0;
-            int frames = 0;
-            char separator = '\0';
-            std::istringstream timeStream(timecode);
-            timeStream >> minutes >> separator >> seconds >> separator >> frames;
-            int lba = (minutes * 60 * 75 + seconds * 75 + frames) - 150;
-            if (lba < 0)
-            {
-                lba = 0;
-            }
-            dataTrack->index01 = static_cast<u32>(lba);
-        }
-    }
-
-    if (!dataTrack || dataTrack->file.empty())
-    {
+        addError("Volume space size is zero.");
         return false;
     }
-
-    std::filesystem::path binPath = cuePath.parent_path() / dataTrack->file;
-    m_filename = binPath.string();
-    m_rawSectorSize = dataTrack->sectorSize != 0 ? dataTrack->sectorSize : kRawSectorSize;
-    m_dataTrackStartLba = dataTrack->index01;
+    if (m_totalSectors != 0 && pvd.volumeSpaceSize > m_totalSectors)
+    {
+        addError("Volume space size exceeds image size.");
+        return false;
+    }
     return true;
+}
+
+bool IsoParser::loadPathTable()
+{
+    m_pathTable.clear();
+    if (m_pvd.pathTableSize == 0 || m_pvd.pathTableLba == 0)
+    {
+        return true;
+    }
+
+    u32 remaining = m_pvd.pathTableSize;
+    u32 sector = m_pvd.pathTableLba;
+    std::vector<u8> buffer;
+    buffer.reserve(m_pvd.pathTableSize);
+
+    while (remaining > 0)
+    {
+        auto data = readSector(sector);
+        if (data.empty())
+        {
+            addError("Failed to read path table sector.");
+            return false;
+        }
+        u32 toCopy = std::min<u32>(remaining, static_cast<u32>(data.size()));
+        buffer.insert(buffer.end(), data.begin(), data.begin() + toCopy);
+        remaining -= toCopy;
+        ++sector;
+    }
+
+    PathTable pathTable{};
+    std::string errorMessage;
+    if (!pathTable.parse(buffer, errorMessage))
+    {
+        if (!errorMessage.empty())
+        {
+            addError(errorMessage);
+        }
+        return false;
+    }
+
+    m_pathTable = pathTable.getPathMap();
+    return true;
+}
+
+bool IsoParser::getDirectoryInfo(const std::string& path, DirectoryInfo& info)
+{
+    if (path.empty())
+    {
+        info.extent = m_rootExtent;
+        info.size = m_rootSize;
+        return true;
+    }
+
+    auto cacheIt = m_directoryCache.find(path);
+    if (cacheIt != m_directoryCache.end())
+    {
+        info = cacheIt->second;
+        return true;
+    }
+
+    auto extentIt = m_pathTable.find(path);
+    if (extentIt == m_pathTable.end())
+    {
+        return false;
+    }
+
+    u32 size = 0;
+    if (!readDirectorySelfSize(extentIt->second, size))
+    {
+        return false;
+    }
+
+    info.extent = extentIt->second;
+    info.size = size;
+    m_directoryCache[path] = info;
+    return true;
+}
+
+bool IsoParser::readDirectorySelfSize(u32 extent, u32& outSize)
+{
+    auto data = readSector(extent);
+    if (data.empty())
+    {
+        return false;
+    }
+    if (data[0] == 0)
+    {
+        addError("Directory record missing self entry.");
+        return false;
+    }
+    u8 length = data[0];
+    if (length < 34 || length > data.size())
+    {
+        addError("Directory record length is invalid.");
+        return false;
+    }
+    outSize = detail::readLe32(data.data() + 10);
+    return outSize != 0;
 }
 
 } // namespace iso
