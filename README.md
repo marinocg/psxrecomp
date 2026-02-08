@@ -29,6 +29,19 @@ PSX ISO → ISO Parser → Executable Extractor → MIPS Disassembler →
     IR Generator → Optimizer → C++ Code Generator → Native Binary
 ```
 
+```mermaid
+flowchart LR
+    A[PSX ISO/BIN] --> B[ISO Parser]
+    B --> C[Executable Loader]
+    C --> D[MIPS Disassembler]
+    D --> E[IR Generator]
+    E --> F[Optimizer]
+    F --> G[C++ Code Generator]
+    G --> H[Native Binary]
+    H --> I[Runtime Library]
+    I --> J[PSX Hardware Abstractions<br/>GPU / SPU / CD-ROM / Input]
+```
+
 ### Core Components
 
 1. **ISO Parser**: Reads PSX CD-ROM image formats (ISO, BIN/CUE)
@@ -117,6 +130,16 @@ For agent collaboration, see [agents.md](agents.md).
 - [MIPS R3000 Reference](https://www.linux-mips.org/wiki/R3000)
 - [PSX ISO Format](http://wiki.osdev.org/ISO_9660)
 - [IR Implementation Roadmap](docs/architecture/ir_roadmap.md)
+- [ISO/BIN Parser Roadmap](docs/architecture/iso_bin_roadmap.md)
+- [PSX-EXE Loader Roadmap](docs/architecture/psx_exe_roadmap.md)
+- [MIPS R3000 Disassembler Roadmap](docs/architecture/mips_r3000_disassembler_roadmap.md)
+- [Recompiler Roadmap](docs/architecture/recompiler_roadmap.md)
+- [Runtime Library Roadmap](docs/architecture/runtime_library_roadmap.md)
+- [First Recompiled Demo Roadmap](docs/architecture/demo_roadmap.md)
+- [GPU Emulation Roadmap](docs/architecture/gpu_emulation_roadmap.md)
+- [SPU Emulation Roadmap](docs/architecture/spu_emulation_roadmap.md)
+- [GPU/SPU Architecture Proposal](docs/architecture/gpu_spu_architecture.md)
+- [Full Game Support Roadmap](docs/architecture/full_game_support_roadmap.md)
 
 ## License
 
