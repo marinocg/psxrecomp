@@ -1,0 +1,490 @@
+#include "psxrecomp/recompiler/codegen.h"
+
+#include "cpp_emitter.h"
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <map>
+#include <set>
+#include <sstream>
+
+namespace psxrecomp
+{
+namespace recompiler
+{
+namespace
+{
+struct LoweringContext
+{
+    std::map<u32, std::string> temporaries;
+    bool generateComments = true;
+    bool enableOptimizations = true;
+};
+
+std::string toIdentifier(std::string_view name)
+{
+    std::string identifier;
+    identifier.reserve(name.size());
+    for (char ch : name)
+    {
+        if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '_')
+        {
+            identifier.push_back(ch);
+        }
+        else
+        {
+            identifier.push_back('_');
+        }
+    }
+    if (identifier.empty())
+    {
+        identifier = "unnamed";
+    }
+    if (std::isdigit(static_cast<unsigned char>(identifier.front())))
+    {
+        identifier.insert(identifier.begin(), '_');
+    }
+    return identifier;
+}
+
+std::string valueToExpr(const ir::Value& value, LoweringContext& context)
+{
+    switch (value.kind)
+    {
+    case ir::ValueKind::IMMEDIATE:
+        return std::to_string(value.immediate);
+    case ir::ValueKind::ADDRESS:
+    {
+        std::ostringstream stream;
+        stream << "0x" << std::hex << value.address;
+        return stream.str();
+    }
+    case ir::ValueKind::REGISTER:
+        return "context.regs[" + std::to_string(value.reg) + "]";
+    case ir::ValueKind::TEMPORARY:
+    {
+        auto it = context.temporaries.find(value.temporaryId);
+        if (it != context.temporaries.end())
+        {
+            return it->second;
+        }
+        std::string name = "temp" + std::to_string(value.temporaryId);
+        context.temporaries[value.temporaryId] = name;
+        return name;
+    }
+    case ir::ValueKind::INVALID:
+        return "/* invalid */ 0";
+    }
+    return "0";
+}
+
+std::string opcodeToComment(ir::Opcode opcode)
+{
+    switch (opcode)
+    {
+    case ir::Opcode::NOP:
+        return "nop";
+    case ir::Opcode::PHI:
+        return "phi";
+    case ir::Opcode::MOVE:
+        return "move";
+    case ir::Opcode::ADD:
+        return "add";
+    case ir::Opcode::SUB:
+        return "sub";
+    case ir::Opcode::AND:
+        return "and";
+    case ir::Opcode::OR:
+        return "or";
+    case ir::Opcode::XOR:
+        return "xor";
+    case ir::Opcode::LOAD:
+        return "load";
+    case ir::Opcode::STORE:
+        return "store";
+    case ir::Opcode::BRANCH:
+        return "branch";
+    case ir::Opcode::JUMP:
+        return "jump";
+    case ir::Opcode::CALL:
+        return "call";
+    case ir::Opcode::RETURN:
+        return "return";
+    }
+    return "unknown";
+}
+
+std::set<u32> collectTemporaries(const ir::Function& function)
+{
+    std::set<u32> temporaries;
+    for (const auto& block : function.blocks)
+    {
+        for (const auto& instruction : block.instructions)
+        {
+            for (const auto& value : instruction.inputs)
+            {
+                if (value.kind == ir::ValueKind::TEMPORARY)
+                {
+                    temporaries.insert(value.temporaryId);
+                }
+            }
+            for (const auto& value : instruction.outputs)
+            {
+                if (value.kind == ir::ValueKind::TEMPORARY)
+                {
+                    temporaries.insert(value.temporaryId);
+                }
+            }
+        }
+    }
+    return temporaries;
+}
+
+std::string formatBlockId(std::string_view name)
+{
+    return "BlockId::" + toIdentifier(name);
+}
+
+void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
+                     LoweringContext& context, CppEmitter& emitter)
+{
+    if (context.generateComments)
+    {
+        std::string comment = "// " + opcodeToComment(instruction.opcode);
+        if (instruction.sourceAddress.has_value())
+        {
+            std::ostringstream stream;
+            stream << comment << " @0x" << std::hex << *instruction.sourceAddress;
+            comment = stream.str();
+        }
+        emitter.writeLine(comment);
+    }
+
+    auto writeBinaryOp = [&](const char* op)
+    {
+        if (instruction.outputs.empty() || instruction.inputs.size() < 2)
+        {
+            emitter.writeLine("// TODO: malformed binary op");
+            return;
+        }
+        std::string lhs = valueToExpr(instruction.outputs.front(), context);
+        std::string rhsA = valueToExpr(instruction.inputs[0], context);
+        std::string rhsB = valueToExpr(instruction.inputs[1], context);
+
+        if (context.enableOptimizations && instruction.inputs[1].kind == ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[1].immediate == 0)
+        {
+            emitter.writeLine(lhs + " = " + rhsA + ";");
+            return;
+        }
+        emitter.writeLine(lhs + " = " + rhsA + " " + op + " " + rhsB + ";");
+    };
+
+    switch (instruction.opcode)
+    {
+    case ir::Opcode::NOP:
+        emitter.writeLine(";");
+        break;
+    case ir::Opcode::PHI:
+        emitter.writeLine("// TODO: phi node lowering");
+        break;
+    case ir::Opcode::MOVE:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty())
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string source = valueToExpr(instruction.inputs.front(), context);
+            if (!context.enableOptimizations || dest != source)
+            {
+                emitter.writeLine(dest + " = " + source + ";");
+            }
+        }
+        break;
+    case ir::Opcode::ADD:
+        writeBinaryOp("+");
+        break;
+    case ir::Opcode::SUB:
+        writeBinaryOp("-");
+        break;
+    case ir::Opcode::AND:
+        writeBinaryOp("&");
+        break;
+    case ir::Opcode::OR:
+        writeBinaryOp("|");
+        break;
+    case ir::Opcode::XOR:
+        writeBinaryOp("^");
+        break;
+    case ir::Opcode::LOAD:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty())
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string address = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine(dest + " = readMemory32(context.system, " + address + ");");
+        }
+        break;
+    case ir::Opcode::STORE:
+        if (instruction.inputs.size() >= 2)
+        {
+            std::string address = valueToExpr(instruction.inputs[0], context);
+            std::string value = valueToExpr(instruction.inputs[1], context);
+            emitter.writeLine("writeMemory32(context.system, " + address + ", " + value + ");");
+        }
+        break;
+    case ir::Opcode::BRANCH:
+        if (block.successors.size() >= 2 && !instruction.inputs.empty())
+        {
+            std::string cond = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine("if (" + cond + ") {");
+            emitter.writeLine("    block = " + formatBlockId(block.successors[0]) + ";");
+            emitter.writeLine("} else {");
+            emitter.writeLine("    block = " + formatBlockId(block.successors[1]) + ";");
+            emitter.writeLine("}");
+            emitter.writeLine("continue;");
+        }
+        break;
+    case ir::Opcode::JUMP:
+        if (!block.successors.empty())
+        {
+            emitter.writeLine("block = " + formatBlockId(block.successors.front()) + ";");
+            emitter.writeLine("continue;");
+        }
+        break;
+    case ir::Opcode::CALL:
+        if (!instruction.inputs.empty())
+        {
+            std::string target = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine("callIntrinsic(context.system, " + target + ");");
+        }
+        else
+        {
+            emitter.writeLine("// TODO: call lowering");
+        }
+        break;
+    case ir::Opcode::RETURN:
+        emitter.writeLine("return;");
+        break;
+    }
+}
+
+} // namespace
+
+CodeGenerator::CodeGenerator(const CodeGenOptions& options) : m_options(options) {}
+
+std::string CodeGenerator::generateHeader(const ir::Program& program, const std::string& moduleName)
+{
+    (void)moduleName;
+    CppEmitter emitter;
+    emitter.writeLine("#pragma once");
+    emitter.writeBlank();
+    emitter.writeLine("#include \"psxrecomp/runtime/psx_system.h\"");
+    emitter.writeLine("#include \"psxrecomp/types.h\"");
+    emitter.writeBlank();
+    emitter.writeLine("namespace psxrecomp");
+    emitter.openBlock("{");
+    emitter.writeLine("namespace recompiler");
+    emitter.openBlock("{");
+    emitter.writeLine("struct RecompilerContext;");
+    emitter.writeLine("struct RecompiledModule");
+    emitter.openBlock("{");
+    emitter.writeLine("static void run(runtime::PsxSystem& system);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(generateFunctionDeclarations(program));
+    emitter.closeBlock();
+    emitter.closeBlock();
+    return emitter.str();
+}
+
+std::string CodeGenerator::generateSource(const ir::Program& program, const std::string& moduleName)
+{
+    CppEmitter emitter;
+    emitter.writeLine("#include \"" + moduleName + ".h\"");
+    emitter.writeBlank();
+    emitter.writeLine("#include <array>");
+    emitter.writeLine("#include <cstdint>");
+    emitter.writeBlank();
+    emitter.writeLine("namespace psxrecomp");
+    emitter.openBlock("{");
+    emitter.writeLine("namespace recompiler");
+    emitter.openBlock("{");
+    emitter.writeLine("struct RecompilerContext");
+    emitter.openBlock("{");
+    emitter.writeLine("runtime::PsxSystem& system;");
+    emitter.writeLine("std::array<s32, Registers::NUM_REGISTERS> regs{};");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("namespace");
+    emitter.openBlock("{");
+    emitter.writeLine("inline s32 readMemory32(runtime::PsxSystem& system, Address address)");
+    emitter.openBlock("{");
+    emitter.writeLine("return system.read<s32>(address);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void writeMemory32(runtime::PsxSystem& system, Address address, s32 value)");
+    emitter.openBlock("{");
+    emitter.writeLine("system.write<s32>(address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline void callIntrinsic(runtime::PsxSystem& system, Address address)");
+    emitter.openBlock("{");
+    emitter.writeLine("(void)system;");
+    emitter.writeLine("(void)address;");
+    emitter.writeLine("// TODO: dispatch GPU/SPU/CD-ROM intrinsics.");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    emitter.writeLine(generateGlobals(program));
+    emitter.writeBlank();
+
+    emitter.writeLine("void RecompiledModule::run(runtime::PsxSystem& system)");
+    emitter.openBlock("{");
+    emitter.writeLine("RecompilerContext context{system, {}};");
+    if (!program.functions.empty())
+    {
+        emitter.writeLine(toIdentifier(program.functions.front().name) + "(context);");
+    }
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    emitter.writeLine(generateFunctionDefinitions(program));
+    emitter.closeBlock();
+    emitter.closeBlock();
+    return emitter.str();
+}
+
+std::string CodeGenerator::generateBuildFile(const std::string& projectName)
+{
+    std::ostringstream stream;
+    stream << "cmake_minimum_required(VERSION 3.15)\n";
+    stream << "project(" << projectName << " LANGUAGES CXX)\n";
+    stream << "add_library(" << projectName << " " << projectName << ".cpp)\n";
+    stream << "target_include_directories(" << projectName << " PRIVATE include)\n";
+    return stream.str();
+}
+
+std::string CodeGenerator::generateIncludes() const
+{
+    return "#include <array>\n#include <cstdint>\n";
+}
+
+std::string CodeGenerator::generateTypes() const
+{
+    return "using psxrecomp::s32;\nusing psxrecomp::Address;\n";
+}
+
+std::string CodeGenerator::generateGlobals(const ir::Program& program) const
+{
+    CppEmitter emitter;
+    if (program.globals.empty())
+    {
+        emitter.writeLine("// No global data.");
+        return emitter.str();
+    }
+    for (const auto& global : program.globals)
+    {
+        std::string name = toIdentifier(global.name);
+        emitter.writeLine("const std::array<u8, " + std::to_string(global.bytes.size()) + "> " +
+                          name + " = {");
+        if (!global.bytes.empty())
+        {
+            std::ostringstream stream;
+            stream << "    ";
+            for (size_t index = 0; index < global.bytes.size(); ++index)
+            {
+                stream << static_cast<int>(global.bytes[index]);
+                if (index + 1 < global.bytes.size())
+                {
+                    stream << ", ";
+                }
+            }
+            emitter.writeLine(stream.str());
+        }
+        emitter.writeLine("};");
+    }
+    return emitter.str();
+}
+
+std::string CodeGenerator::generateFunctionDeclarations(const ir::Program& program) const
+{
+    std::ostringstream stream;
+    for (const auto& function : program.functions)
+    {
+        stream << "void " << toIdentifier(function.name) << "(RecompilerContext& context);\n";
+    }
+    return stream.str();
+}
+
+std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& program) const
+{
+    CppEmitter emitter;
+    for (const auto& function : program.functions)
+    {
+        LoweringContext context;
+        context.generateComments = m_options.generateComments;
+        context.enableOptimizations = m_options.enableOptimizations;
+
+        emitter.writeLine("void " + toIdentifier(function.name) + "(RecompilerContext& context)");
+        emitter.openBlock("{");
+
+        auto temporaries = collectTemporaries(function);
+        for (u32 temporaryId : temporaries)
+        {
+            context.temporaries[temporaryId] = "temp" + std::to_string(temporaryId);
+            emitter.writeLine("s32 " + context.temporaries[temporaryId] + " = 0;");
+        }
+
+        emitter.writeBlank();
+        emitter.writeLine("enum class BlockId {");
+        for (size_t index = 0; index < function.blocks.size(); ++index)
+        {
+            const auto& block = function.blocks[index];
+            emitter.writeLine("    " + toIdentifier(block.name) +
+                              (index + 1 < function.blocks.size() ? "," : ""));
+        }
+        emitter.writeLine("};");
+        emitter.writeLine("BlockId block = BlockId::" + toIdentifier(function.blocks.front().name) +
+                          ";");
+        emitter.writeLine("while (true)");
+        emitter.openBlock("{");
+        emitter.writeLine("switch (block)");
+        emitter.openBlock("{");
+        for (const auto& block : function.blocks)
+        {
+            emitter.writeLine("case " + formatBlockId(block.name) + ":");
+            emitter.openBlock("{");
+            for (const auto& instruction : block.instructions)
+            {
+                emitInstruction(instruction, block, context, emitter);
+            }
+            if (block.instructions.empty() ||
+                block.instructions.back().opcode != ir::Opcode::RETURN)
+            {
+                if (!block.successors.empty())
+                {
+                    emitter.writeLine("block = " + formatBlockId(block.successors.front()) + ";");
+                    emitter.writeLine("continue;");
+                }
+                else
+                {
+                    emitter.writeLine("return;");
+                }
+            }
+            emitter.closeBlock();
+        }
+        emitter.writeLine("default:");
+        emitter.openBlock("{");
+        emitter.writeLine("return;");
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.writeBlank();
+    }
+    return emitter.str();
+}
+
+} // namespace recompiler
+} // namespace psxrecomp

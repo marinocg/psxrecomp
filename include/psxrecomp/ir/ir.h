@@ -106,13 +106,24 @@ struct Function
 };
 
 /**
+ * @brief Represents global data emitted with the program.
+ */
+struct GlobalData
+{
+    std::string name;
+    std::vector<u8> bytes;
+};
+
+/**
  * @brief IR program containing all recompiled functions.
  */
 struct Program
 {
     std::deque<Function> functions;
+    std::deque<GlobalData> globals;
 
     Function& addFunction(std::string_view functionName, Address entryAddress);
+    GlobalData& addGlobal(std::string_view globalName, std::vector<u8> data);
 };
 
 /**

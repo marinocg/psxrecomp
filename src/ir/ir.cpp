@@ -163,6 +163,12 @@ Function& Program::addFunction(std::string_view functionName, Address entryAddre
     return functions.back();
 }
 
+GlobalData& Program::addGlobal(std::string_view globalName, std::vector<u8> data)
+{
+    globals.push_back(GlobalData{std::string(globalName), std::move(data)});
+    return globals.back();
+}
+
 Builder::Builder(Program& program) : m_program(program), m_nextTemporaryId(0) {}
 
 Function& Builder::createFunction(std::string_view functionName, Address entryAddress)
