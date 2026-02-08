@@ -226,7 +226,7 @@ std::filesystem::path createCueImage(std::filesystem::path& cuePath)
         writeDirectoryRecord(rootDir, cursor, "MULTI.BIN;1", multiExtentSectorA, kSectorSize, 0x80);
     cursor +=
         writeDirectoryRecord(rootDir, cursor, "MULTI.BIN;1", multiExtentSectorB, kSectorSize, 0x00);
-    cursor += writeDirectoryRecord(rootDir, cursor, "XA.DAT;1", xaSector, 2324, 0x00);
+    writeDirectoryRecord(rootDir, cursor, "XA.DAT;1", xaSector, 2324, 0x00);
     writeMode2Sector(image, dataTrackStart + rootDirSector, rootDir, false);
 
     std::vector<uint8_t> jolietDir(kSectorSize, 0);
@@ -245,8 +245,7 @@ std::filesystem::path createCueImage(std::filesystem::path& cuePath)
                                                multiExtentSectorB, kSectorSize, 0x00);
     jolietCursor +=
         writeJolietDirectoryRecord(jolietDir, jolietCursor, u"XA.DAT", xaSector, 2324, 0x00);
-    jolietCursor += writeJolietDirectoryRecord(jolietDir, jolietCursor, u"LONGNAME.TXT",
-                                               systemCnfSector, 40, 0x00);
+    writeJolietDirectoryRecord(jolietDir, jolietCursor, u"LONGNAME.TXT", systemCnfSector, 40, 0x00);
     writeMode2Sector(image, dataTrackStart + jolietRootSector, jolietDir, false);
 
     std::string systemCnf = "BOOT = cdrom:\\GAME.EXE;1\n";
