@@ -68,7 +68,7 @@ bool decodeWithTable(const std::array<OpcodeMapEntry, N>& table, u32 encoding, O
 }
 
 // clang-format off
-constexpr std::array<OpcodeMapEntry, 28> kRTypeTable = {{
+constexpr std::array<OpcodeMapEntry, 35> kRTypeTable = {{
     {0x20, Opcode::ADD},  {0x21, Opcode::ADDU},  {0x22, Opcode::SUB},     {0x23, Opcode::SUBU},
     {0x24, Opcode::AND},  {0x25, Opcode::OR},    {0x26, Opcode::XOR},     {0x27, Opcode::NOR},
     {0x2A, Opcode::SLT},  {0x2B, Opcode::SLTU},  {0x00, Opcode::SLL},     {0x02, Opcode::SRL},
@@ -76,17 +76,20 @@ constexpr std::array<OpcodeMapEntry, 28> kRTypeTable = {{
     {0x18, Opcode::MULT}, {0x19, Opcode::MULTU}, {0x1A, Opcode::DIV},     {0x1B, Opcode::DIVU},
     {0x10, Opcode::MFHI}, {0x11, Opcode::MTHI},  {0x12, Opcode::MFLO},    {0x13, Opcode::MTLO},
     {0x08, Opcode::JR},   {0x09, Opcode::JALR},  {0x0C, Opcode::SYSCALL}, {0x0D, Opcode::BREAK},
+    {0x0F, Opcode::SYNC}, {0x30, Opcode::TGE},   {0x31, Opcode::TGEU},    {0x32, Opcode::TLT},
+    {0x33, Opcode::TLTU}, {0x34, Opcode::TEQ},   {0x36, Opcode::TNE},
 }};
 // clang-format on
 
 // clang-format off
-constexpr std::array<OpcodeMapEntry, 24> kITypeTable = {{
+constexpr std::array<OpcodeMapEntry, 25> kITypeTable = {{
     {0x08, Opcode::ADDI}, {0x09, Opcode::ADDIU}, {0x0C, Opcode::ANDI},  {0x0D, Opcode::ORI},
     {0x0E, Opcode::XORI}, {0x0A, Opcode::SLTI},  {0x0B, Opcode::SLTIU}, {0x0F, Opcode::LUI},
     {0x20, Opcode::LB},   {0x21, Opcode::LH},    {0x23, Opcode::LW},    {0x24, Opcode::LBU},
     {0x25, Opcode::LHU},  {0x22, Opcode::LWL},   {0x26, Opcode::LWR},   {0x28, Opcode::SB},
     {0x29, Opcode::SH},   {0x2B, Opcode::SW},    {0x2A, Opcode::SWL},   {0x2E, Opcode::SWR},
     {0x04, Opcode::BEQ},  {0x05, Opcode::BNE},   {0x06, Opcode::BLEZ},  {0x07, Opcode::BGTZ},
+    {0x2F, Opcode::CACHE},
 }};
 // clang-format on
 
@@ -95,6 +98,15 @@ constexpr std::array<OpcodeMapEntry, 4> kRegimmTable = {{
     {0x01, Opcode::BGEZ},
     {0x10, Opcode::BLTZAL},
     {0x11, Opcode::BGEZAL},
+}};
+
+constexpr std::array<OpcodeMapEntry, 6> kRegimmTrapTable = {{
+    {0x08, Opcode::TGEI},
+    {0x09, Opcode::TGEIU},
+    {0x0A, Opcode::TLTI},
+    {0x0B, Opcode::TLTIU},
+    {0x0C, Opcode::TEQI},
+    {0x0E, Opcode::TNEI},
 }};
 
 // clang-format off
@@ -125,7 +137,8 @@ Instruction MipsDisassembler::decode(u32 encoding, Address address)
         return decodeJType(encoding, address);
     }
 
-    if (opcode == 0x10 || opcode == 0x12 || opcode == 0x32 || opcode == 0x3A)
+    if (opcode == 0x10 || opcode == 0x12 || opcode == 0x30 || opcode == 0x32 || opcode == 0x38 ||
+        opcode == 0x3A)
     {
         return decodeCoprocessor(encoding, address);
     }
@@ -171,7 +184,12 @@ Instruction MipsDisassembler::decodeIType(u32 encoding, Address address)
     case 0x01:
     {
         const u32 rt = instruction.rt;
-        if (!decodeWithTable(kRegimmTable, rt, instruction.opcode))
+        if (decodeWithTable(kRegimmTable, rt, instruction.opcode))
+        {
+            return instruction;
+        }
+
+        if (!decodeWithTable(kRegimmTrapTable, rt, instruction.opcode))
         {
             instruction.opcode = Opcode::UNKNOWN;
             instruction.type = InstructionType::UNKNOWN;
@@ -262,6 +280,21 @@ Instruction MipsDisassembler::decodeCoprocessor(u32 encoding, Address address)
                 break;
             }
             break;
+        case 0x08:
+            switch (instruction.rt)
+            {
+            case 0x00:
+                instruction.opcode = Opcode::BC0F;
+                break;
+            case 0x01:
+                instruction.opcode = Opcode::BC0T;
+                break;
+            default:
+                instruction.opcode = Opcode::UNKNOWN;
+                instruction.type = InstructionType::UNKNOWN;
+                break;
+            }
+            break;
         default:
             instruction.opcode = Opcode::UNKNOWN;
             instruction.type = InstructionType::UNKNOWN;
@@ -308,9 +341,21 @@ Instruction MipsDisassembler::decodeCoprocessor(u32 encoding, Address address)
         return instruction;
     }
 
+    if (opcode == 0x30)
+    {
+        instruction.opcode = Opcode::LWC0;
+        return instruction;
+    }
+
     if (opcode == 0x3A)
     {
         instruction.opcode = Opcode::SWC2;
+        return instruction;
+    }
+
+    if (opcode == 0x38)
+    {
+        instruction.opcode = Opcode::SWC0;
         return instruction;
     }
 

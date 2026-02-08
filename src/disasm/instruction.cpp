@@ -121,9 +121,41 @@ std::string formatGteCommand(Opcode opcode)
         return {};
     }
 }
+
+u32 extractSpecialCode(u32 encoding)
+{
+    return (encoding >> 6) & 0xFFFFFu;
+}
+
+std::string
+resolveTargetString(const Instruction& instruction,
+                    const std::function<std::optional<std::string>(Address)>& labelResolver)
+{
+    auto targetAddress = instruction.getTargetAddress();
+    if (!targetAddress)
+    {
+        return "?";
+    }
+
+    if (labelResolver)
+    {
+        if (auto label = labelResolver(*targetAddress))
+        {
+            return *label;
+        }
+    }
+
+    return formatHex(*targetAddress, 8);
+}
 } // namespace
 
 std::string Instruction::toString() const
+{
+    return toString({});
+}
+
+std::string
+Instruction::toString(const std::function<std::optional<std::string>(Address)>& labelResolver) const
 {
     const auto reg = [](Register r) { return MipsDisassembler::getRegisterName(r); };
     const auto formatRrr = [&](const char* mnemonic)
@@ -168,8 +200,16 @@ std::string Instruction::toString() const
         }
         return formatRrr("addu");
     case Opcode::SUB:
+        if (rs == Registers::ZERO)
+        {
+            return std::string("neg ") + reg(rd) + ", " + reg(rt);
+        }
         return formatRrr("sub");
     case Opcode::SUBU:
+        if (rs == Registers::ZERO)
+        {
+            return std::string("negu ") + reg(rd) + ", " + reg(rt);
+        }
         return formatRrr("subu");
     case Opcode::AND:
         return formatRrr("and");
@@ -186,6 +226,14 @@ std::string Instruction::toString() const
     case Opcode::XOR:
         return formatRrr("xor");
     case Opcode::NOR:
+        if (rs == Registers::ZERO)
+        {
+            return std::string("not ") + reg(rd) + ", " + reg(rt);
+        }
+        if (rt == Registers::ZERO)
+        {
+            return std::string("not ") + reg(rd) + ", " + reg(rs);
+        }
         return formatRrr("nor");
     case Opcode::SLT:
         return formatRrr("slt");
@@ -226,17 +274,57 @@ std::string Instruction::toString() const
     case Opcode::JR:
         return std::string("jr ") + reg(rs);
     case Opcode::JALR:
+        if (rd == Registers::RA)
+        {
+            return std::string("jalr ") + reg(rs);
+        }
         return formatRr("jalr", rd, rs);
     case Opcode::SYSCALL:
+    {
+        const u32 code = extractSpecialCode(encoding);
+        if (code != 0)
+        {
+            return std::string("syscall ") + formatHex(code, 5);
+        }
         return "syscall";
+    }
     case Opcode::BREAK:
+    {
+        const u32 code = extractSpecialCode(encoding);
+        if (code != 0)
+        {
+            return std::string("break ") + formatHex(code, 5);
+        }
         return "break";
+    }
+    case Opcode::SYNC:
+        return "sync";
+    case Opcode::TGE:
+        return formatRr("tge", rs, rt);
+    case Opcode::TGEU:
+        return formatRr("tgeu", rs, rt);
+    case Opcode::TLT:
+        return formatRr("tlt", rs, rt);
+    case Opcode::TLTU:
+        return formatRr("tltu", rs, rt);
+    case Opcode::TEQ:
+        return formatRr("teq", rs, rt);
+    case Opcode::TNE:
+        return formatRr("tne", rs, rt);
     case Opcode::ADDI:
+        if (rs == Registers::ZERO)
+        {
+            return std::string("li ") + reg(rt) + ", " + formatImmediateSigned(immediate);
+        }
         return formatRtRsImmSigned("addi");
     case Opcode::ADDIU:
         if (immediate == 0)
         {
             return formatMove(rt, rs);
+        }
+        if (rs == Registers::ZERO)
+        {
+            return std::string("li ") + reg(rt) + ", " + formatImmediateSigned(immediate);
         }
         return formatRtRsImmSigned("addiu");
     case Opcode::ANDI:
@@ -289,14 +377,27 @@ std::string Instruction::toString() const
     case Opcode::BGEZ:
     case Opcode::BLTZAL:
     case Opcode::BGEZAL:
+    case Opcode::BC0F:
+    case Opcode::BC0T:
     {
-        auto targetAddress = getTargetAddress();
-        const std::string targetString = targetAddress ? formatHex(*targetAddress, 8) : "?";
+        const std::string targetString = resolveTargetString(*this, labelResolver);
         switch (opcode)
         {
         case Opcode::BEQ:
+            if (rs == rt)
+            {
+                return "b " + targetString;
+            }
+            if (rt == Registers::ZERO)
+            {
+                return "beqz " + reg(rs) + ", " + targetString;
+            }
             return "beq " + reg(rs) + ", " + reg(rt) + ", " + targetString;
         case Opcode::BNE:
+            if (rt == Registers::ZERO)
+            {
+                return "bnez " + reg(rs) + ", " + targetString;
+            }
             return "bne " + reg(rs) + ", " + reg(rt) + ", " + targetString;
         case Opcode::BLEZ:
             return "blez " + reg(rs) + ", " + targetString;
@@ -310,6 +411,10 @@ std::string Instruction::toString() const
             return "bltzal " + reg(rs) + ", " + targetString;
         case Opcode::BGEZAL:
             return "bgezal " + reg(rs) + ", " + targetString;
+        case Opcode::BC0F:
+            return "bc0f " + targetString;
+        case Opcode::BC0T:
+            return "bc0t " + targetString;
         default:
             break;
         }
@@ -318,10 +423,26 @@ std::string Instruction::toString() const
     case Opcode::J:
     case Opcode::JAL:
     {
-        auto targetAddress = getTargetAddress();
-        const std::string targetString = targetAddress ? formatHex(*targetAddress, 8) : "?";
+        const std::string targetString = resolveTargetString(*this, labelResolver);
         return (opcode == Opcode::J) ? "j " + targetString : "jal " + targetString;
     }
+    case Opcode::TGEI:
+        return std::string("tgei ") + reg(rs) + ", " + formatImmediateSigned(immediate);
+    case Opcode::TGEIU:
+        return std::string("tgeiu ") + reg(rs) + ", " +
+               formatImmediateUnsigned(static_cast<u16>(immediate));
+    case Opcode::TLTI:
+        return std::string("tlti ") + reg(rs) + ", " + formatImmediateSigned(immediate);
+    case Opcode::TLTIU:
+        return std::string("tltiu ") + reg(rs) + ", " +
+               formatImmediateUnsigned(static_cast<u16>(immediate));
+    case Opcode::TEQI:
+        return std::string("teqi ") + reg(rs) + ", " + formatImmediateSigned(immediate);
+    case Opcode::TNEI:
+        return std::string("tnei ") + reg(rs) + ", " + formatImmediateSigned(immediate);
+    case Opcode::CACHE:
+        return std::string("cache ") + formatImmediateUnsigned(static_cast<u16>(rt)) + ", " +
+               formatImmediateSigned(immediate) + "(" + reg(rs) + ")";
     case Opcode::MFC0:
         return std::string("mfc0 ") + reg(rt) + ", " + formatCopRegister(rd);
     case Opcode::MTC0:
@@ -340,6 +461,12 @@ std::string Instruction::toString() const
         return "tlbp";
     case Opcode::RFE:
         return "rfe";
+    case Opcode::LWC0:
+        return std::string("lwc0 ") + formatCopRegister(rt) + ", " +
+               formatImmediateSigned(immediate) + "(" + reg(rs) + ")";
+    case Opcode::SWC0:
+        return std::string("swc0 ") + formatCopRegister(rt) + ", " +
+               formatImmediateSigned(immediate) + "(" + reg(rs) + ")";
     case Opcode::MFC2:
         return std::string("mfc2 ") + reg(rt) + ", " + formatGteDataRegister(rd);
     case Opcode::MTC2:
@@ -395,6 +522,8 @@ bool Instruction::isBranch() const
     case Opcode::BGEZ:
     case Opcode::BLTZAL:
     case Opcode::BGEZAL:
+    case Opcode::BC0F:
+    case Opcode::BC0T:
         return true;
     default:
         return false;
@@ -421,19 +550,29 @@ bool Instruction::isCall() const
            opcode == Opcode::BGEZAL;
 }
 
+bool Instruction::hasDelaySlot() const
+{
+    return isBranch() || isJump();
+}
+
 bool Instruction::isReturn() const
 {
     return opcode == Opcode::JR && rs == Registers::RA;
 }
 
-std::optional<Address> Instruction::getTargetAddress() const
+std::optional<Address> Instruction::getBranchTarget() const
 {
-    if (isBranch())
+    if (!isBranch())
     {
-        const s32 offset = static_cast<s32>(immediate) << 2;
-        return static_cast<Address>(address + 4 + offset);
+        return std::nullopt;
     }
 
+    const s32 offset = static_cast<s32>(immediate) << 2;
+    return static_cast<Address>(address + 4 + offset);
+}
+
+std::optional<Address> Instruction::getJumpTarget() const
+{
     if (opcode == Opcode::J || opcode == Opcode::JAL)
     {
         const Address base = (address + 4) & 0xF0000000u;
@@ -441,6 +580,109 @@ std::optional<Address> Instruction::getTargetAddress() const
     }
 
     return std::nullopt;
+}
+
+std::optional<Address> Instruction::getTargetAddress() const
+{
+    if (auto branchTarget = getBranchTarget())
+    {
+        return branchTarget;
+    }
+
+    return getJumpTarget();
+}
+
+MemoryAccessType Instruction::getMemoryAccessType() const
+{
+    switch (opcode)
+    {
+    case Opcode::LB:
+    case Opcode::LH:
+    case Opcode::LW:
+    case Opcode::LBU:
+    case Opcode::LHU:
+    case Opcode::LWL:
+    case Opcode::LWR:
+    case Opcode::LWC0:
+    case Opcode::LWC2:
+        return MemoryAccessType::LOAD;
+    case Opcode::SB:
+    case Opcode::SH:
+    case Opcode::SW:
+    case Opcode::SWL:
+    case Opcode::SWR:
+    case Opcode::SWC0:
+    case Opcode::SWC2:
+        return MemoryAccessType::STORE;
+    default:
+        return MemoryAccessType::NONE;
+    }
+}
+
+MemoryAccessSize Instruction::getMemoryAccessSize() const
+{
+    switch (opcode)
+    {
+    case Opcode::LB:
+    case Opcode::LBU:
+    case Opcode::SB:
+        return MemoryAccessSize::BYTE;
+    case Opcode::LH:
+    case Opcode::LHU:
+    case Opcode::SH:
+        return MemoryAccessSize::HALF_WORD;
+    case Opcode::LW:
+    case Opcode::LWL:
+    case Opcode::LWR:
+    case Opcode::SW:
+    case Opcode::SWL:
+    case Opcode::SWR:
+    case Opcode::LWC0:
+    case Opcode::LWC2:
+    case Opcode::SWC0:
+    case Opcode::SWC2:
+        return MemoryAccessSize::WORD;
+    default:
+        return MemoryAccessSize::UNKNOWN;
+    }
+}
+
+AddressingMode Instruction::getAddressingMode() const
+{
+    if (isBranch())
+    {
+        return AddressingMode::PC_RELATIVE;
+    }
+
+    switch (opcode)
+    {
+    case Opcode::J:
+    case Opcode::JAL:
+        return AddressingMode::ABSOLUTE;
+    case Opcode::JR:
+    case Opcode::JALR:
+        return AddressingMode::REGISTER;
+    case Opcode::LB:
+    case Opcode::LH:
+    case Opcode::LW:
+    case Opcode::LBU:
+    case Opcode::LHU:
+    case Opcode::LWL:
+    case Opcode::LWR:
+    case Opcode::SB:
+    case Opcode::SH:
+    case Opcode::SW:
+    case Opcode::SWL:
+    case Opcode::SWR:
+    case Opcode::CACHE:
+    case Opcode::LWC0:
+    case Opcode::SWC0:
+    case Opcode::LWC2:
+    case Opcode::SWC2:
+        return AddressingMode::BASE_OFFSET;
+    default:
+        return AddressingMode::NONE;
+    }
 }
 
 } // namespace disasm

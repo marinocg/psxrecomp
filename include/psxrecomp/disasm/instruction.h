@@ -1,8 +1,10 @@
 #pragma once
 
 #include "psxrecomp/types.h"
+#include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace psxrecomp
 {
@@ -55,6 +57,13 @@ enum class Opcode
     JALR,
     SYSCALL,
     BREAK,
+    SYNC,
+    TGE,
+    TGEU,
+    TLT,
+    TLTU,
+    TEQ,
+    TNE,
 
     // I-type
     ADDI,
@@ -85,6 +94,13 @@ enum class Opcode
     BGEZ,
     BLTZAL,
     BGEZAL,
+    TGEI,
+    TGEIU,
+    TLTI,
+    TLTIU,
+    TEQI,
+    TNEI,
+    CACHE,
 
     // J-type
     J,
@@ -100,6 +116,8 @@ enum class Opcode
     TLBWR,
     TLBP,
     RFE,
+    BC0F,
+    BC0T,
     MFC2,
     MTC2,
     CFC2,
@@ -126,10 +144,36 @@ enum class Opcode
     GTE_GPF,
     GTE_GPL,
     GTE_NCCT,
+    LWC0,
+    SWC0,
     LWC2,
     SWC2,
 
     UNKNOWN
+};
+
+enum class MemoryAccessType
+{
+    NONE,
+    LOAD,
+    STORE
+};
+
+enum class MemoryAccessSize
+{
+    UNKNOWN,
+    BYTE,
+    HALF_WORD,
+    WORD
+};
+
+enum class AddressingMode
+{
+    NONE,
+    BASE_OFFSET,
+    PC_RELATIVE,
+    ABSOLUTE,
+    REGISTER
 };
 
 /**
@@ -161,6 +205,14 @@ struct Instruction
     std::string toString() const;
 
     /**
+     * @brief Convert instruction to assembly string with optional label formatting.
+     * @param labelResolver Callback to resolve an address into a label string.
+     * @return Assembly representation
+     */
+    std::string
+    toString(const std::function<std::optional<std::string>(Address)>& labelResolver) const;
+
+    /**
      * @brief Check if this is a branch instruction
      */
     bool isBranch() const;
@@ -176,14 +228,44 @@ struct Instruction
     bool isCall() const;
 
     /**
+     * @brief Check if this instruction has a delay slot.
+     */
+    bool hasDelaySlot() const;
+
+    /**
      * @brief Check if this is a function return
      */
     bool isReturn() const;
 
     /**
+     * @brief Get branch target if applicable
+     */
+    std::optional<Address> getBranchTarget() const;
+
+    /**
+     * @brief Get jump target if applicable
+     */
+    std::optional<Address> getJumpTarget() const;
+
+    /**
      * @brief Get branch/jump target address if applicable
      */
     std::optional<Address> getTargetAddress() const;
+
+    /**
+     * @brief Get memory access type for load/store instructions.
+     */
+    MemoryAccessType getMemoryAccessType() const;
+
+    /**
+     * @brief Get memory access size for load/store instructions.
+     */
+    MemoryAccessSize getMemoryAccessSize() const;
+
+    /**
+     * @brief Get addressing mode for instruction operands.
+     */
+    AddressingMode getAddressingMode() const;
 };
 
 /**
