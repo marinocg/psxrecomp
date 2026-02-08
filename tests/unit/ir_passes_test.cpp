@@ -73,5 +73,48 @@ int main()
     auto verification = psxrecomp::ir::verifyFunction(buildResult.function);
     assert(verification.success());
 
+    std::vector<Instruction> invalidInstructions;
+    invalidInstructions.push_back(
+        makeInstruction(Opcode::BRANCH, {Value::makeRegister(r1)}, {}, 0x2000));
+    invalidInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x2004));
+    ControlFlowBuildResult invalidResult =
+        psxrecomp::ir::buildControlFlowFunction("invalid", 0x2000, invalidInstructions);
+    assert(!invalidResult.errors.empty());
+
+    using psxrecomp::ir::Function;
+
+    Function phiMismatch{"phi_mismatch", 0x3000, {}};
+    phiMismatch.blocks.push_back(BasicBlock{"entry", {}, {"join"}});
+    phiMismatch.blocks.push_back(BasicBlock{"other", {}, {"join"}});
+    phiMismatch.blocks.push_back(BasicBlock{"join", {}, {}});
+    phiMismatch.blocks[2].instructions.push_back(Instruction{
+        Opcode::PHI, {Value::makeTemporary(1)}, {Value::makeTemporary(2)}, std::nullopt});
+
+    auto phiVerify = psxrecomp::ir::verifyFunction(phiMismatch);
+    assert(!phiVerify.success());
+
+    Function undefinedPhi{"undefined_phi", 0x4000, {}};
+    undefinedPhi.blocks.push_back(BasicBlock{"entry", {}, {"join"}});
+    undefinedPhi.blocks.push_back(BasicBlock{"other", {}, {"join"}});
+    undefinedPhi.blocks.push_back(BasicBlock{"join", {}, {}});
+    undefinedPhi.blocks[2].instructions.push_back(
+        Instruction{Opcode::PHI,
+                    {Value::makeTemporary(99), Value::makeTemporary(98)},
+                    {Value::makeTemporary(100)},
+                    std::nullopt});
+
+    auto undefinedVerify = psxrecomp::ir::verifyFunction(undefinedPhi);
+    assert(!undefinedVerify.success());
+
+    Function useBeforeDef{"use_before_def", 0x5000, {}};
+    useBeforeDef.blocks.push_back(BasicBlock{"entry", {}, {}});
+    useBeforeDef.blocks[0].instructions.push_back(
+        Instruction{Opcode::ADD, {Value::makeTemporary(7)}, {Value::makeTemporary(1)}, 0x5000});
+    useBeforeDef.blocks[0].instructions.push_back(
+        Instruction{Opcode::MOVE, {Value::makeTemporary(1)}, {Value::makeTemporary(7)}, 0x5004});
+
+    auto useBeforeVerify = psxrecomp::ir::verifyFunction(useBeforeDef);
+    assert(!useBeforeVerify.success());
+
     return 0;
 }

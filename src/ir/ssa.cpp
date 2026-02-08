@@ -123,17 +123,23 @@ SsaBuildResult convertToSSA(Function& function)
         }
     }
 
-    std::unordered_map<Register, u32> entryParamDefs;
-    for (Register reg : registersUsed)
-    {
-        entryParamDefs[reg] = nextDefId++;
-    }
+    std::vector<Register> orderedRegisters;
+    orderedRegisters.reserve(registersUsed.size() + registersDefined.size());
+    orderedRegisters.insert(orderedRegisters.end(), registersUsed.begin(), registersUsed.end());
     for (Register reg : registersDefined)
     {
-        if (entryParamDefs.find(reg) == entryParamDefs.end())
+        if (std::find(orderedRegisters.begin(), orderedRegisters.end(), reg) ==
+            orderedRegisters.end())
         {
-            entryParamDefs[reg] = nextDefId++;
+            orderedRegisters.push_back(reg);
         }
+    }
+    std::sort(orderedRegisters.begin(), orderedRegisters.end());
+
+    std::unordered_map<Register, u32> entryParamDefs;
+    for (Register reg : orderedRegisters)
+    {
+        entryParamDefs[reg] = nextDefId++;
     }
 
     std::vector<std::unordered_map<Register, u32>> phiDefs(function.blocks.size());

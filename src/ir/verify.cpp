@@ -121,14 +121,22 @@ VerificationResult verifyFunction(const Function& function)
         }
     }
 
-    std::unordered_map<u32, size_t> tempDefinitions;
+    struct TempDefinition
+    {
+        size_t blockIndex = 0;
+        size_t instructionIndex = 0;
+    };
+
+    std::unordered_map<u32, TempDefinition> tempDefinitions;
 
     for (size_t blockIndex = 0; blockIndex < function.blocks.size(); ++blockIndex)
     {
         const auto& block = function.blocks[blockIndex];
         bool nonPhiSeen = false;
-        for (const auto& instruction : block.instructions)
+        for (size_t instructionIndex = 0; instructionIndex < block.instructions.size();
+             ++instructionIndex)
         {
+            const auto& instruction = block.instructions[instructionIndex];
             if (instruction.opcode != Opcode::PHI)
             {
                 nonPhiSeen = true;
@@ -148,7 +156,7 @@ VerificationResult verifyFunction(const Function& function)
                         result.errors.push_back("Temporary defined multiple times: t" +
                                                 std::to_string(output.temporaryId));
                     }
-                    tempDefinitions[output.temporaryId] = blockIndex;
+                    tempDefinitions[output.temporaryId] = {blockIndex, instructionIndex};
                 }
             }
         }
@@ -160,13 +168,16 @@ VerificationResult verifyFunction(const Function& function)
     {
         const auto& block = function.blocks[blockIndex];
         size_t predecessorCount = predecessors[blockIndex].size();
-        for (const auto& instruction : block.instructions)
+        for (size_t instructionIndex = 0; instructionIndex < block.instructions.size();
+             ++instructionIndex)
         {
+            const auto& instruction = block.instructions[instructionIndex];
             if (instruction.opcode == Opcode::PHI)
             {
                 if (instruction.inputs.size() != predecessorCount)
                 {
                     result.errors.push_back("Phi input count mismatch in block " + block.name);
+                    continue;
                 }
                 for (size_t predIndex = 0; predIndex < instruction.inputs.size(); ++predIndex)
                 {
@@ -174,15 +185,18 @@ VerificationResult verifyFunction(const Function& function)
                     if (input.kind == ValueKind::TEMPORARY)
                     {
                         auto defIt = tempDefinitions.find(input.temporaryId);
-                        if (defIt != tempDefinitions.end())
+                        if (defIt == tempDefinitions.end())
                         {
-                            size_t defBlock = defIt->second;
-                            size_t predBlock = predecessors[blockIndex][predIndex];
-                            if (!dominators[predBlock][defBlock])
-                            {
-                                result.errors.push_back(
-                                    "Phi input not dominated by definition in " + block.name);
-                            }
+                            result.errors.push_back("Phi uses undefined temporary t" +
+                                                    std::to_string(input.temporaryId));
+                            continue;
+                        }
+                        size_t defBlock = defIt->second.blockIndex;
+                        size_t predBlock = predecessors[blockIndex][predIndex];
+                        if (!dominators[predBlock][defBlock])
+                        {
+                            result.errors.push_back("Phi input not dominated by definition in " +
+                                                    block.name);
                         }
                     }
                 }
@@ -200,10 +214,17 @@ VerificationResult verifyFunction(const Function& function)
                                                 std::to_string(input.temporaryId));
                         continue;
                     }
-                    size_t defBlock = defIt->second;
+                    size_t defBlock = defIt->second.blockIndex;
                     if (!dominators[blockIndex][defBlock])
                     {
                         result.errors.push_back("Use of temporary before dominance in block " +
+                                                block.name);
+                        continue;
+                    }
+                    if (defBlock == blockIndex &&
+                        defIt->second.instructionIndex >= instructionIndex)
+                    {
+                        result.errors.push_back("Use of temporary before definition in block " +
                                                 block.name);
                     }
                 }

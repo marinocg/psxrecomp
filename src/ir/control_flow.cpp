@@ -82,9 +82,9 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     std::unordered_set<Address> blockStarts;
     blockStarts.insert(entryAddress);
 
-    for (size_t index = 0; index < sorted.size(); ++index)
+    size_t addressableIndex = 0;
+    for (const auto& instruction : sorted)
     {
-        const auto& instruction = sorted[index];
         if (!instruction.sourceAddress.has_value())
         {
             continue;
@@ -104,11 +104,12 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
 
         if (isTerminator(instruction.opcode))
         {
-            if (index + 1 < orderedAddresses.size())
+            if (addressableIndex + 1 < orderedAddresses.size())
             {
-                blockStarts.insert(orderedAddresses[index + 1]);
+                blockStarts.insert(orderedAddresses[addressableIndex + 1]);
             }
         }
+        ++addressableIndex;
     }
 
     BasicBlock* currentBlock = nullptr;
