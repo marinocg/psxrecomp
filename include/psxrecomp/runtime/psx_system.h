@@ -68,16 +68,18 @@ class PsxSystem
         Address physical = normalizeAddress(address);
         if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
-            return readFromRegion<T>(m_ram, physical - MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE);
+            return readFromRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE,
+                                     MemoryMap::RAM_SIZE);
         }
         if (isInRange(physical, MemoryMap::SCRATCHPAD_BASE, MemoryMap::SCRATCHPAD_SIZE))
         {
-            return readFromRegion<T>(m_scratchpad, physical - MemoryMap::SCRATCHPAD_BASE,
+            return readFromRegion<T>(m_scratchpad.data(), physical - MemoryMap::SCRATCHPAD_BASE,
                                      MemoryMap::SCRATCHPAD_SIZE);
         }
         if (isInRange(physical, MemoryMap::BIOS_BASE, MemoryMap::BIOS_SIZE))
         {
-            return readFromRegion<T>(m_bios, physical - MemoryMap::BIOS_BASE, MemoryMap::BIOS_SIZE);
+            return readFromRegion<T>(m_bios.data(), physical - MemoryMap::BIOS_BASE,
+                                     MemoryMap::BIOS_SIZE);
         }
         if (isInRange(physical, MemoryMap::IO_BASE, MemoryMap::IO_SIZE))
         {
@@ -96,12 +98,13 @@ class PsxSystem
         Address physical = normalizeAddress(address);
         if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
-            writeToRegion<T>(m_ram, physical - MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE, value);
+            writeToRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE,
+                             value);
             return;
         }
         if (isInRange(physical, MemoryMap::SCRATCHPAD_BASE, MemoryMap::SCRATCHPAD_SIZE))
         {
-            writeToRegion<T>(m_scratchpad, physical - MemoryMap::SCRATCHPAD_BASE,
+            writeToRegion<T>(m_scratchpad.data(), physical - MemoryMap::SCRATCHPAD_BASE,
                              MemoryMap::SCRATCHPAD_SIZE, value);
             return;
         }
