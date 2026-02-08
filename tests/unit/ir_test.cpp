@@ -104,7 +104,9 @@ int main()
     std::vector<std::string> cfgErrors;
     ControlFlowGraph graph = psxrecomp::ir::buildControlFlowGraph(cfgFunction, &cfgErrors);
     assert(cfgErrors.empty());
-    assert(graph.predecessors[3].size() == 2);
+    auto mergeIndex = graph.indexOf("merge");
+    assert(mergeIndex.has_value());
+    assert(graph.predecessors[*mergeIndex].size() == 2);
 
     auto ssaResult = psxrecomp::ir::convertFunctionToSSA(cfgFunction, graph);
     assert(ssaResult.warnings.empty());
