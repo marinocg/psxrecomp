@@ -39,6 +39,8 @@ std::string opcodeToString(Opcode opcode)
         return "call";
     case Opcode::RETURN:
         return "return";
+    case Opcode::PHI:
+        return "phi";
     }
     return "unknown";
 }

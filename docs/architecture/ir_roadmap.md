@@ -6,7 +6,7 @@ on the architecture pipeline stages and is intended to track near-term milestone
 ## Current Status
 - [x] Core IR data structures (Value, Instruction, BasicBlock, Function, Program, Builder).
 - [x] Basic IR pretty-printing for instructions and blocks.
-- [ ] Control-flow construction, SSA, and verification passes.
+- [x] Control-flow construction, SSA, and verification passes.
 
 ## Phase 1: Control-Flow Analysis
 - [ ] Build basic blocks from the disassembly stream.

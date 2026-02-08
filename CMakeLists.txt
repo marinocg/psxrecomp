@@ -49,6 +49,9 @@ set(DISASM_SOURCES
 
 set(IR_SOURCES
     src/ir/ir.cpp
+    src/ir/control_flow.cpp
+    src/ir/ssa.cpp
+    src/ir/verify.cpp
 )
 
 set(RECOMPILER_SOURCES

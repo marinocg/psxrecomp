@@ -30,7 +30,8 @@ enum class Opcode
     BRANCH,
     JUMP,
     CALL,
-    RETURN
+    RETURN,
+    PHI
 };
 
 /**
