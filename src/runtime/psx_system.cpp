@@ -226,10 +226,7 @@ void PsxSystem::writeMmio16(Address address, u16 value)
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
-        if (value != 0)
-        {
-            m_input.setButton(ControllerButton::Start, false);
-        }
+        (void)value;
         return;
     }
 }

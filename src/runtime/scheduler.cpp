@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/scheduler.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace psxrecomp
 {
@@ -28,20 +29,26 @@ void Scheduler::tick(uint64_t cycles)
         }
     }
 
+    std::vector<Event> readyEvents;
     auto it = std::remove_if(m_events.begin(), m_events.end(),
-                             [](const Event& event)
+                             [&readyEvents](Event& event)
                              {
                                  if (event.cyclesRemaining == 0)
                                  {
-                                     if (event.callback)
-                                     {
-                                         event.callback();
-                                     }
+                                     readyEvents.push_back(std::move(event));
                                      return true;
                                  }
                                  return false;
                              });
     m_events.erase(it, m_events.end());
+
+    for (auto& event : readyEvents)
+    {
+        if (event.callback)
+        {
+            event.callback();
+        }
+    }
 }
 
 void Scheduler::reset()

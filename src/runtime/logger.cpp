@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/logger.h"
 
 #include <cstdio>
+#include <utility>
 
 namespace psxrecomp
 {
