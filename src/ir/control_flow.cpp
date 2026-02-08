@@ -10,7 +10,11 @@ namespace ir
 
 std::optional<size_t> ControlFlowGraph::indexOf(std::string_view name) const
 {
+#if defined(__cpp_lib_generic_unordered_lookup) && __cpp_lib_generic_unordered_lookup >= 201811L
     auto it = blockIndex.find(name);
+#else
+    auto it = blockIndex.find(std::string(name));
+#endif
     if (it == blockIndex.end())
     {
         return std::nullopt;
