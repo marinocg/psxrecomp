@@ -56,9 +56,9 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     }
 
     std::vector<Instruction> sorted = instructions;
-    std::stable_sort(sorted.begin(), sorted.end(), [](const Instruction& lhs, const Instruction& rhs) {
-        return lhs.sourceAddress.value_or(0) < rhs.sourceAddress.value_or(0);
-    });
+    std::stable_sort(sorted.begin(), sorted.end(),
+                     [](const Instruction& lhs, const Instruction& rhs)
+                     { return lhs.sourceAddress.value_or(0) < rhs.sourceAddress.value_or(0); });
 
     std::vector<Address> orderedAddresses;
     orderedAddresses.reserve(sorted.size());
@@ -66,7 +66,8 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     {
         if (!instruction.sourceAddress.has_value())
         {
-            result.errors.push_back("Instruction missing source address during control-flow build.");
+            result.errors.push_back(
+                "Instruction missing source address during control-flow build.");
             continue;
         }
         orderedAddresses.push_back(*instruction.sourceAddress);
@@ -160,7 +161,8 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             nextAddress = nextAddressIt->second;
         }
 
-        auto addSuccessor = [&](Address target) {
+        auto addSuccessor = [&](Address target)
+        {
             auto successorIt = result.addressToBlockName.find(target);
             if (successorIt == result.addressToBlockName.end())
             {
@@ -177,7 +179,8 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
 
         switch (lastInstruction.opcode)
         {
-        case Opcode::BRANCH: {
+        case Opcode::BRANCH:
+        {
             auto target = extractTargetAddress(lastInstruction);
             if (target.has_value())
             {
@@ -193,7 +196,8 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             }
             break;
         }
-        case Opcode::JUMP: {
+        case Opcode::JUMP:
+        {
             auto target = extractTargetAddress(lastInstruction);
             if (target.has_value())
             {

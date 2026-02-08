@@ -21,8 +21,8 @@ std::unordered_map<std::string, size_t> buildBlockIndex(const Function& function
     return indexMap;
 }
 
-std::vector<std::vector<size_t>> buildPredecessors(const Function& function,
-                                                   const std::unordered_map<std::string, size_t>& indexMap)
+std::vector<std::vector<size_t>>
+buildPredecessors(const Function& function, const std::unordered_map<std::string, size_t>& indexMap)
 {
     std::vector<std::vector<size_t>> predecessors(function.blocks.size());
     for (size_t blockIndex = 0; blockIndex < function.blocks.size(); ++blockIndex)
@@ -40,8 +40,8 @@ std::vector<std::vector<size_t>> buildPredecessors(const Function& function,
     return predecessors;
 }
 
-std::vector<std::vector<bool>> computeDominators(const Function& function,
-                                                 const std::vector<std::vector<size_t>>& predecessors)
+std::vector<std::vector<bool>>
+computeDominators(const Function& function, const std::vector<std::vector<size_t>>& predecessors)
 {
     const size_t blockCount = function.blocks.size();
     std::vector<std::vector<bool>> dominators(blockCount, std::vector<bool>(blockCount, true));
@@ -180,8 +180,8 @@ VerificationResult verifyFunction(const Function& function)
                             size_t predBlock = predecessors[blockIndex][predIndex];
                             if (!dominators[predBlock][defBlock])
                             {
-                                result.errors.push_back("Phi input not dominated by definition in " +
-                                                        block.name);
+                                result.errors.push_back(
+                                    "Phi input not dominated by definition in " + block.name);
                             }
                         }
                     }

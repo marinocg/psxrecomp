@@ -16,10 +16,9 @@ int main()
     using psxrecomp::ir::Opcode;
     using psxrecomp::ir::Value;
 
-    auto makeInstruction = [](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs,
-                              Address address) {
-        return Instruction{opcode, std::move(inputs), std::move(outputs), address};
-    };
+    auto makeInstruction =
+        [](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs, Address address)
+    { return Instruction{opcode, std::move(inputs), std::move(outputs), address}; };
 
     Register r1 = static_cast<Register>(1);
     Register r2 = static_cast<Register>(2);
@@ -27,16 +26,17 @@ int main()
     Register r4 = static_cast<Register>(4);
 
     std::vector<Instruction> instructions;
-    instructions.push_back(makeInstruction(Opcode::ADD, {Value::makeRegister(r1), Value::makeRegister(r2)},
+    instructions.push_back(makeInstruction(Opcode::ADD,
+                                           {Value::makeRegister(r1), Value::makeRegister(r2)},
                                            {Value::makeRegister(r3)}, 0x1000));
-    instructions.push_back(makeInstruction(Opcode::BRANCH,
-                                           {Value::makeRegister(r1), Value::makeAddress(0x1010)}, {},
-                                           0x1004));
-    instructions.push_back(makeInstruction(Opcode::ADD, {Value::makeRegister(r3), Value::makeImmediate(1)},
+    instructions.push_back(makeInstruction(
+        Opcode::BRANCH, {Value::makeRegister(r1), Value::makeAddress(0x1010)}, {}, 0x1004));
+    instructions.push_back(makeInstruction(Opcode::ADD,
+                                           {Value::makeRegister(r3), Value::makeImmediate(1)},
                                            {Value::makeRegister(r3)}, 0x1008));
-    instructions.push_back(
-        makeInstruction(Opcode::JUMP, {Value::makeAddress(0x1014)}, {}, 0x100C));
-    instructions.push_back(makeInstruction(Opcode::SUB, {Value::makeRegister(r3), Value::makeImmediate(2)},
+    instructions.push_back(makeInstruction(Opcode::JUMP, {Value::makeAddress(0x1014)}, {}, 0x100C));
+    instructions.push_back(makeInstruction(Opcode::SUB,
+                                           {Value::makeRegister(r3), Value::makeImmediate(2)},
                                            {Value::makeRegister(r3)}, 0x1010));
     instructions.push_back(makeInstruction(Opcode::MOVE, {Value::makeRegister(r3)},
                                            {Value::makeRegister(r4)}, 0x1014));

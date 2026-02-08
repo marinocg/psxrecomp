@@ -17,7 +17,10 @@ struct VerificationResult
 {
     std::vector<std::string> errors;
 
-    bool success() const { return errors.empty(); }
+    bool success() const
+    {
+        return errors.empty();
+    }
 };
 
 /**

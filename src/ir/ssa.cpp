@@ -57,8 +57,8 @@ std::unordered_map<std::string, size_t> buildBlockIndex(const Function& function
     return indexMap;
 }
 
-std::vector<std::vector<size_t>> buildPredecessors(const Function& function,
-                                                   const std::unordered_map<std::string, size_t>& indexMap)
+std::vector<std::vector<size_t>>
+buildPredecessors(const Function& function, const std::unordered_map<std::string, size_t>& indexMap)
 {
     std::vector<std::vector<size_t>> predecessors(function.blocks.size());
     for (size_t blockIndex = 0; blockIndex < function.blocks.size(); ++blockIndex)
@@ -201,8 +201,8 @@ SsaBuildResult convertToSSA(Function& function)
             const auto& block = function.blocks[blockIndex];
             for (size_t instIndex = 0; instIndex < block.instructions.size(); ++instIndex)
             {
-                for (size_t outputIndex = 0; outputIndex < block.instructions[instIndex].outputs.size();
-                     ++outputIndex)
+                for (size_t outputIndex = 0;
+                     outputIndex < block.instructions[instIndex].outputs.size(); ++outputIndex)
                 {
                     const auto& output = block.instructions[instIndex].outputs[outputIndex];
                     if (output.kind == ValueKind::REGISTER)
@@ -223,7 +223,8 @@ SsaBuildResult convertToSSA(Function& function)
     u32 nextTempId = nextTemporaryId(function);
     std::vector<Value> defIdToValue(nextDefId, Value::invalid());
 
-    auto assignTemp = [&](u32 defId) {
+    auto assignTemp = [&](u32 defId)
+    {
         if (defIdToValue[defId].kind == ValueKind::INVALID)
         {
             defIdToValue[defId] = Value::makeTemporary(nextTempId++);
@@ -292,8 +293,8 @@ SsaBuildResult convertToSSA(Function& function)
                         inputs.push_back(assignTemp(entryIt->second));
                     }
                 }
-                Instruction phiInstruction{Opcode::PHI, std::move(inputs),
-                                           {assignTemp(defId)}, std::nullopt};
+                Instruction phiInstruction{
+                    Opcode::PHI, std::move(inputs), {assignTemp(defId)}, std::nullopt};
                 newInstructions.push_back(std::move(phiInstruction));
                 current[reg] = defId;
             }
