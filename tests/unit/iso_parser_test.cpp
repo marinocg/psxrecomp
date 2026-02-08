@@ -152,14 +152,14 @@ std::filesystem::path createCueImage(std::filesystem::path& cuePath)
     const uint32_t totalSectors = 180;
     std::vector<uint8_t> image(totalSectors * kRawSectorSize, 0);
 
-    const uint32_t rootDirSector = dataTrackStart + 20;
+    const uint32_t rootDirSector = 20;
     const uint32_t rootDirSize = kSectorSize;
-    const uint32_t systemCnfSector = dataTrackStart + 21;
-    const uint32_t exeSector = dataTrackStart + 22;
-    const uint32_t multiExtentSectorA = dataTrackStart + 23;
-    const uint32_t multiExtentSectorB = dataTrackStart + 24;
-    const uint32_t xaSector = dataTrackStart + 25;
-    const uint32_t jolietRootSector = dataTrackStart + 26;
+    const uint32_t systemCnfSector = 21;
+    const uint32_t exeSector = 22;
+    const uint32_t multiExtentSectorA = 23;
+    const uint32_t multiExtentSectorB = 24;
+    const uint32_t xaSector = 25;
+    const uint32_t jolietRootSector = 26;
 
     std::vector<uint8_t> pvd(kSectorSize, 0);
     pvd[0] = 1;
@@ -218,7 +218,7 @@ std::filesystem::path createCueImage(std::filesystem::path& cuePath)
     cursor +=
         writeDirectoryRecord(rootDir, cursor, "MULTI.BIN;1", multiExtentSectorB, kSectorSize, 0x00);
     cursor += writeDirectoryRecord(rootDir, cursor, "XA.DAT;1", xaSector, 2324, 0x00);
-    writeMode2Sector(image, rootDirSector, rootDir, false);
+    writeMode2Sector(image, dataTrackStart + rootDirSector, rootDir, false);
 
     std::vector<uint8_t> jolietDir(kSectorSize, 0);
     size_t jolietCursor = 0;
@@ -226,25 +226,35 @@ std::filesystem::path createCueImage(std::filesystem::path& cuePath)
                                                kSectorSize, 0x02);
     jolietCursor += writeJolietDirectoryRecord(jolietDir, jolietCursor, u"\1", jolietRootSector,
                                                kSectorSize, 0x02);
+    jolietCursor += writeJolietDirectoryRecord(jolietDir, jolietCursor, u"SYSTEM.CNF",
+                                               systemCnfSector, 40, 0x00);
+    jolietCursor +=
+        writeJolietDirectoryRecord(jolietDir, jolietCursor, u"GAME.EXE", exeSector, 16, 0x00);
+    jolietCursor += writeJolietDirectoryRecord(jolietDir, jolietCursor, u"MULTI.BIN",
+                                               multiExtentSectorA, kSectorSize, 0x80);
+    jolietCursor += writeJolietDirectoryRecord(jolietDir, jolietCursor, u"MULTI.BIN",
+                                               multiExtentSectorB, kSectorSize, 0x00);
+    jolietCursor +=
+        writeJolietDirectoryRecord(jolietDir, jolietCursor, u"XA.DAT", xaSector, 2324, 0x00);
     jolietCursor += writeJolietDirectoryRecord(jolietDir, jolietCursor, u"LONGNAME.TXT",
                                                systemCnfSector, 40, 0x00);
-    writeMode2Sector(image, jolietRootSector, jolietDir, false);
+    writeMode2Sector(image, dataTrackStart + jolietRootSector, jolietDir, false);
 
     std::string systemCnf = "BOOT = cdrom:\\GAME.EXE;1\n";
     std::vector<uint8_t> systemData(systemCnf.begin(), systemCnf.end());
-    writeMode2Sector(image, systemCnfSector, systemData, false);
+    writeMode2Sector(image, dataTrackStart + systemCnfSector, systemData, false);
 
     std::string exeData = "PS-X EXE";
     std::vector<uint8_t> exeBytes(exeData.begin(), exeData.end());
-    writeMode2Sector(image, exeSector, exeBytes, false);
+    writeMode2Sector(image, dataTrackStart + exeSector, exeBytes, false);
 
     std::vector<uint8_t> multiA(kSectorSize, 'A');
     std::vector<uint8_t> multiB(kSectorSize, 'B');
-    writeMode2Sector(image, multiExtentSectorA, multiA, false);
-    writeMode2Sector(image, multiExtentSectorB, multiB, false);
+    writeMode2Sector(image, dataTrackStart + multiExtentSectorA, multiA, false);
+    writeMode2Sector(image, dataTrackStart + multiExtentSectorB, multiB, false);
 
     std::vector<uint8_t> xaData(2324, 'X');
-    writeMode2Sector(image, xaSector, xaData, true);
+    writeMode2Sector(image, dataTrackStart + xaSector, xaData, true);
 
     auto binPath = std::filesystem::temp_directory_path() / "psxrecomp_test.bin";
     std::ofstream binOut(binPath, std::ios::binary);
