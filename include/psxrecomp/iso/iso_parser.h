@@ -105,6 +105,7 @@ class IsoParser
     u32 m_logicalBlockSize;
     bool m_useJoliet;
     std::ifstream m_stream;
+    std::vector<u8> m_rawSectorScratch;
     PrimaryVolumeDescriptor m_pvd;
     std::vector<DirectoryRecord> m_rootDirectory;
     u32 m_rootExtent;

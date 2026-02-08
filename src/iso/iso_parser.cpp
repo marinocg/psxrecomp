@@ -102,7 +102,7 @@ std::string trim(const std::string& value)
 std::string decodeJolietName(const u8* data, size_t length)
 {
     std::string result;
-    result.reserve(length / 2);
+    result.reserve((length / 2) * 3);
     for (size_t i = 0; i + 1 < length; i += 2)
     {
         u16 code = static_cast<u16>(data[i] << 8) | static_cast<u16>(data[i + 1]);
@@ -114,12 +114,58 @@ std::string decodeJolietName(const u8* data, size_t length)
         {
             result.push_back(static_cast<char>(code));
         }
+        else if (code <= 0x07FF)
+        {
+            char b1 = static_cast<char>(0xC0 | ((code >> 6) & 0x1F));
+            char b2 = static_cast<char>(0x80 | (code & 0x3F));
+            result.push_back(b1);
+            result.push_back(b2);
+        }
         else
         {
-            result.push_back('?');
+            if (code >= 0xD800 && code <= 0xDFFF)
+            {
+                result.push_back('?');
+                continue;
+            }
+            char b1 = static_cast<char>(0xE0 | ((code >> 12) & 0x0F));
+            char b2 = static_cast<char>(0x80 | ((code >> 6) & 0x3F));
+            char b3 = static_cast<char>(0x80 | (code & 0x3F));
+            result.push_back(b1);
+            result.push_back(b2);
+            result.push_back(b3);
         }
     }
     return result;
+}
+
+std::string baseIsoName(const std::string& name)
+{
+    auto semicolon = name.find(';');
+    if (semicolon != std::string::npos)
+    {
+        return name.substr(0, semicolon);
+    }
+    return name;
+}
+
+int isoVersionNumber(const std::string& name)
+{
+    auto semicolon = name.find(';');
+    if (semicolon == std::string::npos)
+    {
+        return 0;
+    }
+    int value = 0;
+    for (size_t i = semicolon + 1; i < name.size(); ++i)
+    {
+        if (!std::isdigit(static_cast<unsigned char>(name[i])))
+        {
+            break;
+        }
+        value = (value * 10) + (name[i] - '0');
+    }
+    return value;
 }
 
 struct SectorView
@@ -202,7 +248,7 @@ std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
 IsoParser::IsoParser(const std::string& filename)
     : m_filename(filename), m_isOpen(false), m_isValid(false), m_rawSectorSize(kUserDataSize),
       m_dataTrackStartLba(0), m_logicalBlockSize(kUserDataSize), m_useJoliet(false), m_stream(),
-      m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0)
+      m_rawSectorScratch(), m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0)
 {
 }
 
@@ -252,6 +298,10 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
         std::string desired = normalizeIsoName(components[i]);
         bool found = false;
         targetExtents.clear();
+        std::string desiredBase = normalizeIsoName(baseIsoName(components[i]));
+        bool desiredHasVersion = components[i].find(';') != std::string::npos;
+        int bestVersion = -1;
+        DirectoryRecord bestRecord{};
         for (const auto& record : records)
         {
             if (record.name.empty())
@@ -262,12 +312,29 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
             {
                 continue;
             }
-            if (normalizeIsoName(record.name) == desired)
+            auto recordName = normalizeIsoName(record.name);
+            if (recordName == desired)
             {
-                target = record;
-                targetExtents.push_back(record);
                 found = true;
+                targetExtents.push_back(record);
+                continue;
             }
+            if (!desiredHasVersion && normalizeIsoName(baseIsoName(record.name)) == desiredBase)
+            {
+                int version = isoVersionNumber(record.name);
+                if (version > bestVersion)
+                {
+                    bestVersion = version;
+                    bestRecord = record;
+                }
+            }
+        }
+
+        if (!found && bestVersion >= 0)
+        {
+            found = true;
+            targetExtents.clear();
+            targetExtents.push_back(bestRecord);
         }
 
         if (!found)
@@ -295,19 +362,28 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
     }
 
     std::vector<u8> data;
-    if (targetExtents.empty())
-    {
-        targetExtents.push_back(target);
-    }
-
     std::sort(targetExtents.begin(), targetExtents.end(),
               [](const DirectoryRecord& lhs, const DirectoryRecord& rhs)
               { return lhs.extentLocation < rhs.extentLocation; });
 
     u32 totalLength = 0;
-    for (const auto& extent : targetExtents)
+    if (targetExtents.size() == 1)
     {
-        totalLength += extent.dataLength;
+        totalLength = targetExtents.front().dataLength;
+    }
+    else
+    {
+        bool hasMultiExtent = false;
+        for (const auto& extent : targetExtents)
+        {
+            hasMultiExtent = hasMultiExtent || ((extent.flags & 0x80) != 0);
+            totalLength += extent.dataLength;
+        }
+        if (!hasMultiExtent && !targetExtents.empty())
+        {
+            totalLength = targetExtents.front().dataLength;
+            targetExtents = {targetExtents.front()};
+        }
     }
     data.reserve(totalLength);
 
@@ -591,6 +667,7 @@ bool IsoParser::readRawSector(u32 sector, std::vector<u8>& buffer)
     {
         return false;
     }
+    m_stream.clear();
     if (buffer.size() != m_rawSectorSize)
     {
         buffer.resize(m_rawSectorSize);
@@ -615,30 +692,28 @@ bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
     }
     if (m_rawSectorSize == kUserDataSize)
     {
-        std::vector<u8> raw(m_rawSectorSize);
-        if (!readRawSector(sector, raw))
+        if (!readRawSector(sector, m_rawSectorScratch))
         {
             return false;
         }
-        if (size > raw.size())
+        if (size > m_rawSectorScratch.size())
         {
             return false;
         }
-        std::memcpy(buffer, raw.data(), size);
+        std::memcpy(buffer, m_rawSectorScratch.data(), size);
         return true;
     }
 
-    std::vector<u8> raw(m_rawSectorSize);
-    if (!readRawSector(sector, raw))
+    if (!readRawSector(sector, m_rawSectorScratch))
     {
         return false;
     }
-    auto view = decodeSectorLayout(raw);
-    if (view.size < size || view.offset + size > raw.size())
+    auto view = decodeSectorLayout(m_rawSectorScratch);
+    if (view.size < size || view.offset + size > m_rawSectorScratch.size())
     {
         return false;
     }
-    std::memcpy(buffer, raw.data() + view.offset, size);
+    std::memcpy(buffer, m_rawSectorScratch.data() + view.offset, size);
     return true;
 }
 
@@ -689,6 +764,7 @@ bool IsoParser::loadCueSheet()
         std::string file;
     };
     std::optional<TrackInfo> dataTrack;
+    bool parsingDataTrack = false;
 
     while (std::getline(cueStream, line))
     {
@@ -720,15 +796,29 @@ bool IsoParser::loadCueSheet()
             type = toUpper(type);
             if (type == "MODE1/2048")
             {
-                dataTrack = TrackInfo{2048, 0, currentFile};
+                if (!dataTrack)
+                {
+                    dataTrack = TrackInfo{2048, 0, currentFile};
+                }
+                parsingDataTrack =
+                    dataTrack && dataTrack->file == currentFile && dataTrack->sectorSize == 2048;
             }
             else if (type == "MODE2/2352")
             {
-                dataTrack = TrackInfo{2352, 0, currentFile};
+                if (!dataTrack)
+                {
+                    dataTrack = TrackInfo{2352, 0, currentFile};
+                }
+                parsingDataTrack =
+                    dataTrack && dataTrack->file == currentFile && dataTrack->sectorSize == 2352;
+            }
+            else
+            {
+                parsingDataTrack = false;
             }
             continue;
         }
-        if (upper.rfind("INDEX 01", 0) == 0 && dataTrack)
+        if (upper.rfind("INDEX 01", 0) == 0 && dataTrack && parsingDataTrack)
         {
             std::istringstream stream(trimmed);
             std::string token;
@@ -742,8 +832,12 @@ bool IsoParser::loadCueSheet()
             char separator = '\0';
             std::istringstream timeStream(timecode);
             timeStream >> minutes >> separator >> seconds >> separator >> frames;
-            u32 lba = static_cast<u32>(minutes * 60 * 75 + seconds * 75 + frames);
-            dataTrack->index01 = lba;
+            int lba = (minutes * 60 * 75 + seconds * 75 + frames) - 150;
+            if (lba < 0)
+            {
+                lba = 0;
+            }
+            dataTrack->index01 = static_cast<u32>(lba);
         }
     }
 

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -148,9 +149,17 @@ std::filesystem::path createTestIso()
 
 std::filesystem::path createCueImage(std::filesystem::path& cuePath)
 {
-    const uint32_t dataTrackStart = 150;
+    const uint32_t dataTrackStart = 0;
     const uint32_t totalSectors = 180;
     std::vector<uint8_t> image(totalSectors * kRawSectorSize, 0);
+
+    std::random_device randomDevice;
+    std::mt19937 generator(randomDevice());
+    std::uniform_int_distribution<uint32_t> distribution;
+    auto uniqueSuffix = distribution(generator);
+    auto uniqueName = std::string("psxrecomp_test_") + std::to_string(uniqueSuffix) + ".";
+    auto binPath = std::filesystem::temp_directory_path() / (uniqueName + "bin");
+    cuePath = std::filesystem::temp_directory_path() / (uniqueName + "cue");
 
     const uint32_t rootDirSector = 20;
     const uint32_t rootDirSize = kSectorSize;
@@ -256,17 +265,15 @@ std::filesystem::path createCueImage(std::filesystem::path& cuePath)
     std::vector<uint8_t> xaData(2324, 'X');
     writeMode2Sector(image, dataTrackStart + xaSector, xaData, true);
 
-    auto binPath = std::filesystem::temp_directory_path() / "psxrecomp_test.bin";
     std::ofstream binOut(binPath, std::ios::binary);
     binOut.write(reinterpret_cast<const char*>(image.data()),
                  static_cast<std::streamsize>(image.size()));
     binOut.close();
 
-    cuePath = std::filesystem::temp_directory_path() / "psxrecomp_test.cue";
     std::ofstream cueOut(cuePath);
     cueOut << "FILE \"" << binPath.filename().string() << "\" BINARY\n";
     cueOut << "  TRACK 01 MODE2/2352\n";
-    cueOut << "    INDEX 01 00:02:00\n";
+    cueOut << "    INDEX 01 00:00:00\n";
     cueOut.close();
 
     return binPath;
