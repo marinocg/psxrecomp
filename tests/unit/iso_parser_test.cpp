@@ -213,10 +213,10 @@ std::filesystem::path createCueImage(std::filesystem::path& cuePath)
                                    rootDirSize, 0x02);
     cursor += writeDirectoryRecord(rootDir, cursor, "SYSTEM.CNF;1", systemCnfSector, 40, 0x00);
     cursor += writeDirectoryRecord(rootDir, cursor, "GAME.EXE;1", exeSector, 16, 0x00);
-    cursor += writeDirectoryRecord(rootDir, cursor, "MULTI.BIN;1", multiExtentSectorA, kSectorSize,
-                                   0x80);
-    cursor += writeDirectoryRecord(rootDir, cursor, "MULTI.BIN;1", multiExtentSectorB, kSectorSize,
-                                   0x00);
+    cursor +=
+        writeDirectoryRecord(rootDir, cursor, "MULTI.BIN;1", multiExtentSectorA, kSectorSize, 0x80);
+    cursor +=
+        writeDirectoryRecord(rootDir, cursor, "MULTI.BIN;1", multiExtentSectorB, kSectorSize, 0x00);
     cursor += writeDirectoryRecord(rootDir, cursor, "XA.DAT;1", xaSector, 2324, 0x00);
     writeMode2Sector(image, rootDirSector, rootDir, false);
 

@@ -301,9 +301,8 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
     }
 
     std::sort(targetExtents.begin(), targetExtents.end(),
-              [](const DirectoryRecord& lhs, const DirectoryRecord& rhs) {
-                  return lhs.extentLocation < rhs.extentLocation;
-              });
+              [](const DirectoryRecord& lhs, const DirectoryRecord& rhs)
+              { return lhs.extentLocation < rhs.extentLocation; });
 
     u32 totalLength = 0;
     for (const auto& extent : targetExtents)
@@ -544,7 +543,8 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
             }
             else
             {
-                record.name.assign(reinterpret_cast<const char*>(recordData + 33), record.nameLength);
+                record.name.assign(reinterpret_cast<const char*>(recordData + 33),
+                                   record.nameLength);
             }
             if (record.nameLength == 1)
             {
