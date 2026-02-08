@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <string>
 
 int main()
@@ -78,9 +79,14 @@ int main()
         std::filesystem::temp_directory_path() / ("psxrecomp_codegen_test_" + stamp);
     std::filesystem::create_directories(outputDir);
 
+    std::filesystem::path includeDir = outputDir / "include/psxrecomp/runtime";
+    std::filesystem::create_directories(includeDir);
+
     std::filesystem::path headerPath = outputDir / "module.h";
     std::filesystem::path sourcePath = outputDir / "module.cpp";
-    std::filesystem::path objectPath = outputDir / "module.o";
+    std::filesystem::path harnessPath = outputDir / "harness.cpp";
+    std::filesystem::path runtimeHeaderPath = includeDir / "psx_system.h";
+    std::filesystem::path exePath = outputDir / "module_test";
 
     std::ofstream headerFile(headerPath);
     headerFile << header;
@@ -89,13 +95,50 @@ int main()
     sourceFile << source;
     sourceFile.close();
 
+    std::ofstream runtimeHeader(runtimeHeaderPath);
+    runtimeHeader << "#pragma once\n";
+    runtimeHeader << "#include \"psxrecomp/types.h\"\n";
+    runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
+    runtimeHeader << "class PsxSystem {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    explicit PsxSystem(u8* ram) : m_ram(ram) {}\n";
+    runtimeHeader << "    u8* getRam() { return m_ram; }\n";
+    runtimeHeader << "  private:\n";
+    runtimeHeader << "    u8* m_ram;\n";
+    runtimeHeader << "};\n";
+    runtimeHeader << "} }\n";
+    runtimeHeader.close();
+
+    std::ofstream harnessFile(harnessPath);
+    harnessFile << "#include \"module.h\"\n";
+    harnessFile << "#include <array>\n";
+    harnessFile << "int main() {\n";
+    harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
+    harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
+    harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
+    harnessFile << "  return 0;\n";
+    harnessFile << "}\n";
+    harnessFile.close();
+
     auto quote = [](const std::filesystem::path& path)
     { return std::string("\"") + path.string() + "\""; };
-    std::string command = "c++ -std=c++17 -I" + quote(repoRoot / "include") + " -I" +
-                          quote(outputDir) + " -c " + quote(sourcePath) + " -o " +
-                          quote(objectPath);
+    std::string command = "c++ -std=c++17 -I" + quote(outputDir / "include") + " -I" +
+                          quote(repoRoot / "include") + " -I" + quote(outputDir) + " " +
+                          quote(sourcePath) + " " + quote(harnessPath) + " -o " + quote(exePath);
     int compileStatus = std::system(command.c_str());
+    if (compileStatus != 0)
+    {
+        std::cerr << "Compile failed with status: " << compileStatus << "\n";
+    }
     assert(compileStatus == 0);
+
+    std::string runCommand = quote(exePath);
+    int runStatus = std::system(runCommand.c_str());
+    if (runStatus != 0)
+    {
+        std::cerr << "Run failed with status: " << runStatus << "\n";
+    }
+    assert(runStatus == 0);
 
     return 0;
 }
