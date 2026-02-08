@@ -361,7 +361,7 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
         if (offset + length > buffer.size())
         {
             addError("Directory record exceeds buffer length.");
-            break;
+            return false;
         }
 
         const u8* recordData = buffer.data() + offset;

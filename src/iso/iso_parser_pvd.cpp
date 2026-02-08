@@ -119,6 +119,13 @@ bool IsoParser::readPVD()
                 addError("Volume space size exceeds image size.");
                 return false;
             }
+            if (!m_tracks.empty() &&
+                detail::toUpper(std::filesystem::path(m_inputFilename).extension().string()) !=
+                    ".CUE")
+            {
+                m_tracks.front().sectorSize = m_rawSectorSize;
+                m_tracks.front().startLba = m_dataTrackStartLba;
+            }
             if (jolietRoot)
             {
                 m_useJoliet = true;

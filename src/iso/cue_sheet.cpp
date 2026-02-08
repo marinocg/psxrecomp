@@ -36,10 +36,6 @@ ParsedTrackType parseTrackType(const std::string& type)
     {
         return {TrackType::Data, 2352};
     }
-    if (upper == "MODE2/2336")
-    {
-        return {TrackType::Data, 2336};
-    }
     if (upper == "MODE2/2048")
     {
         return {TrackType::Data, 2048};
@@ -138,6 +134,11 @@ bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& 
             std::string typeToken;
             stream >> token >> number >> typeToken;
             auto trackType = parseTrackType(typeToken);
+            if (trackType.type == TrackType::Unknown || trackType.sectorSize == 0)
+            {
+                errorMessage = "Unsupported track type in CUE sheet: " + typeToken;
+                return false;
+            }
             u32 trackNumber = 0;
             auto numberStart = number.data();
             auto numberEnd = number.data() + number.size();
