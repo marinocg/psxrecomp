@@ -248,8 +248,7 @@ bool IsoParser::loadPathTable()
 
     if (m_totalSectors != 0 && m_logicalBlockSize != 0)
     {
-        u64 maxBytes =
-            static_cast<u64>(m_totalSectors) * static_cast<u64>(m_logicalBlockSize);
+        u64 maxBytes = static_cast<u64>(m_totalSectors) * static_cast<u64>(m_logicalBlockSize);
         if (static_cast<u64>(m_pvd.pathTableSize) > maxBytes)
         {
             addError("Path table size exceeds image size.");
