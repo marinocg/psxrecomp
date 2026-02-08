@@ -40,6 +40,9 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 set(ISO_SOURCES
     src/iso/cue_sheet.cpp
     src/iso/iso_boot.cpp
+    src/iso/iso_parser_filesystem.cpp
+    src/iso/iso_parser_pvd.cpp
+    src/iso/iso_parser_stream.cpp
     src/iso/iso_sector.cpp
     src/iso/iso_utils.cpp
     src/iso/iso_parser.cpp
