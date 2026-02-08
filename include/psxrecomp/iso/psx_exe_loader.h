@@ -31,6 +31,9 @@ enum class PsxExeDiagnosticSeverity
 enum class PsxExeErrorCode
 {
     BufferTooSmall,
+    FileOpenFailed,
+    FileEmpty,
+    FileReadFailed,
     InvalidMagic,
     PayloadTooSmall,
     LoadAddressOutOfRange,

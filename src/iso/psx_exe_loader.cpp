@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cstring>
 #include <fstream>
-#include <iostream>
 
 namespace psxrecomp
 {
@@ -99,28 +98,6 @@ void addDiagnostic(PsxExeDiagnostics* diagnostics, PsxExeDiagnosticSeverity seve
     }
 }
 
-void logDiagnostics(const PsxExeDiagnostics& diagnostics)
-{
-    for (const auto& entry : diagnostics.entries)
-    {
-        const char* severity = entry.severity == PsxExeDiagnosticSeverity::Error ? "error" : "warn";
-        std::cerr << "PSX-EXE loader " << severity << ": " << entry.field << " - " << entry.message
-                  << "\n";
-    }
-}
-
-bool hasWarnings(const PsxExeDiagnostics& diagnostics)
-{
-    for (const auto& entry : diagnostics.entries)
-    {
-        if (entry.severity == PsxExeDiagnosticSeverity::Warning)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 bool validateAlignedSegment(const std::string& field, u32 address, u32 size, u32 alignment,
                             PsxExeErrorCode addressCode, PsxExeErrorCode sizeCode,
                             PsxExeDiagnostics* diagnostics)
@@ -204,16 +181,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
     PsxExeHeader header{};
     if (!parseHeader(data, header, activeDiagnostics))
     {
-        logDiagnostics(*activeDiagnostics);
-        return false;
-    }
-
-    if (data.size() < kHeaderSize)
-    {
-        addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
-                      PsxExeErrorCode::BufferTooSmall, "header",
-                      "File is smaller than PSX-EXE header size.");
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -229,7 +196,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
         addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
                       PsxExeErrorCode::PayloadTooSmall, "loadSize",
                       "Program payload is smaller than header load size.");
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -245,7 +211,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
         addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
                       PsxExeErrorCode::LoadAddressOutOfRange, "loadAddress",
                       "Load address range is outside PSX RAM.");
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -260,7 +225,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
                       isAddressInRam(header.initialPc) ? PsxExeErrorCode::InitialPcMisaligned
                                                        : PsxExeErrorCode::InitialPcOutOfRange,
                       "initialPc", "Initial PC is invalid for PSX RAM.");
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -271,7 +235,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
                       isAddressInRam(header.initialGp) ? PsxExeErrorCode::InitialGpMisaligned
                                                        : PsxExeErrorCode::InitialGpOutOfRange,
                       "initialGp", "Initial GP is invalid for PSX RAM.");
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -280,7 +243,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
         addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
                       PsxExeErrorCode::BssOutOfRange, "bssAddress",
                       "BSS range is outside PSX RAM.");
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -296,7 +258,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
         addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
                       PsxExeErrorCode::StackOutOfRange, "stackAddress",
                       "Stack range is outside PSX RAM.");
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -309,7 +270,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
 
     if (activeDiagnostics->hasErrors())
     {
-        logDiagnostics(*activeDiagnostics);
         return false;
     }
 
@@ -318,10 +278,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
     outImage.programData.assign(data.begin() + static_cast<std::ptrdiff_t>(kHeaderSize),
                                 data.begin() +
                                     static_cast<std::ptrdiff_t>(kHeaderSize + effectiveLoadSize));
-    if (hasWarnings(*activeDiagnostics))
-    {
-        logDiagnostics(*activeDiagnostics);
-    }
     return true;
 }
 
@@ -362,8 +318,7 @@ bool PsxExeLoader::loadFromFile(const std::string& filename, PsxExeImage& outIma
     if (!file)
     {
         addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
-                      PsxExeErrorCode::BufferTooSmall, "file", "Failed to open PSX-EXE file.");
-        logDiagnostics(*activeDiagnostics);
+                      PsxExeErrorCode::FileOpenFailed, "file", "Failed to open PSX-EXE file.");
         return false;
     }
 
@@ -371,8 +326,7 @@ bool PsxExeLoader::loadFromFile(const std::string& filename, PsxExeImage& outIma
     if (size <= 0)
     {
         addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
-                      PsxExeErrorCode::BufferTooSmall, "file", "PSX-EXE file is empty.");
-        logDiagnostics(*activeDiagnostics);
+                      PsxExeErrorCode::FileEmpty, "file", "PSX-EXE file is empty.");
         return false;
     }
     file.seekg(0, std::ios::beg);
@@ -381,8 +335,7 @@ bool PsxExeLoader::loadFromFile(const std::string& filename, PsxExeImage& outIma
     if (!file.read(reinterpret_cast<char*>(buffer.data()), size))
     {
         addDiagnostic(activeDiagnostics, PsxExeDiagnosticSeverity::Error,
-                      PsxExeErrorCode::BufferTooSmall, "file", "Failed to read PSX-EXE file.");
-        logDiagnostics(*activeDiagnostics);
+                      PsxExeErrorCode::FileReadFailed, "file", "Failed to read PSX-EXE file.");
         return false;
     }
 

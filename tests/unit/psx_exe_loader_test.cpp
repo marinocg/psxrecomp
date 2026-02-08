@@ -1,9 +1,11 @@
 #include "psxrecomp/iso/psx_exe_loader.h"
 
 #include <cassert>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <random>
 #include <vector>
 
 namespace
@@ -208,8 +210,24 @@ int main()
     }
 
     {
+        struct FixtureGuard
+        {
+            std::filesystem::path path;
+            ~FixtureGuard()
+            {
+                std::error_code error;
+                std::filesystem::remove(path, error);
+            }
+        };
+
+        auto tempDir = std::filesystem::temp_directory_path();
+        auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
+        std::random_device randomDevice;
+        std::uniform_int_distribution<int> dist(0, 0xFFFF);
+        auto suffix = std::to_string(timestamp) + "_" + std::to_string(dist(randomDevice));
         auto fixturePath =
-            std::filesystem::absolute(std::filesystem::current_path() / "psx_exe_fixture.psx");
+            std::filesystem::absolute(tempDir / ("psx_exe_fixture_" + suffix + ".psx"));
+        FixtureGuard guard{fixturePath};
 
         auto buffer = buildTestExe(32, true);
         std::ofstream outFile(fixturePath, std::ios::binary);
@@ -230,7 +248,6 @@ int main()
         assert(psxrecomp::iso::PsxExeLoader::loadFromFile(fixturePath.string(), image));
         assert(image.programData.size() == 32);
         assert(image.entryPoint.pc == 0x80010000);
-        std::filesystem::remove(fixturePath);
     }
 
     return 0;
