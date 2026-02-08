@@ -4,6 +4,8 @@
 #include <array>
 #include <cctype>
 #include <cstring>
+#include <filesystem>
+#include <optional>
 #include <sstream>
 
 namespace psxrecomp
@@ -15,6 +17,10 @@ namespace
 {
 
 constexpr u32 kUserDataSize = 2048;
+constexpr u32 kRawSectorSize = 2352;
+constexpr u8 kMode1 = 1;
+constexpr u8 kMode2 = 2;
+constexpr u8 kSubmodeForm2 = 0x20;
 
 u16 readLe16(const u8* data)
 {
@@ -82,6 +88,73 @@ std::vector<std::string> splitPath(const std::string& path)
     return parts;
 }
 
+std::string trim(const std::string& value)
+{
+    auto start = value.find_first_not_of(" \t\r\n");
+    if (start == std::string::npos)
+    {
+        return "";
+    }
+    auto end = value.find_last_not_of(" \t\r\n");
+    return value.substr(start, end - start + 1);
+}
+
+std::string decodeJolietName(const u8* data, size_t length)
+{
+    std::string result;
+    result.reserve(length / 2);
+    for (size_t i = 0; i + 1 < length; i += 2)
+    {
+        u16 code = static_cast<u16>(data[i] << 8) | static_cast<u16>(data[i + 1]);
+        if (code == 0)
+        {
+            continue;
+        }
+        if (code <= 0x7F)
+        {
+            result.push_back(static_cast<char>(code));
+        }
+        else
+        {
+            result.push_back('?');
+        }
+    }
+    return result;
+}
+
+struct SectorView
+{
+    size_t offset = 0;
+    size_t size = 0;
+};
+
+SectorView decodeSectorLayout(const std::vector<u8>& raw)
+{
+    if (raw.size() == kUserDataSize)
+    {
+        return {0, kUserDataSize};
+    }
+    if (raw.size() < kRawSectorSize)
+    {
+        return {0, 0};
+    }
+    u8 mode = raw[15];
+    if (mode == kMode1)
+    {
+        return {16, kUserDataSize};
+    }
+    if (mode == kMode2)
+    {
+        u8 submode = raw[18];
+        if ((submode & kSubmodeForm2) != 0)
+        {
+            return {24, 2324};
+        }
+        return {24, kUserDataSize};
+    }
+    return {0, 0};
+}
+
 std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
 {
     if (systemCnf.empty())
@@ -127,8 +200,9 @@ std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
 } // namespace
 
 IsoParser::IsoParser(const std::string& filename)
-    : m_filename(filename), m_isOpen(false), m_isValid(false), m_sectorSize(kUserDataSize),
-      m_userDataOffset(0), m_stream(), m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0)
+    : m_filename(filename), m_isOpen(false), m_isValid(false), m_rawSectorSize(kUserDataSize),
+      m_dataTrackStartLba(0), m_logicalBlockSize(kUserDataSize), m_useJoliet(false), m_stream(),
+      m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0)
 {
 }
 
@@ -142,13 +216,7 @@ IsoParser::~IsoParser()
 
 bool IsoParser::open()
 {
-    if (m_stream.is_open())
-    {
-        m_stream.close();
-    }
-
-    m_stream.open(m_filename, std::ios::binary);
-    if (!m_stream)
+    if (!openStream())
     {
         return false;
     }
@@ -178,10 +246,12 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
     }
 
     DirectoryRecord target{};
+    std::vector<DirectoryRecord> targetExtents;
     for (size_t i = 0; i < components.size(); ++i)
     {
         std::string desired = normalizeIsoName(components[i]);
         bool found = false;
+        targetExtents.clear();
         for (const auto& record : records)
         {
             if (record.name.empty())
@@ -195,8 +265,8 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
             if (normalizeIsoName(record.name) == desired)
             {
                 target = record;
+                targetExtents.push_back(record);
                 found = true;
-                break;
             }
         }
 
@@ -225,20 +295,39 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
     }
 
     std::vector<u8> data;
-    data.reserve(target.dataLength);
-    u32 remaining = target.dataLength;
-    u32 sector = target.extentLocation;
-    while (remaining > 0)
+    if (targetExtents.empty())
     {
-        auto sectorData = readSector(sector);
-        if (sectorData.empty())
+        targetExtents.push_back(target);
+    }
+
+    std::sort(targetExtents.begin(), targetExtents.end(),
+              [](const DirectoryRecord& lhs, const DirectoryRecord& rhs) {
+                  return lhs.extentLocation < rhs.extentLocation;
+              });
+
+    u32 totalLength = 0;
+    for (const auto& extent : targetExtents)
+    {
+        totalLength += extent.dataLength;
+    }
+    data.reserve(totalLength);
+
+    for (const auto& extent : targetExtents)
+    {
+        u32 remaining = extent.dataLength;
+        u32 sector = extent.extentLocation;
+        while (remaining > 0)
         {
-            return {};
+            auto sectorData = readSector(sector);
+            if (sectorData.empty())
+            {
+                return {};
+            }
+            u32 toCopy = std::min<u32>(remaining, static_cast<u32>(sectorData.size()));
+            data.insert(data.end(), sectorData.begin(), sectorData.begin() + toCopy);
+            remaining -= toCopy;
+            ++sector;
         }
-        u32 toCopy = std::min<u32>(remaining, static_cast<u32>(sectorData.size()));
-        data.insert(data.end(), sectorData.begin(), sectorData.begin() + toCopy);
-        remaining -= toCopy;
-        ++sector;
     }
 
     return data;
@@ -298,58 +387,91 @@ bool IsoParser::isValid() const
 
 bool IsoParser::readPVD()
 {
-    struct Layout
-    {
-        u32 sectorSize;
-        u32 userDataOffset;
-    };
-
-    const Layout layouts[] = {
-        {2048, 0},
-        {2352, 16},
-        {2352, 24},
-    };
-
     std::array<u8, kUserDataSize> sector{};
+    std::optional<PrimaryVolumeDescriptor> pvd;
+    std::optional<std::pair<u32, u32>> pvdRoot;
+    std::optional<std::pair<u32, u32>> jolietRoot;
 
-    for (const auto& layout : layouts)
+    u32 trackStart = m_dataTrackStartLba;
+    m_useJoliet = false;
+
+    for (u32 layoutSize : {kUserDataSize, kRawSectorSize})
     {
-        m_sectorSize = layout.sectorSize;
-        m_userDataOffset = layout.userDataOffset;
+        m_rawSectorSize = layoutSize;
+        m_dataTrackStartLba = trackStart;
         if (!readSectorInto(16, sector.data(), sector.size()))
         {
             continue;
         }
-        if (sector[0] != 1)
+
+        for (u32 descriptorIndex = 16; descriptorIndex < 32; ++descriptorIndex)
         {
-            continue;
-        }
-        if (std::memcmp(sector.data() + 1, "CD001", 5) != 0)
-        {
-            continue;
+            if (!readSectorInto(descriptorIndex, sector.data(), sector.size()))
+            {
+                break;
+            }
+            u8 type = sector[0];
+            if (std::memcmp(sector.data() + 1, "CD001", 5) != 0)
+            {
+                continue;
+            }
+            if (type == 255)
+            {
+                break;
+            }
+            if (type == 1)
+            {
+                PrimaryVolumeDescriptor candidate{};
+                std::memcpy(candidate.identifier, sector.data() + 1, 5);
+                candidate.type = sector[0];
+                candidate.version = sector[6];
+                std::memcpy(candidate.systemId, sector.data() + 8, 32);
+                std::memcpy(candidate.volumeId, sector.data() + 40, 32);
+                candidate.volumeSpaceSize = readLe32(sector.data() + 80);
+                candidate.volumeSetSize = readLe16(sector.data() + 120);
+                candidate.volumeSequenceNumber = readLe16(sector.data() + 124);
+                candidate.logicalBlockSize = readLe16(sector.data() + 128);
+                candidate.pathTableSize = readLe32(sector.data() + 132);
+                pvd = candidate;
+                const u8* rootRecord = sector.data() + 156;
+                pvdRoot = std::make_pair(readLe32(rootRecord + 2), readLe32(rootRecord + 10));
+            }
+            if (type == 2)
+            {
+                if (sector[88] == 0x25 && sector[89] == 0x2F &&
+                    (sector[90] == 0x40 || sector[90] == 0x43 || sector[90] == 0x45))
+                {
+                    const u8* rootRecord = sector.data() + 156;
+                    u32 rootExtent = readLe32(rootRecord + 2);
+                    u32 rootSize = readLe32(rootRecord + 10);
+                    jolietRoot = std::make_pair(rootExtent, rootSize);
+                }
+            }
         }
 
-        std::memcpy(m_pvd.identifier, sector.data() + 1, 5);
-        m_pvd.type = sector[0];
-        m_pvd.version = sector[6];
-        std::memcpy(m_pvd.systemId, sector.data() + 8, 32);
-        std::memcpy(m_pvd.volumeId, sector.data() + 40, 32);
-        m_pvd.volumeSpaceSize = readLe32(sector.data() + 80);
-        m_pvd.volumeSetSize = readLe16(sector.data() + 120);
-        m_pvd.volumeSequenceNumber = readLe16(sector.data() + 124);
-        m_pvd.logicalBlockSize = readLe16(sector.data() + 128);
-        m_pvd.pathTableSize = readLe32(sector.data() + 132);
-
-        const u8* rootRecord = sector.data() + 156;
-        m_rootExtent = readLe32(rootRecord + 2);
-        m_rootSize = readLe32(rootRecord + 10);
-        m_rootDirectory.clear();
-        if (!readDirectory(m_rootExtent, m_rootSize, m_rootDirectory))
+        if (pvd)
         {
-            return false;
+            m_pvd = *pvd;
+            m_logicalBlockSize = m_pvd.logicalBlockSize;
+            if (jolietRoot)
+            {
+                m_useJoliet = true;
+                m_rootExtent = jolietRoot->first;
+                m_rootSize = jolietRoot->second;
+            }
+            else if (pvdRoot)
+            {
+                m_useJoliet = false;
+                m_rootExtent = pvdRoot->first;
+                m_rootSize = pvdRoot->second;
+            }
+            m_rootDirectory.clear();
+            if (!readDirectory(m_rootExtent, m_rootSize, m_rootDirectory))
+            {
+                return false;
+            }
+            return true;
         }
-
-        return true;
     }
 
     return false;
@@ -387,7 +509,9 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
         u8 length = buffer[offset];
         if (length == 0)
         {
-            size_t nextBoundary = ((offset / kUserDataSize) + 1) * kUserDataSize;
+            size_t blockSize =
+                m_logicalBlockSize != 0 ? static_cast<size_t>(m_logicalBlockSize) : kUserDataSize;
+            size_t nextBoundary = ((offset / blockSize) + 1) * blockSize;
             if (nextBoundary <= offset)
             {
                 break;
@@ -414,7 +538,14 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
         record.nameLength = recordData[32];
         if (record.nameLength > 0 && 33 + record.nameLength <= length)
         {
-            record.name.assign(reinterpret_cast<const char*>(recordData + 33), record.nameLength);
+            if (m_useJoliet)
+            {
+                record.name = decodeJolietName(recordData + 33, record.nameLength);
+            }
+            else
+            {
+                record.name.assign(reinterpret_cast<const char*>(recordData + 33), record.nameLength);
+            }
             if (record.nameLength == 1)
             {
                 if (record.name[0] == '\0')
@@ -436,12 +567,44 @@ bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>
 
 std::vector<u8> IsoParser::readSector(u32 sector)
 {
-    std::vector<u8> data(kUserDataSize);
-    if (!readSectorInto(sector, data.data(), data.size()))
+    std::vector<u8> raw(m_rawSectorSize);
+    if (!readRawSector(sector, raw))
     {
         return {};
     }
-    return data;
+    if (m_rawSectorSize == kUserDataSize)
+    {
+        return raw;
+    }
+    auto view = decodeSectorLayout(raw);
+    if (view.size == 0 || view.offset + view.size > raw.size())
+    {
+        return {};
+    }
+    return std::vector<u8>(raw.begin() + static_cast<std::ptrdiff_t>(view.offset),
+                           raw.begin() + static_cast<std::ptrdiff_t>(view.offset + view.size));
+}
+
+bool IsoParser::readRawSector(u32 sector, std::vector<u8>& buffer)
+{
+    if (!m_stream)
+    {
+        return false;
+    }
+    if (buffer.size() != m_rawSectorSize)
+    {
+        buffer.resize(m_rawSectorSize);
+    }
+    std::streamoff offset = static_cast<std::streamoff>(sector + m_dataTrackStartLba) *
+                            static_cast<std::streamoff>(m_rawSectorSize);
+    m_stream.seekg(offset, std::ios::beg);
+    if (!m_stream.good())
+    {
+        return false;
+    }
+    m_stream.read(reinterpret_cast<char*>(buffer.data()),
+                  static_cast<std::streamsize>(buffer.size()));
+    return m_stream.gcount() == static_cast<std::streamsize>(buffer.size());
 }
 
 bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
@@ -450,16 +613,150 @@ bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
     {
         return false;
     }
-    std::streamoff offset =
-        static_cast<std::streamoff>(sector) * static_cast<std::streamoff>(m_sectorSize) +
-        static_cast<std::streamoff>(m_userDataOffset);
-    m_stream.seekg(offset, std::ios::beg);
-    if (!m_stream.good())
+    if (m_rawSectorSize == kUserDataSize)
+    {
+        std::vector<u8> raw(m_rawSectorSize);
+        if (!readRawSector(sector, raw))
+        {
+            return false;
+        }
+        if (size > raw.size())
+        {
+            return false;
+        }
+        std::memcpy(buffer, raw.data(), size);
+        return true;
+    }
+
+    std::vector<u8> raw(m_rawSectorSize);
+    if (!readRawSector(sector, raw))
     {
         return false;
     }
-    m_stream.read(reinterpret_cast<char*>(buffer), static_cast<std::streamsize>(size));
-    return m_stream.gcount() == static_cast<std::streamsize>(size);
+    auto view = decodeSectorLayout(raw);
+    if (view.size < size || view.offset + size > raw.size())
+    {
+        return false;
+    }
+    std::memcpy(buffer, raw.data() + view.offset, size);
+    return true;
+}
+
+bool IsoParser::openStream()
+{
+    if (m_stream.is_open())
+    {
+        m_stream.close();
+    }
+
+    if (loadCueSheet())
+    {
+        m_stream.open(m_filename, std::ios::binary);
+        return m_stream.good();
+    }
+
+    m_dataTrackStartLba = 0;
+    m_stream.open(m_filename, std::ios::binary);
+    return m_stream.good();
+}
+
+bool IsoParser::loadCueSheet()
+{
+    auto extensionPos = m_filename.find_last_of('.');
+    if (extensionPos == std::string::npos)
+    {
+        return false;
+    }
+    std::string extension = toUpper(m_filename.substr(extensionPos + 1));
+    if (extension != "CUE")
+    {
+        return false;
+    }
+
+    std::ifstream cueStream(m_filename);
+    if (!cueStream)
+    {
+        return false;
+    }
+
+    std::filesystem::path cuePath(m_filename);
+    std::string line;
+    std::string currentFile;
+    struct TrackInfo
+    {
+        u32 sectorSize = 0;
+        u32 index01 = 0;
+        std::string file;
+    };
+    std::optional<TrackInfo> dataTrack;
+
+    while (std::getline(cueStream, line))
+    {
+        auto trimmed = trim(line);
+        if (trimmed.empty())
+        {
+            continue;
+        }
+        auto upper = toUpper(trimmed);
+        if (upper.rfind("FILE", 0) == 0)
+        {
+            auto firstQuote = trimmed.find('"');
+            auto lastQuote = trimmed.find_last_of('"');
+            if (firstQuote != std::string::npos && lastQuote != std::string::npos &&
+                lastQuote > firstQuote)
+            {
+                currentFile = trimmed.substr(firstQuote + 1, lastQuote - firstQuote - 1);
+            }
+            continue;
+        }
+        if (upper.rfind("TRACK", 0) == 0)
+        {
+            std::istringstream stream(trimmed);
+            std::string token;
+            std::string type;
+            stream >> token;
+            stream >> token;
+            stream >> type;
+            type = toUpper(type);
+            if (type == "MODE1/2048")
+            {
+                dataTrack = TrackInfo{2048, 0, currentFile};
+            }
+            else if (type == "MODE2/2352")
+            {
+                dataTrack = TrackInfo{2352, 0, currentFile};
+            }
+            continue;
+        }
+        if (upper.rfind("INDEX 01", 0) == 0 && dataTrack)
+        {
+            std::istringstream stream(trimmed);
+            std::string token;
+            std::string timecode;
+            stream >> token;
+            stream >> token;
+            stream >> timecode;
+            int minutes = 0;
+            int seconds = 0;
+            int frames = 0;
+            char separator = '\0';
+            std::istringstream timeStream(timecode);
+            timeStream >> minutes >> separator >> seconds >> separator >> frames;
+            u32 lba = static_cast<u32>(minutes * 60 * 75 + seconds * 75 + frames);
+            dataTrack->index01 = lba;
+        }
+    }
+
+    if (!dataTrack || dataTrack->file.empty())
+    {
+        return false;
+    }
+
+    std::filesystem::path binPath = cuePath.parent_path() / dataTrack->file;
+    m_filename = binPath.string();
+    m_rawSectorSize = dataTrack->sectorSize != 0 ? dataTrack->sectorSize : kRawSectorSize;
+    m_dataTrackStartLba = dataTrack->index01;
+    return true;
 }
 
 } // namespace iso
