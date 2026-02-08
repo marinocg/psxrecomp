@@ -118,7 +118,7 @@ For agent collaboration, see [agents.md](agents.md).
 - [x] Basic MIPS R3000 disassembler
 - [x] IR design and implementation
 - [x] Simple function recompiler
-- [ ] Runtime library basics
+- [x] Runtime library basics
 - [ ] First recompiled demo
 - [ ] GPU emulation layer
 - [ ] SPU emulation layer

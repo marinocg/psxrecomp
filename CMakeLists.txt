@@ -68,9 +68,15 @@ set(RECOMPILER_SOURCES
 )
 
 set(RUNTIME_SOURCES
-    # src/runtime/psx_system.cpp
-    # src/runtime/gpu.cpp
-    # src/runtime/spu.cpp
+    src/runtime/cdrom.cpp
+    src/runtime/dma.cpp
+    src/runtime/gpu.cpp
+    src/runtime/input.cpp
+    src/runtime/interrupt_controller.cpp
+    src/runtime/logger.cpp
+    src/runtime/psx_system.cpp
+    src/runtime/scheduler.cpp
+    src/runtime/spu.cpp
 )
 
 file(GLOB_RECURSE ALL_FORMAT_SOURCES CONFIGURE_DEPENDS
@@ -150,6 +156,13 @@ if(BUILD_TESTS)
                 PSXRECOMP_TEST_CXX="${CMAKE_CXX_COMPILER}"
     )
     add_test(NAME recompiler_codegen_test COMMAND recompiler_codegen_test)
+
+    add_executable(runtime_test
+        tests/unit/runtime_test.cpp
+        ${RUNTIME_SOURCES}
+    )
+    target_include_directories(runtime_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME runtime_test COMMAND runtime_test)
 endif()
 
 # Examples

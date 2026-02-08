@@ -1,9 +1,19 @@
 #pragma once
 
+#include "psxrecomp/runtime/cdrom.h"
+#include "psxrecomp/runtime/dma.h"
+#include "psxrecomp/runtime/gpu.h"
+#include "psxrecomp/runtime/input.h"
+#include "psxrecomp/runtime/interrupt_controller.h"
+#include "psxrecomp/runtime/logger.h"
+#include "psxrecomp/runtime/memory_map.h"
+#include "psxrecomp/runtime/scheduler.h"
+#include "psxrecomp/runtime/spu.h"
 #include "psxrecomp/types.h"
 
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace psxrecomp
 {
@@ -22,11 +32,26 @@ class PsxSystem
     PsxSystem();
     ~PsxSystem();
 
+    PsxSystem(const PsxSystem&) = delete;
+    PsxSystem& operator=(const PsxSystem&) = delete;
+    PsxSystem(PsxSystem&&) = delete;
+    PsxSystem& operator=(PsxSystem&&) = delete;
+
     /**
      * @brief Initialize the PSX system
      * @return true if successful
      */
     bool initialize();
+
+    /**
+     * @brief Reset system state and hardware
+     */
+    void reset();
+
+    /**
+     * @brief Perform a boot routine
+     */
+    void boot();
 
     /**
      * @brief Run a single frame
@@ -41,22 +66,22 @@ class PsxSystem
     template <typename T> T read(Address address)
     {
         Address physical = normalizeAddress(address);
-        if (physical >= MemoryMap::RAM_BASE && physical < MemoryMap::RAM_BASE + MemoryMap::RAM_SIZE)
+        if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
-            return readFromRegion<T>(m_ram, physical - MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE);
+            return readFromRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE,
+                                     MemoryMap::RAM_SIZE);
         }
-        if (physical >= MemoryMap::SCRATCHPAD_BASE &&
-            physical < MemoryMap::SCRATCHPAD_BASE + MemoryMap::SCRATCHPAD_SIZE)
+        if (isInRange(physical, MemoryMap::SCRATCHPAD_BASE, MemoryMap::SCRATCHPAD_SIZE))
         {
-            return readFromRegion<T>(m_scratchpad, physical - MemoryMap::SCRATCHPAD_BASE,
+            return readFromRegion<T>(m_scratchpad.data(), physical - MemoryMap::SCRATCHPAD_BASE,
                                      MemoryMap::SCRATCHPAD_SIZE);
         }
-        if (physical >= MemoryMap::BIOS_BASE &&
-            physical < MemoryMap::BIOS_BASE + MemoryMap::BIOS_SIZE)
+        if (isInRange(physical, MemoryMap::BIOS_BASE, MemoryMap::BIOS_SIZE))
         {
-            return readFromRegion<T>(m_bios, physical - MemoryMap::BIOS_BASE, MemoryMap::BIOS_SIZE);
+            return readFromRegion<T>(m_bios.data(), physical - MemoryMap::BIOS_BASE,
+                                     MemoryMap::BIOS_SIZE);
         }
-        if (physical >= MemoryMap::IO_BASE && physical < MemoryMap::IO_BASE + MemoryMap::IO_SIZE)
+        if (isInRange(physical, MemoryMap::IO_BASE, MemoryMap::IO_SIZE))
         {
             return readMmio<T>(physical);
         }
@@ -71,19 +96,19 @@ class PsxSystem
     template <typename T> void write(Address address, T value)
     {
         Address physical = normalizeAddress(address);
-        if (physical >= MemoryMap::RAM_BASE && physical < MemoryMap::RAM_BASE + MemoryMap::RAM_SIZE)
+        if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
-            writeToRegion<T>(m_ram, physical - MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE, value);
+            writeToRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE,
+                             value);
             return;
         }
-        if (physical >= MemoryMap::SCRATCHPAD_BASE &&
-            physical < MemoryMap::SCRATCHPAD_BASE + MemoryMap::SCRATCHPAD_SIZE)
+        if (isInRange(physical, MemoryMap::SCRATCHPAD_BASE, MemoryMap::SCRATCHPAD_SIZE))
         {
-            writeToRegion<T>(m_scratchpad, physical - MemoryMap::SCRATCHPAD_BASE,
+            writeToRegion<T>(m_scratchpad.data(), physical - MemoryMap::SCRATCHPAD_BASE,
                              MemoryMap::SCRATCHPAD_SIZE, value);
             return;
         }
-        if (physical >= MemoryMap::IO_BASE && physical < MemoryMap::IO_BASE + MemoryMap::IO_SIZE)
+        if (isInRange(physical, MemoryMap::IO_BASE, MemoryMap::IO_SIZE))
         {
             writeMmio<T>(physical, value);
         }
@@ -94,6 +119,16 @@ class PsxSystem
      * @return Pointer to 2MB RAM
      */
     u8* getRam();
+    const u8* getRam() const;
+
+    Gpu& gpu();
+    Spu& spu();
+    Cdrom& cdrom();
+    InputController& input();
+    DmaController& dma();
+    InterruptController& interrupts();
+    Scheduler& scheduler();
+    RuntimeLogger& logger();
 
     void callGpuIntrinsic(Address /*address*/)
     {
@@ -109,20 +144,33 @@ class PsxSystem
     }
 
   private:
-    u8* m_ram;        // 2MB main RAM
-    u8* m_scratchpad; // 1KB scratchpad
-    u8* m_bios;       // 512KB BIOS
+    std::vector<u8> m_ram;        // 2MB main RAM
+    std::vector<u8> m_scratchpad; // 1KB scratchpad
+    std::vector<u8> m_bios;       // 512KB BIOS
 
-    void initMemory();
-    void cleanupMemory();
+    Gpu m_gpu;
+    Spu m_spu;
+    Cdrom m_cdrom;
+    InputController m_input;
+    DmaController m_dma;
+    InterruptController m_interrupts;
+    Scheduler m_scheduler;
+    RuntimeLogger m_logger;
 
     static Address normalizeAddress(Address address)
     {
         return address & 0x1FFFFFFF;
     }
 
+    static bool isInRange(Address address, Address base, Address size)
+    {
+        return address >= base && address < base + size;
+    }
+
     template <typename T> T readFromRegion(const u8* base, Address offset, Address size) const
     {
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported read size for runtime MMIO");
         if (!base || offset + sizeof(T) > size)
         {
             return {};
@@ -134,6 +182,8 @@ class PsxSystem
 
     template <typename T> void writeToRegion(u8* base, Address offset, Address size, T value)
     {
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported write size for runtime MMIO");
         if (!base || offset + sizeof(T) > size)
         {
             return;
@@ -141,11 +191,47 @@ class PsxSystem
         std::memcpy(base + offset, &value, sizeof(T));
     }
 
-    template <typename T> T readMmio(Address /*address*/)
+    template <typename T> T readMmio(Address address)
     {
-        return {};
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported MMIO read size");
+        if constexpr (sizeof(T) == 1)
+        {
+            return static_cast<T>(readMmio8(address));
+        }
+        if constexpr (sizeof(T) == 2)
+        {
+            return static_cast<T>(readMmio16(address));
+        }
+        return static_cast<T>(readMmio32(address));
     }
-    template <typename T> void writeMmio(Address /*address*/, T /*value*/) {}
+
+    template <typename T> void writeMmio(Address address, T value)
+    {
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported MMIO write size");
+        if constexpr (sizeof(T) == 1)
+        {
+            writeMmio8(address, static_cast<u8>(value));
+        }
+        else if constexpr (sizeof(T) == 2)
+        {
+            writeMmio16(address, static_cast<u16>(value));
+        }
+        else
+        {
+            writeMmio32(address, static_cast<u32>(value));
+        }
+    }
+
+    u32 readMmio32(Address address);
+    u16 readMmio16(Address address);
+    u8 readMmio8(Address address);
+    void writeMmio32(Address address, u32 value);
+    void writeMmio16(Address address, u16 value);
+    void writeMmio8(Address address, u8 value);
+
+    void handleDmaTransfer(DmaPort port);
 };
 
 } // namespace runtime
