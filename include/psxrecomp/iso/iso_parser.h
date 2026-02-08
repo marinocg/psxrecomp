@@ -100,9 +100,12 @@ class IsoParser
     std::string m_filename;
     bool m_isOpen;
     bool m_isValid;
-    u32 m_sectorSize;
-    u32 m_userDataOffset;
+    u32 m_rawSectorSize;
+    u32 m_dataTrackStartLba;
+    u32 m_logicalBlockSize;
+    bool m_useJoliet;
     std::ifstream m_stream;
+    std::vector<u8> m_rawSectorScratch;
     PrimaryVolumeDescriptor m_pvd;
     std::vector<DirectoryRecord> m_rootDirectory;
     u32 m_rootExtent;
@@ -111,7 +114,10 @@ class IsoParser
     bool readPVD();
     bool readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>& records);
     std::vector<u8> readSector(u32 sector);
+    bool readRawSector(u32 sector, std::vector<u8>& buffer);
     bool readSectorInto(u32 sector, u8* buffer, size_t size);
+    bool openStream();
+    bool loadCueSheet();
 };
 
 } // namespace iso
