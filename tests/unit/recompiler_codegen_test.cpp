@@ -101,6 +101,11 @@ int main()
     runtimeHeader << "  public:\n";
     runtimeHeader << "    explicit PsxSystem(u8* ram) : m_ram(ram) {}\n";
     runtimeHeader << "    u8* getRam() { return m_ram; }\n";
+    runtimeHeader << "    template <typename T> T read(Address) { return {}; }\n";
+    runtimeHeader << "    template <typename T> void write(Address, T) {}\n";
+    runtimeHeader << "    void callGpuIntrinsic(Address) {}\n";
+    runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
+    runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
     runtimeHeader << "};\n";
