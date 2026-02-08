@@ -13,36 +13,34 @@ constexpr u32 CYCLES_PER_FRAME = 564480;
 constexpr u32 DMA_DIRECTION_FROM_RAM = 0x00000001;
 } // namespace
 
-PsxSystem::PsxSystem() : m_ram(nullptr), m_scratchpad(nullptr), m_bios(nullptr)
+PsxSystem::PsxSystem()
+    : m_ram(MemoryMap::RAM_SIZE), m_scratchpad(MemoryMap::SCRATCHPAD_SIZE),
+      m_bios(MemoryMap::BIOS_SIZE)
 {
-    initMemory();
 }
 
-PsxSystem::~PsxSystem()
-{
-    cleanupMemory();
-}
+PsxSystem::~PsxSystem() = default;
 
 bool PsxSystem::initialize()
 {
     reset();
     boot();
-    return m_ram && m_scratchpad && m_bios;
+    return !m_ram.empty() && !m_scratchpad.empty() && !m_bios.empty();
 }
 
 void PsxSystem::reset()
 {
-    if (m_ram)
+    if (!m_ram.empty())
     {
-        std::memset(m_ram, 0, MemoryMap::RAM_SIZE);
+        std::memset(m_ram.data(), 0, MemoryMap::RAM_SIZE);
     }
-    if (m_scratchpad)
+    if (!m_scratchpad.empty())
     {
-        std::memset(m_scratchpad, 0, MemoryMap::SCRATCHPAD_SIZE);
+        std::memset(m_scratchpad.data(), 0, MemoryMap::SCRATCHPAD_SIZE);
     }
-    if (m_bios)
+    if (!m_bios.empty())
     {
-        std::memset(m_bios, 0, MemoryMap::BIOS_SIZE);
+        std::memset(m_bios.data(), 0, MemoryMap::BIOS_SIZE);
     }
 
     m_gpu.reset();
@@ -69,12 +67,12 @@ void PsxSystem::runFrame()
 
 u8* PsxSystem::getRam()
 {
-    return m_ram;
+    return m_ram.data();
 }
 
 const u8* PsxSystem::getRam() const
 {
-    return m_ram;
+    return m_ram.data();
 }
 
 Gpu& PsxSystem::gpu()
@@ -115,23 +113,6 @@ Scheduler& PsxSystem::scheduler()
 RuntimeLogger& PsxSystem::logger()
 {
     return m_logger;
-}
-
-void PsxSystem::initMemory()
-{
-    m_ram = new u8[MemoryMap::RAM_SIZE]();
-    m_scratchpad = new u8[MemoryMap::SCRATCHPAD_SIZE]();
-    m_bios = new u8[MemoryMap::BIOS_SIZE]();
-}
-
-void PsxSystem::cleanupMemory()
-{
-    delete[] m_ram;
-    delete[] m_scratchpad;
-    delete[] m_bios;
-    m_ram = nullptr;
-    m_scratchpad = nullptr;
-    m_bios = nullptr;
 }
 
 u32 PsxSystem::readMmio32(Address address)

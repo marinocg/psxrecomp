@@ -26,7 +26,9 @@ int main()
     system.write<psxrecomp::u32>(ramOut, 0xFACEB00C);
     assert(system.read<psxrecomp::u32>(ramOut) == 0);
 
-    Address gpuBase = 0x1F801080 + 0x10 * static_cast<Address>(DmaPort::Gpu);
+    Address gpuBase =
+        psxrecomp::runtime::DmaController::ChannelBase +
+        psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Gpu);
     system.write<psxrecomp::u32>(0x00010000, 0x11111111);
     system.write<psxrecomp::u32>(0x00010004, 0x22222222);
     system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00010000);
@@ -38,7 +40,9 @@ int main()
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Dma)) !=
            0);
 
-    Address spuBase = 0x1F801080 + 0x10 * static_cast<Address>(DmaPort::Spu);
+    Address spuBase =
+        psxrecomp::runtime::DmaController::ChannelBase +
+        psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);
     system.write<psxrecomp::u32>(0x00011000, 0xABCDEF01);
     system.write<psxrecomp::u32>(spuBase + 0x0, 0x00011000);
     system.write<psxrecomp::u32>(spuBase + 0x4, 0x00000001);

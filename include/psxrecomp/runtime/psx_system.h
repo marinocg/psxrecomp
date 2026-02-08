@@ -13,6 +13,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <vector>
 
 namespace psxrecomp
 {
@@ -30,6 +31,11 @@ class PsxSystem
   public:
     PsxSystem();
     ~PsxSystem();
+
+    PsxSystem(const PsxSystem&) = delete;
+    PsxSystem& operator=(const PsxSystem&) = delete;
+    PsxSystem(PsxSystem&&) = delete;
+    PsxSystem& operator=(PsxSystem&&) = delete;
 
     /**
      * @brief Initialize the PSX system
@@ -135,9 +141,9 @@ class PsxSystem
     }
 
   private:
-    u8* m_ram;        // 2MB main RAM
-    u8* m_scratchpad; // 1KB scratchpad
-    u8* m_bios;       // 512KB BIOS
+    std::vector<u8> m_ram;        // 2MB main RAM
+    std::vector<u8> m_scratchpad; // 1KB scratchpad
+    std::vector<u8> m_bios;       // 512KB BIOS
 
     Gpu m_gpu;
     Spu m_spu;
@@ -147,9 +153,6 @@ class PsxSystem
     InterruptController m_interrupts;
     Scheduler m_scheduler;
     RuntimeLogger m_logger;
-
-    void initMemory();
-    void cleanupMemory();
 
     static Address normalizeAddress(Address address)
     {
@@ -163,6 +166,8 @@ class PsxSystem
 
     template <typename T> T readFromRegion(const u8* base, Address offset, Address size) const
     {
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported read size for runtime MMIO");
         if (!base || offset + sizeof(T) > size)
         {
             return {};
@@ -174,6 +179,8 @@ class PsxSystem
 
     template <typename T> void writeToRegion(u8* base, Address offset, Address size, T value)
     {
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported write size for runtime MMIO");
         if (!base || offset + sizeof(T) > size)
         {
             return;
@@ -183,6 +190,8 @@ class PsxSystem
 
     template <typename T> T readMmio(Address address)
     {
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported MMIO read size");
         if constexpr (sizeof(T) == 1)
         {
             return static_cast<T>(readMmio8(address));
@@ -196,6 +205,8 @@ class PsxSystem
 
     template <typename T> void writeMmio(Address address, T value)
     {
+        static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
+                      "Unsupported MMIO write size");
         if constexpr (sizeof(T) == 1)
         {
             writeMmio8(address, static_cast<u8>(value));

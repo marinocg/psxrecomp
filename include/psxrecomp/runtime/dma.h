@@ -30,6 +30,10 @@ struct DmaChannel
 class DmaController
 {
   public:
+    static constexpr size_t ChannelCount = 7;
+    static constexpr Address ChannelBase = 0x1F801080;
+    static constexpr Address ChannelStride = 0x10;
+
     void reset();
 
     u32 readRegister(Address address) const;
@@ -39,8 +43,7 @@ class DmaController
     void clearTrigger(DmaPort port);
 
   private:
-    static constexpr size_t CHANNEL_COUNT = 7;
-    DmaChannel m_channels[CHANNEL_COUNT] = {};
+    DmaChannel m_channels[ChannelCount] = {};
     u32 m_control = 0;
     u32 m_interrupt = 0;
 

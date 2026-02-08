@@ -7,8 +7,6 @@ namespace runtime
 
 namespace
 {
-constexpr Address CHANNEL_BASE = 0x1F801080;
-constexpr Address CHANNEL_STRIDE = 0x10;
 constexpr Address CONTROL_REG = 0x1F8010F0;
 constexpr Address INTERRUPT_REG = 0x1F8010F4;
 
@@ -42,7 +40,8 @@ u32 DmaController::readRegister(Address address) const
         return 0;
     }
     const auto& channel = m_channels[channelIndex(*port)];
-    Address offset = address - (CHANNEL_BASE + channelIndex(*port) * CHANNEL_STRIDE);
+    Address offset =
+        address - (ChannelBase + channelIndex(*port) * static_cast<Address>(ChannelStride));
     switch (offset)
     {
     case 0x0:
@@ -76,7 +75,8 @@ std::optional<DmaPort> DmaController::writeRegister(Address address, u32 value)
     }
 
     auto& channel = m_channels[channelIndex(*port)];
-    Address offset = address - (CHANNEL_BASE + channelIndex(*port) * CHANNEL_STRIDE);
+    Address offset =
+        address - (ChannelBase + channelIndex(*port) * static_cast<Address>(ChannelStride));
     switch (offset)
     {
     case 0x0:
@@ -117,11 +117,12 @@ size_t DmaController::channelIndex(DmaPort port) const
 
 std::optional<DmaPort> DmaController::channelFromAddress(Address address) const
 {
-    if (address < CHANNEL_BASE || address >= CHANNEL_BASE + CHANNEL_STRIDE * CHANNEL_COUNT)
+    if (address < ChannelBase ||
+        address >= ChannelBase + ChannelStride * static_cast<Address>(ChannelCount))
     {
         return std::nullopt;
     }
-    size_t index = (address - CHANNEL_BASE) / CHANNEL_STRIDE;
+    size_t index = (address - ChannelBase) / ChannelStride;
     return static_cast<DmaPort>(index);
 }
 
