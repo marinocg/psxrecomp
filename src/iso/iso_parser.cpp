@@ -109,10 +109,10 @@ std::string parseBootPathFromSystemCnf(const std::vector<u8>& systemCnf)
 } // namespace
 
 IsoParser::IsoParser(const std::string& filename)
-    : m_filename(filename), m_isOpen(false), m_isValid(false), m_rawSectorSize(kUserDataSize),
-      m_dataTrackStartLba(0), m_logicalBlockSize(kUserDataSize), m_useJoliet(false), m_stream(),
-      m_rawSectorScratch(), m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0),
-      m_totalSectors(0), m_tracks(), m_errors()
+    : m_filename(filename), m_inputFilename(filename), m_isOpen(false), m_isValid(false),
+      m_rawSectorSize(kUserDataSize), m_dataTrackStartLba(0), m_logicalBlockSize(kUserDataSize),
+      m_useJoliet(false), m_stream(), m_rawSectorScratch(), m_pvd{}, m_rootDirectory(),
+      m_rootExtent(0), m_rootSize(0), m_totalSectors(0), m_tracks(), m_errors()
 {
 }
 
@@ -487,7 +487,7 @@ bool IsoParser::readPVD()
                 candidate.logicalBlockSize = detail::readLe16(sector.data() + 128);
                 candidate.pathTableSize = detail::readLe32(sector.data() + 132);
                 candidate.pathTableLba = detail::readLe32(sector.data() + 140);
-                candidate.optionalPathTableLba = detail::readLe32(sector.data() + 148);
+                candidate.optionalPathTableLba = detail::readLe32(sector.data() + 144);
                 if (!validateVolumeMetadata(candidate))
                 {
                     continue;
@@ -514,6 +514,28 @@ bool IsoParser::readPVD()
         {
             m_pvd = *pvd;
             m_logicalBlockSize = m_pvd.logicalBlockSize;
+            if (m_totalSectors == 0 && m_rawSectorSize != 0)
+            {
+                std::error_code error;
+                auto fileSize = std::filesystem::file_size(m_filename, error);
+                if (error)
+                {
+                    addError("Failed to determine image file size.");
+                }
+                else
+                {
+                    m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
+                    if (fileSize % m_rawSectorSize != 0)
+                    {
+                        addError("Image file size is not aligned to sector size.");
+                    }
+                }
+            }
+            if (m_totalSectors != 0 && m_pvd.volumeSpaceSize > m_totalSectors)
+            {
+                addError("Volume space size exceeds image size.");
+                return false;
+            }
             if (jolietRoot)
             {
                 m_useJoliet = true;
@@ -731,7 +753,8 @@ bool IsoParser::openStream()
 
     CueSheet cueSheet{};
     std::string cueError;
-    std::filesystem::path inputPath(m_filename);
+    m_filename = m_inputFilename;
+    std::filesystem::path inputPath(m_inputFilename);
     bool isCue =
         inputPath.has_extension() && detail::toUpper(inputPath.extension().string()) == ".CUE";
 
@@ -785,19 +808,26 @@ bool IsoParser::openStream()
         return false;
     }
 
-    std::error_code error;
-    auto fileSize = std::filesystem::file_size(m_filename, error);
-    if (error)
+    if (isCue)
     {
-        addError("Failed to determine image file size.");
-    }
-    else if (m_rawSectorSize != 0)
-    {
-        m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
-        if (fileSize % m_rawSectorSize != 0)
+        std::error_code error;
+        auto fileSize = std::filesystem::file_size(m_filename, error);
+        if (error)
         {
-            addError("Image file size is not aligned to sector size.");
+            addError("Failed to determine image file size.");
         }
+        else if (m_rawSectorSize != 0)
+        {
+            m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
+            if (fileSize % m_rawSectorSize != 0)
+            {
+                addError("Image file size is not aligned to sector size.");
+            }
+        }
+    }
+    else
+    {
+        m_totalSectors = 0;
     }
 
     if (!isCue && !m_tracks.empty())
@@ -839,24 +869,25 @@ bool IsoParser::validateVolumeMetadata(const PrimaryVolumeDescriptor& pvd)
         addError("Volume space size is zero.");
         return false;
     }
-    if (m_totalSectors != 0 && pvd.volumeSpaceSize > m_totalSectors)
-    {
-        addError("Volume space size exceeds image size.");
-        return false;
-    }
     return true;
 }
 
 bool IsoParser::loadPathTable()
 {
     m_pathTable.clear();
-    if (m_pvd.pathTableSize == 0 || m_pvd.pathTableLba == 0)
+    if (m_pvd.pathTableSize == 0)
+    {
+        return true;
+    }
+
+    u32 pathTableLba = m_pvd.pathTableLba != 0 ? m_pvd.pathTableLba : m_pvd.optionalPathTableLba;
+    if (pathTableLba == 0)
     {
         return true;
     }
 
     u32 remaining = m_pvd.pathTableSize;
-    u32 sector = m_pvd.pathTableLba;
+    u32 sector = pathTableLba;
     std::vector<u8> buffer;
     buffer.reserve(m_pvd.pathTableSize);
 

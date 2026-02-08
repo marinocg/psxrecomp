@@ -79,11 +79,13 @@ bool PathTable::parse(const std::vector<u8>& data, std::string& errorMessage)
         {
             normalizedName = detail::normalizeIsoName(entry.name);
         }
-        std::string parentPath;
-        if (entry.parentIndex < paths.size())
+        if (entry.parentIndex == 0 || entry.parentIndex > i + 1 ||
+            entry.parentIndex >= paths.size())
         {
-            parentPath = paths[entry.parentIndex];
+            errorMessage = "Invalid parent index in path table.";
+            return false;
         }
+        std::string parentPath = paths[entry.parentIndex];
         std::string fullPath = parentPath;
         if (!normalizedName.empty())
         {

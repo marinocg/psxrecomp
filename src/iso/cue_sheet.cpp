@@ -2,6 +2,7 @@
 
 #include "iso_utils.h"
 
+#include <charconv>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -137,8 +138,17 @@ bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& 
             std::string typeToken;
             stream >> token >> number >> typeToken;
             auto trackType = parseTrackType(typeToken);
+            u32 trackNumber = 0;
+            auto numberStart = number.data();
+            auto numberEnd = number.data() + number.size();
+            auto parseResult = std::from_chars(numberStart, numberEnd, trackNumber);
+            if (parseResult.ec != std::errc() || parseResult.ptr != numberEnd)
+            {
+                errorMessage = "Invalid track number in CUE sheet: " + number;
+                return false;
+            }
             TrackInfo track{};
-            track.trackNumber = static_cast<u32>(std::stoul(number));
+            track.trackNumber = trackNumber;
             track.type = trackType.type;
             track.sectorSize = trackType.sectorSize;
             track.startLba = 0;

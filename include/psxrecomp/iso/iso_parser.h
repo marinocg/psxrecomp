@@ -139,6 +139,7 @@ class IsoParser
     };
 
     std::string m_filename;
+    std::string m_inputFilename;
     bool m_isOpen;
     bool m_isValid;
     u32 m_rawSectorSize;
