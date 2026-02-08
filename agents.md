@@ -21,9 +21,12 @@ PSXRecomp is a static recompiler that converts PlayStation 1 games into native C
   - Classes/Structs: `PascalCase` (e.g., `IsoParser`, `MipsDisassembler`)
   - Functions/Methods: `camelCase` (e.g., `parseIso()`, `disassembleFunction()`)
   - Variables: `camelCase` (e.g., `instructionPointer`, `memoryAddress`)
-  - Constants: `UPPER_SNAKE_CASE` (e.g., `MAX_MEMORY_SIZE`, `PSX_RAM_SIZE`)
+  - Constants: use `UPPER_SNAKE_CASE` for global hardware constants and `camelCase` for local/test constants (e.g., `RAM_SIZE`, `totalSectors`)
+  - Enum constants: `PascalCase` (e.g., `Data`, `Audio`)
+  - Namespaces: primarily `lower_case`, with PascalCase allowed for grouped domains like `MemoryMap` or `Registers`
   - Private members: prefix with `m_` (e.g., `m_data`, `m_parser`)
 - **Formatting**: Use clang-format with the provided `.clang-format` file
+- **Linting**: Keep clang-tidy limited to the agreed-upon subset in `.clang-tidy` (clang-analyzer, minimal modernize checks, and naming enforcement)
 - **Headers**: Use `#pragma once` for header guards
 
 ### Project Structure

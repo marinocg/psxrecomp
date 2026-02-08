@@ -60,6 +60,7 @@ ctest --output-on-failure
 - Prefer `const` correctness
 - Use smart pointers over raw pointers
 - Add Doxygen comments for public APIs
+- Keep clang-tidy limited to the agreed-upon subset in `.clang-tidy` (clang-analyzer, minimal modernize checks, and naming enforcement)
 
 ### Example
 
