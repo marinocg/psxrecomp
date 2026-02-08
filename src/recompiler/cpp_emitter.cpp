@@ -13,8 +13,12 @@ void CppEmitter::writeLine(std::string_view line)
 
 void CppEmitter::writeLines(std::string_view text)
 {
+    if (text.empty())
+    {
+        return;
+    }
     size_t start = 0;
-    while (start <= text.size())
+    while (start < text.size())
     {
         size_t end = text.find('\n', start);
         if (end == std::string_view::npos)

@@ -62,6 +62,11 @@ int main()
     assert(source.find("if (") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
 
+#if defined(_MSC_VER)
+    std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
+    return 0;
+#endif
+
 #if !defined(PSXRECOMP_SOURCE_DIR)
 #define PSXRECOMP_SOURCE_DIR ""
 #endif

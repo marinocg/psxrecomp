@@ -8,6 +8,9 @@
 #include <map>
 #include <set>
 #include <sstream>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 namespace psxrecomp
 {
@@ -91,6 +94,18 @@ std::string toIdentifier(std::string_view name)
         identifier.insert(identifier.begin(), '_');
     }
     return identifier;
+}
+
+std::string uniquifyIdentifier(std::string_view name, std::unordered_set<std::string>& used)
+{
+    std::string base = toIdentifier(name);
+    std::string candidate = base;
+    size_t suffix = 1;
+    while (!used.insert(candidate).second)
+    {
+        candidate = base + "_" + std::to_string(suffix++);
+    }
+    return candidate;
 }
 std::string valueToExpr(const ir::Value& value, LoweringContext& context)
 {
@@ -182,17 +197,25 @@ std::set<u32> collectTemporaries(const ir::Function& function)
     }
     return temporaries;
 }
-std::string formatBlockId(std::string_view name)
-{
-    return "BlockId::" + toIdentifier(name);
-}
 enum class ZeroOptimization
 {
     None,
     Elide,
     ZeroResult
 };
+std::string resolveBlockId(std::string_view name,
+                           const std::unordered_map<std::string, std::string>& blockNames)
+{
+    auto it = blockNames.find(std::string(name));
+    if (it != blockNames.end())
+    {
+        return "BlockId::" + it->second;
+    }
+    return "BlockId::" + toIdentifier(name);
+}
+
 void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
+                     const std::unordered_map<std::string, std::string>& blockNames,
                      LoweringContext& context, CppEmitter& emitter)
 {
     if (context.generateComments)
@@ -292,11 +315,11 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         {
             std::string cond = valueToExpr(instruction.inputs.front(), context);
             emitter.openBlock("if (" + cond + ")");
-            emitter.writeLine("block = " + formatBlockId(block.successors[0]) + ";");
+            emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) + ";");
             emitter.writeLine("continue;");
             emitter.closeBlock();
             emitter.openBlock("else");
-            emitter.writeLine("block = " + formatBlockId(block.successors[1]) + ";");
+            emitter.writeLine("block = " + resolveBlockId(block.successors[1], blockNames) + ";");
             emitter.writeLine("continue;");
             emitter.closeBlock();
         }
@@ -304,7 +327,8 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::JUMP:
         if (!block.successors.empty())
         {
-            emitter.writeLine("block = " + formatBlockId(block.successors.front()) + ";");
+            emitter.writeLine("block = " + resolveBlockId(block.successors.front(), blockNames) +
+                              ";");
             emitter.writeLine("continue;");
         }
         break;
@@ -431,7 +455,7 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "endif()\n";
     stream << "\n";
     stream << "add_library(" << projectName << " " << projectName << ".cpp)\n";
-    stream << "target_include_directories(" << projectName << " PRIVATE\n";
+    stream << "target_include_directories(" << projectName << " PUBLIC\n";
     stream << "    ${PSXRECOMP_INCLUDE_DIR}\n";
     stream << "    include\n";
     stream << ")\n";
@@ -445,9 +469,10 @@ std::string CodeGenerator::generateGlobals(const ir::Program& program) const
         emitter.writeLine("// No global data.");
         return emitter.str();
     }
+    std::unordered_set<std::string> usedNames;
     for (const auto& global : program.globals)
     {
-        std::string name = toIdentifier(global.name);
+        std::string name = uniquifyIdentifier(global.name, usedNames);
         emitter.writeLine("static const std::array<u8, " + std::to_string(global.bytes.size()) +
                           "> " + name + " = {");
         if (!global.bytes.empty())
@@ -471,22 +496,26 @@ std::string CodeGenerator::generateGlobals(const ir::Program& program) const
 std::string CodeGenerator::generateFunctionDeclarations(const ir::Program& program) const
 {
     std::ostringstream stream;
+    std::unordered_set<std::string> usedNames;
     for (const auto& function : program.functions)
     {
-        stream << "void " << toIdentifier(function.name) << "(RecompilerContext& context);\n";
+        std::string name = uniquifyIdentifier(function.name, usedNames);
+        stream << "void " << name << "(RecompilerContext& context);\n";
     }
     return stream.str();
 }
 std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& program) const
 {
     CppEmitter emitter;
+    std::unordered_set<std::string> usedFunctionNames;
     for (const auto& function : program.functions)
     {
         LoweringContext context;
         context.generateComments = m_options.generateComments;
         context.enableOptimizations = m_options.enableOptimizations;
 
-        emitter.writeLine("void " + toIdentifier(function.name) + "(RecompilerContext& context)");
+        std::string functionName = uniquifyIdentifier(function.name, usedFunctionNames);
+        emitter.writeLine("void " + functionName + "(RecompilerContext& context)");
         emitter.openBlock("");
         if (function.blocks.empty())
         {
@@ -505,34 +534,47 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         }
 
         emitter.writeBlank();
-        emitter.writeLine("enum class BlockId {");
-        for (size_t index = 0; index < function.blocks.size(); ++index)
+        std::unordered_set<std::string> usedBlocks;
+        std::unordered_map<std::string, std::string> blockNames;
+        std::vector<std::string> orderedBlockNames;
+        orderedBlockNames.reserve(function.blocks.size());
+        for (const auto& block : function.blocks)
         {
-            const auto& block = function.blocks[index];
-            emitter.writeLine("    " + toIdentifier(block.name) +
-                              (index + 1 < function.blocks.size() ? "," : ""));
+            std::string uniqueName = uniquifyIdentifier(block.name, usedBlocks);
+            blockNames.emplace(block.name, uniqueName);
+            orderedBlockNames.push_back(uniqueName);
+        }
+
+        emitter.writeLine("enum class BlockId {");
+        for (size_t index = 0; index < orderedBlockNames.size(); ++index)
+        {
+            emitter.writeLine("    " + orderedBlockNames[index] +
+                              (index + 1 < orderedBlockNames.size() ? "," : ""));
         }
         emitter.writeLine("};");
-        emitter.writeLine("BlockId block = BlockId::" + toIdentifier(function.blocks.front().name) +
-                          ";");
+        if (!orderedBlockNames.empty())
+        {
+            emitter.writeLine("BlockId block = BlockId::" + orderedBlockNames.front() + ";");
+        }
         emitter.writeLine("while (true)");
         emitter.openBlock("");
         emitter.writeLine("switch (block)");
         emitter.openBlock("");
         for (const auto& block : function.blocks)
         {
-            emitter.writeLine("case " + formatBlockId(block.name) + ":");
+            emitter.writeLine("case " + resolveBlockId(block.name, blockNames) + ":");
             emitter.openBlock("");
             for (const auto& instruction : block.instructions)
             {
-                emitInstruction(instruction, block, context, emitter);
+                emitInstruction(instruction, block, blockNames, context, emitter);
             }
             if (block.instructions.empty() ||
                 block.instructions.back().opcode != ir::Opcode::RETURN)
             {
                 if (!block.successors.empty())
                 {
-                    emitter.writeLine("block = " + formatBlockId(block.successors.front()) + ";");
+                    emitter.writeLine(
+                        "block = " + resolveBlockId(block.successors.front(), blockNames) + ";");
                     emitter.writeLine("continue;");
                 }
                 else
