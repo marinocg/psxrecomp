@@ -15,6 +15,8 @@ std::string opcodeToString(Opcode opcode)
     {
     case Opcode::NOP:
         return "nop";
+    case Opcode::PHI:
+        return "phi";
     case Opcode::MOVE:
         return "move";
     case Opcode::ADD:

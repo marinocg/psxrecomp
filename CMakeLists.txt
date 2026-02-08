@@ -49,6 +49,9 @@ set(DISASM_SOURCES
 
 set(IR_SOURCES
     src/ir/ir.cpp
+    src/ir/control_flow.cpp
+    src/ir/ssa.cpp
+    src/ir/verify.cpp
 )
 
 set(RECOMPILER_SOURCES
@@ -119,6 +122,13 @@ if(BUILD_TESTS)
     )
     target_include_directories(ir_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME ir_test COMMAND ir_test)
+
+    add_executable(ir_passes_test
+        tests/unit/ir_passes_test.cpp
+        ${IR_SOURCES}
+    )
+    target_include_directories(ir_passes_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME ir_passes_test COMMAND ir_passes_test)
 endif()
 
 # Examples
