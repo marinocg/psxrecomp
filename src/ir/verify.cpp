@@ -131,13 +131,16 @@ VerificationResult verifyFunction(const Function& function, const ControlFlowGra
                     const auto& preds = graph.predecessors[*blockIndex];
                     if (preds.empty())
                     {
-                        addError(result, "Phi in block '" + block.name +
-                                             "' has no predecessors");
+                        const std::string message =
+                            "Phi in block '" + block.name + "' has no predecessors";
+                        addError(result, message);
                     }
                     if (instruction.inputs.size() != preds.size())
                     {
-                        addError(result, "Phi in block '" + block.name +
-                                             "' has input count mismatch with predecessors");
+                        const std::string message =
+                            "Phi in block '" + block.name +
+                            "' has input count mismatch with predecessors";
+                        addError(result, message);
                     }
                 }
             }

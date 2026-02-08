@@ -12,8 +12,8 @@ Checks: >
   -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
   -cppcoreguidelines-pro-type-vararg,
   -readability-magic-numbers
-WarningsAsErrors: ''
-HeaderFilterRegex: '.*'
+WarningsAsErrors: ""
+HeaderFilterRegex: ".*"
 FormatStyle: file
 CheckOptions:
   - { key: readability-identifier-naming.ClassCase, value: PascalCase }
