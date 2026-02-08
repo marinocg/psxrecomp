@@ -62,16 +62,14 @@ int main()
     assert(source.find("if (") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
 
-    std::filesystem::path currentPath = std::filesystem::current_path();
-    std::filesystem::path repoRoot = currentPath;
-    for (int depth = 0; depth < 6; ++depth)
-    {
-        if (std::filesystem::exists(repoRoot / "include/psxrecomp/types.h"))
-        {
-            break;
-        }
-        repoRoot = repoRoot.parent_path();
-    }
+#if !defined(PSXRECOMP_SOURCE_DIR)
+#define PSXRECOMP_SOURCE_DIR ""
+#endif
+#if !defined(PSXRECOMP_TEST_CXX)
+#define PSXRECOMP_TEST_CXX ""
+#endif
+    std::filesystem::path repoRoot = PSXRECOMP_SOURCE_DIR;
+    assert(!repoRoot.empty());
     assert(std::filesystem::exists(repoRoot / "include/psxrecomp/types.h"));
 
     auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
@@ -122,8 +120,13 @@ int main()
 
     auto quote = [](const std::filesystem::path& path)
     { return std::string("\"") + path.string() + "\""; };
-    std::string command = "c++ -std=c++17 -I" + quote(outputDir / "include") + " -I" +
-                          quote(repoRoot / "include") + " -I" + quote(outputDir) + " " +
+    std::string compiler = PSXRECOMP_TEST_CXX;
+    if (compiler.empty())
+    {
+        compiler = "c++";
+    }
+    std::string command = quote(compiler) + " -std=c++17 -I" + quote(outputDir / "include") +
+                          " -I" + quote(repoRoot / "include") + " -I" + quote(outputDir) + " " +
                           quote(sourcePath) + " " + quote(harnessPath) + " -o " + quote(exePath);
     int compileStatus = std::system(command.c_str());
     if (compileStatus != 0)

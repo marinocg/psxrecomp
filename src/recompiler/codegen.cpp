@@ -243,6 +243,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         break;
     case ir::Opcode::PHI:
         emitter.writeLine("// TODO: phi node lowering");
+        emitter.writeLine("std::abort();");
         break;
     case ir::Opcode::MOVE:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
@@ -341,7 +342,7 @@ std::string CodeGenerator::generateHeader(const ir::Program& program, const std:
     emitter.writeLine("static void run(runtime::PsxSystem& system);");
     emitter.closeBlock(";");
     emitter.writeBlank();
-    emitter.writeLine(generateFunctionDeclarations(program));
+    emitter.writeLines(generateFunctionDeclarations(program));
     emitter.closeBlock();
     emitter.closeBlock();
     return emitter.str();
@@ -352,6 +353,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
     emitter.writeLine("#include <array>");
+    emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <cstdint>");
     emitter.writeLine("#include <cstring>");
     emitter.writeBlank();
@@ -363,21 +365,45 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.openBlock("namespace");
+    emitter.writeLine("[[noreturn]] inline void unhandledMemoryAccess(Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("(void)address;");
+    emitter.writeLine("std::abort();");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline Address normalizeAddress(Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return address & 0x1FFFFFFF;");
+    emitter.closeBlock();
+    emitter.writeBlank();
     emitter.writeLine("inline s32 readMemory32(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
+    emitter.writeLine("Address physical = normalizeAddress(address);");
+    emitter.writeLine("if (physical >= MemoryMap::RAM_BASE && physical < MemoryMap::RAM_BASE + "
+                      "MemoryMap::RAM_SIZE)");
+    emitter.openBlock("");
     emitter.writeLine("u8* ram = system.getRam();");
-    emitter.writeLine("Address offset = address % MemoryMap::RAM_SIZE;");
+    emitter.writeLine("Address offset = physical - MemoryMap::RAM_BASE;");
     emitter.writeLine("s32 value = 0;");
     emitter.writeLine("std::memcpy(&value, ram + offset, sizeof(s32));");
     emitter.writeLine("return value;");
+    emitter.closeBlock();
+    emitter.writeLine("unhandledMemoryAccess(address);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
         "inline void writeMemory32(runtime::PsxSystem& system, Address address, s32 value)");
     emitter.openBlock("");
+    emitter.writeLine("Address physical = normalizeAddress(address);");
+    emitter.writeLine("if (physical >= MemoryMap::RAM_BASE && physical < MemoryMap::RAM_BASE + "
+                      "MemoryMap::RAM_SIZE)");
+    emitter.openBlock("");
     emitter.writeLine("u8* ram = system.getRam();");
-    emitter.writeLine("Address offset = address % MemoryMap::RAM_SIZE;");
+    emitter.writeLine("Address offset = physical - MemoryMap::RAM_BASE;");
     emitter.writeLine("std::memcpy(ram + offset, &value, sizeof(s32));");
+    emitter.writeLine("return;");
+    emitter.closeBlock();
+    emitter.writeLine("unhandledMemoryAccess(address);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void callIntrinsic(runtime::PsxSystem& system, Address address)");
@@ -389,7 +415,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock();
     emitter.writeBlank();
 
-    emitter.writeLine(generateGlobals(program));
+    emitter.writeLines(generateGlobals(program));
     emitter.writeBlank();
 
     emitter.writeLine("void RecompiledModule::run(runtime::PsxSystem& system)");
@@ -402,7 +428,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock();
     emitter.writeBlank();
 
-    emitter.writeLine(generateFunctionDefinitions(program));
+    emitter.writeLines(generateFunctionDefinitions(program));
     emitter.closeBlock();
     emitter.closeBlock();
     return emitter.str();
@@ -412,8 +438,20 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     std::ostringstream stream;
     stream << "cmake_minimum_required(VERSION 3.15)\n";
     stream << "project(" << projectName << " LANGUAGES CXX)\n";
+    stream << "set(CMAKE_CXX_STANDARD 17)\n";
+    stream << "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n";
+    stream << "set(CMAKE_CXX_EXTENSIONS OFF)\n";
+    stream << "\n";
+    stream << "set(PSXRECOMP_INCLUDE_DIR \"\" CACHE PATH \"Path to psxrecomp headers\")\n";
+    stream << "if(NOT PSXRECOMP_INCLUDE_DIR)\n";
+    stream << "    message(FATAL_ERROR \"PSXRECOMP_INCLUDE_DIR is not set.\")\n";
+    stream << "endif()\n";
+    stream << "\n";
     stream << "add_library(" << projectName << " " << projectName << ".cpp)\n";
-    stream << "target_include_directories(" << projectName << " PRIVATE include)\n";
+    stream << "target_include_directories(" << projectName << " PRIVATE\n";
+    stream << "    ${PSXRECOMP_INCLUDE_DIR}\n";
+    stream << "    include\n";
+    stream << ")\n";
     return stream.str();
 }
 std::string CodeGenerator::generateGlobals(const ir::Program& program) const
@@ -467,6 +505,14 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
 
         emitter.writeLine("void " + toIdentifier(function.name) + "(RecompilerContext& context)");
         emitter.openBlock("");
+        if (function.blocks.empty())
+        {
+            emitter.writeLine("// TODO: empty function body");
+            emitter.writeLine("return;");
+            emitter.closeBlock();
+            emitter.writeBlank();
+            continue;
+        }
 
         auto temporaries = collectTemporaries(function);
         for (u32 temporaryId : temporaries)

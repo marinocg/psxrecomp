@@ -144,6 +144,11 @@ if(BUILD_TESTS)
         ${RECOMPILER_SOURCES}
     )
     target_include_directories(recompiler_codegen_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_compile_definitions(
+        recompiler_codegen_test
+        PRIVATE PSXRECOMP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+                PSXRECOMP_TEST_CXX="${CMAKE_CXX_COMPILER}"
+    )
     add_test(NAME recompiler_codegen_test COMMAND recompiler_codegen_test)
 endif()
 

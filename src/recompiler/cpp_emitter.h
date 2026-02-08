@@ -13,6 +13,7 @@ class CppEmitter
 {
   public:
     void writeLine(std::string_view line);
+    void writeLines(std::string_view text);
     void writeBlank();
     void openBlock(std::string_view header);
     void closeBlock();

@@ -14,8 +14,8 @@ support end-to-end static recompilation.
 - [x] Emit function signatures and basic calling conventions.
 
 ## Phase 2: Runtime Integration
-- [x] Hook memory accesses to runtime RAM and MMIO helpers.
-- [x] Emit runtime calls for GPU/SPU/CD-ROM intrinsics.
+- [ ] Hook memory accesses to runtime RAM and MMIO helpers.
+- [ ] Emit runtime calls for GPU/SPU/CD-ROM intrinsics.
 - [x] Add support for global data and static tables.
 
 ## Phase 3: Optimization & Readability

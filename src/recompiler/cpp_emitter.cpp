@@ -11,6 +11,26 @@ void CppEmitter::writeLine(std::string_view line)
     m_stream << line << "\n";
 }
 
+void CppEmitter::writeLines(std::string_view text)
+{
+    size_t start = 0;
+    while (start <= text.size())
+    {
+        size_t end = text.find('\n', start);
+        if (end == std::string_view::npos)
+        {
+            end = text.size();
+        }
+        std::string_view line = text.substr(start, end - start);
+        writeLine(line);
+        if (end == text.size())
+        {
+            break;
+        }
+        start = end + 1;
+    }
+}
+
 void CppEmitter::writeBlank()
 {
     m_stream << "\n";
