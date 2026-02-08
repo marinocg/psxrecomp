@@ -246,6 +246,17 @@ bool IsoParser::loadPathTable()
         return true;
     }
 
+    if (m_totalSectors != 0 && m_logicalBlockSize != 0)
+    {
+        u64 maxBytes =
+            static_cast<u64>(m_totalSectors) * static_cast<u64>(m_logicalBlockSize);
+        if (static_cast<u64>(m_pvd.pathTableSize) > maxBytes)
+        {
+            addError("Path table size exceeds image size.");
+            return false;
+        }
+    }
+
     u32 pathTableLba = m_pvd.pathTableLba != 0 ? m_pvd.pathTableLba : m_pvd.optionalPathTableLba;
     if (pathTableLba == 0)
     {
