@@ -65,6 +65,8 @@ examples/
 - Document complex algorithms inline
 - Update README.md when adding major features
 - Keep docs/ folder updated with architectural decisions
+- Review and update roadmap/status docs (master roadmap, gaps, implementation status) when adding
+  significant features or milestones.
 
 ### Git Workflow
 

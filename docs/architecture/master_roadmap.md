@@ -10,34 +10,34 @@ highlights dependencies between workstreams.
 - Update **Implementation Status** regularly as gaps close.
 
 ## Workstreams (detailed roadmaps)
-- ISO/BIN parsing: `docs/architecture/iso_bin_roadmap.md`
-- PSX-EXE loading: `docs/architecture/psx_exe_roadmap.md`
-- Disassembler: `docs/architecture/mips_r3000_disassembler_roadmap.md`
-- IR pipeline: `docs/architecture/ir_roadmap.md`
-- Recompiler/codegen: `docs/architecture/recompiler_roadmap.md`
-- Runtime library: `docs/architecture/runtime_library_roadmap.md`
-- GPU emulation: `docs/architecture/gpu_emulation_roadmap.md`
-- SPU emulation: `docs/architecture/spu_emulation_roadmap.md`
-- Demo milestone: `docs/architecture/demo_roadmap.md`
-- Full game support: `docs/architecture/full_game_support_roadmap.md`
-- Pipeline overview: `docs/architecture/pipeline.md`
+- [ ] ISO/BIN parsing ([iso_bin_roadmap.md](docs/architecture/iso_bin_roadmap.md))
+- [ ] PSX-EXE loading ([psx_exe_roadmap.md](docs/architecture/psx_exe_roadmap.md))
+- [ ] Disassembler ([mips_r3000_disassembler_roadmap.md](docs/architecture/mips_r3000_disassembler_roadmap.md))
+- [ ] IR pipeline ([ir_roadmap.md](docs/architecture/ir_roadmap.md))
+- [ ] Recompiler/codegen ([recompiler_roadmap.md](docs/architecture/recompiler_roadmap.md))
+- [ ] Runtime library ([runtime_library_roadmap.md](docs/architecture/runtime_library_roadmap.md))
+- [ ] GPU emulation ([gpu_emulation_roadmap.md](docs/architecture/gpu_emulation_roadmap.md))
+- [ ] SPU emulation ([spu_emulation_roadmap.md](docs/architecture/spu_emulation_roadmap.md))
+- [ ] Demo milestone ([demo_roadmap.md](docs/architecture/demo_roadmap.md))
+- [ ] Full game support ([full_game_support_roadmap.md](docs/architecture/full_game_support_roadmap.md))
+- [ ] Pipeline overview ([pipeline.md](docs/architecture/pipeline.md))
 
 ## Milestones
 
 ### M0: Project Baseline (Complete)
-- ISO parser and PSX-EXE loader exist.
-- Disassembler covers core integer MIPS, COP0 moves, COP2/GTE commands.
-- Initial IR, CFG, SSA, verification passes implemented.
-- Basic codegen can emit C++ stubs.
+- [x] ISO parser and PSX-EXE loader exist.
+- [x] Disassembler covers core integer MIPS, COP0 moves, COP2/GTE commands.
+- [x] Initial IR, CFG, SSA, verification passes implemented.
+- [x] Basic codegen can emit C++ stubs.
 
 ### M1: Deterministic Pipeline (In progress)
 Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual steps.
 
 **Deliverables**
-- End-to-end pipeline with artifact emission and diagnostics.
-- Consistent module naming and output structure.
-- Deterministic handling of multiple EXE candidates.
-- Structured warnings/errors surfaced to CLI.
+- [ ] End-to-end pipeline with artifact emission and diagnostics.
+- [ ] Consistent module naming and output structure.
+- [ ] Deterministic handling of multiple EXE candidates.
+- [ ] Structured warnings/errors surfaced to CLI.
 
 **Dependencies**
 - ISO/BIN parser improvements (`iso_bin_roadmap.md`)
@@ -47,10 +47,10 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 Goal: translate common game code paths into IR with correct control flow.
 
 **Deliverables**
-- Support for full integer ALU set, shifts, mult/div, branches, jumps, loads/stores.
-- Correct delay slot handling for CFG and IR lowering.
-- Function boundary detection and call graph discovery.
-- IR modeling for system calls and BIOS stubs.
+- [ ] Support for full integer ALU set, shifts, mult/div, branches, jumps, loads/stores.
+- [ ] Correct delay slot handling for CFG and IR lowering.
+- [ ] Function boundary detection and call graph discovery.
+- [ ] IR modeling for system calls and BIOS stubs.
 
 **Dependencies**
 - Disassembler completeness (`mips_r3000_disassembler_roadmap.md`)
@@ -60,11 +60,11 @@ Goal: translate common game code paths into IR with correct control flow.
 Goal: make generated code interact with a faithful runtime model of PSX hardware.
 
 **Deliverables**
-- Accurate RAM, scratchpad, and MMIO behavior.
-- DMA, interrupts, timers, and scheduler correctness.
-- CD-ROM data path with XA streaming basics.
-- GPU command packet ingestion and minimal rasterization.
-- SPU voice and streaming scaffolding (even if simplified).
+- [ ] Accurate RAM, scratchpad, and MMIO behavior.
+- [ ] DMA, interrupts, timers, and scheduler correctness.
+- [ ] CD-ROM data path with XA streaming basics.
+- [ ] GPU command packet ingestion and minimal rasterization.
+- [ ] SPU voice and streaming scaffolding (even if simplified).
 
 **Dependencies**
 - Runtime library roadmap (`runtime_library_roadmap.md`)
@@ -74,9 +74,9 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 Goal: run a controlled demo binary end-to-end with deterministic output.
 
 **Deliverables**
-- Known-good demo ROM/EXE pipeline build.
-- Recompiled output builds and runs in CI.
-- Test harness for frame/time-based validation.
+- [ ] Known-good demo ROM/EXE pipeline build.
+- [ ] Recompiled output builds and runs in CI.
+- [ ] Test harness for frame/time-based validation.
 
 **Dependencies**
 - M2 functional IR coverage
@@ -87,9 +87,9 @@ Goal: run a controlled demo binary end-to-end with deterministic output.
 Goal: basic compatibility with a subset of non-commercial or permissibly tested games.
 
 **Deliverables**
-- Expanded instruction coverage (including edge cases).
-- Runtime correctness for GPU/SPU/CD-ROM interactions.
-- Instrumentation for tracing and regression testing.
+- [ ] Expanded instruction coverage (including edge cases).
+- [ ] Runtime correctness for GPU/SPU/CD-ROM interactions.
+- [ ] Instrumentation for tracing and regression testing.
 
 **Dependencies**
 - M4 demo milestone
@@ -99,9 +99,9 @@ Goal: basic compatibility with a subset of non-commercial or permissibly tested 
 Goal: broad compatibility, performance, and tooling for real-world usage.
 
 **Deliverables**
-- Comprehensive CPU, GPU, SPU, and CD-ROM accuracy.
-- Performance optimizations in recompiler and runtime.
-- Compatibility matrix and user-facing tooling.
+- [ ] Comprehensive CPU, GPU, SPU, and CD-ROM accuracy.
+- [ ] Performance optimizations in recompiler and runtime.
+- [ ] Compatibility matrix and user-facing tooling.
 
 **Dependencies**
 - All workstreams completed and validated.
