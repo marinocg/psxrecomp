@@ -1,5 +1,7 @@
 #include "psxrecomp/iso/psx_exe_loader.h"
 
+#include "psx_exe_loader_helpers.h"
+
 #include <algorithm>
 #include <cstring>
 #include <fstream>
@@ -278,6 +280,22 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
     outImage.programData.assign(data.begin() + static_cast<std::ptrdiff_t>(kHeaderSize),
                                 data.begin() +
                                     static_cast<std::ptrdiff_t>(kHeaderSize + effectiveLoadSize));
+    outImage.segments.clear();
+    PsxExeImage::Segment mainSegment;
+    mainSegment.loadAddress = header.loadAddress;
+    mainSegment.size = effectiveLoadSize;
+    mainSegment.fileOffset = static_cast<u32>(kHeaderSize);
+    outImage.segments.push_back(std::move(mainSegment));
+
+    if (!detail::parseOverlayTable(data, header, outImage.segments, activeDiagnostics))
+    {
+        return false;
+    }
+
+    outImage.syscalls.clear();
+    detail::extractSyscalls(outImage.segments, outImage.programData, outImage.syscalls);
+    outImage.symbols.clear();
+    detail::buildDefaultSymbols(outImage, outImage.symbols);
     return true;
 }
 
@@ -294,9 +312,28 @@ bool PsxExeLoader::loadMemoryImage(const std::vector<u8>& data, PsxExeMemoryImag
     outImage.entryPoint = image.entryPoint;
     outImage.ram.assign(static_cast<size_t>(MemoryMap::RAM_SIZE), 0);
 
-    u32 loadOffset = toPhysicalAddress(image.header.loadAddress);
-    std::copy(image.programData.begin(), image.programData.end(),
-              outImage.ram.begin() + static_cast<size_t>(loadOffset));
+    for (const auto& segment : image.segments)
+    {
+        u32 loadOffset = toPhysicalAddress(segment.loadAddress);
+        const u8* segmentData = segment.data.data();
+        size_t segmentSize = segment.data.size();
+        if (segmentSize == 0)
+        {
+            if (segment.fileOffset < kHeaderSize)
+            {
+                return false;
+            }
+            const size_t dataOffset = static_cast<size_t>(segment.fileOffset - kHeaderSize);
+            if (dataOffset + static_cast<size_t>(segment.size) > image.programData.size())
+            {
+                return false;
+            }
+            segmentData = image.programData.data() + dataOffset;
+            segmentSize = static_cast<size_t>(segment.size);
+        }
+        std::copy(segmentData, segmentData + segmentSize,
+                  outImage.ram.begin() + static_cast<size_t>(loadOffset));
+    }
 
     if (image.header.bssSize != 0)
     {
@@ -340,6 +377,18 @@ bool PsxExeLoader::loadFromFile(const std::string& filename, PsxExeImage& outIma
     }
 
     return loadImage(buffer, outImage, diagnostics);
+}
+
+void PsxExeLoader::exportSymbols(const PsxExeImage& image, const SymbolCallback& callback)
+{
+    if (!callback)
+    {
+        return;
+    }
+    for (const auto& symbol : image.symbols)
+    {
+        callback(symbol);
+    }
 }
 
 } // namespace iso

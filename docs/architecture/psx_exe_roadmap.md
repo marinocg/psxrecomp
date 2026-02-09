@@ -27,6 +27,6 @@ executable loading in the recompiler pipeline.
 - [x] Add logging for rejected executables and mismatched sizes.
 
 ## Phase 4: Integration & Compatibility
-- [ ] Map overlays and multiple code segments when present.
-- [ ] Add BIOS/service call metadata extraction where available.
-- [ ] Provide symbol/label export hooks for downstream tooling.
+- [x] Map overlays and multiple code segments when present.
+- [x] Add BIOS/service call metadata extraction where available.
+- [x] Provide symbol/label export hooks for downstream tooling.

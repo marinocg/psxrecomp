@@ -2,6 +2,7 @@
 
 #include "psxrecomp/types.h"
 #include <array>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -49,7 +50,10 @@ enum class PsxExeErrorCode
     BssSizeMisaligned,
     StackOutOfRange,
     StackMisaligned,
-    StackSizeMisaligned
+    StackSizeMisaligned,
+    OverlayTableMalformed,
+    OverlayEntryOutOfRange,
+    OverlayEntryMisaligned
 };
 
 struct PsxExeDiagnostic
@@ -122,6 +126,26 @@ struct PsxExeImage
     PsxExeHeader header;
     PsxExeEntryPoint entryPoint;
     std::vector<u8> programData;
+    struct Segment
+    {
+        u32 loadAddress = 0;
+        u32 size = 0;
+        u32 fileOffset = 0;
+        std::vector<u8> data;
+    };
+    struct SyscallMetadata
+    {
+        u32 address = 0;
+        u32 code = 0;
+    };
+    struct Symbol
+    {
+        std::string name;
+        u32 address = 0;
+    };
+    std::vector<Segment> segments;
+    std::vector<SyscallMetadata> syscalls;
+    std::vector<Symbol> symbols;
 };
 
 /**
@@ -141,6 +165,7 @@ class PsxExeLoader
 {
   public:
     static constexpr size_t kHeaderSize = kPsxExeHeaderSize;
+    using SymbolCallback = std::function<void(const PsxExeImage::Symbol& symbol)>;
 
     /**
      * @brief Parse a PSX-EXE header from a buffer.
@@ -181,6 +206,13 @@ class PsxExeLoader
      */
     static bool loadFromFile(const std::string& filename, PsxExeImage& outImage,
                              PsxExeDiagnostics* diagnostics = nullptr);
+
+    /**
+     * @brief Export default symbols/labels for a loaded image.
+     * @param image Parsed image input.
+     * @param callback Receiver for each symbol.
+     */
+    static void exportSymbols(const PsxExeImage& image, const SymbolCallback& callback);
 };
 
 } // namespace iso

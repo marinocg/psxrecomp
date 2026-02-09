@@ -19,6 +19,25 @@ void writeLe32(std::vector<psxrecomp::u8>& buffer, size_t offset, psxrecomp::u32
     buffer[offset + 3] = static_cast<psxrecomp::u8>((value >> 24) & 0xFF);
 }
 
+void writeProgramWord(std::vector<psxrecomp::u8>& buffer, size_t offset, psxrecomp::u32 value)
+{
+    writeLe32(buffer, psxrecomp::iso::PsxExeLoader::kHeaderSize + offset, value);
+}
+
+void writeOverlayTable(std::vector<psxrecomp::u8>& buffer, psxrecomp::u32 loadAddress,
+                       psxrecomp::u32 size, psxrecomp::u32 fileOffset)
+{
+    const size_t tableOffset = psxrecomp::iso::kPsxExeTrailingDataOffset;
+    buffer[tableOffset] = 'O';
+    buffer[tableOffset + 1] = 'V';
+    buffer[tableOffset + 2] = 'L';
+    buffer[tableOffset + 3] = 'Y';
+    writeLe32(buffer, tableOffset + 4, 1);
+    writeLe32(buffer, tableOffset + 8, loadAddress);
+    writeLe32(buffer, tableOffset + 12, size);
+    writeLe32(buffer, tableOffset + 16, fileOffset);
+}
+
 std::vector<psxrecomp::u8> buildTestExe(psxrecomp::u32 loadSize, bool writeLoadSize)
 {
     std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
@@ -207,6 +226,38 @@ int main()
         assert(memoryImage.ram[0x00010000] == 0x00);
         assert(memoryImage.ram[0x0001000F] == 0x0F);
         assert(memoryImage.ram[0x00030000] == 0x00);
+    }
+
+    {
+        auto buffer = buildTestExe(16, true);
+        writeProgramWord(buffer, 4, 0x0000054C);
+        psxrecomp::iso::PsxExeImage image{};
+        assert(psxrecomp::iso::PsxExeLoader::loadImage(buffer, image));
+        assert(!image.syscalls.empty());
+        assert(image.syscalls[0].address == 0x80010004);
+        assert(image.syscalls[0].code == 0x15);
+        assert(!image.symbols.empty());
+    }
+
+    {
+        auto buffer = buildTestExe(8, true);
+        const psxrecomp::u32 overlayOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize + 8;
+        buffer.resize(static_cast<size_t>(overlayOffset + 8), 0);
+        buffer[overlayOffset] = 0xAA;
+        buffer[overlayOffset + 7] = 0xBB;
+        writeOverlayTable(buffer, 0x80020000, 8, overlayOffset);
+
+        psxrecomp::iso::PsxExeImage image{};
+        assert(psxrecomp::iso::PsxExeLoader::loadImage(buffer, image));
+        assert(image.segments.size() == 2);
+        assert(image.segments[1].loadAddress == 0x80020000);
+        assert(image.segments[1].data[0] == 0xAA);
+        assert(image.segments[1].data[7] == 0xBB);
+
+        psxrecomp::iso::PsxExeMemoryImage memoryImage{};
+        assert(psxrecomp::iso::PsxExeLoader::loadMemoryImage(buffer, memoryImage));
+        assert(memoryImage.ram[0x00020000] == 0xAA);
+        assert(memoryImage.ram[0x00020007] == 0xBB);
     }
 
     {

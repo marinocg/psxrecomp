@@ -19,9 +19,10 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Broader mixed-mode validation beyond current XA checks.
 - Additional malformed image recovery and diagnostics.
 
-### PSX-EXE Loader (~80%)
+### PSX-EXE Loader (~90%)
 **Present**
 - Header parsing, load address validation, memory image creation.
+- Overlay-aware segment mapping, syscall metadata extraction, symbol export hooks.
 
 **Missing**
 - Additional diagnostics for edge cases and BIOS integration hooks.
