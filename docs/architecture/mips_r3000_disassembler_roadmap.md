@@ -30,6 +30,6 @@ needed to support full PSX workloads.
 - [x] Add fuzz/invalid instruction tests to ensure UNKNOWN handling is stable.
 
 ## Phase 4: Higher-Level Analysis
-- [ ] Add function boundary discovery (prologue/epilogue heuristics).
-- [ ] Detect jump tables and indirect branch targets.
-- [ ] Improve code-vs-data segmentation for mixed sections.
+- [x] Add function boundary discovery (prologue/epilogue heuristics).
+- [x] Detect jump tables and indirect branch targets.
+- [x] Improve code-vs-data segmentation for mixed sections.

@@ -10,10 +10,9 @@ master roadmap.
 - No deterministic build orchestration or CI coverage for generated artifacts.
 
 ## Disassembly & Analysis
-- Function boundary detection is not implemented (relies on a single entry point).
-- Limited handling of indirect jumps and jump tables.
 - Delay-slot semantics are not fully modeled in CFG and IR lowering.
-- No separation of code vs. data; the disassembler assumes linear code regions.
+- Disassembler analysis helpers exist but are not yet wired into pipeline CFG/IR stages.
+- Jump table and code/data heuristics need validation against real binaries.
 
 ## IR & Optimization
 - IR lowering covers only a subset of MIPS instructions.

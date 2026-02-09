@@ -27,13 +27,16 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 **Missing**
 - Additional diagnostics for edge cases and BIOS integration hooks.
 
-### Disassembler (~65%)
+### Disassembler (~75%)
 **Present**
 - Core integer instruction decoding, COP0 moves, COP2/GTE mnemonics.
 - Delay slot flagging and target resolution helpers.
+- Function boundary discovery heuristics and indirect jump/jump table detection.
+- Code-vs-data segmentation helpers for mixed sections.
 
 **Missing**
-- Broader decode coverage, better data-vs-code heuristics, jump table analysis.
+- Integration of analysis helpers into the pipeline/call graph builder.
+- Broader decode coverage for edge-case encodings and validation in real binaries.
 
 ### IR Pipeline (~45%)
 **Present**

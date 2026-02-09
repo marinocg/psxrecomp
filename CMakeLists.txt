@@ -55,8 +55,12 @@ set(ISO_SOURCES
 )
 
 set(DISASM_SOURCES
+    src/disasm/analysis_helpers.cpp
+    src/disasm/analysis.cpp
     src/disasm/mips_disassembler.cpp
     src/disasm/instruction.cpp
+    src/disasm/instruction_format.cpp
+    src/disasm/instruction_format_helpers.cpp
 )
 
 set(IR_SOURCES
@@ -137,6 +141,13 @@ if(BUILD_TESTS)
     )
     target_include_directories(disasm_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME disasm_test COMMAND disasm_test)
+
+    add_executable(disasm_analysis_test
+        tests/unit/disasm_analysis_test.cpp
+        ${DISASM_SOURCES}
+    )
+    target_include_directories(disasm_analysis_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME disasm_analysis_test COMMAND disasm_analysis_test)
 
     add_executable(ir_test
         tests/unit/ir_test.cpp
