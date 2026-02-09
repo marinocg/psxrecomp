@@ -68,6 +68,7 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 - [ ] CD-ROM data path with XA streaming basics.
 - [ ] GPU command packet ingestion and minimal rasterization.
 - [ ] SPU voice and streaming scaffolding (even if simplified).
+- [ ] Debug tooling: runtime logs, memory dumps, and performance overlays.
 
 **Dependencies (complete these roadmaps)**
 - [ ] Runtime library roadmap (`runtime_library_roadmap.md`)

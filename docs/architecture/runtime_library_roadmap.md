@@ -26,6 +26,9 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Add unit tests for memory map edge cases.
 - [x] Add integration tests for device interactions.
 - [x] Add regression tests for timing-sensitive behavior.
+- [ ] Add structured runtime logging with configurable verbosity levels.
+- [ ] Implement debug overlays for performance, frame timing, and counters.
+- [ ] Provide memory dump tooling (RAM, VRAM, SPU RAM) for diagnostics.
 
 ## Phase 5: Accuracy & Compatibility
 - [ ] Expand MMIO coverage for GPU/SPU/CD-ROM registers.

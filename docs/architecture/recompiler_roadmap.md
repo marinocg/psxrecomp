@@ -31,3 +31,5 @@ support end-to-end static recompilation.
 ## Phase 5: Packaging & Integration
 - [ ] Emit resource manifest for non-code assets (textures/audio/movies).
 - [ ] Add build rules to bundle non-code resources with generated output.
+- [ ] Add compile-time logging and warnings summary for generated code.
+- [ ] Provide build-time configuration hooks (optimizations, logging, checks).
