@@ -27,6 +27,9 @@ struct TrackInfo
     TrackType type = TrackType::Unknown;
     u32 sectorSize = 0;
     u32 startLba = 0;
+    u32 pregapLength = 0;
+    u32 sessionNumber = 1;
+    u32 discIndex = 0;
     std::string file;
 };
 

@@ -43,10 +43,12 @@ set(ISO_SOURCES
     src/iso/iso_boot.cpp
     src/iso/iso_parser_filesystem.cpp
     src/iso/iso_parser_pvd.cpp
+    src/iso/iso_parser_resources.cpp
     src/iso/iso_parser_stream.cpp
     src/iso/iso_sector.cpp
     src/iso/iso_utils.cpp
     src/iso/iso_parser.cpp
+    src/iso/multi_disc_set.cpp
     src/iso/path_table.cpp
     src/iso/psx_exe_loader.cpp
 )

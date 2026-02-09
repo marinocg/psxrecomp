@@ -3,6 +3,7 @@
 #include "psxrecomp/iso/track_info.h"
 #include "psxrecomp/types.h"
 #include <fstream>
+#include <list>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -48,6 +49,16 @@ struct DirectoryRecord
     u16 volumeSequenceNumber;
     u8 nameLength;
     std::string name;
+};
+
+/**
+ * @brief ISO non-code resource types.
+ */
+enum class ResourceType
+{
+    TimTexture,
+    StrVideo,
+    XaAudio
 };
 
 /**
@@ -131,11 +142,38 @@ class IsoParser
      */
     std::vector<std::string> listExecutables();
 
+    /**
+     * @brief List resource files by type.
+     * @param type Resource type to enumerate.
+     * @return Paths to resources.
+     */
+    std::vector<std::string> listResources(ResourceType type);
+
+    /**
+     * @brief Export resource files to an output directory.
+     * @param type Resource type to export.
+     * @param outputDirectory Directory to write files into.
+     * @return true if all exports succeeded, false otherwise.
+     */
+    bool exportResources(ResourceType type, const std::string& outputDirectory);
+
+    /**
+     * @brief Set the in-memory sector cache capacity.
+     * @param capacity Maximum number of sectors to cache per cache tier.
+     */
+    void setSectorCacheCapacity(size_t capacity);
+
   private:
     struct DirectoryInfo
     {
         u32 extent = 0;
         u32 size = 0;
+    };
+
+    struct CachedSector
+    {
+        u32 sector = 0;
+        std::vector<u8> data;
     };
 
     std::string m_filename;
@@ -157,6 +195,11 @@ class IsoParser
     std::vector<std::string> m_errors;
     std::unordered_map<std::string, u32> m_pathTable;
     std::unordered_map<std::string, DirectoryInfo> m_directoryCache;
+    size_t m_sectorCacheCapacity;
+    std::list<CachedSector> m_rawSectorCache;
+    std::unordered_map<u32, std::list<CachedSector>::iterator> m_rawSectorCacheIndex;
+    std::list<CachedSector> m_userSectorCache;
+    std::unordered_map<u32, std::list<CachedSector>::iterator> m_userSectorCacheIndex;
 
     bool readPVD();
     bool readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>& records);
@@ -169,6 +212,19 @@ class IsoParser
     bool validateVolumeMetadata(const PrimaryVolumeDescriptor& pvd);
     bool getDirectoryInfo(const std::string& path, DirectoryInfo& info);
     bool readDirectorySelfSize(u32 extent, u32& outSize);
+    bool findFileExtents(const std::string& path, DirectoryRecord& target,
+                         std::vector<DirectoryRecord>& extents);
+    bool validateXaAudioFile(const std::string& path);
+    std::vector<std::string> listFilesByExtension(const std::vector<std::string>& extensions,
+                                                  bool requireXaAudio);
+    void clearSectorCache();
+    bool fetchSectorCache(u32 sector, std::vector<u8>& buffer,
+                          std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
+                          std::list<CachedSector>& entries);
+    void storeSectorCache(u32 sector, const std::vector<u8>& buffer,
+                          std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
+                          std::list<CachedSector>& entries);
+    const TrackInfo* selectPrimaryDataTrack() const;
 };
 
 } // namespace iso

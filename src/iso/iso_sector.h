@@ -20,7 +20,17 @@ struct SectorView
     size_t size = 0;
 };
 
+struct XaSubheader
+{
+    u8 fileNumber = 0;
+    u8 channelNumber = 0;
+    u8 submode = 0;
+    u8 codingInfo = 0;
+};
+
 SectorView decodeSectorLayout(const std::vector<u8>& raw);
+bool decodeXaSubheader(const std::vector<u8>& raw, XaSubheader& subheader);
+bool isXaAudioSector(const std::vector<u8>& raw, XaSubheader* subheader);
 
 } // namespace detail
 } // namespace iso

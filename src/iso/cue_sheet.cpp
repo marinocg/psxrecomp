@@ -63,6 +63,38 @@ bool parseTimecode(const std::string& timecode, u32& outLba)
     return true;
 }
 
+bool parseTimecodeLength(const std::string& timecode, u32& outLength)
+{
+    int minutes = 0;
+    int seconds = 0;
+    int frames = 0;
+    char separator = '\0';
+    std::istringstream timeStream(timecode);
+    if (!(timeStream >> minutes >> separator >> seconds >> separator >> frames))
+    {
+        return false;
+    }
+    int lba = minutes * 60 * 75 + seconds * 75 + frames;
+    if (lba < 0)
+    {
+        lba = 0;
+    }
+    outLength = static_cast<u32>(lba);
+    return true;
+}
+
+void updatePregap(TrackInfo& track, bool hasIndex00, u32 index00Lba)
+{
+    if (!hasIndex00)
+    {
+        return;
+    }
+    if (track.startLba >= index00Lba)
+    {
+        track.pregapLength = track.startLba - index00Lba;
+    }
+}
+
 } // namespace
 
 const TrackInfo* CueSheet::findFirstDataTrack() const
@@ -75,6 +107,33 @@ const TrackInfo* CueSheet::findFirstDataTrack() const
         }
     }
     return nullptr;
+}
+
+const TrackInfo* CueSheet::findPrimaryDataTrack() const
+{
+    const TrackInfo* selected = nullptr;
+    for (const auto& track : tracks)
+    {
+        if (track.type != TrackType::Data)
+        {
+            continue;
+        }
+        if (!selected)
+        {
+            selected = &track;
+            continue;
+        }
+        if (track.sessionNumber > selected->sessionNumber)
+        {
+            selected = &track;
+            continue;
+        }
+        if (track.sessionNumber == selected->sessionNumber && track.startLba > selected->startLba)
+        {
+            selected = &track;
+        }
+    }
+    return selected;
 }
 
 bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& errorMessage)
@@ -98,6 +157,9 @@ bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& 
     std::string line;
     std::string currentFile;
     TrackInfo* currentTrack = nullptr;
+    u32 currentSession = 1;
+    bool hasIndex00 = false;
+    u32 index00Lba = 0;
 
     while (std::getline(cueStream, line))
     {
@@ -107,6 +169,27 @@ bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& 
             continue;
         }
         auto upper = detail::toUpper(trimmed);
+        if (upper.rfind("REM SESSION", 0) == 0 || upper.rfind("SESSION", 0) == 0)
+        {
+            std::istringstream stream(trimmed);
+            std::string token;
+            std::string sessionToken;
+            stream >> token;
+            if (detail::toUpper(token) == "REM")
+            {
+                stream >> token;
+            }
+            stream >> sessionToken;
+            u32 sessionValue = 0;
+            auto sessionStart = sessionToken.data();
+            auto sessionEnd = sessionToken.data() + sessionToken.size();
+            auto parseResult = std::from_chars(sessionStart, sessionEnd, sessionValue);
+            if (parseResult.ec == std::errc() && parseResult.ptr == sessionEnd)
+            {
+                currentSession = sessionValue;
+            }
+            continue;
+        }
         if (upper.rfind("FILE", 0) == 0)
         {
             auto firstQuote = trimmed.find('"');
@@ -121,7 +204,8 @@ bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& 
                 std::istringstream stream(trimmed);
                 std::string token;
                 std::string fileToken;
-                stream >> token >> fileToken;
+                std::string fileTypeToken;
+                stream >> token >> fileToken >> fileTypeToken;
                 currentFile = fileToken;
             }
             continue;
@@ -153,9 +237,42 @@ bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& 
             track.type = trackType.type;
             track.sectorSize = trackType.sectorSize;
             track.startLba = 0;
+            track.sessionNumber = currentSession;
+            track.pregapLength = 0;
             track.file = currentFile;
             outSheet.tracks.push_back(track);
             currentTrack = &outSheet.tracks.back();
+            hasIndex00 = false;
+            index00Lba = 0;
+            continue;
+        }
+        if (upper.rfind("PREGAP", 0) == 0 && currentTrack)
+        {
+            std::istringstream stream(trimmed);
+            std::string token;
+            std::string timecode;
+            stream >> token >> timecode;
+            u32 pregapLength = 0;
+            if (parseTimecodeLength(timecode, pregapLength))
+            {
+                currentTrack->pregapLength = pregapLength;
+            }
+            continue;
+        }
+        if (upper.rfind("INDEX 00", 0) == 0 && currentTrack)
+        {
+            std::istringstream stream(trimmed);
+            std::string token;
+            std::string indexToken;
+            std::string timecode;
+            stream >> token >> indexToken >> timecode;
+            u32 lba = 0;
+            if (parseTimecode(timecode, lba))
+            {
+                hasIndex00 = true;
+                index00Lba = lba;
+                updatePregap(*currentTrack, hasIndex00, index00Lba);
+            }
             continue;
         }
         if (upper.rfind("INDEX 01", 0) == 0 && currentTrack)
@@ -169,6 +286,7 @@ bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& 
             if (parseTimecode(timecode, lba))
             {
                 currentTrack->startLba = lba;
+                updatePregap(*currentTrack, hasIndex00, index00Lba);
             }
             continue;
         }

@@ -14,6 +14,7 @@ struct CueSheet
     std::vector<TrackInfo> tracks;
 
     const TrackInfo* findFirstDataTrack() const;
+    const TrackInfo* findPrimaryDataTrack() const;
 };
 
 bool parseCueSheet(const std::string& cuePath, CueSheet& outSheet, std::string& errorMessage);

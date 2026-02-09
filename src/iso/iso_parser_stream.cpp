@@ -24,6 +24,11 @@ constexpr u32 kRawSectorSize = detail::kRawSectorSize;
 
 std::vector<u8> IsoParser::readSector(u32 sector)
 {
+    std::vector<u8> cached;
+    if (fetchSectorCache(sector, cached, m_userSectorCacheIndex, m_userSectorCache))
+    {
+        return cached;
+    }
     std::vector<u8> raw(m_rawSectorSize);
     if (!readRawSector(sector, raw))
     {
@@ -32,6 +37,7 @@ std::vector<u8> IsoParser::readSector(u32 sector)
     }
     if (m_rawSectorSize == kUserDataSize)
     {
+        storeSectorCache(sector, raw, m_userSectorCacheIndex, m_userSectorCache);
         return raw;
     }
     auto view = detail::decodeSectorLayout(raw);
@@ -40,8 +46,10 @@ std::vector<u8> IsoParser::readSector(u32 sector)
         addError("Unsupported sector layout.");
         return {};
     }
-    return std::vector<u8>(raw.begin() + static_cast<std::ptrdiff_t>(view.offset),
-                           raw.begin() + static_cast<std::ptrdiff_t>(view.offset + view.size));
+    std::vector<u8> data(raw.begin() + static_cast<std::ptrdiff_t>(view.offset),
+                         raw.begin() + static_cast<std::ptrdiff_t>(view.offset + view.size));
+    storeSectorCache(sector, data, m_userSectorCacheIndex, m_userSectorCache);
+    return data;
 }
 
 bool IsoParser::readRawSector(u32 sector, std::vector<u8>& buffer)
@@ -50,6 +58,10 @@ bool IsoParser::readRawSector(u32 sector, std::vector<u8>& buffer)
     {
         addError("Stream not open for sector read.");
         return false;
+    }
+    if (fetchSectorCache(sector, buffer, m_rawSectorCacheIndex, m_rawSectorCache))
+    {
+        return true;
     }
     m_stream.clear();
     if (buffer.size() != m_rawSectorSize)
@@ -71,6 +83,7 @@ bool IsoParser::readRawSector(u32 sector, std::vector<u8>& buffer)
         addError("Short read while reading sector.");
         return false;
     }
+    storeSectorCache(sector, buffer, m_rawSectorCacheIndex, m_rawSectorCache);
     return true;
 }
 
@@ -133,7 +146,7 @@ bool IsoParser::openStream()
         }
 
         m_tracks = cueSheet.tracks;
-        const auto* dataTrack = cueSheet.findFirstDataTrack();
+        const auto* dataTrack = cueSheet.findPrimaryDataTrack();
         if (!dataTrack)
         {
             addError("No data track found in CUE sheet.");
@@ -147,6 +160,7 @@ bool IsoParser::openStream()
                 std::filesystem::path resolved = inputPath.parent_path() / track.file;
                 track.file = resolved.string();
             }
+            track.discIndex = 0;
         }
 
         std::filesystem::path binPath = inputPath.parent_path() / dataTrack->file;
@@ -163,6 +177,8 @@ bool IsoParser::openStream()
         track.type = TrackType::Data;
         track.sectorSize = m_rawSectorSize;
         track.startLba = 0;
+        track.sessionNumber = 1;
+        track.discIndex = 0;
         track.file = m_filename;
         m_tracks = {track};
     }
@@ -211,6 +227,65 @@ void IsoParser::addError(const std::string& message)
         return;
     }
     m_errors.push_back(message);
+}
+
+void IsoParser::setSectorCacheCapacity(size_t capacity)
+{
+    m_sectorCacheCapacity = capacity;
+    clearSectorCache();
+}
+
+void IsoParser::clearSectorCache()
+{
+    m_rawSectorCache.clear();
+    m_rawSectorCacheIndex.clear();
+    m_userSectorCache.clear();
+    m_userSectorCacheIndex.clear();
+}
+
+bool IsoParser::fetchSectorCache(u32 sector, std::vector<u8>& buffer,
+                                 std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
+                                 std::list<CachedSector>& entries)
+{
+    if (m_sectorCacheCapacity == 0)
+    {
+        return false;
+    }
+    auto it = index.find(sector);
+    if (it == index.end())
+    {
+        return false;
+    }
+    auto listIt = it->second;
+    buffer = listIt->data;
+    entries.splice(entries.begin(), entries, listIt);
+    return true;
+}
+
+void IsoParser::storeSectorCache(u32 sector, const std::vector<u8>& buffer,
+                                 std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
+                                 std::list<CachedSector>& entries)
+{
+    if (m_sectorCacheCapacity == 0)
+    {
+        return;
+    }
+    auto it = index.find(sector);
+    if (it != index.end())
+    {
+        auto listIt = it->second;
+        listIt->data = buffer;
+        entries.splice(entries.begin(), entries, listIt);
+        return;
+    }
+    if (entries.size() >= m_sectorCacheCapacity)
+    {
+        auto& last = entries.back();
+        index.erase(last.sector);
+        entries.pop_back();
+    }
+    entries.push_front(CachedSector{sector, buffer});
+    index[sector] = entries.begin();
 }
 
 bool IsoParser::validateVolumeMetadata(const PrimaryVolumeDescriptor& pvd)
