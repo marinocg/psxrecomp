@@ -10,7 +10,7 @@ highlights dependencies between workstreams.
 - Update **Implementation Status** regularly as gaps close.
 
 ## Workstreams (detailed roadmaps)
-- [ ] ISO/BIN parsing ([iso_bin_roadmap.md](iso_bin_roadmap.md))
+- [x] ISO/BIN parsing ([iso_bin_roadmap.md](iso_bin_roadmap.md))
 - [ ] PSX-EXE loading ([psx_exe_roadmap.md](psx_exe_roadmap.md))
 - [ ] Disassembler ([mips_r3000_disassembler_roadmap.md](mips_r3000_disassembler_roadmap.md))
 - [ ] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
@@ -41,7 +41,7 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 - [ ] Structured warnings/errors surfaced to CLI.
 
 **Dependencies (complete these roadmaps)**
-- [ ] ISO/BIN parser improvements (`iso_bin_roadmap.md`)
+- [x] ISO/BIN parser improvements (`iso_bin_roadmap.md`)
 - [ ] PSX-EXE loader robustness (`psx_exe_roadmap.md`)
 - [ ] Disassembler analysis helpers (`mips_r3000_disassembler_roadmap.md`)
 
@@ -110,7 +110,7 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 - [ ] Compatibility matrix and user-facing tooling.
 
 **Dependencies (complete these roadmaps)**
-- [ ] ISO/BIN parsing (`iso_bin_roadmap.md`)
+- [x] ISO/BIN parsing (`iso_bin_roadmap.md`)
 - [ ] PSX-EXE loading (`psx_exe_roadmap.md`)
 - [ ] Disassembler (`mips_r3000_disassembler_roadmap.md`)
 - [ ] IR pipeline (`ir_roadmap.md`)

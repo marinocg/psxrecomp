@@ -18,7 +18,9 @@ IsoParser::IsoParser(const std::string& filename)
     : m_filename(filename), m_inputFilename(filename), m_isOpen(false), m_isValid(false),
       m_rawSectorSize(kUserDataSize), m_dataTrackStartLba(0), m_logicalBlockSize(kUserDataSize),
       m_useJoliet(false), m_stream(), m_rawSectorScratch(), m_pvd{}, m_rootDirectory(),
-      m_rootExtent(0), m_rootSize(0), m_totalSectors(0), m_tracks(), m_errors()
+      m_rootExtent(0), m_rootSize(0), m_totalSectors(0), m_tracks(), m_errors(),
+      m_sectorCacheCapacity(64), m_rawSectorCache(), m_rawSectorCacheIndex(),
+      m_userSectorCache(), m_userSectorCacheIndex()
 {
 }
 
@@ -36,6 +38,7 @@ bool IsoParser::open()
     m_tracks.clear();
     m_directoryCache.clear();
     m_pathTable.clear();
+    clearSectorCache();
     m_totalSectors = 0;
 
     if (!openStream())

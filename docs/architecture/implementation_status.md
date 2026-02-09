@@ -9,14 +9,15 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 ## Subsystem status (estimate)
 
-### ISO/BIN Parsing (~70%)
+### ISO/BIN Parsing (~85%)
 **Present**
-- ISO 9660 parsing, track handling, file extraction.
-- PSX EXE discovery heuristics and metadata helpers.
+- ISO 9660 parsing, track handling, file extraction, and path table lookups.
+- PSX EXE discovery heuristics, resource export helpers, and sector caching.
+- XA Mode 2 validation plus improved CUE parsing (sessions/pregaps).
 
 **Missing**
-- XA/Mode 2 edge cases, multi-session robustness, broader CUE/BIN coverage.
-- Better validation and error recovery.
+- Broader mixed-mode validation beyond current XA checks.
+- Additional malformed image recovery and diagnostics.
 
 ### PSX-EXE Loader (~80%)
 **Present**

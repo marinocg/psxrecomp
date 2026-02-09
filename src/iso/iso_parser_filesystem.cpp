@@ -26,115 +26,9 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
         return {};
     }
 
-    std::vector<std::string> components = detail::splitPath(path);
-    if (components.empty())
-    {
-        return {};
-    }
-
-    std::vector<DirectoryRecord> records;
-    if (!readDirectory(m_rootExtent, m_rootSize, records))
-    {
-        return {};
-    }
-
     DirectoryRecord target{};
     std::vector<DirectoryRecord> targetExtents;
-    std::string currentPath;
-    for (size_t i = 0; i < components.size(); ++i)
-    {
-        std::string desired = detail::normalizeIsoName(components[i]);
-        bool isLast = i == components.size() - 1;
-        std::string nextPath = currentPath;
-        if (!desired.empty())
-        {
-            if (!nextPath.empty())
-            {
-                nextPath += "/";
-            }
-            nextPath += desired;
-        }
-
-        if (!isLast && !m_pathTable.empty())
-        {
-            DirectoryInfo info{};
-            if (getDirectoryInfo(nextPath, info))
-            {
-                currentPath = nextPath;
-                if (!readDirectory(info.extent, info.size, records))
-                {
-                    return {};
-                }
-                continue;
-            }
-        }
-
-        bool found = false;
-        targetExtents.clear();
-        std::string desiredBase = detail::normalizeIsoName(detail::baseIsoName(components[i]));
-        bool desiredHasVersion = components[i].find(';') != std::string::npos;
-        int bestVersion = -1;
-        DirectoryRecord bestRecord{};
-        for (const auto& record : records)
-        {
-            if (record.name.empty())
-            {
-                continue;
-            }
-            if (record.name == "." || record.name == "..")
-            {
-                continue;
-            }
-            auto recordName = detail::normalizeIsoName(record.name);
-            if (recordName == desired)
-            {
-                found = true;
-                target = record;
-                targetExtents.push_back(record);
-                continue;
-            }
-            if (!desiredHasVersion &&
-                detail::normalizeIsoName(detail::baseIsoName(record.name)) == desiredBase)
-            {
-                int version = detail::isoVersionNumber(record.name);
-                if (version > bestVersion)
-                {
-                    bestVersion = version;
-                    bestRecord = record;
-                }
-            }
-        }
-
-        if (!found && bestVersion >= 0)
-        {
-            found = true;
-            target = bestRecord;
-            targetExtents.clear();
-            targetExtents.push_back(bestRecord);
-        }
-
-        if (!found)
-        {
-            addError("Failed to locate ISO file: " + desired);
-            return {};
-        }
-
-        if (!isLast)
-        {
-            if ((target.flags & 0x02) == 0)
-            {
-                return {};
-            }
-            records.clear();
-            if (!readDirectory(target.extentLocation, target.dataLength, records))
-            {
-                return {};
-            }
-            currentPath = nextPath;
-        }
-    }
-
-    if ((target.flags & 0x02) != 0)
+    if (!findFileExtents(path, target, targetExtents))
     {
         return {};
     }
@@ -227,14 +121,12 @@ const std::vector<TrackInfo>& IsoParser::getTracks() const
 
 std::optional<TrackInfo> IsoParser::getDataTrack() const
 {
-    for (const auto& track : m_tracks)
+    const auto* track = selectPrimaryDataTrack();
+    if (!track)
     {
-        if (track.type == TrackType::Data)
-        {
-            return track;
-        }
+        return std::nullopt;
     }
-    return std::nullopt;
+    return *track;
 }
 
 const std::vector<std::string>& IsoParser::getErrors() const
@@ -258,60 +150,7 @@ bool IsoParser::isValid() const
 
 std::vector<std::string> IsoParser::listExecutables()
 {
-    std::vector<std::string> executables;
-    if (!m_isOpen)
-    {
-        return executables;
-    }
-
-    std::vector<std::pair<std::string, DirectoryInfo>> directories;
-    directories.emplace_back("", DirectoryInfo{m_rootExtent, m_rootSize});
-
-    if (!m_pathTable.empty())
-    {
-        directories.clear();
-        directories.reserve(m_pathTable.size());
-        for (const auto& entry : m_pathTable)
-        {
-            DirectoryInfo info{};
-            if (!getDirectoryInfo(entry.first, info))
-            {
-                continue;
-            }
-            directories.emplace_back(entry.first, info);
-        }
-    }
-
-    for (const auto& entry : directories)
-    {
-        std::vector<DirectoryRecord> records;
-        if (!readDirectory(entry.second.extent, entry.second.size, records))
-        {
-            continue;
-        }
-        for (const auto& record : records)
-        {
-            if ((record.flags & 0x02) != 0)
-            {
-                continue;
-            }
-            auto name = detail::normalizeIsoName(record.name);
-            if (name.size() >= 4 && name.substr(name.size() - 4) == ".EXE")
-            {
-                std::string path = entry.first;
-                if (!path.empty())
-                {
-                    path += "/";
-                }
-                path += name;
-                executables.push_back(path);
-            }
-        }
-    }
-
-    std::sort(executables.begin(), executables.end());
-    executables.erase(std::unique(executables.begin(), executables.end()), executables.end());
-    return executables;
+    return listFilesByExtension({".EXE"}, false);
 }
 
 bool IsoParser::readDirectory(u32 extent, u32 size, std::vector<DirectoryRecord>& records)
@@ -460,6 +299,169 @@ bool IsoParser::readDirectorySelfSize(u32 extent, u32& outSize)
     }
     outSize = detail::readLe32(data.data() + 10);
     return outSize != 0;
+}
+
+bool IsoParser::findFileExtents(const std::string& path, DirectoryRecord& target,
+                                std::vector<DirectoryRecord>& extents)
+{
+    std::vector<std::string> components = detail::splitPath(path);
+    if (components.empty())
+    {
+        return false;
+    }
+
+    std::vector<DirectoryRecord> records;
+    if (!readDirectory(m_rootExtent, m_rootSize, records))
+    {
+        return false;
+    }
+
+    std::string currentPath;
+    for (size_t i = 0; i < components.size(); ++i)
+    {
+        std::string desired = detail::normalizeIsoName(components[i]);
+        bool isLast = i == components.size() - 1;
+        std::string nextPath = currentPath;
+        if (!desired.empty())
+        {
+            if (!nextPath.empty())
+            {
+                nextPath += "/";
+            }
+            nextPath += desired;
+        }
+
+        if (!isLast && !m_pathTable.empty())
+        {
+            DirectoryInfo info{};
+            if (getDirectoryInfo(nextPath, info))
+            {
+                currentPath = nextPath;
+                if (!readDirectory(info.extent, info.size, records))
+                {
+                    return false;
+                }
+                continue;
+            }
+        }
+
+        bool found = false;
+        extents.clear();
+        std::string desiredBase = detail::normalizeIsoName(detail::baseIsoName(components[i]));
+        bool desiredHasVersion = components[i].find(';') != std::string::npos;
+        int bestVersion = -1;
+        DirectoryRecord bestRecord{};
+        for (const auto& record : records)
+        {
+            if (record.name.empty())
+            {
+                continue;
+            }
+            if (record.name == "." || record.name == "..")
+            {
+                continue;
+            }
+            auto recordName = detail::normalizeIsoName(record.name);
+            if (recordName == desired)
+            {
+                found = true;
+                target = record;
+                extents.push_back(record);
+                continue;
+            }
+            if (!desiredHasVersion &&
+                detail::normalizeIsoName(detail::baseIsoName(record.name)) == desiredBase)
+            {
+                int version = detail::isoVersionNumber(record.name);
+                if (version > bestVersion)
+                {
+                    bestVersion = version;
+                    bestRecord = record;
+                }
+            }
+        }
+
+        if (!found && bestVersion >= 0)
+        {
+            found = true;
+            target = bestRecord;
+            extents.clear();
+            for (const auto& record : records)
+            {
+                if (record.name.empty())
+                {
+                    continue;
+                }
+                if (record.name == "." || record.name == "..")
+                {
+                    continue;
+                }
+                if (detail::normalizeIsoName(detail::baseIsoName(record.name)) == desiredBase &&
+                    detail::isoVersionNumber(record.name) == bestVersion)
+                {
+                    extents.push_back(record);
+                }
+            }
+            if (extents.empty())
+            {
+                extents.push_back(bestRecord);
+            }
+        }
+
+        if (!found)
+        {
+            addError("Failed to locate ISO file: " + desired);
+            return false;
+        }
+
+        if (!isLast)
+        {
+            if ((target.flags & 0x02) == 0)
+            {
+                return false;
+            }
+            records.clear();
+            if (!readDirectory(target.extentLocation, target.dataLength, records))
+            {
+                return false;
+            }
+            currentPath = nextPath;
+        }
+    }
+
+    if ((target.flags & 0x02) != 0)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+const TrackInfo* IsoParser::selectPrimaryDataTrack() const
+{
+    const TrackInfo* selected = nullptr;
+    for (const auto& track : m_tracks)
+    {
+        if (track.type != TrackType::Data)
+        {
+            continue;
+        }
+        if (!selected)
+        {
+            selected = &track;
+            continue;
+        }
+        if (track.sessionNumber > selected->sessionNumber)
+        {
+            selected = &track;
+            continue;
+        }
+        if (track.sessionNumber == selected->sessionNumber && track.startLba > selected->startLba)
+        {
+            selected = &track;
+        }
+    }
+    return selected;
 }
 
 } // namespace iso
