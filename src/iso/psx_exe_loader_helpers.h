@@ -12,8 +12,7 @@ namespace detail
 {
 
 bool parseOverlayTable(const std::vector<u8>& data, const PsxExeHeader& header,
-                       std::vector<PsxExeImage::Segment>& segments,
-                       PsxExeDiagnostics* diagnostics);
+                       std::vector<PsxExeImage::Segment>& segments, PsxExeDiagnostics* diagnostics);
 
 void extractSyscalls(const std::vector<PsxExeImage::Segment>& segments,
                      const std::vector<u8>& programData,

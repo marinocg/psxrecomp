@@ -11,8 +11,8 @@ build: configure
 test: build
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
 
-lint: configure
-	cmake --build $(BUILD_DIR) --target clang-format
+lint:
+	git ls-files '*.cpp' '*.h' | xargs -r clang-format --dry-run --Werror
 
 clean:
 	cmake --build $(BUILD_DIR) --target clean
