@@ -27,3 +27,7 @@ support end-to-end static recompilation.
 - [x] Add unit tests for IR-to-C++ lowering.
 - [ ] Add end-to-end tests for small PSX-EXE samples.
 - [x] Add compile-and-run checks for generated code.
+
+## Phase 5: Packaging & Integration
+- [ ] Emit resource manifest for non-code assets (textures/audio/movies).
+- [ ] Add build rules to bundle non-code resources with generated output.

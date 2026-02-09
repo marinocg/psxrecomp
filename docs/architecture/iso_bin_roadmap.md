@@ -30,6 +30,7 @@ image formats needed by the recompiler pipeline.
 ## Phase 4: Integration Features
 - [x] Provide convenience helpers to locate PSX-EXE across disc layouts.
 - [x] Expose track metadata (data vs audio) for later runtime integration.
+- [ ] Add export helpers for non-code resources (TIM textures, STR videos, XA audio).
 
 ## Phase 5: Advanced Formats & Performance
 - [ ] Support multi-session discs and mixed-mode edge cases.

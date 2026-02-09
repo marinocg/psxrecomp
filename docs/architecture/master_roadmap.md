@@ -40,9 +40,10 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 - [ ] Multi-disc awareness (disc set identification and swap metadata).
 - [ ] Structured warnings/errors surfaced to CLI.
 
-**Dependencies**
-- ISO/BIN parser improvements (`iso_bin_roadmap.md`)
-- PSX-EXE loader robustness (`psx_exe_roadmap.md`)
+**Dependencies (complete these roadmaps)**
+- [ ] ISO/BIN parser improvements (`iso_bin_roadmap.md`)
+- [ ] PSX-EXE loader robustness (`psx_exe_roadmap.md`)
+- [ ] Disassembler analysis helpers (`mips_r3000_disassembler_roadmap.md`)
 
 ### M2: Functional MIPS→IR Coverage (In progress)
 Goal: translate common game code paths into IR with correct control flow.
@@ -53,9 +54,10 @@ Goal: translate common game code paths into IR with correct control flow.
 - [ ] Function boundary detection and call graph discovery.
 - [ ] IR modeling for system calls and BIOS stubs.
 
-**Dependencies**
-- Disassembler completeness (`mips_r3000_disassembler_roadmap.md`)
-- IR pipeline expansion (`ir_roadmap.md`)
+**Dependencies (complete these roadmaps)**
+- [ ] Disassembler completeness (`mips_r3000_disassembler_roadmap.md`)
+- [ ] IR pipeline expansion (`ir_roadmap.md`)
+- [ ] Recompiler baseline codegen (`recompiler_roadmap.md`)
 
 ### M3: Correct Runtime Semantics (In progress)
 Goal: make generated code interact with a faithful runtime model of PSX hardware.
@@ -67,9 +69,10 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 - [ ] GPU command packet ingestion and minimal rasterization.
 - [ ] SPU voice and streaming scaffolding (even if simplified).
 
-**Dependencies**
-- Runtime library roadmap (`runtime_library_roadmap.md`)
-- GPU/SPU roadmaps (`gpu_emulation_roadmap.md`, `spu_emulation_roadmap.md`)
+**Dependencies (complete these roadmaps)**
+- [ ] Runtime library roadmap (`runtime_library_roadmap.md`)
+- [ ] GPU emulation roadmap (`gpu_emulation_roadmap.md`)
+- [ ] SPU emulation roadmap (`spu_emulation_roadmap.md`)
 
 ### M4: Recompiled Demo Title (Planned)
 Goal: run a controlled demo binary end-to-end with deterministic output.
@@ -79,10 +82,10 @@ Goal: run a controlled demo binary end-to-end with deterministic output.
 - [ ] Recompiled output builds and runs in CI.
 - [ ] Test harness for frame/time-based validation.
 
-**Dependencies**
-- M2 functional IR coverage
-- M3 runtime semantics for required subsystems
-- Demo roadmap (`demo_roadmap.md`)
+**Dependencies (complete these roadmaps)**
+- [ ] M2 functional IR coverage (this milestone)
+- [ ] M3 runtime semantics (this milestone)
+- [ ] Demo roadmap (`demo_roadmap.md`)
 
 ### M5: Early Game Compatibility (Planned)
 Goal: basic compatibility with a subset of non-commercial or permissibly tested games.
@@ -93,9 +96,9 @@ Goal: basic compatibility with a subset of non-commercial or permissibly tested 
 - [ ] Instrumentation for tracing and regression testing.
 - [ ] Optional game metadata registry for reproducible builds and compatibility tracking.
 
-**Dependencies**
-- M4 demo milestone
-- Full-game roadmap (`full_game_support_roadmap.md`)
+**Dependencies (complete these roadmaps)**
+- [ ] M4 demo milestone (this milestone)
+- [ ] Full game support roadmap (`full_game_support_roadmap.md`)
 
 ### M6: Full Commercial Game Support (Planned)
 Goal: broad compatibility, performance, and tooling for real-world usage.
@@ -105,8 +108,17 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 - [ ] Performance optimizations in recompiler and runtime.
 - [ ] Compatibility matrix and user-facing tooling.
 
-**Dependencies**
-- All workstreams completed and validated.
+**Dependencies (complete these roadmaps)**
+- [ ] ISO/BIN parsing (`iso_bin_roadmap.md`)
+- [ ] PSX-EXE loading (`psx_exe_roadmap.md`)
+- [ ] Disassembler (`mips_r3000_disassembler_roadmap.md`)
+- [ ] IR pipeline (`ir_roadmap.md`)
+- [ ] Recompiler/codegen (`recompiler_roadmap.md`)
+- [ ] Runtime library (`runtime_library_roadmap.md`)
+- [ ] GPU emulation (`gpu_emulation_roadmap.md`)
+- [ ] SPU emulation (`spu_emulation_roadmap.md`)
+- [ ] Demo milestone (`demo_roadmap.md`)
+- [ ] Full game support (`full_game_support_roadmap.md`)
 
 ## Risk and dependency highlights
 - **Instruction coverage gaps** directly block M2 and downstream milestones.

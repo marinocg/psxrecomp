@@ -31,3 +31,4 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [ ] Expand MMIO coverage for GPU/SPU/CD-ROM registers.
 - [ ] Implement BIOS/syscall layer for common kernel services.
 - [ ] Add save-state serialization and determinism checks.
+- [ ] Add resource pack loader for non-code assets (textures, audio, movies).
