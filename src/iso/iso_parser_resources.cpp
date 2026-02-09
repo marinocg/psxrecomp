@@ -79,12 +79,20 @@ bool IsoParser::exportResources(ResourceType type, const std::string& outputDire
             continue;
         }
         std::filesystem::path resourcePath(resource);
-        auto filename = resourcePath.filename().string();
-        if (filename.empty())
+        if (resourcePath.empty())
         {
             continue;
         }
-        std::filesystem::path destination = outputPath / filename;
+        std::filesystem::path destination = outputPath / resourcePath;
+        error.clear();
+        std::filesystem::create_directories(destination.parent_path(), error);
+        if (error)
+        {
+            addError("Failed to create output directory for resource: " +
+                     destination.parent_path().string());
+            success = false;
+            continue;
+        }
         std::ofstream out(destination, std::ios::binary);
         if (!out)
         {
@@ -221,7 +229,7 @@ bool IsoParser::validateXaAudioFile(const std::string& path)
             }
             ++audioSectorCount;
             auto view = detail::decodeSectorLayout(raw);
-            if (view.size == 0)
+            if (view.size != 2324)
             {
                 addError("Unsupported XA sector layout.");
                 return false;

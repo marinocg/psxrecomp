@@ -159,7 +159,7 @@ class IsoParser
 
     /**
      * @brief Set the in-memory sector cache capacity.
-     * @param capacity Maximum number of sectors to cache.
+     * @param capacity Maximum number of sectors to cache per cache tier.
      */
     void setSectorCacheCapacity(size_t capacity);
 

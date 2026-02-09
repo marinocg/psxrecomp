@@ -76,12 +76,13 @@ int main()
     assert(xaResources.size() == 1);
     assert(xaResources.front() == "AUDIO.XA");
 
-    auto exportDir = std::filesystem::temp_directory_path() / "psxrecomp_exports";
+    auto exportDir = std::filesystem::temp_directory_path() /
+                     ("psxrecomp_exports_" + std::to_string(iso_test::generateUniqueSuffix()));
     assert(cueParser.exportResources(psxrecomp::iso::ResourceType::TimTexture, exportDir.string()));
     assert(std::filesystem::exists(exportDir / "TEXTURE.TIM"));
 
-    std::filesystem::remove(exportDir / "TEXTURE.TIM");
-    std::filesystem::remove(exportDir);
+    std::error_code cleanupError;
+    std::filesystem::remove_all(exportDir, cleanupError);
 
     std::filesystem::remove(cuePath);
     std::filesystem::remove(binPath);

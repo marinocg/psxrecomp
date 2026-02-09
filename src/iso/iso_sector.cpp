@@ -54,6 +54,10 @@ bool decodeXaSubheader(const std::vector<u8>& raw, XaSubheader& subheader)
     {
         return false;
     }
+    if ((raw[18] & kSubmodeForm2) == 0)
+    {
+        return false;
+    }
     subheader.fileNumber = raw[16];
     subheader.channelNumber = raw[17];
     subheader.submode = raw[18];
@@ -69,6 +73,15 @@ bool isXaAudioSector(const std::vector<u8>& raw, XaSubheader* subheader)
         return false;
     }
     if ((local.submode & kSubmodeAudio) == 0)
+    {
+        return false;
+    }
+    if (raw.size() < 24)
+    {
+        return false;
+    }
+    if (raw[20] != local.fileNumber || raw[21] != local.channelNumber || raw[22] != local.submode ||
+        raw[23] != local.codingInfo)
     {
         return false;
     }

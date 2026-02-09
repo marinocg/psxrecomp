@@ -16,6 +16,14 @@ constexpr uint32_t kSectorSize = 2048;
 constexpr uint32_t kRawSectorSize = 2352;
 constexpr uint32_t kMode2DataOffset = 24;
 
+inline uint32_t generateUniqueSuffix()
+{
+    static std::random_device randomDevice;
+    static std::mt19937 generator(randomDevice());
+    static std::uniform_int_distribution<uint32_t> distribution;
+    return distribution(generator);
+}
+
 inline void writeLe16(std::vector<uint8_t>& buffer, size_t offset, uint16_t value)
 {
     buffer[offset] = static_cast<uint8_t>(value & 0xFF);
@@ -114,6 +122,19 @@ inline void writeXaAudioSector(std::vector<uint8_t>& image, uint32_t lba,
                                const std::vector<uint8_t>& data)
 {
     writeMode2Sector(image, lba, data, 0x24);
+    size_t offset = static_cast<size_t>(lba) * kRawSectorSize;
+    constexpr uint8_t kFileNumber = 1;
+    constexpr uint8_t kChannelNumber = 1;
+    constexpr uint8_t kSubmode = 0x24;
+    constexpr uint8_t kCodingInfo = 0;
+    image[offset + 16] = kFileNumber;
+    image[offset + 17] = kChannelNumber;
+    image[offset + 18] = kSubmode;
+    image[offset + 19] = kCodingInfo;
+    image[offset + 20] = kFileNumber;
+    image[offset + 21] = kChannelNumber;
+    image[offset + 22] = kSubmode;
+    image[offset + 23] = kCodingInfo;
 }
 
 inline std::filesystem::path createTestIso()
@@ -187,7 +208,9 @@ inline std::filesystem::path createTestIso()
     std::string exeData = "PS-X EXE";
     std::memcpy(image.data() + exeSector * kSectorSize, exeData.data(), exeData.size());
 
-    auto path = std::filesystem::temp_directory_path() / "psxrecomp_test.iso";
+    auto uniqueSuffix = generateUniqueSuffix();
+    auto path = std::filesystem::temp_directory_path() /
+                ("psxrecomp_test_" + std::to_string(uniqueSuffix) + ".iso");
     std::ofstream out(path, std::ios::binary);
     out.write(reinterpret_cast<const char*>(image.data()),
               static_cast<std::streamsize>(image.size()));
@@ -259,10 +282,7 @@ inline std::filesystem::path createCueImage(std::filesystem::path& cuePath)
     const uint32_t totalSectors = 200;
     std::vector<uint8_t> image(totalSectors * kRawSectorSize, 0);
 
-    std::random_device randomDevice;
-    std::mt19937 generator(randomDevice());
-    std::uniform_int_distribution<uint32_t> distribution;
-    auto uniqueSuffix = distribution(generator);
+    auto uniqueSuffix = generateUniqueSuffix();
     auto uniqueName = std::string("psxrecomp_test_") + std::to_string(uniqueSuffix) + ".";
     auto binPath = std::filesystem::temp_directory_path() / (uniqueName + "bin");
     cuePath = std::filesystem::temp_directory_path() / (uniqueName + "cue");
@@ -453,10 +473,7 @@ inline std::filesystem::path createRawCueIso(const std::string& volumeLabel)
     std::vector<uint8_t> exeBytes(exeData.begin(), exeData.end());
     writeMode2FormSector(image, exeSector, exeBytes, false);
 
-    std::random_device randomDevice;
-    std::mt19937 generator(randomDevice());
-    std::uniform_int_distribution<uint32_t> distribution;
-    auto uniqueSuffix = distribution(generator);
+    auto uniqueSuffix = generateUniqueSuffix();
     auto binPath =
         std::filesystem::temp_directory_path() /
         ("psxrecomp_session_" + volumeLabel + "_" + std::to_string(uniqueSuffix) + ".bin");
@@ -475,7 +492,9 @@ inline std::filesystem::path createMultiSessionCue(std::filesystem::path& cuePat
     auto sessionOneBin = createRawCueIso("SESSION_ONE");
     sessionTwoBin = createRawCueIso("SESSION_TWO");
 
-    cuePath = std::filesystem::temp_directory_path() / "psxrecomp_multisession.cue";
+    auto uniqueSuffix = generateUniqueSuffix();
+    cuePath = std::filesystem::temp_directory_path() /
+              ("psxrecomp_multisession_" + std::to_string(uniqueSuffix) + ".cue");
     std::ofstream cueOut(cuePath);
     cueOut << "REM SESSION 1\n";
     cueOut << "FILE \"" << sessionOneBin.filename().string() << "\" BINARY\n";
