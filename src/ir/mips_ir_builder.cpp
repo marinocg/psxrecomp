@@ -325,6 +325,8 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
             auto target = instruction.getJumpTarget();
             if (target.has_value())
             {
+                addWarning(result.warnings, instruction,
+                           "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
                 emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
             }
             else

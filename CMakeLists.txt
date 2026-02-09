@@ -180,6 +180,17 @@ if(BUILD_TESTS)
     )
     target_include_directories(runtime_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME runtime_test COMMAND runtime_test)
+
+    add_executable(pipeline_test
+        tests/unit/pipeline_test.cpp
+        ${ISO_SOURCES}
+        ${DISASM_SOURCES}
+        ${IR_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${RUNTIME_SOURCES}
+    )
+    target_include_directories(pipeline_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME pipeline_test COMMAND pipeline_test)
 endif()
 
 # Examples

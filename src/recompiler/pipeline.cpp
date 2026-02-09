@@ -70,6 +70,18 @@ std::string formatDiagnostics(const iso::PsxExeDiagnostics& diagnostics)
     return stream.str();
 }
 
+void appendDiagnosticsWarnings(std::vector<std::string>& warnings,
+                               const iso::PsxExeDiagnostics& diagnostics)
+{
+    for (const auto& entry : diagnostics.entries)
+    {
+        std::ostringstream stream;
+        stream << (entry.severity == iso::PsxExeDiagnosticSeverity::Error ? "error: " : "warning: ")
+               << entry.field << " - " << entry.message;
+        warnings.push_back(stream.str());
+    }
+}
+
 bool writeFile(const std::filesystem::path& path, const std::string& contents,
                std::string& outError)
 {
@@ -171,10 +183,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             return buildPipelineError(
                 "Failed to parse PSX executable:\n" + formatDiagnostics(diagnostics), warnings);
         }
-        if (!diagnostics.entries.empty())
-        {
-            warnings.push_back(formatDiagnostics(diagnostics));
-        }
+        appendDiagnosticsWarnings(warnings, diagnostics);
     }
     else
     {
@@ -184,10 +193,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             return buildPipelineError(
                 "Failed to load PSX executable:\n" + formatDiagnostics(diagnostics), warnings);
         }
-        if (!diagnostics.entries.empty())
-        {
-            warnings.push_back(formatDiagnostics(diagnostics));
-        }
+        appendDiagnosticsWarnings(warnings, diagnostics);
     }
 
     if (exeImage.programData.empty())

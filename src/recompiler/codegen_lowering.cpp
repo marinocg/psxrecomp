@@ -275,17 +275,33 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         }
         break;
     case ir::Opcode::BRANCH:
-        if (block.successors.size() >= 2 && !instruction.inputs.empty())
+        if (!instruction.inputs.empty())
         {
             std::string cond = valueToExpr(instruction.inputs.front(), context);
-            emitter.openBlock("if (" + cond + ")");
-            emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) + ";");
-            emitter.writeLine("continue;");
-            emitter.closeBlock();
-            emitter.openBlock("else");
-            emitter.writeLine("block = " + resolveBlockId(block.successors[1], blockNames) + ";");
-            emitter.writeLine("continue;");
-            emitter.closeBlock();
+            if (block.successors.size() >= 2)
+            {
+                emitter.openBlock("if (" + cond + ")");
+                emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
+                                  ";");
+                emitter.writeLine("continue;");
+                emitter.closeBlock();
+                emitter.openBlock("else");
+                emitter.writeLine("block = " + resolveBlockId(block.successors[1], blockNames) +
+                                  ";");
+                emitter.writeLine("continue;");
+                emitter.closeBlock();
+            }
+            else if (block.successors.size() == 1)
+            {
+                emitter.openBlock("if (" + cond + ")");
+                emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
+                                  ";");
+                emitter.writeLine("continue;");
+                emitter.closeBlock();
+                emitter.openBlock("else");
+                emitter.writeLine("return;");
+                emitter.closeBlock();
+            }
         }
         break;
     case ir::Opcode::JUMP:
@@ -300,7 +316,9 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (!instruction.inputs.empty())
         {
             std::string target = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine("callIntrinsic(context.system, " + target + ");");
+            emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
+            emitter.writeLine("std::abort();");
+            emitter.closeBlock();
         }
         else
         {
