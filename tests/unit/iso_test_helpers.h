@@ -50,8 +50,8 @@ inline size_t writeDirectoryRecord(std::vector<uint8_t>& buffer, size_t offset,
 }
 
 inline size_t writeJolietDirectoryRecord(std::vector<uint8_t>& buffer, size_t offset,
-                                         const std::u16string& name, uint32_t extent,
-                                         uint32_t size, uint8_t flags)
+                                         const std::u16string& name, uint32_t extent, uint32_t size,
+                                         uint8_t flags)
 {
     uint8_t nameLength = static_cast<uint8_t>(name.size() * 2);
     uint8_t recordLength = static_cast<uint8_t>(33 + nameLength + (nameLength % 2 == 0 ? 1 : 0));
@@ -165,10 +165,10 @@ inline std::filesystem::path createTestIso()
 
     size_t rootDirOffset = rootDirSector * kSectorSize;
     size_t cursor = rootDirOffset;
-    cursor += writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector,
-                                   rootDirSize, 0x02);
-    cursor += writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector,
-                                   rootDirSize, 0x02);
+    cursor +=
+        writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector, rootDirSize, 0x02);
+    cursor +=
+        writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector, rootDirSize, 0x02);
     cursor += writeDirectoryRecord(image, cursor, "SYSTEM.CNF;1", systemCnfSector, 64, 0x00);
     cursor += writeDirectoryRecord(image, cursor, "DATA", dataDirSector, kSectorSize, 0x02);
     (void)cursor;
@@ -232,10 +232,10 @@ inline std::filesystem::path createTestIsoWithLabel(const std::string& label)
 
     size_t rootDirOffset = rootDirSector * kSectorSize;
     size_t cursor = rootDirOffset;
-    cursor += writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector,
-                                   rootDirSize, 0x02);
-    cursor += writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector,
-                                   rootDirSize, 0x02);
+    cursor +=
+        writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector, rootDirSize, 0x02);
+    cursor +=
+        writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector, rootDirSize, 0x02);
     cursor += writeDirectoryRecord(image, cursor, "SYSTEM.CNF;1", systemCnfSector, 40, 0x00);
     writeDirectoryRecord(image, cursor, "GAME.EXE;1", exeSector, 16, 0x00);
 
@@ -457,9 +457,9 @@ inline std::filesystem::path createRawCueIso(const std::string& volumeLabel)
     std::mt19937 generator(randomDevice());
     std::uniform_int_distribution<uint32_t> distribution;
     auto uniqueSuffix = distribution(generator);
-    auto binPath = std::filesystem::temp_directory_path() /
-                   ("psxrecomp_session_" + volumeLabel + "_" + std::to_string(uniqueSuffix) +
-                    ".bin");
+    auto binPath =
+        std::filesystem::temp_directory_path() /
+        ("psxrecomp_session_" + volumeLabel + "_" + std::to_string(uniqueSuffix) + ".bin");
 
     std::ofstream binOut(binPath, std::ios::binary);
     binOut.write(reinterpret_cast<const char*>(image.data()),

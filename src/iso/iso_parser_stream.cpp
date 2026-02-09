@@ -243,10 +243,9 @@ void IsoParser::clearSectorCache()
     m_userSectorCacheIndex.clear();
 }
 
-bool IsoParser::fetchSectorCache(
-    u32 sector, std::vector<u8>& buffer,
-    std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
-    std::list<CachedSector>& entries)
+bool IsoParser::fetchSectorCache(u32 sector, std::vector<u8>& buffer,
+                                 std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
+                                 std::list<CachedSector>& entries)
 {
     if (m_sectorCacheCapacity == 0)
     {
@@ -263,10 +262,9 @@ bool IsoParser::fetchSectorCache(
     return true;
 }
 
-void IsoParser::storeSectorCache(
-    u32 sector, const std::vector<u8>& buffer,
-    std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
-    std::list<CachedSector>& entries)
+void IsoParser::storeSectorCache(u32 sector, const std::vector<u8>& buffer,
+                                 std::unordered_map<u32, std::list<CachedSector>::iterator>& index,
+                                 std::list<CachedSector>& entries)
 {
     if (m_sectorCacheCapacity == 0)
     {

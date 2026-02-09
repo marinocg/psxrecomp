@@ -103,8 +103,8 @@ bool IsoParser::exportResources(ResourceType type, const std::string& outputDire
     return success;
 }
 
-std::vector<std::string>
-IsoParser::listFilesByExtension(const std::vector<std::string>& extensions, bool requireXaAudio)
+std::vector<std::string> IsoParser::listFilesByExtension(const std::vector<std::string>& extensions,
+                                                         bool requireXaAudio)
 {
     std::vector<std::string> matches;
     if (!m_isOpen)
