@@ -30,3 +30,9 @@ image formats needed by the recompiler pipeline.
 ## Phase 4: Integration Features
 - [x] Provide convenience helpers to locate PSX-EXE across disc layouts.
 - [x] Expose track metadata (data vs audio) for later runtime integration.
+
+## Phase 5: Advanced Formats & Performance
+- [ ] Support multi-session discs and mixed-mode edge cases.
+- [ ] Add sector caching and streaming to reduce redundant reads.
+- [ ] Improve BIN/CUE parsing for uncommon cue syntax and pregap variants.
+- [ ] Validate XA audio sector metadata for runtime streaming.

@@ -25,3 +25,8 @@ executable loading in the recompiler pipeline.
 - [x] Add unit tests for header parsing edge cases (zero sizes, misaligned fields).
 - [x] Add integration tests with known-good PSX-EXE fixtures.
 - [x] Add logging for rejected executables and mismatched sizes.
+
+## Phase 4: Integration & Compatibility
+- [ ] Map overlays and multiple code segments when present.
+- [ ] Add BIOS/service call metadata extraction where available.
+- [ ] Provide symbol/label export hooks for downstream tooling.

@@ -26,3 +26,8 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Add unit tests for memory map edge cases.
 - [x] Add integration tests for device interactions.
 - [x] Add regression tests for timing-sensitive behavior.
+
+## Phase 5: Accuracy & Compatibility
+- [ ] Expand MMIO coverage for GPU/SPU/CD-ROM registers.
+- [ ] Implement BIOS/syscall layer for common kernel services.
+- [ ] Add save-state serialization and determinism checks.
