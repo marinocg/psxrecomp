@@ -33,6 +33,7 @@ image formats needed by the recompiler pipeline.
 
 ## Phase 5: Advanced Formats & Performance
 - [ ] Support multi-session discs and mixed-mode edge cases.
+- [ ] Add multi-disc set handling (disc swaps, shared metadata, cumulative track tables).
 - [ ] Add sector caching and streaming to reduce redundant reads.
 - [ ] Improve BIN/CUE parsing for uncommon cue syntax and pregap variants.
 - [ ] Validate XA audio sector metadata for runtime streaming.

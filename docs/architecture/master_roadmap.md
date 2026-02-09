@@ -37,6 +37,7 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 - [ ] End-to-end pipeline with artifact emission and diagnostics.
 - [ ] Consistent module naming and output structure.
 - [ ] Deterministic handling of multiple EXE candidates.
+- [ ] Multi-disc awareness (disc set identification and swap metadata).
 - [ ] Structured warnings/errors surfaced to CLI.
 
 **Dependencies**
@@ -90,6 +91,7 @@ Goal: basic compatibility with a subset of non-commercial or permissibly tested 
 - [ ] Expanded instruction coverage (including edge cases).
 - [ ] Runtime correctness for GPU/SPU/CD-ROM interactions.
 - [ ] Instrumentation for tracing and regression testing.
+- [ ] Optional game metadata registry for reproducible builds and compatibility tracking.
 
 **Dependencies**
 - M4 demo milestone
