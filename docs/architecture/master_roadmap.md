@@ -115,6 +115,6 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 - **Testing infrastructure** must scale before M5 to prevent regressions.
 
 ## Tracking recommendations
-- Update `docs/architecture/implementation_status.md` after each milestone change.
+- Update `implementation_status.md` after each milestone change.
 - Add small, focused regression tests whenever new instruction/runtime behavior lands.
 - Keep each workstream roadmap aligned to this milestone ordering.
