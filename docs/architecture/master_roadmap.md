@@ -10,17 +10,17 @@ highlights dependencies between workstreams.
 - Update **Implementation Status** regularly as gaps close.
 
 ## Workstreams (detailed roadmaps)
-- [ ] ISO/BIN parsing ([iso_bin_roadmap.md](docs/architecture/iso_bin_roadmap.md))
-- [ ] PSX-EXE loading ([psx_exe_roadmap.md](docs/architecture/psx_exe_roadmap.md))
-- [ ] Disassembler ([mips_r3000_disassembler_roadmap.md](docs/architecture/mips_r3000_disassembler_roadmap.md))
-- [ ] IR pipeline ([ir_roadmap.md](docs/architecture/ir_roadmap.md))
-- [ ] Recompiler/codegen ([recompiler_roadmap.md](docs/architecture/recompiler_roadmap.md))
-- [ ] Runtime library ([runtime_library_roadmap.md](docs/architecture/runtime_library_roadmap.md))
-- [ ] GPU emulation ([gpu_emulation_roadmap.md](docs/architecture/gpu_emulation_roadmap.md))
-- [ ] SPU emulation ([spu_emulation_roadmap.md](docs/architecture/spu_emulation_roadmap.md))
-- [ ] Demo milestone ([demo_roadmap.md](docs/architecture/demo_roadmap.md))
-- [ ] Full game support ([full_game_support_roadmap.md](docs/architecture/full_game_support_roadmap.md))
-- [ ] Pipeline overview ([pipeline.md](docs/architecture/pipeline.md))
+- [ ] ISO/BIN parsing ([iso_bin_roadmap.md](iso_bin_roadmap.md))
+- [ ] PSX-EXE loading ([psx_exe_roadmap.md](psx_exe_roadmap.md))
+- [ ] Disassembler ([mips_r3000_disassembler_roadmap.md](mips_r3000_disassembler_roadmap.md))
+- [ ] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
+- [ ] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
+- [ ] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
+- [ ] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
+- [ ] SPU emulation ([spu_emulation_roadmap.md](spu_emulation_roadmap.md))
+- [ ] Demo milestone ([demo_roadmap.md](demo_roadmap.md))
+- [ ] Full game support ([full_game_support_roadmap.md](full_game_support_roadmap.md))
+- [ ] Pipeline overview ([pipeline.md](pipeline.md))
 
 ## Milestones
 

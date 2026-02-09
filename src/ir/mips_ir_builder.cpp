@@ -48,13 +48,46 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
 
     const auto registerValue = [](Register reg) { return Value::makeRegister(reg); };
 
-    for (const auto& instruction : instructions)
+    for (size_t index = 0; index < instructions.size(); ++index)
     {
+        if (index > 0 && instructions[index].isInDelaySlot &&
+            instructions[index - 1].hasDelaySlot())
+        {
+            continue;
+        }
+
+        const auto& instruction = instructions[index];
         const auto address = instruction.address;
         auto emit = [&](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs)
         {
             result.instructions.push_back(
                 builder.makeInstruction(opcode, std::move(inputs), std::move(outputs), address));
+        };
+
+        auto delaySlotIsNop = [&]() -> bool
+        {
+            if (!instruction.hasDelaySlot())
+            {
+                return true;
+            }
+            if (index + 1 >= instructions.size())
+            {
+                addError(result.errors, instruction, "Missing delay-slot instruction");
+                return false;
+            }
+            const auto& delaySlot = instructions[index + 1];
+            if (!delaySlot.isInDelaySlot || delaySlot.delaySlotOwner != instruction.address)
+            {
+                addError(result.errors, instruction, "Delay-slot metadata mismatch");
+                return false;
+            }
+            if (!isMipsNop(delaySlot))
+            {
+                addError(result.errors, instruction,
+                         "Delay-slot semantics not modeled; only nop delay slots are supported");
+                return false;
+            }
+            return true;
         };
 
         if (isMipsNop(instruction))
@@ -140,6 +173,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::BEQ:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             Value condTemp = builder.createTemporary();
             emit(Opcode::COMPARE_EQ, {registerValue(instruction.rs), registerValue(instruction.rt)},
                  {condTemp});
@@ -156,6 +194,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::BNE:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             Value condTemp = builder.createTemporary();
             emit(Opcode::COMPARE_NE, {registerValue(instruction.rs), registerValue(instruction.rt)},
                  {condTemp});
@@ -172,6 +215,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::BLEZ:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             Value condTemp = builder.createTemporary();
             emit(Opcode::COMPARE_LE, {registerValue(instruction.rs), Value::makeImmediate(0)},
                  {condTemp});
@@ -188,6 +236,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::BGTZ:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             Value condTemp = builder.createTemporary();
             emit(Opcode::COMPARE_GT, {registerValue(instruction.rs), Value::makeImmediate(0)},
                  {condTemp});
@@ -204,6 +257,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::BLTZ:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             Value condTemp = builder.createTemporary();
             emit(Opcode::COMPARE_LT, {registerValue(instruction.rs), Value::makeImmediate(0)},
                  {condTemp});
@@ -220,6 +278,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::BGEZ:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             Value condTemp = builder.createTemporary();
             emit(Opcode::COMPARE_GE, {registerValue(instruction.rs), Value::makeImmediate(0)},
                  {condTemp});
@@ -236,6 +299,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::J:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             auto target = instruction.getJumpTarget();
             if (target.has_value())
             {
@@ -249,6 +317,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
         }
         case disasm::Opcode::JAL:
         {
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             auto target = instruction.getJumpTarget();
             if (target.has_value())
             {
@@ -261,6 +334,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
             break;
         }
         case disasm::Opcode::JR:
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             if (instruction.isReturn())
             {
                 emit(Opcode::RETURN, {}, {});
@@ -272,6 +350,11 @@ MipsIrBuildResult buildIrFromMips(const std::vector<disasm::Instruction>& instru
             }
             break;
         case disasm::Opcode::JALR:
+            if (!delaySlotIsNop())
+            {
+                emit(Opcode::NOP, {}, {});
+                break;
+            }
             addWarning(result.warnings, instruction, "Indirect JALR unsupported");
             emit(Opcode::CALL, {registerValue(instruction.rs)}, {});
             break;

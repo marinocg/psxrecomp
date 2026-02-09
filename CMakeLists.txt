@@ -12,6 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Build options
 option(BUILD_TESTS "Build unit tests" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
@@ -97,17 +98,18 @@ if(CLANG_FORMAT_EXE)
     )
 endif()
 
-# Main executable (commented out until we have source files)
-# add_executable(psxrecomp
-#     src/main.cpp
-#     ${ISO_SOURCES}
-#     ${DISASM_SOURCES}
-#     ${IR_SOURCES}
-#     ${RECOMPILER_SOURCES}
-#     ${RUNTIME_SOURCES}
-# )
+if(BUILD_CLI)
+    add_executable(psxrecomp
+        src/main.cpp
+        ${ISO_SOURCES}
+        ${DISASM_SOURCES}
+        ${IR_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${RUNTIME_SOURCES}
+    )
 
-# target_include_directories(psxrecomp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_include_directories(psxrecomp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+endif()
 
 # Testing
 if(BUILD_TESTS)

@@ -46,19 +46,19 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.openBlock("namespace recompiler");
     emitter.openBlock("struct RecompilerContext");
     emitter.writeLine("runtime::PsxSystem& system;");
-    emitter.writeLine("std::array<s32, Registers::NUM_REGISTERS> regs{};");
+    emitter.writeLine("std::array<u32, Registers::NUM_REGISTERS> regs{};");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.openBlock("namespace");
-    emitter.writeLine("inline s32 readMemory32(runtime::PsxSystem& system, Address address)");
+    emitter.writeLine("inline u32 readMemory32(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
-    emitter.writeLine("return system.read<s32>(address);");
+    emitter.writeLine("return system.read<u32>(address);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
-        "inline void writeMemory32(runtime::PsxSystem& system, Address address, s32 value)");
+        "inline void writeMemory32(runtime::PsxSystem& system, Address address, u32 value)");
     emitter.openBlock("");
-    emitter.writeLine("system.write<s32>(address, value);");
+    emitter.writeLine("system.write<u32>(address, value);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void callIntrinsic(runtime::PsxSystem& system, Address address)");

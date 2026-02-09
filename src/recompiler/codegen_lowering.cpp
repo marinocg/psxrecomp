@@ -201,7 +201,8 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         std::string lhs = valueToExpr(instruction.outputs.front(), context);
         std::string rhsA = valueToExpr(instruction.inputs[0], context);
         std::string rhsB = valueToExpr(instruction.inputs[1], context);
-        emitter.writeLine(lhs + " = (" + rhsA + " " + op + " " + rhsB + ");");
+        emitter.writeLine(lhs + " = (static_cast<s32>(" + rhsA + ") " + op + " static_cast<s32>(" +
+                          rhsB + "));");
     };
 
     switch (instruction.opcode)
@@ -339,7 +340,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         for (u32 temporaryId : temporaries)
         {
             context.temporaries[temporaryId] = "temp" + std::to_string(temporaryId);
-            emitter.writeLine("s32 " + context.temporaries[temporaryId] + " = 0;");
+            emitter.writeLine("u32 " + context.temporaries[temporaryId] + " = 0;");
         }
 
         emitter.writeBlank();
