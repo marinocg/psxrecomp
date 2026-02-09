@@ -47,8 +47,7 @@ struct CodeDataSegmentation
     std::vector<AddressRange> dataRanges;
 };
 
-std::vector<FunctionBoundary>
-findFunctionBoundaries(const std::vector<Instruction>& instructions);
+std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instruction>& instructions);
 
 std::vector<IndirectBranchTarget>
 findIndirectBranchTargets(const std::vector<Instruction>& instructions);

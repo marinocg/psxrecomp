@@ -17,8 +17,7 @@ namespace
 constexpr Register kReturnAddress = detail::kReturnAddress;
 } // namespace
 
-std::vector<FunctionBoundary>
-findFunctionBoundaries(const std::vector<Instruction>& instructions)
+std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instruction>& instructions)
 {
     std::vector<FunctionBoundary> boundaries;
     if (instructions.empty())
@@ -59,10 +58,10 @@ findFunctionBoundaries(const std::vector<Instruction>& instructions)
         }
 
         const size_t startInstructionIndex = it->second;
-        const size_t limitIndex = (startIndex + 1 < sortedStarts.size() &&
-                                   indexMap.count(sortedStarts[startIndex + 1]))
-                                      ? indexMap[sortedStarts[startIndex + 1]]
-                                      : instructions.size();
+        const size_t limitIndex =
+            (startIndex + 1 < sortedStarts.size() && indexMap.count(sortedStarts[startIndex + 1]))
+                ? indexMap[sortedStarts[startIndex + 1]]
+                : instructions.size();
 
         Address end = instructions[limitIndex - 1].address;
         bool hasEpilogue = false;
@@ -82,9 +81,9 @@ findFunctionBoundaries(const std::vector<Instruction>& instructions)
             }
         }
 
-        boundaries.push_back(
-            {start, end, detail::hasProloguePattern(instructions, startInstructionIndex),
-             hasEpilogue});
+        boundaries.push_back({start, end,
+                              detail::hasProloguePattern(instructions, startInstructionIndex),
+                              hasEpilogue});
     }
 
     return boundaries;
@@ -107,7 +106,8 @@ findIndirectBranchTargets(const std::vector<Instruction>& instructions)
             continue;
         }
 
-        targets.push_back({instruction.address, instruction.rs, instruction.opcode == Opcode::JALR});
+        targets.push_back(
+            {instruction.address, instruction.rs, instruction.opcode == Opcode::JALR});
     }
 
     return targets;

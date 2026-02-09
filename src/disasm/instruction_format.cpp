@@ -33,8 +33,7 @@ Instruction::toString(const std::function<std::optional<std::string>(Address)>& 
     const auto formatLoadStore = [&](const char* mnemonic)
     {
         return std::string(mnemonic) + " " + reg(rt) + ", " +
-               detail::formatImmediateSigned(immediate) +
-               "(" + reg(rs) + ")";
+               detail::formatImmediateSigned(immediate) + "(" + reg(rs) + ")";
     };
     const auto formatLoadStoreCop2 = [&](const char* mnemonic)
     {
@@ -173,8 +172,7 @@ Instruction::toString(const std::function<std::optional<std::string>(Address)>& 
     case Opcode::ADDI:
         if (rs == Registers::ZERO)
         {
-            return std::string("li ") + reg(rt) + ", " +
-                   detail::formatImmediateSigned(immediate);
+            return std::string("li ") + reg(rt) + ", " + detail::formatImmediateSigned(immediate);
         }
         return formatRtRsImmSigned("addi");
     case Opcode::ADDIU:
@@ -184,8 +182,7 @@ Instruction::toString(const std::function<std::optional<std::string>(Address)>& 
         }
         if (rs == Registers::ZERO)
         {
-            return std::string("li ") + reg(rt) + ", " +
-                   detail::formatImmediateSigned(immediate);
+            return std::string("li ") + reg(rt) + ", " + detail::formatImmediateSigned(immediate);
         }
         return formatRtRsImmSigned("addiu");
     case Opcode::ANDI:
@@ -288,23 +285,19 @@ Instruction::toString(const std::function<std::optional<std::string>(Address)>& 
         return (opcode == Opcode::J) ? "j " + targetString : "jal " + targetString;
     }
     case Opcode::TGEI:
-        return std::string("tgei ") + reg(rs) + ", " +
-               detail::formatImmediateSigned(immediate);
+        return std::string("tgei ") + reg(rs) + ", " + detail::formatImmediateSigned(immediate);
     case Opcode::TGEIU:
         return std::string("tgeiu ") + reg(rs) + ", " +
                detail::formatImmediateUnsigned(static_cast<u16>(immediate));
     case Opcode::TLTI:
-        return std::string("tlti ") + reg(rs) + ", " +
-               detail::formatImmediateSigned(immediate);
+        return std::string("tlti ") + reg(rs) + ", " + detail::formatImmediateSigned(immediate);
     case Opcode::TLTIU:
         return std::string("tltiu ") + reg(rs) + ", " +
                detail::formatImmediateUnsigned(static_cast<u16>(immediate));
     case Opcode::TEQI:
-        return std::string("teqi ") + reg(rs) + ", " +
-               detail::formatImmediateSigned(immediate);
+        return std::string("teqi ") + reg(rs) + ", " + detail::formatImmediateSigned(immediate);
     case Opcode::TNEI:
-        return std::string("tnei ") + reg(rs) + ", " +
-               detail::formatImmediateSigned(immediate);
+        return std::string("tnei ") + reg(rs) + ", " + detail::formatImmediateSigned(immediate);
     case Opcode::CACHE:
         return std::string("cache ") + detail::formatImmediateUnsigned(static_cast<u16>(rt)) +
                ", " + detail::formatImmediateSigned(immediate) + "(" + reg(rs) + ")";

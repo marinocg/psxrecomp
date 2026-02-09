@@ -92,8 +92,7 @@ buildInstructionIndex(const std::vector<Instruction>& instructions)
 }
 
 std::optional<Address> resolveImmediateAddress(const std::vector<Instruction>& instructions,
-                                               size_t index,
-                                               Register reg)
+                                               size_t index, Register reg)
 {
     std::optional<u32> high;
     std::optional<s32> low;

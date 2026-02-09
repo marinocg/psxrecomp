@@ -24,8 +24,7 @@ std::unordered_map<Address, size_t>
 buildInstructionIndex(const std::vector<Instruction>& instructions);
 
 std::optional<Address> resolveImmediateAddress(const std::vector<Instruction>& instructions,
-                                               size_t index,
-                                               Register reg);
+                                               size_t index, Register reg);
 
 std::vector<AddressRange> buildRanges(const std::vector<Instruction>& instructions,
                                       const std::unordered_set<Address>& addresses);
