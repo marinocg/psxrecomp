@@ -38,6 +38,7 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 - [ ] Consistent module naming and output structure.
 - [ ] Deterministic handling of multiple EXE candidates.
 - [ ] Multi-disc awareness (disc set identification and swap metadata).
+- [ ] Wire multi-disc sets into runtime disc swap workflows.
 - [ ] Structured warnings/errors surfaced to CLI.
 
 **Dependencies (complete these roadmaps)**
