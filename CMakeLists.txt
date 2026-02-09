@@ -12,6 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Build options
 option(BUILD_TESTS "Build unit tests" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
+option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
@@ -58,13 +59,16 @@ set(DISASM_SOURCES
 set(IR_SOURCES
     src/ir/ir.cpp
     src/ir/control_flow.cpp
+    src/ir/mips_ir_builder.cpp
     src/ir/ssa.cpp
     src/ir/verify.cpp
 )
 
 set(RECOMPILER_SOURCES
     src/recompiler/codegen.cpp
+    src/recompiler/codegen_lowering.cpp
     src/recompiler/cpp_emitter.cpp
+    src/recompiler/pipeline.cpp
 )
 
 set(RUNTIME_SOURCES
@@ -94,17 +98,18 @@ if(CLANG_FORMAT_EXE)
     )
 endif()
 
-# Main executable (commented out until we have source files)
-# add_executable(psxrecomp
-#     src/main.cpp
-#     ${ISO_SOURCES}
-#     ${DISASM_SOURCES}
-#     ${IR_SOURCES}
-#     ${RECOMPILER_SOURCES}
-#     ${RUNTIME_SOURCES}
-# )
+if(BUILD_CLI)
+    add_executable(psxrecomp
+        src/main.cpp
+        ${ISO_SOURCES}
+        ${DISASM_SOURCES}
+        ${IR_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${RUNTIME_SOURCES}
+    )
 
-# target_include_directories(psxrecomp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_include_directories(psxrecomp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+endif()
 
 # Testing
 if(BUILD_TESTS)
@@ -133,6 +138,7 @@ if(BUILD_TESTS)
     add_executable(ir_test
         tests/unit/ir_test.cpp
         ${IR_SOURCES}
+        ${DISASM_SOURCES}
     )
     target_include_directories(ir_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME ir_test COMMAND ir_test)
@@ -140,6 +146,7 @@ if(BUILD_TESTS)
     add_executable(ir_passes_test
         tests/unit/ir_passes_test.cpp
         ${IR_SOURCES}
+        ${DISASM_SOURCES}
     )
     target_include_directories(ir_passes_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME ir_passes_test COMMAND ir_passes_test)
@@ -147,7 +154,9 @@ if(BUILD_TESTS)
     add_executable(recompiler_codegen_test
         tests/unit/recompiler_codegen_test.cpp
         ${IR_SOURCES}
+        ${DISASM_SOURCES}
         ${RECOMPILER_SOURCES}
+        ${ISO_SOURCES}
     )
     target_include_directories(recompiler_codegen_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     target_compile_definitions(
@@ -157,12 +166,31 @@ if(BUILD_TESTS)
     )
     add_test(NAME recompiler_codegen_test COMMAND recompiler_codegen_test)
 
+    add_executable(mips_ir_builder_test
+        tests/unit/mips_ir_builder_test.cpp
+        ${IR_SOURCES}
+        ${DISASM_SOURCES}
+    )
+    target_include_directories(mips_ir_builder_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME mips_ir_builder_test COMMAND mips_ir_builder_test)
+
     add_executable(runtime_test
         tests/unit/runtime_test.cpp
         ${RUNTIME_SOURCES}
     )
     target_include_directories(runtime_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME runtime_test COMMAND runtime_test)
+
+    add_executable(pipeline_test
+        tests/unit/pipeline_test.cpp
+        ${ISO_SOURCES}
+        ${DISASM_SOURCES}
+        ${IR_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${RUNTIME_SOURCES}
+    )
+    target_include_directories(pipeline_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME pipeline_test COMMAND pipeline_test)
 endif()
 
 # Examples

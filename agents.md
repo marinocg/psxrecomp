@@ -58,6 +58,10 @@ examples/
 - Test file naming: `*_test.cpp`
 - Aim for >80% code coverage for critical paths
 - Include edge cases and error conditions
+- Prefer Ninja builds for faster iteration when available:
+  - Configure: `cmake -S . -B build -G Ninja -DBUILD_TESTS=ON -DBUILD_CLI=ON`
+  - Build: `cmake --build build`
+  - Test: `ctest --test-dir build --output-on-failure`
 
 ### Documentation
 
@@ -65,6 +69,8 @@ examples/
 - Document complex algorithms inline
 - Update README.md when adding major features
 - Keep docs/ folder updated with architectural decisions
+- Review and update roadmap/status docs (master roadmap, gaps, implementation status) when adding
+  significant features or milestones.
 
 ### Git Workflow
 

@@ -112,34 +112,17 @@ For agent collaboration, see [agents.md](agents.md).
 
 ## Roadmap
 
-- [x] Initial project structure
-- [x] ISO/BIN parser implementation
-- [x] PSX-EXE loader
-- [x] Basic MIPS R3000 disassembler
-- [x] IR design and implementation
-- [x] Simple function recompiler
-- [x] Runtime library basics
-- [ ] First recompiled demo
-- [ ] GPU emulation layer
-- [ ] SPU emulation layer
-- [ ] Full game support
+See the consolidated roadmap and current status reports:
+- [Master Roadmap](docs/architecture/master_roadmap.md)
+- [Implementation Status](docs/architecture/implementation_status.md)
+- [Gap Analysis](docs/architecture/gaps_report.md)
 
 ## Resources
 
 - [PSX Specifications](http://problemkaputt.de/psx-spx.htm)
 - [MIPS R3000 Reference](https://www.linux-mips.org/wiki/R3000)
 - [PSX ISO Format](http://wiki.osdev.org/ISO_9660)
-- [IR Implementation Roadmap](docs/architecture/ir_roadmap.md)
-- [ISO/BIN Parser Roadmap](docs/architecture/iso_bin_roadmap.md)
-- [PSX-EXE Loader Roadmap](docs/architecture/psx_exe_roadmap.md)
-- [MIPS R3000 Disassembler Roadmap](docs/architecture/mips_r3000_disassembler_roadmap.md)
-- [Recompiler Roadmap](docs/architecture/recompiler_roadmap.md)
-- [Runtime Library Roadmap](docs/architecture/runtime_library_roadmap.md)
-- [First Recompiled Demo Roadmap](docs/architecture/demo_roadmap.md)
-- [GPU Emulation Roadmap](docs/architecture/gpu_emulation_roadmap.md)
-- [SPU Emulation Roadmap](docs/architecture/spu_emulation_roadmap.md)
-- [GPU/SPU Architecture Proposal](docs/architecture/gpu_spu_architecture.md)
-- [Full Game Support Roadmap](docs/architecture/full_game_support_roadmap.md)
+- [Architecture Overview](docs/architecture/pipeline.md)
 
 ## License
 
