@@ -7,6 +7,111 @@
 // Placeholder for command-line interface
 // This will be implemented as the project develops
 
+std::string escapeJson(const std::string& value)
+{
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (char ch : value)
+    {
+        switch (ch)
+        {
+        case '\"':
+            escaped += "\\\"";
+            break;
+        case '\\':
+            escaped += "\\\\";
+            break;
+        case '\n':
+            escaped += "\\n";
+            break;
+        case '\r':
+            escaped += "\\r";
+            break;
+        case '\t':
+            escaped += "\\t";
+            break;
+        default:
+            escaped += ch;
+            break;
+        }
+    }
+    return escaped;
+}
+
+void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
+                     const std::string& inputFile, const std::string& outputDir)
+{
+    std::cout << "{\n";
+    std::cout << "  \"success\": " << (result.success ? "true" : "false") << ",\n";
+    std::cout << "  \"input\": \"" << escapeJson(inputFile) << "\",\n";
+    std::cout << "  \"outputDir\": \"" << escapeJson(outputDir) << "\",\n";
+    if (!result.errorMessage.empty())
+    {
+        std::cout << "  \"error\": \"" << escapeJson(result.errorMessage) << "\",\n";
+    }
+    std::cout << "  \"selection\": {\n";
+    std::cout << "    \"rule\": \"" << escapeJson(result.selectionInfo.rule) << "\",\n";
+    std::cout << "    \"reason\": \"" << escapeJson(result.selectionInfo.reason) << "\",\n";
+    std::cout << "    \"selectedPath\": \"" << escapeJson(result.selectionInfo.selectedPath)
+              << "\"\n";
+    std::cout << "  },\n";
+    std::cout << "  \"artifacts\": {\n";
+    std::cout << "    \"module\": \"" << escapeJson(result.artifacts.moduleName) << "\",\n";
+    std::cout << "    \"header\": \"" << escapeJson(result.artifacts.headerPath) << "\",\n";
+    std::cout << "    \"source\": \"" << escapeJson(result.artifacts.sourcePath) << "\",\n";
+    std::cout << "    \"build\": \"" << escapeJson(result.artifacts.buildPath) << "\",\n";
+    std::cout << "    \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\"\n";
+    std::cout << "  },\n";
+    std::cout << "  \"diagnostics\": [\n";
+    for (size_t index = 0; index < result.diagnostics.size(); ++index)
+    {
+        const auto& diag = result.diagnostics[index];
+        std::cout << "    {\n";
+        std::cout << "      \"code\": \"" << escapeJson(diag.code) << "\",\n";
+        std::cout << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
+        std::cout << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
+        std::cout << "      \"context\": {\n";
+        std::cout << "        \"file\": \"" << escapeJson(diag.context.file) << "\",\n";
+        std::cout << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
+        if (diag.context.offset.has_value())
+        {
+            std::cout << ",\n        \"offset\": " << diag.context.offset.value() << "\n";
+        }
+        else
+        {
+            std::cout << "\n";
+        }
+        std::cout << "      }\n";
+        std::cout << "    }";
+        if (index + 1 < result.diagnostics.size())
+        {
+            std::cout << ",";
+        }
+        std::cout << "\n";
+    }
+    std::cout << "  ],\n";
+    std::cout << "  \"exeCandidates\": [\n";
+    for (size_t index = 0; index < result.exeCandidates.size(); ++index)
+    {
+        const auto& candidate = result.exeCandidates[index];
+        std::cout << "    {\n";
+        std::cout << "      \"path\": \"" << escapeJson(candidate.path) << "\",\n";
+        std::cout << "      \"loadAddress\": " << candidate.loadAddress << ",\n";
+        std::cout << "      \"loadSize\": " << candidate.loadSize << ",\n";
+        std::cout << "      \"entryPoint\": " << candidate.entryPoint << ",\n";
+        std::cout << "      \"hash\": \"" << escapeJson(candidate.hash) << "\",\n";
+        std::cout << "      \"valid\": " << (candidate.valid ? "true" : "false") << "\n";
+        std::cout << "    }";
+        if (index + 1 < result.exeCandidates.size())
+        {
+            std::cout << ",";
+        }
+        std::cout << "\n";
+    }
+    std::cout << "  ]\n";
+    std::cout << "}\n";
+}
+
 void printUsage(const char* programName)
 {
     std::cout << "PSXRecomp - PlayStation Static Recompiler\n";
@@ -17,6 +122,7 @@ void printUsage(const char* programName)
     std::cout << "  -O, --optimize         Enable optimizations\n";
     std::cout << "  -s, --symbols          Preserve debug symbols\n";
     std::cout << "  -v, --verbose          Verbose output\n";
+    std::cout << "  --json                 Emit structured JSON output\n";
     std::cout << "  -h, --help             Show this help message\n\n";
     std::cout << "Example:\n";
     std::cout << "  " << programName << " -o output_dir game.bin\n";
@@ -35,6 +141,7 @@ int main(int argc, char* argv[])
     bool optimize = false;
     bool preserveSymbols = false;
     bool verbose = false;
+    bool jsonOutput = false;
 
     // Parse command-line arguments
     for (int i = 1; i < argc; ++i)
@@ -70,6 +177,10 @@ int main(int argc, char* argv[])
         {
             verbose = true;
         }
+        else if (arg == "--json")
+        {
+            jsonOutput = true;
+        }
         else if (arg[0] != '-')
         {
             inputFile = arg;
@@ -84,18 +195,31 @@ int main(int argc, char* argv[])
 
     if (inputFile.empty())
     {
-        std::cerr << "Error: No input file specified\n";
-        printUsage(argv[0]);
+        if (jsonOutput)
+        {
+            psxrecomp::recompiler::PipelineResult result;
+            result.success = false;
+            result.errorMessage = "No input file specified.";
+            printJsonOutput(result, inputFile, outputDir);
+        }
+        else
+        {
+            std::cerr << "Error: No input file specified\n";
+            printUsage(argv[0]);
+        }
         return 1;
     }
 
-    std::cout << "PSXRecomp - Static Recompiler for PlayStation\n";
-    std::cout << "=============================================\n\n";
-    std::cout << "Input file:    " << inputFile << "\n";
-    std::cout << "Output dir:    " << outputDir << "\n";
-    std::cout << "Optimize:      " << (optimize ? "Yes" : "No") << "\n";
-    std::cout << "Symbols:       " << (preserveSymbols ? "Preserve" : "Strip") << "\n";
-    std::cout << "Verbose:       " << (verbose ? "Yes" : "No") << "\n\n";
+    if (!jsonOutput)
+    {
+        std::cout << "PSXRecomp - Static Recompiler for PlayStation\n";
+        std::cout << "=============================================\n\n";
+        std::cout << "Input file:    " << inputFile << "\n";
+        std::cout << "Output dir:    " << outputDir << "\n";
+        std::cout << "Optimize:      " << (optimize ? "Yes" : "No") << "\n";
+        std::cout << "Symbols:       " << (preserveSymbols ? "Preserve" : "Strip") << "\n";
+        std::cout << "Verbose:       " << (verbose ? "Yes" : "No") << "\n\n";
+    }
 
     psxrecomp::recompiler::PipelineOptions options;
     options.outputDirectory = outputDir;
@@ -107,11 +231,18 @@ int main(int argc, char* argv[])
     auto result = pipeline.run(inputFile);
     if (!result.success)
     {
-        std::cerr << "Recompilation failed:\n" << result.errorMessage << "\n";
+        if (jsonOutput)
+        {
+            printJsonOutput(result, inputFile, outputDir);
+        }
+        else
+        {
+            std::cerr << "Recompilation failed:\n" << result.errorMessage << "\n";
+        }
         return 1;
     }
 
-    if (!result.warnings.empty())
+    if (!jsonOutput && !result.warnings.empty())
     {
         std::cout << "Warnings:\n";
         for (const auto& warning : result.warnings)
@@ -121,11 +252,18 @@ int main(int argc, char* argv[])
         std::cout << "\n";
     }
 
+    if (jsonOutput)
+    {
+        printJsonOutput(result, inputFile, outputDir);
+        return 0;
+    }
+
     std::cout << "Recompilation complete.\n";
     std::cout << "Module:   " << result.artifacts.moduleName << "\n";
     std::cout << "Header:   " << result.artifacts.headerPath << "\n";
     std::cout << "Source:   " << result.artifacts.sourcePath << "\n";
     std::cout << "CMake:    " << result.artifacts.buildPath << "\n";
+    std::cout << "Manifest: " << result.artifacts.manifestPath << "\n";
 
     return 0;
 }

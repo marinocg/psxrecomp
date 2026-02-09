@@ -75,6 +75,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen.cpp
     src/recompiler/codegen_lowering.cpp
     src/recompiler/cpp_emitter.cpp
+    src/recompiler/pipeline_helpers.cpp
     src/recompiler/pipeline.cpp
 )
 
@@ -205,6 +206,17 @@ if(BUILD_TESTS)
     )
     target_include_directories(pipeline_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME pipeline_test COMMAND pipeline_test)
+
+    add_executable(pipeline_candidate_test
+        tests/unit/pipeline_candidate_test.cpp
+        ${ISO_SOURCES}
+        ${DISASM_SOURCES}
+        ${IR_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${RUNTIME_SOURCES}
+    )
+    target_include_directories(pipeline_candidate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME pipeline_candidate_test COMMAND pipeline_candidate_test)
 endif()
 
 # Examples

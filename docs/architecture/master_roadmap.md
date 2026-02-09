@@ -30,16 +30,16 @@ highlights dependencies between workstreams.
 - [x] Initial IR, CFG, SSA, verification passes implemented.
 - [x] Basic codegen can emit C++ stubs.
 
-### M1: Deterministic Pipeline (In progress)
+### M1: Deterministic Pipeline (Complete)
 Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual steps.
 
 **Deliverables**
-- [ ] End-to-end pipeline with artifact emission and diagnostics.
-- [ ] Consistent module naming and output structure.
-- [ ] Deterministic handling of multiple EXE candidates.
-- [ ] Multi-disc awareness (disc set identification and swap metadata).
-- [ ] Wire multi-disc sets into runtime disc swap workflows.
-- [ ] Structured warnings/errors surfaced to CLI.
+- [x] End-to-end pipeline with artifact emission and diagnostics.
+- [x] Consistent module naming and output structure.
+- [x] Deterministic handling of multiple EXE candidates.
+- [x] Multi-disc awareness (disc set identification and swap metadata).
+- [x] Wire multi-disc sets into runtime disc swap workflows.
+- [x] Structured warnings/errors surfaced to CLI.
 
 **Dependencies (complete these roadmaps)**
 - [x] ISO/BIN parser improvements (`iso_bin_roadmap.md`)

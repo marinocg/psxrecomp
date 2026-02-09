@@ -10,6 +10,40 @@ namespace psxrecomp
 {
 namespace recompiler
 {
+namespace
+{
+std::string escapeStringLiteral(const std::string& value)
+{
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (char ch : value)
+    {
+        switch (ch)
+        {
+        case '\\':
+            escaped += "\\\\";
+            break;
+        case '\"':
+            escaped += "\\\"";
+            break;
+        case '\n':
+            escaped += "\\n";
+            break;
+        case '\r':
+            escaped += "\\r";
+            break;
+        case '\t':
+            escaped += "\\t";
+            break;
+        default:
+            escaped += ch;
+            break;
+        }
+    }
+    return escaped;
+}
+} // namespace
+
 CodeGenerator::CodeGenerator(const CodeGenOptions& options) : m_options(options) {}
 std::string CodeGenerator::generateHeader(const ir::Program& program, const std::string& moduleName)
 {
@@ -24,6 +58,7 @@ std::string CodeGenerator::generateHeader(const ir::Program& program, const std:
     emitter.openBlock("namespace recompiler");
     emitter.writeLine("struct RecompilerContext;");
     emitter.openBlock("struct RecompiledModule");
+    emitter.writeLine("static void configure(runtime::PsxSystem& system);");
     emitter.writeLine("static void run(runtime::PsxSystem& system);");
     emitter.closeBlock(";");
     emitter.writeBlank();
@@ -32,7 +67,8 @@ std::string CodeGenerator::generateHeader(const ir::Program& program, const std:
     emitter.closeBlock();
     return emitter.str();
 }
-std::string CodeGenerator::generateSource(const ir::Program& program, const std::string& moduleName)
+std::string CodeGenerator::generateSource(const ir::Program& program, const std::string& moduleName,
+                                          const ModuleMetadata& metadata)
 {
     CppEmitter emitter;
     emitter.writeLine("#include \"" + moduleName + ".h\"");
@@ -41,6 +77,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <cstdint>");
     emitter.writeLine("#include <cstring>");
+    emitter.writeLine("#include <string>");
+    emitter.writeLine("#include <vector>");
     emitter.writeBlank();
     emitter.openBlock("namespace psxrecomp");
     emitter.openBlock("namespace recompiler");
@@ -85,6 +123,36 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeBlank();
 
     emitter.writeLines(generateGlobals(program));
+    emitter.writeBlank();
+
+    emitter.writeLine("void RecompiledModule::configure(runtime::PsxSystem& system)");
+    emitter.openBlock("");
+    emitter.writeLine("runtime::PsxSystem::DiscSwapInfo info;");
+    emitter.writeLine("info.setName = \"" + escapeStringLiteral(metadata.discSetName) + "\";");
+    emitter.writeLine("info.activeDiscIndex = " + std::to_string(metadata.activeDiscIndex) + ";");
+    if (metadata.discs.empty())
+    {
+        emitter.writeLine("info.discs = {};");
+    }
+    else
+    {
+        emitter.writeLine("info.discs = {");
+        for (size_t index = 0; index < metadata.discs.size(); ++index)
+        {
+            const auto& disc = metadata.discs[index];
+            std::ostringstream line;
+            line << "    {" << disc.index << ", \"" << escapeStringLiteral(disc.label) << "\", \""
+                 << escapeStringLiteral(disc.path) << "\"}";
+            if (index + 1 < metadata.discs.size())
+            {
+                line << ",";
+            }
+            emitter.writeLine(line.str());
+        }
+        emitter.writeLine("};");
+    }
+    emitter.writeLine("system.setDiscSwapInfo(info);");
+    emitter.closeBlock();
     emitter.writeBlank();
 
     emitter.writeLine("void RecompiledModule::run(runtime::PsxSystem& system)");

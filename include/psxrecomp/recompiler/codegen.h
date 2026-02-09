@@ -22,6 +22,19 @@ struct CodeGenOptions
     int optimizationLevel = 2;
 };
 
+struct ModuleMetadata
+{
+    struct DiscEntry
+    {
+        u32 index = 0;
+        std::string label;
+        std::string path;
+    };
+    std::string discSetName;
+    u32 activeDiscIndex = 0;
+    std::vector<DiscEntry> discs;
+};
+
 /**
  * @brief Generates C++ code from intermediate representation
  */
@@ -46,9 +59,11 @@ class CodeGenerator
      * @brief Generate C++ source file
      * @param program IR program to lower and emit definitions for
      * @param moduleName Name of the module
+     * @param metadata Runtime metadata to embed
      * @return Generated source content
      */
-    std::string generateSource(const ir::Program& program, const std::string& moduleName);
+    std::string generateSource(const ir::Program& program, const std::string& moduleName,
+                               const ModuleMetadata& metadata = ModuleMetadata{});
 
     /**
      * @brief Generate CMakeLists.txt for recompiled code

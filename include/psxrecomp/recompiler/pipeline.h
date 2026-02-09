@@ -1,6 +1,8 @@
 #pragma once
 
 #include "psxrecomp/ir/ir.h"
+#include "psxrecomp/types.h"
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -8,6 +10,53 @@ namespace psxrecomp
 {
 namespace recompiler
 {
+
+struct PipelineDiagnosticContext
+{
+    std::string file;
+    std::string module;
+    std::optional<u32> offset;
+};
+
+struct PipelineDiagnostic
+{
+    std::string code;
+    std::string severity;
+    std::string message;
+    PipelineDiagnosticContext context;
+};
+
+struct ExeCandidateInfo
+{
+    std::string path;
+    u32 loadAddress = 0;
+    u32 loadSize = 0;
+    u32 entryPoint = 0;
+    std::string hash;
+    bool valid = false;
+    std::vector<PipelineDiagnostic> diagnostics;
+};
+
+struct ExeSelectionInfo
+{
+    std::string rule;
+    std::string reason;
+    std::string selectedPath;
+};
+
+struct DiscMetadata
+{
+    std::string path;
+    std::string volumeLabel;
+    u32 discIndex = 0;
+};
+
+struct DiscSetMetadata
+{
+    std::string setName;
+    u32 activeDiscIndex = 0;
+    std::vector<DiscMetadata> discs;
+};
 
 /**
  * @brief Options for the recompilation pipeline.
@@ -18,6 +67,10 @@ struct PipelineOptions
     bool enableOptimizations = true;
     bool preserveSymbols = false;
     bool verbose = false;
+    std::vector<std::string> discPaths;
+    size_t activeDiscIndex = 0;
+    std::string manifestTimestamp;
+    std::string pipelineVersion = "1.0.0";
 };
 
 /**
@@ -29,6 +82,7 @@ struct PipelineArtifacts
     std::string headerPath;
     std::string sourcePath;
     std::string buildPath;
+    std::string manifestPath;
 };
 
 /**
@@ -39,6 +93,10 @@ struct PipelineResult
     bool success = false;
     PipelineArtifacts artifacts;
     std::vector<std::string> warnings;
+    std::vector<PipelineDiagnostic> diagnostics;
+    std::vector<ExeCandidateInfo> exeCandidates;
+    ExeSelectionInfo selectionInfo;
+    DiscSetMetadata discSet;
     std::string errorMessage;
 };
 

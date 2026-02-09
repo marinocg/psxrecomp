@@ -1,16 +1,18 @@
 #include "psxrecomp/recompiler/pipeline.h"
 
+#include "pipeline_helpers.h"
 #include "psxrecomp/disasm/instruction.h"
 #include "psxrecomp/ir/control_flow.h"
 #include "psxrecomp/ir/mips_ir_builder.h"
+#include "psxrecomp/iso/iso_boot.h"
 #include "psxrecomp/iso/iso_parser.h"
 #include "psxrecomp/iso/psx_exe_loader.h"
 #include "psxrecomp/recompiler/codegen.h"
 
 #include <algorithm>
-#include <cctype>
 #include <filesystem>
-#include <fstream>
+#include <numeric>
+#include <optional>
 #include <sstream>
 
 namespace psxrecomp
@@ -20,95 +22,6 @@ namespace recompiler
 
 namespace
 {
-std::string toLower(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-    return value;
-}
-
-bool isIsoLikePath(const std::filesystem::path& path)
-{
-    const std::string extension = toLower(path.extension().string());
-    return extension == ".iso" || extension == ".bin" || extension == ".cue";
-}
-
-std::string sanitizeModuleName(const std::string& name)
-{
-    std::string result;
-    result.reserve(name.size());
-    for (char ch : name)
-    {
-        if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '_')
-        {
-            result.push_back(ch);
-        }
-        else
-        {
-            result.push_back('_');
-        }
-    }
-    if (result.empty())
-    {
-        result = "psx_module";
-    }
-    if (std::isdigit(static_cast<unsigned char>(result.front())))
-    {
-        result.insert(result.begin(), '_');
-    }
-    return result;
-}
-
-std::string formatDiagnostics(const iso::PsxExeDiagnostics& diagnostics)
-{
-    std::ostringstream stream;
-    for (const auto& entry : diagnostics.entries)
-    {
-        stream << (entry.severity == iso::PsxExeDiagnosticSeverity::Error ? "error: " : "warning: ")
-               << entry.field << " - " << entry.message << "\n";
-    }
-    return stream.str();
-}
-
-void appendDiagnosticsWarnings(std::vector<std::string>& warnings,
-                               const iso::PsxExeDiagnostics& diagnostics)
-{
-    for (const auto& entry : diagnostics.entries)
-    {
-        std::ostringstream stream;
-        stream << (entry.severity == iso::PsxExeDiagnosticSeverity::Error ? "error: " : "warning: ")
-               << entry.field << " - " << entry.message;
-        warnings.push_back(stream.str());
-    }
-}
-
-bool writeFile(const std::filesystem::path& path, const std::string& contents,
-               std::string& outError)
-{
-    std::ofstream file(path, std::ios::binary);
-    if (!file)
-    {
-        outError = "Failed to open output file: " + path.string();
-        return false;
-    }
-    file.write(contents.data(), static_cast<std::streamsize>(contents.size()));
-    if (!file)
-    {
-        outError = "Failed to write output file: " + path.string();
-        return false;
-    }
-    return true;
-}
-
-Address resolveEntryAddress(const iso::PsxExeImage& image)
-{
-    if (image.entryPoint.pc != 0)
-    {
-        return image.entryPoint.pc;
-    }
-    return image.header.loadAddress;
-}
-
 PipelineResult buildPipelineError(const std::string& message,
                                   const std::vector<std::string>& warnings = {})
 {
@@ -118,7 +31,6 @@ PipelineResult buildPipelineError(const std::string& message,
     result.warnings = warnings;
     return result;
 }
-
 } // namespace
 
 RecompilationPipeline::RecompilationPipeline(PipelineOptions options)
@@ -138,14 +50,27 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         return buildPipelineError("Output directory is not set.");
     }
 
-    const std::filesystem::path inputFsPath = std::filesystem::path(inputPath);
+    const std::vector<std::string> discPaths =
+        m_options.discPaths.empty() ? std::vector<std::string>{inputPath} : m_options.discPaths;
+    const size_t activeDiscIndex =
+        discPaths.empty() ? 0U : std::min(m_options.activeDiscIndex, discPaths.size() - 1U);
+    const std::string activeDiscPath = discPaths.empty() ? inputPath : discPaths[activeDiscIndex];
+    const std::filesystem::path inputFsPath(activeDiscPath);
 
     iso::PsxExeImage exeImage{};
     std::vector<std::string> warnings;
+    std::vector<PipelineDiagnostic> diagnostics;
+    PipelineResult result;
+    result.discSet = detail::buildDiscSetMetadata(discPaths, activeDiscIndex, warnings);
 
-    if (isIsoLikePath(inputFsPath))
+    const std::string selectionRule =
+        "Prefer SYSTEM.CNF BOOT entry when valid; otherwise select sorted candidates by path, "
+        "load address, then size.";
+    result.selectionInfo.rule = selectionRule;
+
+    if (detail::isIsoLikePath(inputFsPath))
     {
-        iso::IsoParser parser(inputPath);
+        iso::IsoParser parser(activeDiscPath);
         if (!parser.open() || !parser.isValid())
         {
             std::string error = "Failed to open ISO image.";
@@ -156,44 +81,153 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             return buildPipelineError(error);
         }
 
-        std::string executablePath = parser.findExecutable();
-        if (executablePath.empty())
+        std::vector<std::string> candidatePaths = parser.listExecutables();
+        auto systemCnf = parser.extractFile("SYSTEM.CNF");
+        const std::string bootPath = iso::detail::parseBootPathFromSystemCnf(systemCnf);
+        if (!bootPath.empty())
         {
-            auto candidates = parser.listExecutables();
-            if (!candidates.empty())
+            candidatePaths.push_back(bootPath);
+        }
+        std::vector<std::string> normalized;
+        std::vector<std::string> uniquePaths;
+        for (const auto& path : candidatePaths)
+        {
+            std::string key = detail::toLower(path);
+            if (std::find(normalized.begin(), normalized.end(), key) == normalized.end())
             {
-                executablePath = candidates.front();
-                warnings.push_back("Using first executable candidate: " + executablePath);
+                normalized.push_back(key);
+                uniquePaths.push_back(path);
             }
         }
-        if (executablePath.empty())
+
+        if (uniquePaths.empty())
         {
             return buildPipelineError("No PSX executable found in ISO image.", warnings);
         }
 
-        std::vector<u8> exeData = parser.extractFile(executablePath);
-        if (exeData.empty())
+        for (const auto& path : uniquePaths)
         {
-            return buildPipelineError("Failed to extract PSX executable from ISO.", warnings);
+            ExeCandidateInfo candidate;
+            candidate.path = path;
+            std::vector<u8> exeData = parser.extractFile(path);
+            if (exeData.empty())
+            {
+                PipelineDiagnostic entry;
+                entry.code = "ExeCandidateExtractFailed";
+                entry.severity = "error";
+                entry.message = "Failed to extract executable data.";
+                entry.context.file = path;
+                diagnostics.push_back(entry);
+                candidate.diagnostics.push_back(std::move(entry));
+                result.exeCandidates.push_back(std::move(candidate));
+                continue;
+            }
+
+            iso::PsxExeDiagnostics exeDiagnostics;
+            iso::PsxExeImage image{};
+            if (!iso::PsxExeLoader::loadImage(exeData, image, &exeDiagnostics))
+            {
+                detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, path);
+                for (const auto& entry : exeDiagnostics.entries)
+                {
+                    candidate.diagnostics.push_back(detail::toPipelineDiagnostic(entry, path));
+                }
+                result.exeCandidates.push_back(std::move(candidate));
+                continue;
+            }
+
+            candidate.valid = true;
+            candidate.loadAddress = image.header.loadAddress;
+            candidate.loadSize = image.header.loadSize;
+            candidate.entryPoint = image.entryPoint.pc;
+            candidate.hash = detail::formatHex(detail::fnv1a64(image.programData), 16);
+            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, path);
+            for (const auto& entry : exeDiagnostics.entries)
+            {
+                candidate.diagnostics.push_back(detail::toPipelineDiagnostic(entry, path));
+            }
+            result.exeCandidates.push_back(candidate);
         }
 
-        iso::PsxExeDiagnostics diagnostics;
-        if (!iso::PsxExeLoader::loadImage(exeData, exeImage, &diagnostics))
+        std::vector<size_t> sortedIndices(result.exeCandidates.size());
+        std::iota(sortedIndices.begin(), sortedIndices.end(), 0);
+        std::sort(sortedIndices.begin(), sortedIndices.end(),
+                  [&](size_t left, size_t right)
+                  {
+                      const auto& lhs = result.exeCandidates[left];
+                      const auto& rhs = result.exeCandidates[right];
+                      std::string lhsKey = detail::toLower(lhs.path);
+                      std::string rhsKey = detail::toLower(rhs.path);
+                      if (lhsKey != rhsKey)
+                      {
+                          return lhsKey < rhsKey;
+                      }
+                      if (lhs.loadAddress != rhs.loadAddress)
+                      {
+                          return lhs.loadAddress < rhs.loadAddress;
+                      }
+                      return lhs.loadSize < rhs.loadSize;
+                  });
+
+        std::optional<size_t> selectedIndex;
+        if (!bootPath.empty())
         {
-            return buildPipelineError(
-                "Failed to parse PSX executable:\n" + formatDiagnostics(diagnostics), warnings);
+            for (size_t index = 0; index < result.exeCandidates.size(); ++index)
+            {
+                const auto& candidate = result.exeCandidates[index];
+                if (candidate.valid && detail::toLower(candidate.path) == detail::toLower(bootPath))
+                {
+                    selectedIndex = index;
+                    result.selectionInfo.reason = "Selected SYSTEM.CNF BOOT candidate.";
+                    break;
+                }
+            }
         }
-        appendDiagnosticsWarnings(warnings, diagnostics);
+        if (!selectedIndex.has_value())
+        {
+            for (size_t index : sortedIndices)
+            {
+                if (result.exeCandidates[index].valid)
+                {
+                    selectedIndex = index;
+                    result.selectionInfo.reason = "Selected first valid candidate after sorting.";
+                    break;
+                }
+            }
+        }
+        if (!selectedIndex.has_value())
+        {
+            return buildPipelineError("No valid PSX executable candidate found.", warnings);
+        }
+
+        const auto& selected = result.exeCandidates[selectedIndex.value()];
+        result.selectionInfo.selectedPath = selected.path;
+        std::vector<u8> exeData = parser.extractFile(selected.path);
+        if (!iso::PsxExeLoader::loadImage(exeData, exeImage, nullptr))
+        {
+            return buildPipelineError("Failed to parse selected PSX executable.", warnings);
+        }
     }
     else
     {
-        iso::PsxExeDiagnostics diagnostics;
-        if (!iso::PsxExeLoader::loadFromFile(inputPath, exeImage, &diagnostics))
+        iso::PsxExeDiagnostics exeDiagnostics;
+        if (!iso::PsxExeLoader::loadFromFile(activeDiscPath, exeImage, &exeDiagnostics))
         {
-            return buildPipelineError(
-                "Failed to load PSX executable:\n" + formatDiagnostics(diagnostics), warnings);
+            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
+            return buildPipelineError("Failed to load PSX executable.", warnings);
         }
-        appendDiagnosticsWarnings(warnings, diagnostics);
+        detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
+
+        ExeCandidateInfo candidate;
+        candidate.path = activeDiscPath;
+        candidate.valid = true;
+        candidate.loadAddress = exeImage.header.loadAddress;
+        candidate.loadSize = exeImage.header.loadSize;
+        candidate.entryPoint = exeImage.entryPoint.pc;
+        candidate.hash = detail::formatHex(detail::fnv1a64(exeImage.programData), 16);
+        result.exeCandidates.push_back(candidate);
+        result.selectionInfo.selectedPath = activeDiscPath;
+        result.selectionInfo.reason = "Single executable input.";
     }
 
     if (exeImage.programData.empty())
@@ -207,6 +241,15 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
     auto irBuild = ir::buildIrFromMips(disassembled);
     warnings.insert(warnings.end(), irBuild.warnings.begin(), irBuild.warnings.end());
+    for (const auto& warning : irBuild.warnings)
+    {
+        PipelineDiagnostic entry;
+        entry.code = "IrWarning";
+        entry.severity = "warning";
+        entry.message = warning;
+        entry.context.file = activeDiscPath;
+        diagnostics.push_back(std::move(entry));
+    }
 
     if (!irBuild.errors.empty())
     {
@@ -219,7 +262,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         return buildPipelineError(stream.str(), warnings);
     }
 
-    const Address entryAddress = resolveEntryAddress(exeImage);
+    const Address entryAddress = detail::resolveEntryAddress(exeImage);
     auto flowResult = ir::buildControlFlowFunction("entry", entryAddress, irBuild.instructions);
     if (!flowResult.errors.empty())
     {
@@ -240,14 +283,40 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     codegenOptions.preserveSymbols = m_options.preserveSymbols;
     CodeGenerator codeGenerator(codegenOptions);
 
-    const std::string moduleName = sanitizeModuleName(
-        inputFsPath.stem().string().empty() ? "psx_module" : inputFsPath.stem().string());
+    const std::string inputStem =
+        inputFsPath.stem().string().empty() ? "psx_module" : inputFsPath.stem().string();
+    const std::string exeHash = detail::formatHex(detail::fnv1a64(exeImage.programData), 16);
+    const std::string exeTag = detail::makeDeterministicTag(exeImage.header.loadAddress, exeHash);
+    const std::string moduleName =
+        detail::sanitizeModuleName(inputStem + "_" + detail::sanitizeModuleName(exeTag));
+
+    for (auto& diagnostic : diagnostics)
+    {
+        if (diagnostic.context.module.empty())
+        {
+            diagnostic.context.module = moduleName;
+        }
+    }
+
+    ModuleMetadata metadata;
+    metadata.discSetName = result.discSet.setName;
+    metadata.activeDiscIndex = result.discSet.activeDiscIndex;
+    for (const auto& disc : result.discSet.discs)
+    {
+        ModuleMetadata::DiscEntry entry;
+        entry.index = disc.discIndex;
+        entry.label = disc.volumeLabel;
+        entry.path = disc.path;
+        metadata.discs.push_back(std::move(entry));
+    }
 
     const std::string header = codeGenerator.generateHeader(program, moduleName);
-    const std::string source = codeGenerator.generateSource(program, moduleName);
+    const std::string source = codeGenerator.generateSource(program, moduleName, metadata);
     const std::string buildFile = codeGenerator.generateBuildFile(moduleName);
 
-    std::filesystem::path outputDir = std::filesystem::path(m_options.outputDirectory);
+    std::filesystem::path outputDir =
+        detail::buildOutputDirectory(std::filesystem::path(m_options.outputDirectory), inputStem,
+                                     result.discSet.setName, exeTag);
     std::error_code dirError;
     std::filesystem::create_directories(outputDir, dirError);
     if (dirError)
@@ -261,19 +330,28 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     artifacts.headerPath = (outputDir / (moduleName + ".h")).string();
     artifacts.sourcePath = (outputDir / (moduleName + ".cpp")).string();
     artifacts.buildPath = (outputDir / "CMakeLists.txt").string();
+    artifacts.manifestPath = (outputDir / "manifest.json").string();
 
     std::string writeError;
-    if (!writeFile(artifacts.headerPath, header, writeError) ||
-        !writeFile(artifacts.sourcePath, source, writeError) ||
-        !writeFile(artifacts.buildPath, buildFile, writeError))
+    if (!detail::writeFile(artifacts.headerPath, header, writeError) ||
+        !detail::writeFile(artifacts.sourcePath, source, writeError) ||
+        !detail::writeFile(artifacts.buildPath, buildFile, writeError))
     {
         return buildPipelineError(writeError, warnings);
     }
 
-    PipelineResult result;
     result.success = true;
     result.artifacts = artifacts;
     result.warnings = warnings;
+    result.diagnostics = diagnostics;
+
+    const std::string timestamp = detail::buildTimestamp(m_options.manifestTimestamp);
+    const std::string manifest = detail::serializeManifest(
+        result, activeDiscPath, outputDir.string(), timestamp, m_options.pipelineVersion);
+    if (!detail::writeFile(artifacts.manifestPath, manifest, writeError))
+    {
+        return buildPipelineError(writeError, warnings);
+    }
     return result;
 }
 

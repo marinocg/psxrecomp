@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <random>
+#include <sstream>
 #include <vector>
 
 namespace
@@ -74,16 +75,42 @@ int main()
     options.enableOptimizations = false;
     options.preserveSymbols = false;
     options.verbose = false;
+    options.manifestTimestamp = "2024-01-01T00:00:00Z";
 
     psxrecomp::recompiler::RecompilationPipeline pipeline(options);
-    auto result = pipeline.run(exePath.string());
-    assert(result.success);
-    assert(!result.artifacts.headerPath.empty());
-    assert(!result.artifacts.sourcePath.empty());
-    assert(!result.artifacts.buildPath.empty());
-    assert(std::filesystem::exists(result.artifacts.headerPath));
-    assert(std::filesystem::exists(result.artifacts.sourcePath));
-    assert(std::filesystem::exists(result.artifacts.buildPath));
+    auto resultA = pipeline.run(exePath.string());
+    assert(resultA.success);
+    assert(!resultA.artifacts.headerPath.empty());
+    assert(!resultA.artifacts.sourcePath.empty());
+    assert(!resultA.artifacts.buildPath.empty());
+    assert(!resultA.artifacts.manifestPath.empty());
+    assert(std::filesystem::exists(resultA.artifacts.headerPath));
+    assert(std::filesystem::exists(resultA.artifacts.sourcePath));
+    assert(std::filesystem::exists(resultA.artifacts.buildPath));
+    assert(std::filesystem::exists(resultA.artifacts.manifestPath));
+
+    auto resultB = pipeline.run(exePath.string());
+    assert(resultB.success);
+    assert(resultA.artifacts.headerPath == resultB.artifacts.headerPath);
+    assert(resultA.artifacts.sourcePath == resultB.artifacts.sourcePath);
+    assert(resultA.artifacts.buildPath == resultB.artifacts.buildPath);
+    assert(resultA.artifacts.manifestPath == resultB.artifacts.manifestPath);
+
+    std::ifstream manifestA(resultA.artifacts.manifestPath);
+    std::stringstream manifestBufferA;
+    manifestBufferA << manifestA.rdbuf();
+    std::string manifestContentA = manifestBufferA.str();
+
+    std::ifstream manifestB(resultB.artifacts.manifestPath);
+    std::stringstream manifestBufferB;
+    manifestBufferB << manifestB.rdbuf();
+    std::string manifestContentB = manifestBufferB.str();
+
+    assert(manifestContentA == manifestContentB);
+    assert(manifestContentA.find("\"pipelineVersion\"") != std::string::npos);
+    assert(manifestContentA.find("\"timestamp\"") != std::string::npos);
+    assert(manifestContentA.find("\"input\"") != std::string::npos);
+    assert(manifestContentA.find("\"output\"") != std::string::npos);
 
     return 0;
 }

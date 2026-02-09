@@ -1,4 +1,4 @@
-#include "iso_boot.h"
+#include "psxrecomp/iso/iso_boot.h"
 
 #include "iso_utils.h"
 

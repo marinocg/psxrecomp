@@ -13,6 +13,7 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace psxrecomp
@@ -29,6 +30,19 @@ namespace runtime
 class PsxSystem
 {
   public:
+    struct DiscSwapInfo
+    {
+        struct DiscEntry
+        {
+            u32 index = 0;
+            std::string label;
+            std::string path;
+        };
+        std::string setName;
+        u32 activeDiscIndex = 0;
+        std::vector<DiscEntry> discs;
+    };
+
     PsxSystem();
     ~PsxSystem();
 
@@ -130,6 +144,9 @@ class PsxSystem
     Scheduler& scheduler();
     RuntimeLogger& logger();
 
+    void setDiscSwapInfo(DiscSwapInfo info);
+    const DiscSwapInfo& discSwapInfo() const;
+
     void callGpuIntrinsic(Address /*address*/)
     {
         std::abort();
@@ -156,6 +173,7 @@ class PsxSystem
     InterruptController m_interrupts;
     Scheduler m_scheduler;
     RuntimeLogger m_logger;
+    DiscSwapInfo m_discSwapInfo;
 
     static Address normalizeAddress(Address address)
     {
