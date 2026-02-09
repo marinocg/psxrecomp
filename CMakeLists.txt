@@ -51,6 +51,7 @@ set(ISO_SOURCES
     src/iso/multi_disc_set.cpp
     src/iso/path_table.cpp
     src/iso/psx_exe_loader.cpp
+    src/iso/psx_exe_loader_helpers.cpp
 )
 
 set(DISASM_SOURCES
