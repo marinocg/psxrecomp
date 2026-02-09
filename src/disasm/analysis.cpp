@@ -269,9 +269,9 @@ CodeDataSegmentation segmentCodeAndData(const std::vector<Instruction>& instruct
         {
             if (instruction.hasDelaySlot())
             {
-                const bool shouldEnqueueDelaySlot =
+                const bool isCall =
                     instruction.opcode == Opcode::JAL || instruction.opcode == Opcode::JALR;
-                enqueueDelaySlot(shouldEnqueueDelaySlot);
+                enqueueDelaySlot(isCall);
             }
 
             if (instruction.opcode == Opcode::J || instruction.opcode == Opcode::JAL)
