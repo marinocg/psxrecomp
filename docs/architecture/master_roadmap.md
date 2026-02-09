@@ -12,7 +12,7 @@ highlights dependencies between workstreams.
 ## Workstreams (detailed roadmaps)
 - [x] ISO/BIN parsing ([iso_bin_roadmap.md](iso_bin_roadmap.md))
 - [x] PSX-EXE loading ([psx_exe_roadmap.md](psx_exe_roadmap.md))
-- [ ] Disassembler ([mips_r3000_disassembler_roadmap.md](mips_r3000_disassembler_roadmap.md))
+- [x] Disassembler ([mips_r3000_disassembler_roadmap.md](mips_r3000_disassembler_roadmap.md))
 - [ ] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
 - [ ] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
 - [ ] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
@@ -44,7 +44,7 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 **Dependencies (complete these roadmaps)**
 - [x] ISO/BIN parser improvements (`iso_bin_roadmap.md`)
 - [x] PSX-EXE loader robustness (`psx_exe_roadmap.md`)
-- [ ] Disassembler analysis helpers (`mips_r3000_disassembler_roadmap.md`)
+- [x] Disassembler analysis helpers (`mips_r3000_disassembler_roadmap.md`)
 
 ### M2: Functional MIPS→IR Coverage (In progress)
 Goal: translate common game code paths into IR with correct control flow.
@@ -56,7 +56,7 @@ Goal: translate common game code paths into IR with correct control flow.
 - [ ] IR modeling for system calls and BIOS stubs.
 
 **Dependencies (complete these roadmaps)**
-- [ ] Disassembler completeness (`mips_r3000_disassembler_roadmap.md`)
+- [x] Disassembler completeness (`mips_r3000_disassembler_roadmap.md`)
 - [ ] IR pipeline expansion (`ir_roadmap.md`)
 - [ ] Recompiler baseline codegen (`recompiler_roadmap.md`)
 
@@ -113,7 +113,7 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 **Dependencies (complete these roadmaps)**
 - [x] ISO/BIN parsing (`iso_bin_roadmap.md`)
 - [x] PSX-EXE loading (`psx_exe_roadmap.md`)
-- [ ] Disassembler (`mips_r3000_disassembler_roadmap.md`)
+- [x] Disassembler (`mips_r3000_disassembler_roadmap.md`)
 - [ ] IR pipeline (`ir_roadmap.md`)
 - [ ] Recompiler/codegen (`recompiler_roadmap.md`)
 - [ ] Runtime library (`runtime_library_roadmap.md`)
