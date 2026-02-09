@@ -16,6 +16,7 @@ bool parseOverlayTable(const std::vector<u8>& data, const PsxExeHeader& header,
                        PsxExeDiagnostics* diagnostics);
 
 void extractSyscalls(const std::vector<PsxExeImage::Segment>& segments,
+                     const std::vector<u8>& programData,
                      std::vector<PsxExeImage::SyscallMetadata>& syscalls);
 
 void buildDefaultSymbols(const PsxExeImage& image, std::vector<PsxExeImage::Symbol>& symbols);

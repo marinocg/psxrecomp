@@ -31,7 +31,6 @@ u32 readLe32(const u8* data)
            (static_cast<u32>(data[2]) << 16) | (static_cast<u32>(data[3]) << 24);
 }
 
-
 std::string trimString(const std::string& value)
 {
     auto isTrimChar = [](unsigned char ch)
@@ -286,7 +285,6 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
     mainSegment.loadAddress = header.loadAddress;
     mainSegment.size = effectiveLoadSize;
     mainSegment.fileOffset = static_cast<u32>(kHeaderSize);
-    mainSegment.data = outImage.programData;
     outImage.segments.push_back(std::move(mainSegment));
 
     if (!detail::parseOverlayTable(data, header, outImage.segments, activeDiagnostics))
@@ -295,7 +293,7 @@ bool PsxExeLoader::loadImage(const std::vector<u8>& data, PsxExeImage& outImage,
     }
 
     outImage.syscalls.clear();
-    detail::extractSyscalls(outImage.segments, outImage.syscalls);
+    detail::extractSyscalls(outImage.segments, outImage.programData, outImage.syscalls);
     outImage.symbols.clear();
     detail::buildDefaultSymbols(outImage, outImage.symbols);
     return true;
@@ -317,7 +315,23 @@ bool PsxExeLoader::loadMemoryImage(const std::vector<u8>& data, PsxExeMemoryImag
     for (const auto& segment : image.segments)
     {
         u32 loadOffset = toPhysicalAddress(segment.loadAddress);
-        std::copy(segment.data.begin(), segment.data.end(),
+        const u8* segmentData = segment.data.data();
+        size_t segmentSize = segment.data.size();
+        if (segmentSize == 0)
+        {
+            if (segment.fileOffset < kHeaderSize)
+            {
+                return false;
+            }
+            const size_t dataOffset = static_cast<size_t>(segment.fileOffset - kHeaderSize);
+            if (dataOffset + static_cast<size_t>(segment.size) > image.programData.size())
+            {
+                return false;
+            }
+            segmentData = image.programData.data() + dataOffset;
+            segmentSize = static_cast<size_t>(segment.size);
+        }
+        std::copy(segmentData, segmentData + segmentSize,
                   outImage.ram.begin() + static_cast<size_t>(loadOffset));
     }
 

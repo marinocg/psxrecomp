@@ -121,8 +121,7 @@ bool validateOverlayEntry(u32 loadAddress, u32 size, PsxExeDiagnostics* diagnost
 } // namespace
 
 bool parseOverlayTable(const std::vector<u8>& data, const PsxExeHeader& header,
-                       std::vector<PsxExeImage::Segment>& segments,
-                       PsxExeDiagnostics* diagnostics)
+                       std::vector<PsxExeImage::Segment>& segments, PsxExeDiagnostics* diagnostics)
 {
     if (header.trailingData.size() < kOverlayHeaderSize ||
         std::memcmp(header.trailingData.data(), kOverlayMagic, kOverlayMagicSize) != 0)
@@ -131,16 +130,14 @@ bool parseOverlayTable(const std::vector<u8>& data, const PsxExeHeader& header,
     }
 
     const u32 overlayCount = readLe32(header.trailingData.data() + kOverlayMagicSize);
-    const size_t tableBytes = kOverlayHeaderSize + static_cast<size_t>(overlayCount) *
-                                                       static_cast<size_t>(kOverlayEntrySize);
-    if (tableBytes > header.trailingData.size())
+    const size_t maxEntries = (header.trailingData.size() - kOverlayHeaderSize) / kOverlayEntrySize;
+    if (overlayCount > maxEntries)
     {
         addDiagnostic(diagnostics, PsxExeDiagnosticSeverity::Error,
                       PsxExeErrorCode::OverlayTableMalformed, "overlayTable",
-                      "Overlay table exceeds trailing header storage.");
+                      "Overlay table entry count exceeds trailing header storage.");
         return false;
     }
-
     size_t tableOffset = kOverlayHeaderSize;
     for (u32 index = 0; index < overlayCount; ++index)
     {
@@ -154,7 +151,8 @@ bool parseOverlayTable(const std::vector<u8>& data, const PsxExeHeader& header,
             return false;
         }
 
-        if (static_cast<size_t>(fileOffset) + static_cast<size_t>(size) > data.size())
+        const size_t endOffset = static_cast<size_t>(fileOffset) + static_cast<size_t>(size);
+        if (endOffset > data.size())
         {
             addDiagnostic(diagnostics, PsxExeDiagnosticSeverity::Error,
                           PsxExeErrorCode::OverlayEntryOutOfRange, "overlayFileOffset",
@@ -166,9 +164,8 @@ bool parseOverlayTable(const std::vector<u8>& data, const PsxExeHeader& header,
         overlaySegment.loadAddress = loadAddress;
         overlaySegment.size = size;
         overlaySegment.fileOffset = fileOffset;
-        overlaySegment.data.assign(
-            data.begin() + static_cast<std::ptrdiff_t>(fileOffset),
-            data.begin() + static_cast<std::ptrdiff_t>(fileOffset + size));
+        overlaySegment.data.assign(data.begin() + static_cast<std::ptrdiff_t>(fileOffset),
+                                   data.begin() + static_cast<std::ptrdiff_t>(endOffset));
         segments.push_back(std::move(overlaySegment));
     }
 
@@ -176,14 +173,31 @@ bool parseOverlayTable(const std::vector<u8>& data, const PsxExeHeader& header,
 }
 
 void extractSyscalls(const std::vector<PsxExeImage::Segment>& segments,
+                     const std::vector<u8>& programData,
                      std::vector<PsxExeImage::SyscallMetadata>& syscalls)
 {
     for (const auto& segment : segments)
     {
+        const std::vector<u8>* data = &segment.data;
+        size_t baseOffset = 0;
+        if (data->empty())
+        {
+            if (segment.fileOffset < PsxExeLoader::kHeaderSize)
+            {
+                continue;
+            }
+            baseOffset = static_cast<size_t>(segment.fileOffset - PsxExeLoader::kHeaderSize);
+            if (baseOffset + static_cast<size_t>(segment.size) > programData.size())
+            {
+                continue;
+            }
+            data = &programData;
+        }
+
         for (u32 offset = 0; offset + sizeof(u32) <= segment.size; offset += sizeof(u32))
         {
             const u32 word =
-                readLe32At(segment.data, static_cast<size_t>(offset)) & 0xFFFFFFFFu;
+                readLe32At(*data, baseOffset + static_cast<size_t>(offset)) & 0xFFFFFFFFu;
             if ((word & 0xFC00003Fu) == 0x0000000Cu)
             {
                 const u32 code = (word >> 6) & 0xFFFFFu;
@@ -214,15 +228,15 @@ void buildDefaultSymbols(const PsxExeImage& image, std::vector<PsxExeImage::Symb
         symbols.push_back({"segment_" + std::to_string(index), segment.loadAddress});
         if (segment.size != 0)
         {
-            symbols.push_back({"segment_" + std::to_string(index) + "_end",
-                               segment.loadAddress + segment.size});
+            symbols.push_back(
+                {"segment_" + std::to_string(index) + "_end", segment.loadAddress + segment.size});
         }
     }
 
     for (const auto& syscall : image.syscalls)
     {
         std::ostringstream stream;
-        stream << "syscall_0x" << std::hex << syscall.code;
+        stream << "syscall_0x" << std::hex << syscall.code << "_0x" << syscall.address;
         symbols.push_back({stream.str(), syscall.address});
     }
 }

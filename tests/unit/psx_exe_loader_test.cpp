@@ -241,8 +241,7 @@ int main()
 
     {
         auto buffer = buildTestExe(8, true);
-        const psxrecomp::u32 overlayOffset =
-            psxrecomp::iso::PsxExeLoader::kHeaderSize + 8;
+        const psxrecomp::u32 overlayOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize + 8;
         buffer.resize(static_cast<size_t>(overlayOffset + 8), 0);
         buffer[overlayOffset] = 0xAA;
         buffer[overlayOffset + 7] = 0xBB;

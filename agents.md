@@ -58,6 +58,7 @@ examples/
 - Test file naming: `*_test.cpp`
 - Aim for >80% code coverage for critical paths
 - Include edge cases and error conditions
+- Use the repository Makefile targets (`configure`, `build`, `test`, `lint`) for quick discovery.
 - Prefer Ninja builds for faster iteration when available:
   - Configure: `cmake -S . -B build -G Ninja -DBUILD_TESTS=ON -DBUILD_CLI=ON`
   - Build: `cmake --build build`
