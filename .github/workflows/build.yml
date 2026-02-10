@@ -62,8 +62,22 @@ jobs:
           $packageDir = "build/package"
           New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
           Copy-Item "build/psxrecomp.exe" "$packageDir/" -Force
+
+          # Copy produced DLLs (if any) from build directory.
           Get-ChildItem -Path "build" -Filter "*.dll" -File | ForEach-Object {
             Copy-Item $_.FullName "$packageDir/" -Force
+          }
+
+          # Also copy MinGW runtime DLLs when present (libstdc++, libgcc, winpthread).
+          $gxxPath = (Get-Command g++ -ErrorAction SilentlyContinue).Source
+          if ($gxxPath) {
+            $compilerBin = Split-Path -Parent $gxxPath
+            @("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll") | ForEach-Object {
+              $dllPath = Join-Path $compilerBin $_
+              if (Test-Path $dllPath) {
+                Copy-Item $dllPath "$packageDir/" -Force
+              }
+            }
           }
 
       - name: Determine artifact path
