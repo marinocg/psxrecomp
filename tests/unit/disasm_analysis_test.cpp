@@ -43,8 +43,10 @@ int main()
     using psxrecomp::disasm::findIndirectBranchTargets;
     using psxrecomp::disasm::findJumpTables;
     using psxrecomp::disasm::Instruction;
+    using psxrecomp::disasm::InstructionType;
     using psxrecomp::disasm::JumpTableInfo;
     using psxrecomp::disasm::MipsDisassembler;
+    using psxrecomp::disasm::Opcode;
     using psxrecomp::disasm::segmentCodeAndData;
 
     const Address baseAddress = 0x80010000;
@@ -115,6 +117,19 @@ int main()
     assert(segmentation.dataRanges.size() == 1);
     assert(segmentation.dataRanges[0].start == 0x8001004C);
     assert(segmentation.dataRanges[0].end == 0x8001004C);
+
+    std::vector<Instruction> duplicateCallInstructions;
+    duplicateCallInstructions.push_back(Instruction{0x80020008, encodeJ(0x03, (0x80030000u >> 2)),
+                                                    Opcode::JAL, InstructionType::J_TYPE, 0, 0, 0,
+                                                    0, (0x80030000u >> 2), 0, false, std::nullopt});
+    duplicateCallInstructions.push_back(Instruction{0x80020008, encodeJ(0x03, (0x80030100u >> 2)),
+                                                    Opcode::JAL, InstructionType::J_TYPE, 0, 0, 0,
+                                                    0, (0x80030100u >> 2), 0, false, std::nullopt});
+
+    auto duplicateCallGraph =
+        buildCallGraph(duplicateCallInstructions, {{0x80020000, 0x80020020, false, false}});
+    assert(duplicateCallGraph.functions.size() == 3);
+    assert(duplicateCallGraph.edges.size() == 2);
 
     return 0;
 }

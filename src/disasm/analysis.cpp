@@ -15,6 +15,30 @@ namespace disasm
 namespace
 {
 constexpr Register kReturnAddress = detail::kReturnAddress;
+
+struct CallGraphEdgeKey
+{
+    Address caller;
+    Address callSite;
+    Address callee;
+
+    bool operator==(const CallGraphEdgeKey& other) const
+    {
+        return caller == other.caller && callSite == other.callSite && callee == other.callee;
+    }
+};
+
+struct CallGraphEdgeKeyHash
+{
+    size_t operator()(const CallGraphEdgeKey& key) const
+    {
+        size_t hash = static_cast<size_t>(key.caller);
+        hash ^= static_cast<size_t>(key.callSite) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        hash ^= static_cast<size_t>(key.callee) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
+        return hash;
+    }
+};
+
 } // namespace
 
 std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instruction>& instructions)
@@ -346,7 +370,7 @@ CallGraph buildCallGraph(const std::vector<Instruction>& instructions,
         knownFunctions.insert(boundary.start);
     }
 
-    std::unordered_set<u64> seenEdges;
+    std::unordered_set<CallGraphEdgeKey, CallGraphEdgeKeyHash> seenEdges;
     seenEdges.reserve(instructions.size());
 
     for (const auto& instruction : instructions)
@@ -378,7 +402,7 @@ CallGraph buildCallGraph(const std::vector<Instruction>& instructions,
         }
 
         const Address caller = callerBoundary.start;
-        const u64 edgeKey = (static_cast<u64>(caller) << 32) | instruction.address;
+        const CallGraphEdgeKey edgeKey{caller, instruction.address, *callee};
         if (seenEdges.insert(edgeKey).second)
         {
             graph.edges.push_back({caller, instruction.address, *callee});
