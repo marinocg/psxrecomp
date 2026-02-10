@@ -5,9 +5,9 @@ end-to-end static recompilation workflow. It complements the workstream roadmaps
 master roadmap.
 
 ## Pipeline & Tooling
-- Pipeline emits C++ artifacts but does not yet build/run them automatically.
-- Limited CLI reporting and no structured output formats for automation.
-- No deterministic build orchestration or CI coverage for generated artifacts.
+- Pipeline emits C++ artifacts and manifests but does not yet build/run them automatically.
+- Structured diagnostics are available, but CLI build automation is still missing.
+- No CI coverage for compiling generated artifacts end-to-end.
 
 ## Disassembly & Analysis
 - Delay-slot semantics are not fully modeled in CFG and IR lowering.

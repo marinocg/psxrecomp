@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/psx_system.h"
 
 #include <sstream>
+#include <utility>
 
 namespace psxrecomp
 {
@@ -113,6 +114,16 @@ Scheduler& PsxSystem::scheduler()
 RuntimeLogger& PsxSystem::logger()
 {
     return m_logger;
+}
+
+void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
+{
+    m_discSwapInfo = std::move(info);
+}
+
+const PsxSystem::DiscSwapInfo& PsxSystem::discSwapInfo() const
+{
+    return m_discSwapInfo;
 }
 
 u32 PsxSystem::readMmio32(Address address)

@@ -1,8 +1,8 @@
 #include "psxrecomp/iso/iso_parser.h"
 
-#include "iso_boot.h"
 #include "iso_sector.h"
 #include "iso_utils.h"
+#include "psxrecomp/iso/iso_boot.h"
 
 #include <algorithm>
 #include <cstring>

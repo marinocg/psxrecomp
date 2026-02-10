@@ -1,0 +1,64 @@
+name: Build binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_os:
+        description: "Target OS to build (all, ubuntu-latest, windows-latest, macos-latest)"
+        required: false
+        default: "all"
+
+jobs:
+  validate:
+    name: Validate target OS input
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check target_os
+        shell: bash
+        run: |
+          allowed=("all" "ubuntu-latest" "windows-latest" "macos-latest")
+          target="${{ github.event.inputs.target_os }}"
+          for value in "${allowed[@]}"; do
+            if [[ "${value}" == "${target}" ]]; then
+              exit 0
+            fi
+          done
+          echo "Invalid target_os: ${target}" >&2
+          echo "Allowed values: ${allowed[*]}" >&2
+          exit 1
+
+  build:
+    name: Build (${{ matrix.os }})
+    needs: validate
+    if: ${{ github.event.inputs.target_os == 'all' || github.event.inputs.target_os == matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTS=ON -DBUILD_CLI=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Determine artifact path
+        id: artifact
+        shell: bash
+        run: |
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            echo "path=build/psxrecomp.exe" >> "${GITHUB_OUTPUT}"
+          else
+            echo "path=build/psxrecomp" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: psxrecomp-${{ matrix.os }}
+          path: ${{ steps.artifact.outputs.path }}

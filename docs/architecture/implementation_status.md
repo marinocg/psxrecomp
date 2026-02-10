@@ -4,10 +4,20 @@ This report estimates current implementation coverage across major subsystems an
 what is present vs. missing. Percentages are coarse estimates intended for planning.
 
 ## Overall completion (estimate)
-- **Project-wide completion:** ~20%
-- **End-to-end playable pipeline:** ~10%
+- **Project-wide completion:** ~25%
+- **End-to-end playable pipeline:** ~20%
 
 ## Subsystem status (estimate)
+
+### Pipeline & Tooling (~45%)
+**Present**
+- Deterministic pipeline output layout with manifest emission.
+- Stable EXE candidate selection with structured diagnostics.
+- Multi-disc metadata surfaced in pipeline output and runtime hooks.
+
+**Missing**
+- Automated build/run of emitted C++ artifacts.
+- CLI automation around compiling generated output in CI.
 
 ### ISO/BIN Parsing (~85%)
 **Present**
