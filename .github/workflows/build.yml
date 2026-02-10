@@ -2,10 +2,16 @@ name: Build binaries
 
 on:
   workflow_dispatch:
+    inputs:
+      target_os:
+        description: "Target OS to build (all, ubuntu-latest, windows-latest, macos-latest)"
+        required: false
+        default: "all"
 
 jobs:
   build:
     name: Build (${{ matrix.os }})
+    if: ${{ github.event.inputs.target_os == 'all' || github.event.inputs.target_os == matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
