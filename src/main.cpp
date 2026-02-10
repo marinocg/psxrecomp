@@ -1,5 +1,7 @@
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 #include "psxrecomp/recompiler/pipeline.h"
@@ -41,6 +43,13 @@ std::string escapeJson(const std::string& value)
 void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
                      const std::string& inputFile, const std::string& outputDir)
 {
+    auto toHex = [](psxrecomp::u32 value)
+    {
+        std::ostringstream stream;
+        stream << "0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0') << value;
+        return stream.str();
+    };
+
     std::cout << "{\n";
     std::cout << "  \"success\": " << (result.success ? "true" : "false") << ",\n";
     std::cout << "  \"input\": \"" << escapeJson(inputFile) << "\",\n";
@@ -62,6 +71,17 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
     std::cout << "    \"build\": \"" << escapeJson(result.artifacts.buildPath) << "\",\n";
     std::cout << "    \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\"\n";
     std::cout << "  },\n";
+    std::cout << "  \"warnings\": [\n";
+    for (size_t index = 0; index < result.warnings.size(); ++index)
+    {
+        std::cout << "    \"" << escapeJson(result.warnings[index]) << "\"";
+        if (index + 1 < result.warnings.size())
+        {
+            std::cout << ",";
+        }
+        std::cout << "\n";
+    }
+    std::cout << "  ],\n";
     std::cout << "  \"diagnostics\": [\n";
     for (size_t index = 0; index < result.diagnostics.size(); ++index)
     {
@@ -96,9 +116,9 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
         const auto& candidate = result.exeCandidates[index];
         std::cout << "    {\n";
         std::cout << "      \"path\": \"" << escapeJson(candidate.path) << "\",\n";
-        std::cout << "      \"loadAddress\": " << candidate.loadAddress << ",\n";
+        std::cout << "      \"loadAddress\": \"" << toHex(candidate.loadAddress) << "\",\n";
         std::cout << "      \"loadSize\": " << candidate.loadSize << ",\n";
-        std::cout << "      \"entryPoint\": " << candidate.entryPoint << ",\n";
+        std::cout << "      \"entryPoint\": \"" << toHex(candidate.entryPoint) << "\",\n";
         std::cout << "      \"hash\": \"" << escapeJson(candidate.hash) << "\",\n";
         std::cout << "      \"valid\": " << (candidate.valid ? "true" : "false") << "\n";
         std::cout << "    }";
