@@ -4,8 +4,8 @@ This report estimates current implementation coverage across major subsystems an
 what is present vs. missing. Percentages are coarse estimates intended for planning.
 
 ## Overall completion (estimate)
-- **Project-wide completion:** ~30%
-- **End-to-end playable pipeline:** ~25%
+- **Project-wide completion:** ~40%
+- **End-to-end playable pipeline:** ~30%
 
 ## Subsystem status (estimate)
 
@@ -48,29 +48,26 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Integration of analysis helpers into the pipeline/call graph builder.
 - Broader decode coverage for edge-case encodings and validation in real binaries.
 
-### IR Pipeline (~50%)
+### IR Pipeline (~85%)
 **Present**
 - IR data structures, CFG builder, SSA conversion, and verification utilities.
-- MIPS→IR lowering for arithmetic/logical ops, immediates, loads/stores, branches, jumps,
-  calls, and returns (nop-only delay slots).
+- Function boundary detection and call graph discovery in the pipeline.
+- MIPS→IR lowering for arithmetic/logical ops, shifts, mult/div, HI/LO moves, branches, jumps,
+  calls, returns, syscalls, and MMIO intrinsics with non-nop delay slots.
+- Optimization passes (constant folding, DCE, CSE, LICM) integrated into the pipeline.
 
 **Missing**
-- Full instruction coverage (shifts, mult/div, HI/LO transfers).
-- Delay-slot semantics beyond nop and function boundary detection.
-- Memory-mapped IO intrinsics and optimization passes.
-- Pipeline integration for SSA/verification in emitted artifacts.
+- Expanded load/store variants (byte/halfword, unaligned) and coprocessor-specific IR modeling.
 
-### Recompiler / Codegen (~45%)
+### Recompiler / Codegen (~75%)
 **Present**
-- Structured C++ emission for core IR ops with basic control flow.
-- Runtime helpers for memory access and address-based intrinsic dispatch.
-- Peephole optimizations and debug metadata in generated output.
-- Compile-and-run validation in unit tests.
+- Structured C++ emission for core IR ops with control flow and phi-node lowering.
+- Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
+- Peephole optimizations, logging hooks, and debug metadata in generated output.
+- End-to-end pipeline validation and compile-and-run checks in unit tests.
 
 **Missing**
-- Phi-node lowering and SSA-aware temporary handling.
-- Broader opcode lowering (shifts, mult/div) as IR expands.
-- End-to-end PSX-EXE samples and packaging/build integration.
+- Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.
 
 ### Runtime Library (~30%)
 **Present**

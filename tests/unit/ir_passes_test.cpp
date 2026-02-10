@@ -1,4 +1,5 @@
 #include "psxrecomp/ir/control_flow.h"
+#include "psxrecomp/ir/optimizations.h"
 #include "psxrecomp/ir/ssa.h"
 #include "psxrecomp/ir/verify.h"
 
@@ -115,6 +116,40 @@ int main()
 
     auto useBeforeVerify = psxrecomp::ir::verifyFunction(useBeforeDef);
     assert(!useBeforeVerify.success());
+
+    Function optimizations{"optimizations", 0x6000, {}};
+    optimizations.blocks.push_back(BasicBlock{"entry", {}, {}});
+    optimizations.blocks[0].instructions.push_back(
+        Instruction{Opcode::ADD,
+                    {Value::makeImmediate(1), Value::makeImmediate(2)},
+                    {Value::makeTemporary(1)},
+                    0x6000});
+    optimizations.blocks[0].instructions.push_back(
+        Instruction{Opcode::MOVE, {Value::makeTemporary(1)}, {Value::makeTemporary(2)}, 0x6004});
+    optimizations.blocks[0].instructions.push_back(Instruction{
+        Opcode::STORE, {Value::makeAddress(0x7000), Value::makeTemporary(2)}, {}, 0x6008});
+    optimizations.blocks[0].instructions.push_back(
+        Instruction{Opcode::ADD,
+                    {Value::makeImmediate(3), Value::makeImmediate(4)},
+                    {Value::makeTemporary(3)},
+                    0x600C});
+    optimizations.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x6010});
+
+    auto stats = psxrecomp::ir::runOptimizations(optimizations);
+    assert(stats.constantsFolded > 0);
+    assert(stats.deadInstructionsRemoved > 0);
+    bool foundFolded = false;
+    for (const auto& instruction : optimizations.blocks[0].instructions)
+    {
+        if (instruction.opcode == Opcode::MOVE && !instruction.inputs.empty() &&
+            instruction.inputs.front().kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs.front().immediate == 3)
+        {
+            foundFolded = true;
+            break;
+        }
+    }
+    assert(foundFolded);
 
     return 0;
 }

@@ -67,6 +67,9 @@ set(IR_SOURCES
     src/ir/ir.cpp
     src/ir/control_flow.cpp
     src/ir/mips_ir_builder.cpp
+    src/ir/mips_ir_translation.cpp
+    src/ir/mips_ir_translation_no_delay.cpp
+    src/ir/optimizations.cpp
     src/ir/ssa.cpp
     src/ir/verify.cpp
 )
@@ -74,6 +77,8 @@ set(IR_SOURCES
 set(RECOMPILER_SOURCES
     src/recompiler/codegen.cpp
     src/recompiler/codegen_lowering.cpp
+    src/recompiler/codegen_lowering_helpers.cpp
+    src/recompiler/codegen_lowering_instructions.cpp
     src/recompiler/cpp_emitter.cpp
     src/recompiler/pipeline_helpers.cpp
     src/recompiler/pipeline.cpp

@@ -77,14 +77,27 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <cstdint>");
     emitter.writeLine("#include <cstring>");
+    emitter.writeLine("#include <iostream>");
     emitter.writeLine("#include <string>");
     emitter.writeLine("#include <vector>");
+    emitter.writeBlank();
+    emitter.writeLine("#ifndef PSXRECOMP_ENABLE_LOGGING");
+    emitter.writeLine("#define PSXRECOMP_ENABLE_LOGGING 0");
+    emitter.writeLine("#endif");
+    emitter.writeLine("#ifndef PSXRECOMP_LOG_LEVEL");
+    emitter.writeLine("#define PSXRECOMP_LOG_LEVEL 1");
+    emitter.writeLine("#endif");
+    emitter.writeLine("#ifndef PSXRECOMP_ENABLE_CHECKS");
+    emitter.writeLine("#define PSXRECOMP_ENABLE_CHECKS 1");
+    emitter.writeLine("#endif");
     emitter.writeBlank();
     emitter.openBlock("namespace psxrecomp");
     emitter.openBlock("namespace recompiler");
     emitter.openBlock("struct RecompilerContext");
     emitter.writeLine("runtime::PsxSystem& system;");
     emitter.writeLine("std::array<u32, Registers::NUM_REGISTERS> regs{};");
+    emitter.writeLine("u32 hi = 0;");
+    emitter.writeLine("u32 lo = 0;");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.openBlock("namespace");
@@ -97,6 +110,24 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         "inline void writeMemory32(runtime::PsxSystem& system, Address address, u32 value)");
     emitter.openBlock("");
     emitter.writeLine("system.write<u32>(address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline u32 readMmio32(runtime::PsxSystem& system, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return system.readMmioExplicit<u32>(address);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void writeMmio32(runtime::PsxSystem& system, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("system.writeMmioExplicit<u32>(address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void callSyscall(runtime::PsxSystem& system, u32 code, std::array<u32, "
+        "Registers::NUM_REGISTERS>& regs)");
+    emitter.openBlock("");
+    emitter.writeLine("system.callBiosSyscall(code, regs.data(), regs.size());");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline bool callIntrinsic(runtime::PsxSystem& system, Address address)");
@@ -119,10 +150,37 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock();
     emitter.writeLine("return false;");
     emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline void logWarning(const char* message)");
+    emitter.openBlock("");
+    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << message << \"\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
 
     emitter.writeLines(generateGlobals(program));
+    emitter.writeBlank();
+    emitter.writeLine("static const std::vector<const char*> kPipelineWarnings = {");
+    if (metadata.warnings.empty())
+    {
+        emitter.writeLine("};");
+    }
+    else
+    {
+        for (size_t index = 0; index < metadata.warnings.size(); ++index)
+        {
+            std::string line = "    \"" + escapeStringLiteral(metadata.warnings[index]) + "\"";
+            if (index + 1 < metadata.warnings.size())
+            {
+                line += ",";
+            }
+            emitter.writeLine(line);
+        }
+        emitter.writeLine("};");
+    }
     emitter.writeBlank();
 
     emitter.writeLine("void RecompiledModule::configure(runtime::PsxSystem& system)");
@@ -152,6 +210,13 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         emitter.writeLine("};");
     }
     emitter.writeLine("system.setDiscSwapInfo(info);");
+    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
+    emitter.openBlock("");
+    emitter.writeLine("for (const auto* warning : kPipelineWarnings)");
+    emitter.openBlock("");
+    emitter.writeLine("logWarning(warning);");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
 
@@ -180,15 +245,32 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "set(CMAKE_CXX_EXTENSIONS OFF)\n";
     stream << "\n";
     stream << "set(PSXRECOMP_INCLUDE_DIR \"\" CACHE PATH \"Path to psxrecomp headers\")\n";
+    stream << "set(PSXRECOMP_RESOURCE_DIR \"\" CACHE PATH \"Path to resource directory\")\n";
+    stream << "option(PSXRECOMP_ENABLE_LOGGING \"Enable recompiled logging\" OFF)\n";
+    stream << "set(PSXRECOMP_LOG_LEVEL 1 CACHE STRING \"Logging level\")\n";
+    stream << "option(PSXRECOMP_ENABLE_CHECKS \"Enable runtime checks\" ON)\n";
+    stream << "set(PSXRECOMP_OPT_LEVEL 2 CACHE STRING \"Optimization level hint\")\n";
     stream << "if(NOT PSXRECOMP_INCLUDE_DIR)\n";
     stream << "    message(FATAL_ERROR \"PSXRECOMP_INCLUDE_DIR is not set.\")\n";
     stream << "endif()\n";
     stream << "\n";
     stream << "add_library(" << projectName << " " << projectName << ".cpp)\n";
+    stream << "target_compile_definitions(" << projectName << " PUBLIC\n";
+    stream << "    PSXRECOMP_ENABLE_LOGGING=$<BOOL:${PSXRECOMP_ENABLE_LOGGING}>\n";
+    stream << "    PSXRECOMP_LOG_LEVEL=${PSXRECOMP_LOG_LEVEL}\n";
+    stream << "    PSXRECOMP_ENABLE_CHECKS=$<BOOL:${PSXRECOMP_ENABLE_CHECKS}>\n";
+    stream << "    PSXRECOMP_OPT_LEVEL=${PSXRECOMP_OPT_LEVEL}\n";
+    stream << ")\n";
     stream << "target_include_directories(" << projectName << " PUBLIC\n";
     stream << "    ${PSXRECOMP_INCLUDE_DIR}\n";
     stream << "    include\n";
     stream << ")\n";
+    stream << "if(PSXRECOMP_RESOURCE_DIR)\n";
+    stream << "    add_custom_command(TARGET " << projectName << " POST_BUILD\n";
+    stream << "        COMMAND ${CMAKE_COMMAND} -E copy_directory\n";
+    stream << "            ${PSXRECOMP_RESOURCE_DIR}\n";
+    stream << "            $<TARGET_FILE_DIR:" << projectName << ">/resources)\n";
+    stream << "endif()\n";
     return stream.str();
 }
 std::string CodeGenerator::generateGlobals(const ir::Program& program) const

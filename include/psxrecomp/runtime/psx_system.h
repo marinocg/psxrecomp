@@ -11,6 +11,7 @@
 #include "psxrecomp/runtime/spu.h"
 #include "psxrecomp/types.h"
 
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -159,6 +160,20 @@ class PsxSystem
     {
         std::abort();
     }
+
+    template <typename T> T readMmioExplicit(Address address)
+    {
+        Address physical = normalizeAddress(address);
+        return readMmio<T>(physical);
+    }
+
+    template <typename T> void writeMmioExplicit(Address address, T value)
+    {
+        Address physical = normalizeAddress(address);
+        writeMmio<T>(physical, value);
+    }
+
+    void callBiosSyscall(u32 code, const u32* regs, size_t regCount);
 
   private:
     std::vector<u8> m_ram;        // 2MB main RAM

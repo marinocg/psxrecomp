@@ -95,6 +95,17 @@ struct PipelineResult
     std::vector<std::string> warnings;
     std::vector<PipelineDiagnostic> diagnostics;
     std::vector<ExeCandidateInfo> exeCandidates;
+    struct FunctionMetadata
+    {
+        std::string name;
+        Address entryAddress = 0;
+        Address endAddress = 0;
+        bool hasPrologue = false;
+        bool hasEpilogue = false;
+        std::vector<Address> directCalls;
+        size_t indirectCallCount = 0;
+    };
+    std::vector<FunctionMetadata> functions;
     ExeSelectionInfo selectionInfo;
     DiscSetMetadata discSet;
     std::string errorMessage;

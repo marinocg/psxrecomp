@@ -121,6 +121,11 @@ void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
     m_discSwapInfo = std::move(info);
 }
 
+void PsxSystem::callBiosSyscall(u32 /*code*/, const u32* /*regs*/, size_t /*regCount*/)
+{
+    std::abort();
+}
+
 const PsxSystem::DiscSwapInfo& PsxSystem::discSwapInfo() const
 {
     return m_discSwapInfo;
