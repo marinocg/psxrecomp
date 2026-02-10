@@ -97,6 +97,7 @@ set(RUNTIME_SOURCES
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gpu.cpp
+    src/runtime/gpu_renderer.cpp
     src/runtime/input.cpp
     src/runtime/interrupt_controller.cpp
     src/runtime/logger.cpp
@@ -204,6 +205,14 @@ if(BUILD_TESTS)
     target_include_directories(mips_ir_builder_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME mips_ir_builder_test COMMAND mips_ir_builder_test)
 
+
+    add_executable(gpu_test
+        tests/unit/gpu_test.cpp
+        src/runtime/gpu.cpp
+        src/runtime/gpu_renderer.cpp
+    )
+    target_include_directories(gpu_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME gpu_test COMMAND gpu_test)
     add_executable(runtime_test
         tests/unit/runtime_test.cpp
         ${RUNTIME_SOURCES}
