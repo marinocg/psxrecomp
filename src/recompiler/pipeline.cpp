@@ -78,7 +78,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             {
                 error += " " + parser.getLastError();
             }
-            return buildPipelineError(error);
+            return buildPipelineError(error, warnings);
         }
 
         std::vector<std::string> candidatePaths = parser.listExecutables();
@@ -149,25 +149,37 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             result.exeCandidates.push_back(candidate);
         }
 
-        std::vector<size_t> sortedIndices(result.exeCandidates.size());
-        std::iota(sortedIndices.begin(), sortedIndices.end(), 0);
-        std::sort(sortedIndices.begin(), sortedIndices.end(),
-                  [&](size_t left, size_t right)
-                  {
-                      const auto& lhs = result.exeCandidates[left];
-                      const auto& rhs = result.exeCandidates[right];
-                      std::string lhsKey = detail::toLower(lhs.path);
-                      std::string rhsKey = detail::toLower(rhs.path);
-                      if (lhsKey != rhsKey)
-                      {
-                          return lhsKey < rhsKey;
-                      }
-                      if (lhs.loadAddress != rhs.loadAddress)
-                      {
-                          return lhs.loadAddress < rhs.loadAddress;
-                      }
-                      return lhs.loadSize < rhs.loadSize;
-                  });
+        auto candidateLess = [&](const ExeCandidateInfo& lhs, const ExeCandidateInfo& rhs)
+        {
+            const std::string lhsKey = detail::toLower(lhs.path);
+            const std::string rhsKey = detail::toLower(rhs.path);
+            if (lhsKey != rhsKey)
+            {
+                return lhsKey < rhsKey;
+            }
+            if (lhs.loadAddress != rhs.loadAddress)
+            {
+                return lhs.loadAddress < rhs.loadAddress;
+            }
+            if (lhs.loadSize != rhs.loadSize)
+            {
+                return lhs.loadSize < rhs.loadSize;
+            }
+            if (lhs.entryPoint != rhs.entryPoint)
+            {
+                return lhs.entryPoint < rhs.entryPoint;
+            }
+            if (lhs.hash != rhs.hash)
+            {
+                return lhs.hash < rhs.hash;
+            }
+            if (lhs.valid != rhs.valid)
+            {
+                return lhs.valid;
+            }
+            return lhs.path < rhs.path;
+        };
+        std::sort(result.exeCandidates.begin(), result.exeCandidates.end(), candidateLess);
 
         std::optional<size_t> selectedIndex;
         if (!bootPath.empty())
@@ -185,7 +197,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         }
         if (!selectedIndex.has_value())
         {
-            for (size_t index : sortedIndices)
+            for (size_t index = 0; index < result.exeCandidates.size(); ++index)
             {
                 if (result.exeCandidates[index].valid)
                 {
