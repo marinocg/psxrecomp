@@ -294,14 +294,14 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     for (const auto& boundary : boundaries)
     {
         std::vector<disasm::Instruction> functionInstructions;
-        functionInstructions.reserve(disassembled.size());
-        for (const auto& instruction : disassembled)
-        {
-            if (instruction.address >= boundary.start && instruction.address <= boundary.end)
-            {
-                functionInstructions.push_back(instruction);
-            }
-        }
+        auto rangeBegin =
+            std::lower_bound(disassembled.begin(), disassembled.end(), boundary.start,
+                             [](const disasm::Instruction& instruction, Address target)
+                             { return instruction.address < target; });
+        auto rangeEnd = std::upper_bound(rangeBegin, disassembled.end(), boundary.end,
+                                         [](Address target, const disasm::Instruction& instruction)
+                                         { return target < instruction.address; });
+        functionInstructions.insert(functionInstructions.end(), rangeBegin, rangeEnd);
         if (functionInstructions.empty())
         {
             PipelineDiagnostic entry;
