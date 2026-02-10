@@ -89,11 +89,13 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - VRAM write semantics and software reference rendering for rectangles/triangles/quads/sprites.
 - Pluggable GPU renderer interface with software and semi-accurate backend scaffolding.
 - Runtime backend switching and frame comparison helpers for validation workflows.
+- Detailed phased execution plan with checkboxes for software accuracy + hardware parity delivery.
 
 **Missing**
 - Hardware API-specific backend implementation (OpenGL/Vulkan/Metal).
 - Robust VRAM transfer/readback semantics and richer GP0/GP1 command coverage.
 - Pixel-accurate blending/texturing and full timing parity with production emulators.
+- External capture-based parity gates integrated into CI.
 
 ### SPU Emulation (~5%)
 **Present**
