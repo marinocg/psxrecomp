@@ -55,12 +55,23 @@ jobs:
       - name: Build
         run: make build
 
+      - name: Prepare Windows package
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $packageDir = "build/package"
+          New-Item -ItemType Directory -Path $packageDir -Force | Out-Null
+          Copy-Item "build/psxrecomp.exe" "$packageDir/" -Force
+          Get-ChildItem -Path "build" -Filter "*.dll" -File | ForEach-Object {
+            Copy-Item $_.FullName "$packageDir/" -Force
+          }
+
       - name: Determine artifact path
         id: artifact
         shell: bash
         run: |
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
-            echo "path=build/psxrecomp.exe" >> "${GITHUB_OUTPUT}"
+            echo "path=build/package" >> "${GITHUB_OUTPUT}"
           else
             echo "path=build/psxrecomp" >> "${GITHUB_OUTPUT}"
           fi
