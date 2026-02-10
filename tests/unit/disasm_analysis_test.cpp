@@ -130,6 +130,8 @@ int main()
         buildCallGraph(duplicateCallInstructions, {{0x80020000, 0x80020020, false, false}});
     assert(duplicateCallGraph.functions.size() == 3);
     assert(duplicateCallGraph.edges.size() == 2);
+    assert(duplicateCallGraph.edges[0].callee == 0x80030000);
+    assert(duplicateCallGraph.edges[1].callee == 0x80030100);
 
     return 0;
 }

@@ -421,7 +421,11 @@ CallGraph buildCallGraph(const std::vector<Instruction>& instructions,
                   {
                       return lhs.caller < rhs.caller;
                   }
-                  return lhs.callSite < rhs.callSite;
+                  if (lhs.callSite != rhs.callSite)
+                  {
+                      return lhs.callSite < rhs.callSite;
+                  }
+                  return lhs.callee < rhs.callee;
               });
 
     return graph;
