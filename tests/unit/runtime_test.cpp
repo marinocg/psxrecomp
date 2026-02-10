@@ -105,8 +105,11 @@ int main()
     assert(checksum1 == checksum2);
 
     auto stateWithJunk = state;
+    const auto firstRamByteBeforeFailedLoad = system.read<psxrecomp::u8>(MemoryMap::RAM_BASE);
+    stateWithJunk[4] = static_cast<psxrecomp::u8>(firstRamByteBeforeFailedLoad ^ 0xFFu);
     stateWithJunk.push_back(0x99);
     assert(!system.deserializeState(stateWithJunk));
+    assert(system.read<psxrecomp::u8>(MemoryMap::RAM_BASE) == firstRamByteBeforeFailedLoad);
 
     auto tempRoot = std::filesystem::temp_directory_path() / "psxrecomp_runtime_test_assets";
     std::filesystem::create_directories(tempRoot / "textures");

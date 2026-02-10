@@ -226,39 +226,37 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     u32 spuCycles = 0;
     u32 gpuStatus = 0;
 
+    auto readBlob = [&state, &cursor](u32 blobSize, std::vector<u8>& out)
+    {
+        if (cursor > state.size() || blobSize > (state.size() - cursor))
+        {
+            return false;
+        }
+
+        out.assign(state.begin() + static_cast<std::ptrdiff_t>(cursor),
+                   state.begin() + static_cast<std::ptrdiff_t>(cursor + blobSize));
+        cursor += blobSize;
+        return true;
+    };
+
+    std::vector<u8> ramCopy;
+    std::vector<u8> scratchpadCopy;
+    std::vector<u8> biosCopy;
+
     if (!consumeU32(state, cursor, ramSize) || ramSize != m_ram.size() ||
-        cursor + ramSize > state.size())
+        !readBlob(ramSize, ramCopy) || !consumeU32(state, cursor, scratchpadSize) ||
+        scratchpadSize != m_scratchpad.size() || !readBlob(scratchpadSize, scratchpadCopy) ||
+        !consumeU32(state, cursor, biosSize) || biosSize != m_bios.size() ||
+        !readBlob(biosSize, biosCopy) || !consumeU32(state, cursor, irqStatus) ||
+        !consumeU32(state, cursor, irqMask) || !consumeU32(state, cursor, spuCycles) ||
+        !consumeU32(state, cursor, gpuStatus) || cursor != state.size())
     {
         return false;
     }
-    std::copy(state.begin() + static_cast<std::ptrdiff_t>(cursor),
-              state.begin() + static_cast<std::ptrdiff_t>(cursor + ramSize), m_ram.begin());
-    cursor += ramSize;
 
-    if (!consumeU32(state, cursor, scratchpadSize) || scratchpadSize != m_scratchpad.size() ||
-        cursor + scratchpadSize > state.size())
-    {
-        return false;
-    }
-    std::copy(state.begin() + static_cast<std::ptrdiff_t>(cursor),
-              state.begin() + static_cast<std::ptrdiff_t>(cursor + scratchpadSize),
-              m_scratchpad.begin());
-    cursor += scratchpadSize;
-
-    if (!consumeU32(state, cursor, biosSize) || biosSize != m_bios.size() ||
-        cursor + biosSize > state.size())
-    {
-        return false;
-    }
-    std::copy(state.begin() + static_cast<std::ptrdiff_t>(cursor),
-              state.begin() + static_cast<std::ptrdiff_t>(cursor + biosSize), m_bios.begin());
-    cursor += biosSize;
-
-    if (!consumeU32(state, cursor, irqStatus) || !consumeU32(state, cursor, irqMask) ||
-        !consumeU32(state, cursor, spuCycles) || !consumeU32(state, cursor, gpuStatus))
-    {
-        return false;
-    }
+    std::copy(ramCopy.begin(), ramCopy.end(), m_ram.begin());
+    std::copy(scratchpadCopy.begin(), scratchpadCopy.end(), m_scratchpad.begin());
+    std::copy(biosCopy.begin(), biosCopy.end(), m_bios.begin());
 
     m_interrupts.reset();
     m_interrupts.writeMask(irqMask);
@@ -268,8 +266,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_spu.tick(spuCycles);
 
     m_gpu.writeStatus(gpuStatus);
-
-    return cursor == state.size();
+    return true;
 }
 uint64_t PsxSystem::stateChecksum() const
 {
