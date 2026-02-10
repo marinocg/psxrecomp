@@ -120,8 +120,7 @@ struct InstructionKeyHash
             hash ^= static_cast<size_t>(input.reg) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
             hash ^= static_cast<size_t>(input.immediate) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
             hash ^= static_cast<size_t>(input.address) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-            hash ^= static_cast<size_t>(input.temporaryId) + 0x9e3779b9 + (hash << 6) +
-                    (hash >> 2);
+            hash ^= static_cast<size_t>(input.temporaryId) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
             hash ^= static_cast<size_t>(input.special) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
         }
         return hash;
@@ -130,8 +129,8 @@ struct InstructionKeyHash
 
 ValueKey toKey(const Value& value)
 {
-    return {value.kind, value.reg, value.immediate, value.address, value.temporaryId,
-            value.specialReg};
+    return {value.kind,    value.reg,         value.immediate,
+            value.address, value.temporaryId, value.specialReg};
 }
 
 bool isInvariantInput(const Value& value)
@@ -180,12 +179,12 @@ OptimizationStats runOptimizations(Function& function)
                 result = lhs.immediate ^ rhs.immediate;
                 break;
             case Opcode::SHL:
-                result = static_cast<s32>(static_cast<u32>(lhs.immediate)
-                                          << (rhs.immediate & 0x1F));
+                result =
+                    static_cast<s32>(static_cast<u32>(lhs.immediate) << (rhs.immediate & 0x1F));
                 break;
             case Opcode::SHR_LOGICAL:
-                result = static_cast<s32>(static_cast<u32>(lhs.immediate)
-                                          >> (rhs.immediate & 0x1F));
+                result =
+                    static_cast<s32>(static_cast<u32>(lhs.immediate) >> (rhs.immediate & 0x1F));
                 break;
             case Opcode::SHR_ARITH:
                 result = lhs.immediate >> (rhs.immediate & 0x1F);

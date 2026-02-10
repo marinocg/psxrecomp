@@ -57,5 +57,8 @@ int main()
     system.scheduler().tick(1);
     assert(fired);
 
+    const psxrecomp::u32 regs[32] = {};
+    system.callBiosSyscall(0xA0, regs, 32);
+
     return 0;
 }

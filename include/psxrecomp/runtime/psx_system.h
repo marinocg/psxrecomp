@@ -204,7 +204,7 @@ class PsxSystem
     {
         static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
                       "Unsupported read size for runtime MMIO");
-        if (!base || offset + sizeof(T) > size)
+        if (!base || size < sizeof(T) || offset > (size - sizeof(T)))
         {
             return {};
         }
@@ -217,7 +217,7 @@ class PsxSystem
     {
         static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
                       "Unsupported write size for runtime MMIO");
-        if (!base || offset + sizeof(T) > size)
+        if (!base || size < sizeof(T) || offset > (size - sizeof(T)))
         {
             return;
         }

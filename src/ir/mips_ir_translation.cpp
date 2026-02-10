@@ -59,9 +59,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
                                           const disasm::Instruction* delaySlot)
 {
     auto emit = [&](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs)
-    {
-        emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address);
-    };
+    { emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address); };
 
     switch (instr.opcode)
     {
@@ -252,8 +250,8 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
 void MipsIrTranslator::emitInstruction(Opcode opcode, std::vector<Value> inputs,
                                        std::vector<Value> outputs, Address sourceAddress)
 {
-    m_result.instructions.push_back(m_builder.makeInstruction(
-        opcode, std::move(inputs), std::move(outputs), sourceAddress));
+    m_result.instructions.push_back(
+        m_builder.makeInstruction(opcode, std::move(inputs), std::move(outputs), sourceAddress));
 }
 
 void MipsIrTranslator::addWarning(const disasm::Instruction& instruction,
@@ -264,8 +262,7 @@ void MipsIrTranslator::addWarning(const disasm::Instruction& instruction,
     m_result.warnings.push_back(stream.str());
 }
 
-void MipsIrTranslator::addError(const disasm::Instruction& instruction,
-                                const std::string& message)
+void MipsIrTranslator::addError(const disasm::Instruction& instruction, const std::string& message)
 {
     std::ostringstream stream;
     stream << message << " @ " << formatAddress(instruction.address);
@@ -285,8 +282,7 @@ bool MipsIrTranslator::isMmioImmediate(Register base, s16 immediate)
         return false;
     }
     const Address address = static_cast<Address>(static_cast<s32>(immediate));
-    return address >= MemoryMap::IO_BASE &&
-           address < (MemoryMap::IO_BASE + MemoryMap::IO_SIZE);
+    return address >= MemoryMap::IO_BASE && address < (MemoryMap::IO_BASE + MemoryMap::IO_SIZE);
 }
 
 std::string MipsIrTranslator::formatAddress(Address address)

@@ -69,8 +69,8 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         std::string lhs = valueToExpr(instruction.outputs.front(), context);
         std::string rhsA = valueToExpr(instruction.inputs[0], context);
         std::string rhsB = valueToExpr(instruction.inputs[1], context);
-        emitter.writeLine(lhs + " = (static_cast<s32>(" + rhsA + ") " + op +
-                          " static_cast<s32>(" + rhsB + "));");
+        emitter.writeLine(lhs + " = (static_cast<s32>(" + rhsA + ") " + op + " static_cast<s32>(" +
+                          rhsB + "));");
     };
 
     switch (instruction.opcode)
@@ -132,9 +132,11 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             emitter.writeLine("// TODO: malformed shift op");
             break;
         }
-        emitter.writeLine(valueToExpr(instruction.outputs.front(), context) + " = static_cast<u32>("
-                          "static_cast<s32>(" + valueToExpr(instruction.inputs[0], context) +
-                          ") >> (" + valueToExpr(instruction.inputs[1], context) + " & 0x1F));");
+        emitter.writeLine(valueToExpr(instruction.outputs.front(), context) +
+                          " = static_cast<u32>("
+                          "static_cast<s32>(" +
+                          valueToExpr(instruction.inputs[0], context) + ") >> (" +
+                          valueToExpr(instruction.inputs[1], context) + " & 0x1F));");
         break;
     case ir::Opcode::MUL:
     case ir::Opcode::MULU:

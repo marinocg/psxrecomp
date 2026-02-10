@@ -10,9 +10,7 @@ namespace detail
 void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
 {
     auto emit = [&](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs)
-    {
-        emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address);
-    };
+    { emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address); };
 
     if (isMipsNop(instr))
     {
@@ -45,8 +43,8 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
              {Value::makeRegister(instr.rd)});
         break;
     case disasm::Opcode::SLL:
-        emit(Opcode::SHL, {Value::makeRegister(instr.rt),
-                           Value::makeImmediate(static_cast<s32>(instr.shamt))},
+        emit(Opcode::SHL,
+             {Value::makeRegister(instr.rt), Value::makeImmediate(static_cast<s32>(instr.shamt))},
              {Value::makeRegister(instr.rd)});
         break;
     case disasm::Opcode::SRL:
@@ -64,8 +62,7 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
              {Value::makeRegister(instr.rd)});
         break;
     case disasm::Opcode::SRLV:
-        emit(Opcode::SHR_LOGICAL,
-             {Value::makeRegister(instr.rt), Value::makeRegister(instr.rs)},
+        emit(Opcode::SHR_LOGICAL, {Value::makeRegister(instr.rt), Value::makeRegister(instr.rs)},
              {Value::makeRegister(instr.rd)});
         break;
     case disasm::Opcode::SRAV:
@@ -74,23 +71,19 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         break;
     case disasm::Opcode::MULT:
         emit(Opcode::MUL, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
-             {Value::makeSpecial(SpecialRegister::HI),
-              Value::makeSpecial(SpecialRegister::LO)});
+             {Value::makeSpecial(SpecialRegister::HI), Value::makeSpecial(SpecialRegister::LO)});
         break;
     case disasm::Opcode::MULTU:
         emit(Opcode::MULU, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
-             {Value::makeSpecial(SpecialRegister::HI),
-              Value::makeSpecial(SpecialRegister::LO)});
+             {Value::makeSpecial(SpecialRegister::HI), Value::makeSpecial(SpecialRegister::LO)});
         break;
     case disasm::Opcode::DIV:
         emit(Opcode::DIV, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
-             {Value::makeSpecial(SpecialRegister::HI),
-              Value::makeSpecial(SpecialRegister::LO)});
+             {Value::makeSpecial(SpecialRegister::HI), Value::makeSpecial(SpecialRegister::LO)});
         break;
     case disasm::Opcode::DIVU:
         emit(Opcode::DIVU, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
-             {Value::makeSpecial(SpecialRegister::HI),
-              Value::makeSpecial(SpecialRegister::LO)});
+             {Value::makeSpecial(SpecialRegister::HI), Value::makeSpecial(SpecialRegister::LO)});
         break;
     case disasm::Opcode::MFHI:
         emit(Opcode::MOVE, {Value::makeSpecial(SpecialRegister::HI)},
@@ -110,23 +103,27 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         break;
     case disasm::Opcode::ADDI:
     case disasm::Opcode::ADDIU:
-        emit(Opcode::ADD, {Value::makeRegister(instr.rs),
-                           Value::makeImmediate(static_cast<s32>(instr.immediate))},
+        emit(Opcode::ADD,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<s32>(instr.immediate))},
              {Value::makeRegister(instr.rt)});
         break;
     case disasm::Opcode::ANDI:
-        emit(Opcode::AND, {Value::makeRegister(instr.rs),
-                           Value::makeImmediate(static_cast<u16>(instr.immediate))},
+        emit(Opcode::AND,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<u16>(instr.immediate))},
              {Value::makeRegister(instr.rt)});
         break;
     case disasm::Opcode::ORI:
-        emit(Opcode::OR, {Value::makeRegister(instr.rs),
-                          Value::makeImmediate(static_cast<u16>(instr.immediate))},
+        emit(Opcode::OR,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<u16>(instr.immediate))},
              {Value::makeRegister(instr.rt)});
         break;
     case disasm::Opcode::XORI:
-        emit(Opcode::XOR, {Value::makeRegister(instr.rs),
-                           Value::makeImmediate(static_cast<u16>(instr.immediate))},
+        emit(Opcode::XOR,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<u16>(instr.immediate))},
              {Value::makeRegister(instr.rt)});
         break;
     case disasm::Opcode::LUI:
@@ -283,8 +280,7 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         auto target = instr.getJumpTarget();
         if (target.has_value())
         {
-            addWarning(instr,
-                       "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
+            addWarning(instr, "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
             emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
         }
         else

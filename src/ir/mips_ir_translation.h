@@ -22,8 +22,7 @@ class MipsIrTranslator
 
   private:
     void translateNoDelay(const disasm::Instruction& instr);
-    void translateWithDelay(const disasm::Instruction& instr,
-                            const disasm::Instruction* delaySlot);
+    void translateWithDelay(const disasm::Instruction& instr, const disasm::Instruction* delaySlot);
     void emitInstruction(Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs,
                          Address sourceAddress);
     void addWarning(const disasm::Instruction& instruction, const std::string& message);

@@ -261,6 +261,11 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     const Address baseAddress = exeImage.header.loadAddress;
     const auto disassembled = disasm::MipsDisassembler::disassemble(
         exeImage.programData.data(), exeImage.programData.size(), baseAddress);
+    if (disassembled.empty())
+    {
+        return buildPipelineError("Disassembler produced no instructions.", warnings, diagnostics,
+                                  result.exeCandidates);
+    }
 
     const Address entryAddress = detail::resolveEntryAddress(exeImage);
     auto boundaries = disasm::findFunctionBoundaries(disassembled);
@@ -289,6 +294,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     for (const auto& boundary : boundaries)
     {
         std::vector<disasm::Instruction> functionInstructions;
+        functionInstructions.reserve(disassembled.size());
         for (const auto& instruction : disassembled)
         {
             if (instruction.address >= boundary.start && instruction.address <= boundary.end)

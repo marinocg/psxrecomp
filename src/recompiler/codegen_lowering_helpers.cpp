@@ -207,8 +207,7 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
             {
                 emitter.openBlock("else if (" + condition + ")");
             }
-            emitter.writeLine(dest + " = " + valueToExpr(instruction.inputs[index], context) +
-                              ";");
+            emitter.writeLine(dest + " = " + valueToExpr(instruction.inputs[index], context) + ";");
             emitter.closeBlock();
         }
         if (!predecessors.empty())
