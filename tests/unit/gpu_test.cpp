@@ -43,6 +43,9 @@ int main()
     gpu.tickGpu(2);
     assert(gpu.fifoDepth() <= initialDepth);
 
+    gpu.restoreStatus(0x12345678u);
+    assert(gpu.readStatus() == 0x12345678u);
+
     const auto before = gpu.readStatus();
     gpu.writeStatus(0x08000020u);
     gpu.tickDisplayLine();

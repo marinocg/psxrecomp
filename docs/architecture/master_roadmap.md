@@ -16,7 +16,7 @@ highlights dependencies between workstreams.
 - [x] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
 - [x] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
 - [x] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
-- [x] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
+- [ ] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
 - [ ] SPU emulation ([spu_emulation_roadmap.md](spu_emulation_roadmap.md))
 - [ ] Demo milestone ([demo_roadmap.md](demo_roadmap.md))
 - [ ] Full game support ([full_game_support_roadmap.md](full_game_support_roadmap.md))
@@ -75,7 +75,7 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 
 **Dependencies (complete these roadmaps)**
 - [x] Runtime library roadmap (`runtime_library_roadmap.md`)
-- [x] GPU emulation roadmap (`gpu_emulation_roadmap.md`)
+- [ ] GPU emulation roadmap (`gpu_emulation_roadmap.md`)
 - [ ] SPU emulation roadmap (`spu_emulation_roadmap.md`)
 
 ### M4: Recompiled Demo Title (Planned)
@@ -119,7 +119,7 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 - [ ] IR pipeline (`ir_roadmap.md`)
 - [ ] Recompiler/codegen (`recompiler_roadmap.md`)
 - [x] Runtime library (`runtime_library_roadmap.md`)
-- [x] GPU emulation (`gpu_emulation_roadmap.md`)
+- [ ] GPU emulation (`gpu_emulation_roadmap.md`)
 - [ ] SPU emulation (`spu_emulation_roadmap.md`)
 - [ ] Demo milestone (`demo_roadmap.md`)
 - [ ] Full game support (`full_game_support_roadmap.md`)

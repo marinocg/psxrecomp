@@ -5,7 +5,6 @@
 
 #include <deque>
 #include <memory>
-#include <optional>
 #include <vector>
 
 namespace psxrecomp
@@ -29,6 +28,7 @@ class Gpu
     u32 readStatus() const;
     u32 readData() const;
     void writeStatus(u32 value);
+    void restoreStatus(u32 value);
 
     void writeCommand(u32 value);
     void writeDma(u32 value);

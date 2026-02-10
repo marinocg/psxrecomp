@@ -41,6 +41,11 @@ void Gpu::writeStatus(u32 value)
     appendPacketWord(true, value);
 }
 
+void Gpu::restoreStatus(u32 value)
+{
+    m_status = value;
+}
+
 void Gpu::writeCommand(u32 value)
 {
     if (m_fifo.size() < MAX_FIFO_DEPTH)
@@ -104,6 +109,11 @@ void Gpu::selectBackend(Backend backend)
     }
     m_renderer->reset();
     updateRendererState();
+
+    for (const auto& command : m_commandTrace)
+    {
+        m_renderer->submit(command);
+    }
 }
 
 Gpu::Backend Gpu::backend() const

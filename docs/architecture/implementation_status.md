@@ -82,16 +82,17 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Higher-fidelity timer behavior and cycle-accurate scheduling.
 - Broader BIOS function coverage and return-value semantics.
 
-### GPU Emulation (~70%)
+### GPU Emulation (~45%)
 **Present**
 - GP0/GP1 packet decoding into structured command traces.
 - Register/status handling with FIFO depth and timing-oriented status updates.
 - VRAM write semantics and software reference rendering for rectangles/triangles/quads/sprites.
-- Pluggable GPU renderer interface with software and semi-accurate backend options.
+- Pluggable GPU renderer interface with software and semi-accurate backend scaffolding.
 - Runtime backend switching and frame comparison helpers for validation workflows.
 
 **Missing**
 - Hardware API-specific backend implementation (OpenGL/Vulkan/Metal).
+- Robust VRAM transfer/readback semantics and richer GP0/GP1 command coverage.
 - Pixel-accurate blending/texturing and full timing parity with production emulators.
 
 ### SPU Emulation (~5%)
