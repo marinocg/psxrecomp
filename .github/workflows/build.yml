@@ -9,8 +9,27 @@ on:
         default: "all"
 
 jobs:
+  validate:
+    name: Validate target OS input
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check target_os
+        shell: bash
+        run: |
+          allowed=("all" "ubuntu-latest" "windows-latest" "macos-latest")
+          target="${{ github.event.inputs.target_os }}"
+          for value in "${allowed[@]}"; do
+            if [[ "${value}" == "${target}" ]]; then
+              exit 0
+            fi
+          done
+          echo "Invalid target_os: ${target}" >&2
+          echo "Allowed values: ${allowed[*]}" >&2
+          exit 1
+
   build:
     name: Build (${{ matrix.os }})
+    needs: validate
     if: ${{ github.event.inputs.target_os == 'all' || github.event.inputs.target_os == matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
