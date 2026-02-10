@@ -59,6 +59,8 @@ int main()
 
     const psxrecomp::u32 regs[32] = {};
     system.callBiosSyscall(0xA0, regs, 32);
+    const psxrecomp::u32 oneReg[1] = {0x42};
+    system.callBiosSyscall(0xB0, oneReg, 1);
 
     return 0;
 }

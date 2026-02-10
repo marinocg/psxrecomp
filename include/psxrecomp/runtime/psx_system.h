@@ -197,7 +197,7 @@ class PsxSystem
 
     static bool isInRange(Address address, Address base, Address size)
     {
-        return address >= base && address < base + size;
+        return address >= base && (address - base) < size;
     }
 
     template <typename T> T readFromRegion(const u8* base, Address offset, Address size) const
