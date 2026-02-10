@@ -37,13 +37,16 @@ void appendLe32(std::vector<uint8_t>& buffer, uint32_t value)
 int main()
 {
     using psxrecomp::Address;
+    using psxrecomp::disasm::buildCallGraph;
     using psxrecomp::disasm::CodeDataSegmentation;
     using psxrecomp::disasm::findFunctionBoundaries;
     using psxrecomp::disasm::findIndirectBranchTargets;
     using psxrecomp::disasm::findJumpTables;
     using psxrecomp::disasm::Instruction;
+    using psxrecomp::disasm::InstructionType;
     using psxrecomp::disasm::JumpTableInfo;
     using psxrecomp::disasm::MipsDisassembler;
+    using psxrecomp::disasm::Opcode;
     using psxrecomp::disasm::segmentCodeAndData;
 
     const Address baseAddress = 0x80010000;
@@ -85,6 +88,15 @@ int main()
     assert(boundaries[1].start == 0x80010020);
     assert(boundaries[1].end == 0x8001002C);
 
+    auto callGraph = buildCallGraph(instructions, boundaries);
+    assert(callGraph.functions.size() == 2);
+    assert(callGraph.functions[0] == 0x80010000);
+    assert(callGraph.functions[1] == 0x80010020);
+    assert(callGraph.edges.size() == 1);
+    assert(callGraph.edges[0].caller == 0x80010000);
+    assert(callGraph.edges[0].callSite == 0x80010008);
+    assert(callGraph.edges[0].callee == 0x80010020);
+
     auto indirectTargets = findIndirectBranchTargets(instructions);
     assert(indirectTargets.size() == 1);
     assert(indirectTargets[0].address == 0x80010044);
@@ -105,6 +117,21 @@ int main()
     assert(segmentation.dataRanges.size() == 1);
     assert(segmentation.dataRanges[0].start == 0x8001004C);
     assert(segmentation.dataRanges[0].end == 0x8001004C);
+
+    std::vector<Instruction> duplicateCallInstructions;
+    duplicateCallInstructions.push_back(Instruction{0x80020008, encodeJ(0x03, (0x80030000u >> 2)),
+                                                    Opcode::JAL, InstructionType::J_TYPE, 0, 0, 0,
+                                                    0, (0x80030000u >> 2), 0, false, std::nullopt});
+    duplicateCallInstructions.push_back(Instruction{0x80020008, encodeJ(0x03, (0x80030100u >> 2)),
+                                                    Opcode::JAL, InstructionType::J_TYPE, 0, 0, 0,
+                                                    0, (0x80030100u >> 2), 0, false, std::nullopt});
+
+    auto duplicateCallGraph =
+        buildCallGraph(duplicateCallInstructions, {{0x80020000, 0x80020020, false, false}});
+    assert(duplicateCallGraph.functions.size() == 3);
+    assert(duplicateCallGraph.edges.size() == 2);
+    assert(duplicateCallGraph.edges[0].callee == 0x80030000);
+    assert(duplicateCallGraph.edges[1].callee == 0x80030100);
 
     return 0;
 }

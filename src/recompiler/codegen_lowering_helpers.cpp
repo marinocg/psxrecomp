@@ -84,6 +84,8 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "cmp_ne";
     case ir::Opcode::COMPARE_LT:
         return "cmp_lt";
+    case ir::Opcode::COMPARE_LTU:
+        return "cmp_ltu";
     case ir::Opcode::COMPARE_LE:
         return "cmp_le";
     case ir::Opcode::COMPARE_GT:

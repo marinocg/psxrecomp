@@ -82,6 +82,45 @@ int main()
         psxrecomp::ir::buildControlFlowFunction("invalid", 0x2000, invalidInstructions);
     assert(!invalidResult.errors.empty());
 
+    std::vector<Instruction> delaySlotInstructions;
+    delaySlotInstructions.push_back(
+        makeInstruction(Opcode::COMPARE_EQ, {Value::makeRegister(r1), Value::makeRegister(r2)},
+                        {Value::makeTemporary(10)}, 0x8000));
+    delaySlotInstructions.push_back(makeInstruction(
+        Opcode::BRANCH, {Value::makeTemporary(10), Value::makeAddress(0x8014)}, {}, 0x8008));
+    delaySlotInstructions.push_back(
+        makeInstruction(Opcode::ADD, {Value::makeRegister(r3), Value::makeImmediate(1)},
+                        {Value::makeRegister(r3)}, 0x800C));
+    delaySlotInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x8010));
+    delaySlotInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x8014));
+
+    ControlFlowBuildResult delaySlotCfg =
+        psxrecomp::ir::buildControlFlowFunction("delay_slot", 0x8000, delaySlotInstructions);
+    assert(delaySlotCfg.errors.empty());
+    assert(delaySlotCfg.function.blocks.size() == 3);
+    bool foundBlock8000 = false;
+    bool foundBlock800c = false;
+    bool foundBlock8014 = false;
+    for (const auto& block : delaySlotCfg.function.blocks)
+    {
+        if (block.name == "block_0x8000")
+        {
+            foundBlock8000 = true;
+            assert(block.successors.size() == 2);
+        }
+        if (block.name == "block_0x800c")
+        {
+            foundBlock800c = true;
+        }
+        if (block.name == "block_0x8014")
+        {
+            foundBlock8014 = true;
+        }
+    }
+    assert(foundBlock8000);
+    assert(foundBlock800c);
+    assert(foundBlock8014);
+
     using psxrecomp::ir::Function;
 
     Function phiMismatch{"phi_mismatch", 0x3000, {}};

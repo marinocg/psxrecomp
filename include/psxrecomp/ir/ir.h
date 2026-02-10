@@ -36,6 +36,7 @@ enum class Opcode
     COMPARE_EQ,
     COMPARE_NE,
     COMPARE_LT,
+    COMPARE_LTU,
     COMPARE_LE,
     COMPARE_GT,
     COMPARE_GE,

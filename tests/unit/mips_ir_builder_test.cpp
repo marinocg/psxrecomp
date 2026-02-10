@@ -18,6 +18,11 @@ psxrecomp::u32 encodeI(psxrecomp::u32 opcode, psxrecomp::u32 rs, psxrecomp::u32 
     return (opcode << 26) | (rs << 21) | (rt << 16) | static_cast<psxrecomp::u16>(imm);
 }
 
+psxrecomp::u32 encodeJ(psxrecomp::u32 opcode, psxrecomp::u32 target)
+{
+    return (opcode << 26) | (target & 0x03FFFFFFu);
+}
+
 void appendLe32(std::vector<psxrecomp::u8>& buffer, psxrecomp::u32 value)
 {
     buffer.push_back(static_cast<psxrecomp::u8>(value & 0xFF));
@@ -61,6 +66,68 @@ int main()
 
     const Address branchAddress = result.instructions[2].sourceAddress.value_or(0);
     assert(branchAddress == 0x80010008);
+
+    std::vector<psxrecomp::u8> extendedBuffer;
+    extendedBuffer.reserve(44);
+    appendLe32(extendedBuffer, encodeR(9, 10, 11, 0, 0x27)); // nor $t3, $t1, $t2
+    appendLe32(extendedBuffer, encodeI(0x0A, 11, 12, 5));    // slti $t4, $t3, 5
+    appendLe32(extendedBuffer, encodeI(0x0B, 11, 14, 5));    // sltiu $t6, $t3, 5
+    appendLe32(extendedBuffer, encodeI(0x20, 8, 13, 1));     // lb $t5, 1($t0)
+    appendLe32(extendedBuffer, encodeI(0x28, 8, 13, 2));     // sb $t5, 2($t0)
+    appendLe32(extendedBuffer, encodeJ(0x03, 0x00000028u));  // jal 0xA0 (BIOS)
+    appendLe32(extendedBuffer, encodeR(0, 0, 0, 0, 0x00));   // nop delay slot
+    appendLe32(extendedBuffer, encodeI(0x01, 4, 17, 1));     // bgezal $a0, +1
+    appendLe32(extendedBuffer, encodeR(0, 0, 0, 0, 0x00));   // nop delay slot
+
+    auto extendedInstructions =
+        MipsDisassembler::disassemble(extendedBuffer.data(), extendedBuffer.size(), 0x80020000);
+    auto extended = buildIrFromMips(extendedInstructions);
+
+    assert(extended.errors.empty());
+    bool foundNorXor = false;
+    bool foundSlti = false;
+    bool foundSltu = false;
+    bool foundLoadStore = false;
+    bool foundBiosSyscall = false;
+    bool foundConditionalLink = false;
+    for (const auto& instruction : extended.instructions)
+    {
+        if (instruction.opcode == Opcode::XOR)
+        {
+            foundNorXor = true;
+        }
+        if (instruction.opcode == Opcode::COMPARE_LT && !instruction.outputs.empty() &&
+            instruction.outputs.front().kind == psxrecomp::ir::ValueKind::REGISTER)
+        {
+            foundSlti = true;
+        }
+        if (instruction.opcode == Opcode::COMPARE_LTU)
+        {
+            foundSltu = true;
+        }
+        if (instruction.opcode == Opcode::LOAD || instruction.opcode == Opcode::STORE)
+        {
+            foundLoadStore = true;
+        }
+        if (instruction.opcode == Opcode::SYSCALL && !instruction.inputs.empty() &&
+            instruction.inputs.front().kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            (static_cast<psxrecomp::u32>(instruction.inputs.front().immediate) & 0x1FFFFFFFu) ==
+                0xA0u)
+        {
+            foundBiosSyscall = true;
+        }
+        if (instruction.opcode == Opcode::BRANCH && !instruction.inputs.empty())
+        {
+            foundConditionalLink = true;
+        }
+    }
+
+    assert(foundNorXor);
+    assert(foundSlti);
+    assert(foundLoadStore);
+    assert(foundSltu);
+    assert(foundBiosSyscall);
+    assert(foundConditionalLink);
 
     return 0;
 }

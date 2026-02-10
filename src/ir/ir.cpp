@@ -49,6 +49,8 @@ std::string opcodeToString(Opcode opcode)
         return "cmp_ne";
     case Opcode::COMPARE_LT:
         return "cmp_lt";
+    case Opcode::COMPARE_LTU:
+        return "cmp_ltu";
     case Opcode::COMPARE_LE:
         return "cmp_le";
     case Opcode::COMPARE_GT:

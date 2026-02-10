@@ -42,6 +42,21 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         emit(Opcode::XOR, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
              {Value::makeRegister(instr.rd)});
         break;
+    case disasm::Opcode::NOR:
+        emit(Opcode::OR, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
+             {Value::makeRegister(instr.rd)});
+        emit(Opcode::XOR,
+             {Value::makeRegister(instr.rd), Value::makeImmediate(static_cast<s32>(0xFFFFFFFFu))},
+             {Value::makeRegister(instr.rd)});
+        break;
+    case disasm::Opcode::SLT:
+        emit(Opcode::COMPARE_LT, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
+             {Value::makeRegister(instr.rd)});
+        break;
+    case disasm::Opcode::SLTU:
+        emit(Opcode::COMPARE_LTU, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
+             {Value::makeRegister(instr.rd)});
+        break;
     case disasm::Opcode::SLL:
         emit(Opcode::SHL,
              {Value::makeRegister(instr.rt), Value::makeImmediate(static_cast<s32>(instr.shamt))},
@@ -126,11 +141,29 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
               Value::makeImmediate(static_cast<u16>(instr.immediate))},
              {Value::makeRegister(instr.rt)});
         break;
+    case disasm::Opcode::SLTI:
+        emit(Opcode::COMPARE_LT,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<s32>(instr.immediate))},
+             {Value::makeRegister(instr.rt)});
+        break;
+    case disasm::Opcode::SLTIU:
+        emit(Opcode::COMPARE_LTU,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<s32>(instr.immediate))},
+             {Value::makeRegister(instr.rt)});
+        break;
     case disasm::Opcode::LUI:
         emit(Opcode::MOVE,
              {Value::makeImmediate(static_cast<s32>(static_cast<u16>(instr.immediate)) << 16)},
              {Value::makeRegister(instr.rt)});
         break;
+    case disasm::Opcode::LB:
+    case disasm::Opcode::LBU:
+    case disasm::Opcode::LH:
+    case disasm::Opcode::LHU:
+    case disasm::Opcode::LWL:
+    case disasm::Opcode::LWR:
     case disasm::Opcode::LW:
     {
         if (isMmioImmediate(instr.rs, instr.immediate))
@@ -148,6 +181,10 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         emit(Opcode::LOAD, {addressTemp}, {Value::makeRegister(instr.rt)});
         break;
     }
+    case disasm::Opcode::SB:
+    case disasm::Opcode::SH:
+    case disasm::Opcode::SWL:
+    case disasm::Opcode::SWR:
     case disasm::Opcode::SW:
     {
         if (isMmioImmediate(instr.rs, instr.immediate))
@@ -280,12 +317,41 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         auto target = instr.getJumpTarget();
         if (target.has_value())
         {
-            addWarning(instr, "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
-            emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
+            if (isBiosStubAddress(*target))
+            {
+                addWarning(instr, "JAL to BIOS stub lowered to SYSCALL intrinsic");
+                emit(Opcode::SYSCALL, {Value::makeImmediate(static_cast<s32>(*target))}, {});
+            }
+            else
+            {
+                addWarning(instr,
+                           "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
+                emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
+            }
         }
         else
         {
             addError(instr, "JAL missing call target");
+        }
+        break;
+    }
+    case disasm::Opcode::BLTZAL:
+    case disasm::Opcode::BGEZAL:
+    {
+        Value condTemp = m_builder.createTemporary();
+        const Opcode compareOp =
+            instr.opcode == disasm::Opcode::BLTZAL ? Opcode::COMPARE_LT : Opcode::COMPARE_GE;
+        emit(compareOp, {Value::makeRegister(instr.rs), Value::makeImmediate(0)}, {condTemp});
+        auto target = instr.getBranchTarget();
+        if (target.has_value())
+        {
+            addWarning(instr, "Conditional link branch lowered to BRANCH; link-register semantics "
+                              "are not modeled yet");
+            emit(Opcode::BRANCH, {condTemp, Value::makeAddress(*target)}, {});
+        }
+        else
+        {
+            addError(instr, "Conditional link branch missing target");
         }
         break;
     }
