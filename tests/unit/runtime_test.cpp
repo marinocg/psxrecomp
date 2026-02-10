@@ -104,6 +104,22 @@ int main()
     auto checksum2 = system.stateChecksum();
     assert(checksum1 == checksum2);
 
+    auto stateWithInterrupts = state;
+    const size_t interruptStateOffset = sizeof(psxrecomp::u32) + MemoryMap::RAM_SIZE +
+                                        sizeof(psxrecomp::u32) + MemoryMap::SCRATCHPAD_SIZE +
+                                        sizeof(psxrecomp::u32) + MemoryMap::BIOS_SIZE;
+    stateWithInterrupts[interruptStateOffset + 0] = 0xAA;
+    stateWithInterrupts[interruptStateOffset + 1] = 0x55;
+    stateWithInterrupts[interruptStateOffset + 2] = 0x00;
+    stateWithInterrupts[interruptStateOffset + 3] = 0xF0;
+    stateWithInterrupts[interruptStateOffset + 4] = 0x0F;
+    stateWithInterrupts[interruptStateOffset + 5] = 0x00;
+    stateWithInterrupts[interruptStateOffset + 6] = 0x00;
+    stateWithInterrupts[interruptStateOffset + 7] = 0x00;
+    assert(system.deserializeState(stateWithInterrupts));
+    assert(system.interrupts().readStatus() == 0xF00055AAu);
+    assert(system.interrupts().readMask() == 0x0000000Fu);
+
     auto stateWithJunk = state;
     const auto firstRamByteBeforeFailedLoad = system.read<psxrecomp::u8>(MemoryMap::RAM_BASE);
     stateWithJunk[4] = static_cast<psxrecomp::u8>(firstRamByteBeforeFailedLoad ^ 0xFFu);

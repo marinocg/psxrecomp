@@ -33,6 +33,7 @@ class InterruptController
     void writeMask(u32 value);
 
     void raise(InterruptLine line);
+    void restoreState(u32 status, u32 mask);
 
     bool isInterruptPending() const;
 

@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/resource_pack.h"
 
 #include <fstream>
+#include <system_error>
 
 namespace psxrecomp
 {
@@ -10,20 +11,40 @@ namespace runtime
 bool ResourcePack::loadFromDirectory(const std::filesystem::path& root)
 {
     m_index.clear();
-    if (!std::filesystem::exists(root) || !std::filesystem::is_directory(root))
+
+    std::error_code error;
+    if (!std::filesystem::exists(root, error) || error)
+    {
+        return false;
+    }
+    if (!std::filesystem::is_directory(root, error) || error)
     {
         return false;
     }
 
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(root))
+    std::filesystem::recursive_directory_iterator iterator(
+        root, std::filesystem::directory_options::skip_permission_denied, error);
+    if (error)
     {
-        if (!entry.is_regular_file())
+        return false;
+    }
+
+    for (const auto& entry : iterator)
+    {
+        if (!entry.is_regular_file(error) || error)
         {
+            error.clear();
             continue;
         }
 
-        auto relative = std::filesystem::relative(entry.path(), root).generic_string();
-        m_index[relative] = entry.path();
+        auto relative = std::filesystem::relative(entry.path(), root, error);
+        if (error)
+        {
+            error.clear();
+            continue;
+        }
+
+        m_index[relative.generic_string()] = entry.path();
     }
 
     return true;
@@ -49,12 +70,21 @@ std::optional<std::vector<uint8_t>> ResourcePack::readResource(const std::string
     }
 
     file.seekg(0, std::ios::end);
+    if (!file)
+    {
+        return std::nullopt;
+    }
+
     auto size = file.tellg();
     if (size < 0)
     {
         return std::nullopt;
     }
     file.seekg(0, std::ios::beg);
+    if (!file)
+    {
+        return std::nullopt;
+    }
 
     std::vector<uint8_t> buffer(static_cast<size_t>(size));
     if (!buffer.empty())

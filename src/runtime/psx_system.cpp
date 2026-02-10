@@ -258,9 +258,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     std::copy(scratchpadCopy.begin(), scratchpadCopy.end(), m_scratchpad.begin());
     std::copy(biosCopy.begin(), biosCopy.end(), m_bios.begin());
 
-    m_interrupts.reset();
-    m_interrupts.writeMask(irqMask);
-    m_interrupts.raise(static_cast<InterruptLine>(irqStatus));
+    m_interrupts.restoreState(irqStatus, irqMask);
 
     m_spu.reset();
     m_spu.tick(spuCycles);
