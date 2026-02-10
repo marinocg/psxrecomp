@@ -265,6 +265,12 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
 
     m_gpu.reset();
     m_gpu.writeStatus(gpuStatus);
+
+    m_cdrom.reset();
+    m_input.reset();
+    m_dma.reset();
+    m_scheduler.reset();
+    m_debugOverlay.reset();
     return true;
 }
 uint64_t PsxSystem::stateChecksum() const
