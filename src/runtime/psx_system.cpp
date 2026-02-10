@@ -263,6 +263,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_spu.reset();
     m_spu.tick(spuCycles);
 
+    m_gpu.reset();
     m_gpu.writeStatus(gpuStatus);
     return true;
 }

@@ -100,9 +100,15 @@ int main()
 
     auto checksum1 = system.stateChecksum();
     auto state = system.serializeState();
+
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xAABBCCDDu);
+    assert(system.gpu().fifoDepth() > 0);
+
     assert(system.deserializeState(state));
     auto checksum2 = system.stateChecksum();
     assert(checksum1 == checksum2);
+    assert(system.gpu().fifoDepth() == 0);
+    assert(system.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0) == 0);
 
     auto stateWithInterrupts = state;
     const size_t interruptStateOffset = sizeof(psxrecomp::u32) + MemoryMap::RAM_SIZE +
