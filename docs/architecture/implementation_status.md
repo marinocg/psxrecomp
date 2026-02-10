@@ -4,8 +4,8 @@ This report estimates current implementation coverage across major subsystems an
 what is present vs. missing. Percentages are coarse estimates intended for planning.
 
 ## Overall completion (estimate)
-- **Project-wide completion:** ~25%
-- **End-to-end playable pipeline:** ~20%
+- **Project-wide completion:** ~30%
+- **End-to-end playable pipeline:** ~25%
 
 ## Subsystem status (estimate)
 
@@ -48,23 +48,29 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Integration of analysis helpers into the pipeline/call graph builder.
 - Broader decode coverage for edge-case encodings and validation in real binaries.
 
-### IR Pipeline (~45%)
+### IR Pipeline (~50%)
 **Present**
-- IR data structures, CFG builder, SSA conversion, verification utilities.
-- Initial MIPS→IR translation for a subset of opcodes.
+- IR data structures, CFG builder, SSA conversion, and verification utilities.
+- MIPS→IR lowering for arithmetic/logical ops, immediates, loads/stores, branches, jumps,
+  calls, and returns (nop-only delay slots).
 
 **Missing**
-- Full instruction coverage, delay-slot semantics, memory-mapped IO modeling.
-- Optimization passes and full SSA integration in pipeline output.
+- Full instruction coverage (shifts, mult/div, HI/LO transfers).
+- Delay-slot semantics beyond nop and function boundary detection.
+- Memory-mapped IO intrinsics and optimization passes.
+- Pipeline integration for SSA/verification in emitted artifacts.
 
-### Recompiler / Codegen (~35%)
+### Recompiler / Codegen (~45%)
 **Present**
-- Basic C++ emission for a small IR subset.
-- Minimal runtime calls for load/store and intrinsics.
+- Structured C++ emission for core IR ops with basic control flow.
+- Runtime helpers for memory access and address-based intrinsic dispatch.
+- Peephole optimizations and debug metadata in generated output.
+- Compile-and-run validation in unit tests.
 
 **Missing**
-- ABI/calling conventions, register allocation hints, structured control flow output.
-- Broader opcode lowering and optimized emission.
+- Phi-node lowering and SSA-aware temporary handling.
+- Broader opcode lowering (shifts, mult/div) as IR expands.
+- End-to-end PSX-EXE samples and packaging/build integration.
 
 ### Runtime Library (~30%)
 **Present**

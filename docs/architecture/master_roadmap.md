@@ -60,6 +60,9 @@ Goal: translate common game code paths into IR with correct control flow.
 - [ ] IR pipeline expansion (`ir_roadmap.md`)
 - [ ] Recompiler baseline codegen (`recompiler_roadmap.md`)
 
+Status note: IR and recompiler dependency roadmaps have been refreshed to reflect current
+implementation coverage and remaining gaps for M2.
+
 ### M3: Correct Runtime Semantics (In progress)
 Goal: make generated code interact with a faithful runtime model of PSX hardware.
 

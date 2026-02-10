@@ -4,19 +4,27 @@ This roadmap tracks the current state of the C++ recompiler and the remaining wo
 support end-to-end static recompilation.
 
 ## Current Status
-- [x] IR-to-C++ lowering and emission pipeline.
-- [x] Backend helpers for PSX memory accesses and intrinsic calls.
+- [x] IR-to-C++ lowering and emission pipeline with structured blocks.
+- [x] Lowering for core IR ops (move/add/sub/bitwise/compare/load/store/branch/jump/call/return).
+- [x] Backend helpers for PSX memory accesses and address-based intrinsic dispatch.
+- [x] Peephole optimizations for zero-value arithmetic and redundant moves.
+- [x] Source-address comments and label metadata in generated output.
+- [ ] Phi node lowering and SSA-aware temporaries in C++.
+- [ ] Support for additional IR ops (shifts, mult/div, HI/LO semantics).
 
 ## Phase 1: Baseline Code Generation
 - [x] Define a C++ emitter API with structured blocks and expressions.
-- [x] Lower core IR opcodes (move, add/sub, bitwise, loads/stores) to C++.
+- [x] Lower core IR opcodes (move, add/sub, bitwise, compare, loads/stores) to C++.
 - [x] Emit control flow for branches, jumps, and returns.
 - [x] Emit function signatures and basic calling conventions.
+- [ ] Lower PHI nodes and SSA values into concrete temporaries.
+- [ ] Support new IR opcodes as the IR pipeline expands (shifts, mult/div).
 
 ## Phase 2: Runtime Integration
 - [x] Hook memory accesses to runtime RAM and MMIO helpers.
-- [x] Emit runtime calls for GPU/SPU/CD-ROM intrinsics.
+- [x] Emit address-based intrinsic dispatch for GPU/SPU/CD-ROM calls.
 - [x] Add support for global data and static tables.
+- [ ] Introduce explicit intrinsic lowering once IR gains MMIO intrinsics.
 
 ## Phase 3: Optimization & Readability
 - [x] Add peephole optimizations during emission.
