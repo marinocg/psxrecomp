@@ -136,12 +136,17 @@ int main()
     }
 
     ResourcePack pack;
+    assert(!pack.loadFromDirectory(tempRoot / "missing"));
     assert(pack.loadFromDirectory(tempRoot));
     assert(pack.hasResource("textures/logo.bin"));
     auto resource = pack.readResource("textures/logo.bin");
     assert(resource.has_value());
     assert(resource->size() == 4);
     assert(pack.resourceCount() == 1);
+
+    std::filesystem::remove(tempRoot / "textures" / "logo.bin");
+    auto missingResource = pack.readResource("textures/logo.bin");
+    assert(!missingResource.has_value());
 
     std::filesystem::remove_all(tempRoot);
 
