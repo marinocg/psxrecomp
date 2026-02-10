@@ -64,13 +64,16 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
     std::cout << "    \"selectedPath\": \"" << escapeJson(result.selectionInfo.selectedPath)
               << "\"\n";
     std::cout << "  },\n";
-    std::cout << "  \"artifacts\": {\n";
-    std::cout << "    \"module\": \"" << escapeJson(result.artifacts.moduleName) << "\",\n";
-    std::cout << "    \"header\": \"" << escapeJson(result.artifacts.headerPath) << "\",\n";
-    std::cout << "    \"source\": \"" << escapeJson(result.artifacts.sourcePath) << "\",\n";
-    std::cout << "    \"build\": \"" << escapeJson(result.artifacts.buildPath) << "\",\n";
-    std::cout << "    \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\"\n";
-    std::cout << "  },\n";
+    if (result.success)
+    {
+        std::cout << "  \"artifacts\": {\n";
+        std::cout << "    \"module\": \"" << escapeJson(result.artifacts.moduleName) << "\",\n";
+        std::cout << "    \"header\": \"" << escapeJson(result.artifacts.headerPath) << "\",\n";
+        std::cout << "    \"source\": \"" << escapeJson(result.artifacts.sourcePath) << "\",\n";
+        std::cout << "    \"build\": \"" << escapeJson(result.artifacts.buildPath) << "\",\n";
+        std::cout << "    \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\"\n";
+        std::cout << "  },\n";
+    }
     std::cout << "  \"warnings\": [\n";
     for (size_t index = 0; index < result.warnings.size(); ++index)
     {

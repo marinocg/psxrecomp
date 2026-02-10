@@ -23,12 +23,16 @@ namespace recompiler
 namespace
 {
 PipelineResult buildPipelineError(const std::string& message,
-                                  const std::vector<std::string>& warnings = {})
+                                  const std::vector<std::string>& warnings,
+                                  const std::vector<PipelineDiagnostic>& diagnostics,
+                                  const std::vector<ExeCandidateInfo>& candidates)
 {
     PipelineResult result;
     result.success = false;
     result.errorMessage = message;
     result.warnings = warnings;
+    result.diagnostics = diagnostics;
+    result.exeCandidates = candidates;
     return result;
 }
 } // namespace
@@ -42,12 +46,12 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 {
     if (inputPath.empty())
     {
-        return buildPipelineError("Input path is empty.");
+        return buildPipelineError("Input path is empty.", {}, {}, {});
     }
 
     if (m_options.outputDirectory.empty())
     {
-        return buildPipelineError("Output directory is not set.");
+        return buildPipelineError("Output directory is not set.", {}, {}, {});
     }
 
     const std::vector<std::string> discPaths =
@@ -65,7 +69,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
     const std::string selectionRule =
         "Prefer SYSTEM.CNF BOOT entry when valid; otherwise select sorted candidates by path, "
-        "load address, then size.";
+        "load address, size, entry point, hash, validity, then path.";
     result.selectionInfo.rule = selectionRule;
 
     if (detail::isIsoLikePath(inputFsPath))
@@ -78,7 +82,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             {
                 error += " " + parser.getLastError();
             }
-            return buildPipelineError(error, warnings);
+            return buildPipelineError(error, warnings, diagnostics, result.exeCandidates);
         }
 
         std::vector<std::string> candidatePaths = parser.listExecutables();
@@ -102,7 +106,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
         if (uniquePaths.empty())
         {
-            return buildPipelineError("No PSX executable found in ISO image.", warnings);
+            return buildPipelineError("No PSX executable found in ISO image.", warnings,
+                                      diagnostics, result.exeCandidates);
         }
 
         for (const auto& path : uniquePaths)
@@ -209,7 +214,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         }
         if (!selectedIndex.has_value())
         {
-            return buildPipelineError("No valid PSX executable candidate found.", warnings);
+            return buildPipelineError("No valid PSX executable candidate found.", warnings,
+                                      diagnostics, result.exeCandidates);
         }
 
         const auto& selected = result.exeCandidates[selectedIndex.value()];
@@ -217,7 +223,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         std::vector<u8> exeData = parser.extractFile(selected.path);
         if (!iso::PsxExeLoader::loadImage(exeData, exeImage, nullptr))
         {
-            return buildPipelineError("Failed to parse selected PSX executable.", warnings);
+            return buildPipelineError("Failed to parse selected PSX executable.", warnings,
+                                      diagnostics, result.exeCandidates);
         }
     }
     else
@@ -226,7 +233,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         if (!iso::PsxExeLoader::loadFromFile(activeDiscPath, exeImage, &exeDiagnostics))
         {
             detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
-            return buildPipelineError("Failed to load PSX executable.", warnings);
+            return buildPipelineError("Failed to load PSX executable.", warnings, diagnostics,
+                                      result.exeCandidates);
         }
         detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
 
@@ -244,7 +252,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
     if (exeImage.programData.empty())
     {
-        return buildPipelineError("Executable program data is empty.", warnings);
+        return buildPipelineError("Executable program data is empty.", warnings, diagnostics,
+                                  result.exeCandidates);
     }
 
     const Address baseAddress = exeImage.header.loadAddress;
@@ -271,7 +280,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         {
             stream << " - " << error << "\n";
         }
-        return buildPipelineError(stream.str(), warnings);
+        return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
     }
 
     const Address entryAddress = detail::resolveEntryAddress(exeImage);
@@ -284,7 +293,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         {
             stream << " - " << error << "\n";
         }
-        return buildPipelineError(stream.str(), warnings);
+        return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
     }
 
     ir::Program program;
@@ -334,7 +343,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     if (dirError)
     {
         return buildPipelineError("Failed to create output directory: " + outputDir.string(),
-                                  warnings);
+                                  warnings, diagnostics, result.exeCandidates);
     }
 
     PipelineArtifacts artifacts;
@@ -349,7 +358,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         !detail::writeFile(artifacts.sourcePath, source, writeError) ||
         !detail::writeFile(artifacts.buildPath, buildFile, writeError))
     {
-        return buildPipelineError(writeError, warnings);
+        return buildPipelineError(writeError, warnings, diagnostics, result.exeCandidates);
     }
 
     result.success = true;
@@ -362,7 +371,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         result, activeDiscPath, outputDir.string(), timestamp, m_options.pipelineVersion);
     if (!detail::writeFile(artifacts.manifestPath, manifest, writeError))
     {
-        return buildPipelineError(writeError, warnings);
+        return buildPipelineError(writeError, warnings, diagnostics, result.exeCandidates);
     }
     return result;
 }
