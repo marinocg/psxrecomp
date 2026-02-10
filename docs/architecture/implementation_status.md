@@ -1,4 +1,4 @@
-# Implementation Status Report
+#Implementation Status Report
 
 This report estimates current implementation coverage across major subsystems and lists
 what is present vs. missing. Percentages are coarse estimates intended for planning.
@@ -45,7 +45,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Code-vs-data segmentation helpers for mixed sections.
 
 **Missing**
-- Integration of analysis helpers into the pipeline/call graph builder.
+- Integration of analysis helpers into the pipeline/call graph builder (function boundaries and direct-call graph are now wired).
 - Broader decode coverage for edge-case encodings and validation in real binaries.
 
 ### IR Pipeline (~85%)
@@ -57,7 +57,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Optimization passes (constant folding, DCE, CSE, LICM) integrated into the pipeline.
 
 **Missing**
-- Expanded load/store variants (byte/halfword, unaligned) and coprocessor-specific IR modeling.
+- Coprocessor-specific IR modeling and richer memory width semantics in backend lowering (byte/halfword/unaligned currently map to generic LOAD/STORE IR ops).
 
 ### Recompiler / Codegen (~75%)
 **Present**
@@ -109,5 +109,5 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 8. **End-to-end demo validation** with deterministic regression tests.
 
 ## References
-- Master roadmap: `docs/architecture/master_roadmap.md`
-- Gap analysis: `docs/architecture/gaps_report.md`
+- Master roadmap:
+`docs / architecture / master_roadmap.md` - Gap analysis : `docs / architecture / gaps_report.md`

@@ -201,6 +201,18 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::COMPARE_LT:
         writeCompareOp("<");
         break;
+    case ir::Opcode::COMPARE_LTU:
+        if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
+        {
+            const std::string dest = valueToExpr(instruction.outputs.front(), context);
+            const std::string lhs = valueToExpr(instruction.inputs[0], context);
+            const std::string rhs = valueToExpr(instruction.inputs[1], context);
+            emitter.writeLine(dest + " = static_cast<u32>(static_cast<u32>(" + lhs +
+                              ") < "
+                              "static_cast<u32>(" +
+                              rhs + "));");
+        }
+        break;
     case ir::Opcode::COMPARE_LE:
         writeCompareOp("<=");
         break;

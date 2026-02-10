@@ -47,6 +47,19 @@ struct CodeDataSegmentation
     std::vector<AddressRange> dataRanges;
 };
 
+struct CallGraphEdge
+{
+    Address caller;
+    Address callSite;
+    Address callee;
+};
+
+struct CallGraph
+{
+    std::vector<Address> functions;
+    std::vector<CallGraphEdge> edges;
+};
+
 std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instruction>& instructions);
 
 std::vector<IndirectBranchTarget>
@@ -57,6 +70,9 @@ std::vector<JumpTableInfo> findJumpTables(const std::vector<Instruction>& instru
 CodeDataSegmentation segmentCodeAndData(const std::vector<Instruction>& instructions,
                                         const std::vector<Address>& entryPoints,
                                         const std::vector<JumpTableInfo>& jumpTables);
+
+CallGraph buildCallGraph(const std::vector<Instruction>& instructions,
+                         const std::vector<FunctionBoundary>& boundaries);
 
 } // namespace disasm
 } // namespace psxrecomp

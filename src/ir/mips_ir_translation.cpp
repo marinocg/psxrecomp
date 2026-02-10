@@ -209,12 +209,45 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         auto target = instr.getJumpTarget();
         if (target.has_value())
         {
-            addWarning(instr, "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
-            emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
+            if (isBiosStubAddress(*target))
+            {
+                addWarning(instr, "JAL to BIOS stub lowered to SYSCALL intrinsic");
+                emit(Opcode::SYSCALL, {Value::makeImmediate(static_cast<s32>(*target))}, {});
+            }
+            else
+            {
+                addWarning(instr,
+                           "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
+                emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
+            }
         }
         else
         {
             addError(instr, "JAL missing call target");
+        }
+        return;
+    }
+    case disasm::Opcode::BLTZAL:
+    case disasm::Opcode::BGEZAL:
+    {
+        Value condTemp = m_builder.createTemporary();
+        const Opcode compareOp =
+            instr.opcode == disasm::Opcode::BLTZAL ? Opcode::COMPARE_LT : Opcode::COMPARE_GE;
+        emit(compareOp, {Value::makeRegister(instr.rs), Value::makeImmediate(0)}, {condTemp});
+        if (delaySlot != nullptr)
+        {
+            translateNoDelay(*delaySlot);
+        }
+        auto target = instr.getBranchTarget();
+        if (target.has_value())
+        {
+            addWarning(instr, "Conditional link branch lowered to BRANCH; link-register semantics "
+                              "are not modeled yet");
+            emit(Opcode::BRANCH, {condTemp, Value::makeAddress(*target)}, {});
+        }
+        else
+        {
+            addError(instr, "Conditional link branch missing target");
         }
         return;
     }
@@ -283,6 +316,12 @@ bool MipsIrTranslator::isMmioImmediate(Register base, s16 immediate)
     }
     const Address address = static_cast<Address>(static_cast<s32>(immediate));
     return address >= MemoryMap::IO_BASE && address < (MemoryMap::IO_BASE + MemoryMap::IO_SIZE);
+}
+
+bool MipsIrTranslator::isBiosStubAddress(Address address)
+{
+    const Address normalized = address & 0x1FFFFFFFu;
+    return normalized == 0xA0 || normalized == 0xB0 || normalized == 0xC0;
 }
 
 std::string MipsIrTranslator::formatAddress(Address address)

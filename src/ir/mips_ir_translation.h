@@ -29,6 +29,7 @@ class MipsIrTranslator
     void addError(const disasm::Instruction& instruction, const std::string& message);
     static bool isMipsNop(const disasm::Instruction& instruction);
     static bool isMmioImmediate(Register base, s16 immediate);
+    static bool isBiosStubAddress(Address address);
     static std::string formatAddress(Address address);
 
     Builder& m_builder;

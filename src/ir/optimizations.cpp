@@ -43,6 +43,7 @@ bool isPureBinaryOp(Opcode opcode)
     case Opcode::COMPARE_EQ:
     case Opcode::COMPARE_NE:
     case Opcode::COMPARE_LT:
+    case Opcode::COMPARE_LTU:
     case Opcode::COMPARE_LE:
     case Opcode::COMPARE_GT:
     case Opcode::COMPARE_GE:
@@ -223,6 +224,10 @@ OptimizationStats runOptimizations(Function& function)
                 break;
             case Opcode::COMPARE_LT:
                 result = (lhs.immediate < rhs.immediate) ? 1 : 0;
+                break;
+            case Opcode::COMPARE_LTU:
+                result =
+                    (static_cast<u32>(lhs.immediate) < static_cast<u32>(rhs.immediate)) ? 1 : 0;
                 break;
             case Opcode::COMPARE_LE:
                 result = (lhs.immediate <= rhs.immediate) ? 1 : 0;

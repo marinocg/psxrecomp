@@ -324,5 +324,84 @@ CodeDataSegmentation segmentCodeAndData(const std::vector<Instruction>& instruct
     return segmentation;
 }
 
+CallGraph buildCallGraph(const std::vector<Instruction>& instructions,
+                         const std::vector<FunctionBoundary>& boundaries)
+{
+    CallGraph graph;
+    if (instructions.empty() || boundaries.empty())
+    {
+        return graph;
+    }
+
+    std::vector<FunctionBoundary> sortedBoundaries = boundaries;
+    std::sort(sortedBoundaries.begin(), sortedBoundaries.end(),
+              [](const FunctionBoundary& lhs, const FunctionBoundary& rhs)
+              { return lhs.start < rhs.start; });
+
+    std::unordered_set<Address> knownFunctions;
+    knownFunctions.reserve(sortedBoundaries.size());
+    for (const auto& boundary : sortedBoundaries)
+    {
+        graph.functions.push_back(boundary.start);
+        knownFunctions.insert(boundary.start);
+    }
+
+    std::unordered_set<u64> seenEdges;
+    seenEdges.reserve(instructions.size());
+
+    for (const auto& instruction : instructions)
+    {
+        if (!detail::isDirectCall(instruction))
+        {
+            continue;
+        }
+
+        const auto callee = detail::resolveDirectCallTarget(instruction);
+        if (!callee.has_value())
+        {
+            continue;
+        }
+
+        const auto boundaryIt =
+            std::upper_bound(sortedBoundaries.begin(), sortedBoundaries.end(), instruction.address,
+                             [](Address address, const FunctionBoundary& boundary)
+                             { return address < boundary.start; });
+        if (boundaryIt == sortedBoundaries.begin())
+        {
+            continue;
+        }
+
+        const FunctionBoundary& callerBoundary = *std::prev(boundaryIt);
+        if (instruction.address > callerBoundary.end)
+        {
+            continue;
+        }
+
+        const Address caller = callerBoundary.start;
+        const u64 edgeKey = (static_cast<u64>(caller) << 32) | instruction.address;
+        if (seenEdges.insert(edgeKey).second)
+        {
+            graph.edges.push_back({caller, instruction.address, *callee});
+        }
+        if (knownFunctions.insert(*callee).second)
+        {
+            graph.functions.push_back(*callee);
+        }
+    }
+
+    std::sort(graph.functions.begin(), graph.functions.end());
+    std::sort(graph.edges.begin(), graph.edges.end(),
+              [](const CallGraphEdge& lhs, const CallGraphEdge& rhs)
+              {
+                  if (lhs.caller != rhs.caller)
+                  {
+                      return lhs.caller < rhs.caller;
+                  }
+                  return lhs.callSite < rhs.callSite;
+              });
+
+    return graph;
+}
+
 } // namespace disasm
 } // namespace psxrecomp

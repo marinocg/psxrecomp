@@ -37,6 +37,7 @@ void appendLe32(std::vector<uint8_t>& buffer, uint32_t value)
 int main()
 {
     using psxrecomp::Address;
+    using psxrecomp::disasm::buildCallGraph;
     using psxrecomp::disasm::CodeDataSegmentation;
     using psxrecomp::disasm::findFunctionBoundaries;
     using psxrecomp::disasm::findIndirectBranchTargets;
@@ -84,6 +85,15 @@ int main()
     assert(boundaries[0].hasEpilogue);
     assert(boundaries[1].start == 0x80010020);
     assert(boundaries[1].end == 0x8001002C);
+
+    auto callGraph = buildCallGraph(instructions, boundaries);
+    assert(callGraph.functions.size() == 2);
+    assert(callGraph.functions[0] == 0x80010000);
+    assert(callGraph.functions[1] == 0x80010020);
+    assert(callGraph.edges.size() == 1);
+    assert(callGraph.edges[0].caller == 0x80010000);
+    assert(callGraph.edges[0].callSite == 0x80010008);
+    assert(callGraph.edges[0].callee == 0x80010020);
 
     auto indirectTargets = findIndirectBranchTargets(instructions);
     assert(indirectTargets.size() == 1);

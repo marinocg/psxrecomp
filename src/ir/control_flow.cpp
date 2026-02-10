@@ -55,14 +55,9 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
         return result;
     }
 
-    std::vector<Instruction> sorted = instructions;
-    std::stable_sort(sorted.begin(), sorted.end(),
-                     [](const Instruction& lhs, const Instruction& rhs)
-                     { return lhs.sourceAddress.value_or(0) < rhs.sourceAddress.value_or(0); });
-
     std::vector<Address> orderedAddresses;
-    orderedAddresses.reserve(sorted.size());
-    for (const auto& instruction : sorted)
+    orderedAddresses.reserve(instructions.size());
+    for (const auto& instruction : instructions)
     {
         if (!instruction.sourceAddress.has_value())
         {
@@ -90,7 +85,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     blockStarts.insert(entryAddress);
 
     size_t addressableIndex = 0;
-    for (const auto& instruction : sorted)
+    for (const auto& instruction : instructions)
     {
         if (!instruction.sourceAddress.has_value())
         {
@@ -120,9 +115,9 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     }
 
     BasicBlock* currentBlock = nullptr;
-    for (size_t index = 0; index < sorted.size(); ++index)
+    for (size_t index = 0; index < instructions.size(); ++index)
     {
-        const auto& instruction = sorted[index];
+        const auto& instruction = instructions[index];
         if (!instruction.sourceAddress.has_value())
         {
             continue;

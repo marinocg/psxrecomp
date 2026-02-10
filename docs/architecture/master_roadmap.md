@@ -1,4 +1,4 @@
-# PSXRecomp Master Roadmap
+#PSXRecomp Master Roadmap
 
 This roadmap consolidates all component roadmaps into a single, trackable plan from prototype to
 full commercial game support. It references the detailed sub-roadmaps for each subsystem and
@@ -50,10 +50,10 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 Goal: translate common game code paths into IR with correct control flow.
 
 **Deliverables**
-- [ ] Support for full integer ALU set, shifts, mult/div, branches, jumps, loads/stores.
-- [ ] Correct delay slot handling for CFG and IR lowering.
-- [ ] Function boundary detection and call graph discovery.
-- [ ] IR modeling for system calls and BIOS stubs.
+- [x] Support for full integer ALU set, shifts, mult/div, branches, jumps, loads/stores.
+- [x] Correct delay slot handling for CFG and IR lowering.
+- [x] Function boundary detection and call graph discovery.
+- [x] IR modeling for system calls and BIOS stubs.
 
 **Dependencies (complete these roadmaps)**
 - [x] Disassembler completeness (`mips_r3000_disassembler_roadmap.md`)
