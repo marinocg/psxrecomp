@@ -139,6 +139,32 @@ bool isInvariantInput(const Value& value)
            value.kind == ValueKind::SPECIAL || value.kind == ValueKind::ADDRESS;
 }
 
+std::unordered_set<u32>
+collectLiveOutTemporaries(const BasicBlock& block,
+                          const std::unordered_map<std::string, const BasicBlock*>& byName)
+{
+    std::unordered_set<u32> liveOut;
+    for (const auto& successorName : block.successors)
+    {
+        auto it = byName.find(successorName);
+        if (it == byName.end() || it->second == nullptr)
+        {
+            continue;
+        }
+        for (const auto& instruction : it->second->instructions)
+        {
+            for (const auto& input : instruction.inputs)
+            {
+                if (input.kind == ValueKind::TEMPORARY)
+                {
+                    liveOut.insert(input.temporaryId);
+                }
+            }
+        }
+    }
+    return liveOut;
+}
+
 } // namespace
 
 OptimizationStats runOptimizations(Function& function)
@@ -311,9 +337,15 @@ OptimizationStats runOptimizations(Function& function)
         }
     }
 
+    std::unordered_map<std::string, const BasicBlock*> blockByName;
+    for (const auto& block : function.blocks)
+    {
+        blockByName.emplace(block.name, &block);
+    }
+
     for (auto& block : function.blocks)
     {
-        std::unordered_set<u32> liveTemps;
+        std::unordered_set<u32> liveTemps = collectLiveOutTemporaries(block, blockByName);
         for (auto it = block.instructions.rbegin(); it != block.instructions.rend();)
         {
             const Instruction& instruction = *it;

@@ -151,5 +151,33 @@ int main()
     }
     assert(foundFolded);
 
+    Function crossBlockDce{"cross_block_dce", 0x7000, {}};
+    crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}});
+    crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}});
+    crossBlockDce.blocks[0].instructions.push_back(
+        Instruction{Opcode::ADD,
+                    {Value::makeImmediate(10), Value::makeImmediate(20)},
+                    {Value::makeTemporary(1)},
+                    0x7000});
+    crossBlockDce.blocks[0].instructions.push_back(
+        Instruction{Opcode::JUMP, {Value::makeAddress(0x7008)}, {}, 0x7004});
+    crossBlockDce.blocks[1].instructions.push_back(
+        Instruction{Opcode::MOVE, {Value::makeTemporary(1)}, {Value::makeTemporary(2)}, 0x7008});
+    crossBlockDce.blocks[1].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x700C});
+
+    psxrecomp::ir::runOptimizations(crossBlockDce);
+    bool producerKept = false;
+    for (const auto& instruction : crossBlockDce.blocks[0].instructions)
+    {
+        if (!instruction.outputs.empty() &&
+            instruction.outputs.front().kind == psxrecomp::ir::ValueKind::TEMPORARY &&
+            instruction.outputs.front().temporaryId == 1)
+        {
+            producerKept = true;
+            break;
+        }
+    }
+    assert(producerKept);
+
     return 0;
 }
