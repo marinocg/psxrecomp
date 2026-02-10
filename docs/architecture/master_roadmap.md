@@ -1,4 +1,4 @@
-#PSXRecomp Master Roadmap
+# PSXRecomp Master Roadmap
 
 This roadmap consolidates all component roadmaps into a single, trackable plan from prototype to
 full commercial game support. It references the detailed sub-roadmaps for each subsystem and
@@ -15,7 +15,7 @@ highlights dependencies between workstreams.
 - [x] Disassembler ([mips_r3000_disassembler_roadmap.md](mips_r3000_disassembler_roadmap.md))
 - [x] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
 - [x] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
-- [ ] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
+- [x] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
 - [ ] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
 - [ ] SPU emulation ([spu_emulation_roadmap.md](spu_emulation_roadmap.md))
 - [ ] Demo milestone ([demo_roadmap.md](demo_roadmap.md))
@@ -71,10 +71,10 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 - [ ] CD-ROM data path with XA streaming basics.
 - [ ] GPU command packet ingestion and minimal rasterization.
 - [ ] SPU voice and streaming scaffolding (even if simplified).
-- [ ] Debug tooling: runtime logs, memory dumps, and performance overlays.
+- [x] Debug tooling: runtime logs, memory dumps, and performance overlays.
 
 **Dependencies (complete these roadmaps)**
-- [ ] Runtime library roadmap (`runtime_library_roadmap.md`)
+- [x] Runtime library roadmap (`runtime_library_roadmap.md`)
 - [ ] GPU emulation roadmap (`gpu_emulation_roadmap.md`)
 - [ ] SPU emulation roadmap (`spu_emulation_roadmap.md`)
 
@@ -118,7 +118,7 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 - [x] Disassembler (`mips_r3000_disassembler_roadmap.md`)
 - [ ] IR pipeline (`ir_roadmap.md`)
 - [ ] Recompiler/codegen (`recompiler_roadmap.md`)
-- [ ] Runtime library (`runtime_library_roadmap.md`)
+- [x] Runtime library (`runtime_library_roadmap.md`)
 - [ ] GPU emulation (`gpu_emulation_roadmap.md`)
 - [ ] SPU emulation (`spu_emulation_roadmap.md`)
 - [ ] Demo milestone (`demo_roadmap.md`)

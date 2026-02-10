@@ -1,11 +1,11 @@
-#Implementation Status Report
+# Implementation Status Report
 
 This report estimates current implementation coverage across major subsystems and lists
 what is present vs. missing. Percentages are coarse estimates intended for planning.
 
 ## Overall completion (estimate)
-- **Project-wide completion:** ~40%
-- **End-to-end playable pipeline:** ~30%
+- **Project-wide completion:** ~48%
+- **End-to-end playable pipeline:** ~36%
 
 ## Subsystem status (estimate)
 
@@ -69,13 +69,18 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 **Missing**
 - Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.
 
-### Runtime Library (~30%)
+### Runtime Library (~60%)
 **Present**
 - Core PSX system scaffolding (memory, basic subsystems).
+- DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
+- Structured runtime logging with per-category events and configurable verbosity.
+- Debug overlay counters for frame timing, DMA transfers, and interrupt activity.
+- Diagnostic memory dump support for RAM, VRAM, and SPU RAM plus save-state serialization/checksum.
+- Resource pack loader for runtime assets (textures/audio/movie payload containers).
 
 **Missing**
-- Accurate DMA/interrupt/timer scheduling.
-- Full MMIO map coverage, BIOS/syscall support.
+- Higher-fidelity timer behavior and cycle-accurate scheduling.
+- Broader BIOS function coverage and return-value semantics.
 
 ### GPU Emulation (~10%)
 **Present**
@@ -109,5 +114,5 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 8. **End-to-end demo validation** with deterministic regression tests.
 
 ## References
-- Master roadmap:
-`docs / architecture / master_roadmap.md` - Gap analysis : `docs / architecture / gaps_report.md`
+- Master roadmap: `docs/architecture/master_roadmap.md`
+- Gap analysis: `docs/architecture/gaps_report.md`

@@ -27,10 +27,10 @@ master roadmap.
 - No support for address translation beyond simple masking.
 
 ## Runtime Library
-- Incomplete MMIO map coverage; GPU/SPU/CD-ROM interfaces are skeletal.
-- DMA, timers, and interrupts need correctness and scheduling accuracy.
-- No BIOS emulation or syscall layer for common kernel services.
-- Limited logging/tracing for behavior verification.
+- MMIO coverage has baseline GPU/SPU/CD-ROM register handling but still lacks many device-specific edge cases.
+- DMA and interrupt routing are integrated, but timer behavior is not cycle-accurate yet.
+- BIOS/syscall layer exists for common entry points, with limited service coverage.
+- Structured logging, debug overlays, and memory dumps now exist; richer trace export tooling is still pending.
 
 ## GPU / SPU / CD-ROM
 - GPU: missing command decoding, rasterization accuracy, and VRAM behavior.

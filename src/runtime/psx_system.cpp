@@ -1,5 +1,6 @@
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <algorithm>
 #include <sstream>
 #include <utility>
 
@@ -12,6 +13,37 @@ namespace
 {
 constexpr u32 CYCLES_PER_FRAME = 564480;
 constexpr u32 DMA_DIRECTION_FROM_RAM = 0x00000001;
+
+void appendU32(std::vector<u8>& out, u32 value)
+{
+    out.push_back(static_cast<u8>(value & 0xFF));
+    out.push_back(static_cast<u8>((value >> 8) & 0xFF));
+    out.push_back(static_cast<u8>((value >> 16) & 0xFF));
+    out.push_back(static_cast<u8>((value >> 24) & 0xFF));
+}
+
+bool consumeU32(const std::vector<u8>& data, size_t& cursor, u32& out)
+{
+    if (cursor + sizeof(u32) > data.size())
+    {
+        return false;
+    }
+    out = static_cast<u32>(data[cursor]) | (static_cast<u32>(data[cursor + 1]) << 8) |
+          (static_cast<u32>(data[cursor + 2]) << 16) | (static_cast<u32>(data[cursor + 3]) << 24);
+    cursor += sizeof(u32);
+    return true;
+}
+
+uint64_t fnv1a64(const std::vector<u8>& bytes)
+{
+    uint64_t hash = 1469598103934665603ull;
+    for (u8 byte : bytes)
+    {
+        hash ^= byte;
+        hash *= 1099511628211ull;
+    }
+    return hash;
+}
 } // namespace
 
 PsxSystem::PsxSystem()
@@ -51,19 +83,22 @@ void PsxSystem::reset()
     m_dma.reset();
     m_interrupts.reset();
     m_scheduler.reset();
+    m_debugOverlay.reset();
 
-    m_logger.log(LogLevel::Info, "Runtime reset complete");
+    m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
 }
 
 void PsxSystem::boot()
 {
-    m_logger.log(LogLevel::Info, "Runtime boot sequence initialized");
+    m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
 }
 
 void PsxSystem::runFrame()
 {
     m_spu.tick(CYCLES_PER_FRAME);
     m_scheduler.tick(CYCLES_PER_FRAME);
+    m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
+    m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
 }
 
 u8* PsxSystem::getRam()
@@ -116,21 +151,14 @@ RuntimeLogger& PsxSystem::logger()
     return m_logger;
 }
 
+RuntimeDebugOverlay& PsxSystem::debugOverlay()
+{
+    return m_debugOverlay;
+}
+
 void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
 {
     m_discSwapInfo = std::move(info);
-}
-
-void PsxSystem::callBiosSyscall(u32 code, const u32* regs, size_t regCount)
-{
-    std::ostringstream stream;
-    stream << "BIOS syscall stub invoked: code=0x" << std::hex << code << std::dec
-           << ", regs=" << regCount;
-    if (regs != nullptr && regCount > 4)
-    {
-        stream << ", a0=0x" << std::hex << regs[4];
-    }
-    m_logger.log(LogLevel::Warn, stream.str());
 }
 
 const PsxSystem::DiscSwapInfo& PsxSystem::discSwapInfo() const
@@ -138,6 +166,154 @@ const PsxSystem::DiscSwapInfo& PsxSystem::discSwapInfo() const
     return m_discSwapInfo;
 }
 
+std::vector<u8> PsxSystem::dumpRam() const
+{
+    return m_ram;
+}
+
+std::vector<u8> PsxSystem::dumpVram() const
+{
+    std::vector<u8> bytes;
+    const auto& words = m_gpu.vramWords();
+    bytes.reserve(words.size() * sizeof(u32));
+    for (u32 value : words)
+    {
+        appendU32(bytes, value);
+    }
+    return bytes;
+}
+
+std::vector<u8> PsxSystem::dumpSpuRam() const
+{
+    std::vector<u8> bytes;
+    const auto& words = m_spu.ramWords();
+    bytes.reserve(words.size() * sizeof(u32));
+    for (u32 value : words)
+    {
+        appendU32(bytes, value);
+    }
+    return bytes;
+}
+
+std::vector<u8> PsxSystem::serializeState() const
+{
+    std::vector<u8> state;
+    state.reserve(sizeof(u32) * 7 + m_ram.size() + m_scratchpad.size() + m_bios.size());
+
+    appendU32(state, static_cast<u32>(m_ram.size()));
+    state.insert(state.end(), m_ram.begin(), m_ram.end());
+
+    appendU32(state, static_cast<u32>(m_scratchpad.size()));
+    state.insert(state.end(), m_scratchpad.begin(), m_scratchpad.end());
+
+    appendU32(state, static_cast<u32>(m_bios.size()));
+    state.insert(state.end(), m_bios.begin(), m_bios.end());
+
+    appendU32(state, m_interrupts.readStatus());
+    appendU32(state, m_interrupts.readMask());
+    appendU32(state, m_spu.cyclesElapsed());
+    appendU32(state, m_gpu.readStatus());
+    return state;
+}
+bool PsxSystem::deserializeState(const std::vector<u8>& state)
+{
+    size_t cursor = 0;
+    u32 ramSize = 0;
+    u32 scratchpadSize = 0;
+    u32 biosSize = 0;
+    u32 irqStatus = 0;
+    u32 irqMask = 0;
+    u32 spuCycles = 0;
+    u32 gpuStatus = 0;
+
+    if (!consumeU32(state, cursor, ramSize) || ramSize != m_ram.size() ||
+        cursor + ramSize > state.size())
+    {
+        return false;
+    }
+    std::copy(state.begin() + static_cast<std::ptrdiff_t>(cursor),
+              state.begin() + static_cast<std::ptrdiff_t>(cursor + ramSize), m_ram.begin());
+    cursor += ramSize;
+
+    if (!consumeU32(state, cursor, scratchpadSize) || scratchpadSize != m_scratchpad.size() ||
+        cursor + scratchpadSize > state.size())
+    {
+        return false;
+    }
+    std::copy(state.begin() + static_cast<std::ptrdiff_t>(cursor),
+              state.begin() + static_cast<std::ptrdiff_t>(cursor + scratchpadSize),
+              m_scratchpad.begin());
+    cursor += scratchpadSize;
+
+    if (!consumeU32(state, cursor, biosSize) || biosSize != m_bios.size() ||
+        cursor + biosSize > state.size())
+    {
+        return false;
+    }
+    std::copy(state.begin() + static_cast<std::ptrdiff_t>(cursor),
+              state.begin() + static_cast<std::ptrdiff_t>(cursor + biosSize), m_bios.begin());
+    cursor += biosSize;
+
+    if (!consumeU32(state, cursor, irqStatus) || !consumeU32(state, cursor, irqMask) ||
+        !consumeU32(state, cursor, spuCycles) || !consumeU32(state, cursor, gpuStatus))
+    {
+        return false;
+    }
+
+    m_interrupts.reset();
+    m_interrupts.writeMask(irqMask);
+    m_interrupts.raise(static_cast<InterruptLine>(irqStatus));
+
+    m_spu.reset();
+    m_spu.tick(spuCycles);
+
+    m_gpu.writeStatus(gpuStatus);
+
+    return cursor == state.size();
+}
+uint64_t PsxSystem::stateChecksum() const
+{
+    return fnv1a64(serializeState());
+}
+void PsxSystem::callBiosSyscall(u32 code, const u32* regs, size_t regCount)
+{
+    if (regs == nullptr || regCount == 0)
+    {
+        m_logger.log(LogLevel::Warn, "bios", "BIOS syscall called with empty register file");
+        return;
+    }
+
+    std::ostringstream stream;
+    switch (code)
+    {
+    case 0x00:
+        stream << "BIOS EnterCriticalSection";
+        m_logger.log(LogLevel::Debug, "bios", stream.str());
+        return;
+    case 0x01:
+        stream << "BIOS ExitCriticalSection";
+        m_logger.log(LogLevel::Debug, "bios", stream.str());
+        return;
+    case 0x3F:
+        if (regCount <= 4)
+        {
+            m_logger.log(LogLevel::Warn, "bios", "BIOS Putchar called without a0 register");
+            return;
+        }
+        stream << "BIOS Putchar: '" << static_cast<char>(regs[4] & 0xFF) << "'";
+        m_logger.log(LogLevel::Info, "bios", stream.str());
+        return;
+    default:
+        stream << "BIOS syscall stub invoked: code=0x" << std::hex << code << std::dec
+               << ", regs=" << regCount;
+        if (regCount > 4)
+        {
+            stream << ", a0=0x" << std::hex << regs[4];
+        }
+        m_logger.log(LogLevel::Warn, "bios", stream.str());
+        return;
+    }
+}
 u32 PsxSystem::readMmio32(Address address)
 {
     if (address == Mmio::GPU_GP1)
@@ -146,7 +322,7 @@ u32 PsxSystem::readMmio32(Address address)
     }
     if (address == Mmio::GPU_GP0)
     {
-        return 0;
+        return m_gpu.readData();
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
@@ -182,7 +358,19 @@ u8 PsxSystem::readMmio8(Address address)
 {
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
-        return m_cdrom.readStatus();
+        switch (address - Mmio::CDROM_BASE)
+        {
+        case 0:
+            return m_cdrom.readStatus();
+        case 1:
+            return m_cdrom.readData();
+        case 2:
+            return m_cdrom.readInterruptFlags();
+        case 3:
+            return m_cdrom.readInterruptEnable();
+        default:
+            return 0;
+        }
     }
 
     return 0;
@@ -239,18 +427,25 @@ void PsxSystem::writeMmio8(Address address, u8 value)
 {
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
-        if (address == Mmio::CDROM_BASE)
+        switch (address - Mmio::CDROM_BASE)
         {
+        case 0:
             m_cdrom.writeCommand(value);
-        }
-        else
-        {
+            break;
+        case 1:
             m_cdrom.writeParam(value);
+            break;
+        case 2:
+            m_cdrom.writeInterruptFlags(value);
+            break;
+        case 3:
+            m_cdrom.writeInterruptEnable(value);
+            break;
+        default:
+            break;
         }
-        return;
     }
 }
-
 void PsxSystem::handleDmaTransfer(DmaPort port)
 {
     const auto& channel = m_dma.channel(port);
@@ -290,10 +485,12 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
 
     m_dma.clearTrigger(port);
     m_interrupts.raise(InterruptLine::Dma);
+    m_debugOverlay.incrementDmaTransfers();
+    m_debugOverlay.incrementInterruptsRaised();
 
     std::ostringstream message;
     message << "DMA transfer on port " << static_cast<int>(port) << " words=" << wordCount;
-    m_logger.log(LogLevel::Debug, message.str());
+    m_logger.log(LogLevel::Debug, "dma", message.str());
 }
 
 } // namespace runtime
