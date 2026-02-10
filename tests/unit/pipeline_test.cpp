@@ -48,20 +48,23 @@ int main()
     auto suffix = std::to_string(timestamp) + "_" + std::to_string(dist(randomDevice));
 
     std::filesystem::path exePath = tempDir / ("psxrecomp_pipeline_" + suffix + ".psx");
+    std::filesystem::path ecmPath = tempDir / ("psxrecomp_pipeline_" + suffix + ".bin.ecm");
     std::filesystem::path outputDir = tempDir / ("psxrecomp_pipeline_out_" + suffix);
 
     struct CleanupGuard
     {
         std::filesystem::path exe;
+        std::filesystem::path ecm;
         std::filesystem::path out;
         ~CleanupGuard()
         {
             std::error_code error;
             std::filesystem::remove(exe, error);
+            std::filesystem::remove(ecm, error);
             std::filesystem::remove_all(out, error);
         }
     };
-    CleanupGuard guard{exePath, outputDir};
+    CleanupGuard guard{exePath, ecmPath, outputDir};
 
     auto buffer = buildMinimalExe(16);
     std::ofstream outFile(exePath, std::ios::binary);
@@ -111,6 +114,15 @@ int main()
     assert(manifestContentA.find("\"timestamp\"") != std::string::npos);
     assert(manifestContentA.find("\"input\"") != std::string::npos);
     assert(manifestContentA.find("\"output\"") != std::string::npos);
+
+    {
+        std::ofstream ecmFile(ecmPath, std::ios::binary);
+        const char marker[] = "not-an-exe";
+        ecmFile.write(marker, static_cast<std::streamsize>(sizeof(marker)));
+    }
+    auto ecmResult = pipeline.run(ecmPath.string());
+    assert(!ecmResult.success);
+    assert(ecmResult.errorMessage.find("ECM-compressed") != std::string::npos);
 
     return 0;
 }
