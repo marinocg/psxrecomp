@@ -51,6 +51,7 @@ class Gpu
   private:
     static constexpr u32 STATUS_READY = 0x14802000;
     static constexpr size_t MAX_FIFO_DEPTH = 64;
+    static constexpr size_t MAX_COMMAND_TRACE = 16384;
 
     struct PacketState
     {

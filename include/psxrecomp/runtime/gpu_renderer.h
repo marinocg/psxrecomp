@@ -11,8 +11,8 @@ namespace runtime
 
 struct GpuVertex
 {
-    u16 x = 0;
-    u16 y = 0;
+    s16 x = 0;
+    s16 y = 0;
 };
 
 enum class GpuCommandKind
@@ -80,7 +80,7 @@ class SoftwareGpuRenderer final : public GpuRenderer
     void setClut(u16 clut) override;
 
   private:
-    void fillRect(u16 x, u16 y, u16 width, u16 height, u16 color);
+    void fillRect(s32 x, s32 y, u16 width, u16 height, u16 color);
     void drawTriangle(const GpuCommand& command);
     void drawQuad(const GpuCommand& command);
     void drawSprite(const GpuCommand& command);

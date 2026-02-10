@@ -1,7 +1,6 @@
 #include "psxrecomp/runtime/gpu_renderer.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace psxrecomp
 {
@@ -21,9 +20,22 @@ u16 toColor15(u32 color24)
 GpuVertex decodeVertex(u32 packed)
 {
     GpuVertex vertex;
-    vertex.x = static_cast<u16>(packed & 0xFFFF);
-    vertex.y = static_cast<u16>((packed >> 16) & 0xFFFF);
+    vertex.x = static_cast<s16>(packed & 0xFFFF);
+    vertex.y = static_cast<s16>((packed >> 16) & 0xFFFF);
     return vertex;
+}
+
+u16 clampExtent(s32 value, u16 maximum)
+{
+    if (value <= 0)
+    {
+        return 0;
+    }
+    if (value >= static_cast<s32>(maximum))
+    {
+        return maximum;
+    }
+    return static_cast<u16>(value);
 }
 } // namespace
 
@@ -87,17 +99,20 @@ void SoftwareGpuRenderer::setClut(u16 clut)
     m_clut = clut;
 }
 
-void SoftwareGpuRenderer::fillRect(u16 x, u16 y, u16 width, u16 height, u16 color)
+void SoftwareGpuRenderer::fillRect(s32 x, s32 y, u16 width, u16 height, u16 color)
 {
-    const u16 xEnd = static_cast<u16>(std::min<u32>(x + width, Width));
-    const u16 yEnd = static_cast<u16>(std::min<u32>(y + height, Height));
-    for (u16 py = y; py < yEnd; ++py)
+    const u16 xBegin = clampExtent(x, Width);
+    const u16 yBegin = clampExtent(y, Height);
+    const u16 xEnd = clampExtent(x + width, Width);
+    const u16 yEnd = clampExtent(y + height, Height);
+
+    for (u16 py = yBegin; py < yEnd; ++py)
     {
         if (m_interlaced && ((py & 1u) != static_cast<u16>(m_oddField)))
         {
             continue;
         }
-        for (u16 px = x; px < xEnd; ++px)
+        for (u16 px = xBegin; px < xEnd; ++px)
         {
             m_frameBuffer[static_cast<size_t>(py) * Width + px] = color;
         }
@@ -115,11 +130,14 @@ void SoftwareGpuRenderer::drawTriangle(const GpuCommand& command)
     const auto v1 = decodeVertex(command.words[2]);
     const auto v2 = decodeVertex(command.words[3]);
 
-    const u16 minX = std::min({v0.x, v1.x, v2.x});
-    const u16 minY = std::min({v0.y, v1.y, v2.y});
-    const u16 maxX = std::max({v0.x, v1.x, v2.x});
-    const u16 maxY = std::max({v0.y, v1.y, v2.y});
-    fillRect(minX, minY, static_cast<u16>(maxX - minX + 1), static_cast<u16>(maxY - minY + 1),
+    const s16 minX = std::min({v0.x, v1.x, v2.x});
+    const s16 minY = std::min({v0.y, v1.y, v2.y});
+    const s16 maxX = std::max({v0.x, v1.x, v2.x});
+    const s16 maxY = std::max({v0.y, v1.y, v2.y});
+
+    const s32 width = std::max<s32>(0, static_cast<s32>(maxX) - minX + 1);
+    const s32 height = std::max<s32>(0, static_cast<s32>(maxY) - minY + 1);
+    fillRect(minX, minY, static_cast<u16>(width), static_cast<u16>(height),
              toColor15(command.words[0]));
 }
 
@@ -135,11 +153,14 @@ void SoftwareGpuRenderer::drawQuad(const GpuCommand& command)
     const auto v2 = decodeVertex(command.words[3]);
     const auto v3 = decodeVertex(command.words[4]);
 
-    const u16 minX = std::min({v0.x, v1.x, v2.x, v3.x});
-    const u16 minY = std::min({v0.y, v1.y, v2.y, v3.y});
-    const u16 maxX = std::max({v0.x, v1.x, v2.x, v3.x});
-    const u16 maxY = std::max({v0.y, v1.y, v2.y, v3.y});
-    fillRect(minX, minY, static_cast<u16>(maxX - minX + 1), static_cast<u16>(maxY - minY + 1),
+    const s16 minX = std::min({v0.x, v1.x, v2.x, v3.x});
+    const s16 minY = std::min({v0.y, v1.y, v2.y, v3.y});
+    const s16 maxX = std::max({v0.x, v1.x, v2.x, v3.x});
+    const s16 maxY = std::max({v0.y, v1.y, v2.y, v3.y});
+
+    const s32 width = std::max<s32>(0, static_cast<s32>(maxX) - minX + 1);
+    const s32 height = std::max<s32>(0, static_cast<s32>(maxY) - minY + 1);
+    fillRect(minX, minY, static_cast<u16>(width), static_cast<u16>(height),
              toColor15(command.words[0]));
 }
 
@@ -162,8 +183,8 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
         color ^= 0x001C;
     }
 
-    fillRect(pos.x, pos.y, static_cast<u16>(std::max<u16>(1, size.x)),
-             static_cast<u16>(std::max<u16>(1, size.y)), color);
+    fillRect(pos.x, pos.y, static_cast<u16>(std::max<s32>(1, size.x)),
+             static_cast<u16>(std::max<s32>(1, size.y)), color);
 }
 
 void SemiAccurateGpuRenderer::reset()

@@ -1,9 +1,26 @@
 #include "psxrecomp/runtime/gpu.h"
 
+#include <algorithm>
+#include <cstddef>
+
 namespace psxrecomp
 {
 namespace runtime
 {
+
+namespace
+{
+void trimCommandTrace(std::vector<GpuCommand>& trace, size_t maxSize)
+{
+    if (trace.size() < maxSize)
+    {
+        return;
+    }
+
+    const size_t removeCount = std::max<size_t>(1, maxSize / 4);
+    trace.erase(trace.begin(), trace.begin() + static_cast<std::ptrdiff_t>(removeCount));
+}
+} // namespace
 
 void Gpu::reset()
 {
@@ -247,6 +264,7 @@ void Gpu::processPacket(const PacketState& packet)
     updateRendererState();
     m_renderer->submit(command);
     m_referenceRenderer.submit(command);
+    trimCommandTrace(m_commandTrace, MAX_COMMAND_TRACE);
     m_commandTrace.push_back(command);
     updateStatusBits();
 }

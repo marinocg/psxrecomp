@@ -39,6 +39,12 @@ int main()
     auto comparison = gpu.compareCurrentFrameWithReference();
     assert(comparison.matches());
 
+    gpu.reset();
+    gpu.writeCommand(0x020000FFu);
+    gpu.writeCommand(0x0000FFFFu);
+    gpu.writeCommand(0x00020002u);
+    assert(gpu.frameBuffer()[0] != 0);
+
     const auto initialDepth = gpu.fifoDepth();
     gpu.tickGpu(2);
     assert(gpu.fifoDepth() <= initialDepth);
