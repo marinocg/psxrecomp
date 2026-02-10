@@ -94,12 +94,14 @@ set(RECOMPILER_SOURCES
 
 set(RUNTIME_SOURCES
     src/runtime/cdrom.cpp
+    src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gpu.cpp
     src/runtime/input.cpp
     src/runtime/interrupt_controller.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
+    src/runtime/resource_pack.cpp
     src/runtime/scheduler.cpp
     src/runtime/spu.cpp
 )

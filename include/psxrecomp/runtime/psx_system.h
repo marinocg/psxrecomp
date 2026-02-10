@@ -1,6 +1,7 @@
 #pragma once
 
 #include "psxrecomp/runtime/cdrom.h"
+#include "psxrecomp/runtime/debug_overlay.h"
 #include "psxrecomp/runtime/dma.h"
 #include "psxrecomp/runtime/gpu.h"
 #include "psxrecomp/runtime/input.h"
@@ -14,6 +15,7 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -144,9 +146,18 @@ class PsxSystem
     InterruptController& interrupts();
     Scheduler& scheduler();
     RuntimeLogger& logger();
+    RuntimeDebugOverlay& debugOverlay();
 
     void setDiscSwapInfo(DiscSwapInfo info);
     const DiscSwapInfo& discSwapInfo() const;
+
+    std::vector<u8> dumpRam() const;
+    std::vector<u8> dumpVram() const;
+    std::vector<u8> dumpSpuRam() const;
+
+    std::vector<u8> serializeState() const;
+    bool deserializeState(const std::vector<u8>& state);
+    uint64_t stateChecksum() const;
 
     void callGpuIntrinsic(Address /*address*/)
     {
@@ -188,6 +199,7 @@ class PsxSystem
     InterruptController m_interrupts;
     Scheduler m_scheduler;
     RuntimeLogger m_logger;
+    RuntimeDebugOverlay m_debugOverlay;
     DiscSwapInfo m_discSwapInfo;
 
     static Address normalizeAddress(Address address)

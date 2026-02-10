@@ -10,6 +10,8 @@ void Spu::reset()
     m_registers.fill(0);
     m_cycles = 0;
     m_lastDmaWord = 0;
+    m_ram.assign(RamWordCount, 0);
+    m_ramWriteCursor = 0;
 }
 
 u16 Spu::readRegister(u32 offset) const
@@ -32,6 +34,11 @@ void Spu::tick(u32 cycles)
 void Spu::writeDma(u32 value)
 {
     m_lastDmaWord = value;
+    if (!m_ram.empty())
+    {
+        m_ram[m_ramWriteCursor] = value;
+        m_ramWriteCursor = (m_ramWriteCursor + 1) % m_ram.size();
+    }
 }
 
 u32 Spu::cyclesElapsed() const
@@ -42,6 +49,11 @@ u32 Spu::cyclesElapsed() const
 u32 Spu::lastDmaWord() const
 {
     return m_lastDmaWord;
+}
+
+const std::vector<u32>& Spu::ramWords() const
+{
+    return m_ram;
 }
 
 } // namespace runtime

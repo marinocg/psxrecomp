@@ -36,6 +36,11 @@ void InterruptController::raise(InterruptLine line)
     m_status |= static_cast<u32>(line);
 }
 
+void InterruptController::restoreState(u32 status, u32 mask)
+{
+    m_status = status;
+    m_mask = mask;
+}
 bool InterruptController::isInterruptPending() const
 {
     return (m_status & m_mask) != 0;
