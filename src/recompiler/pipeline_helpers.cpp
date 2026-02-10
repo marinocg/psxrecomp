@@ -344,7 +344,8 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
     stream << "      \"source\": \"" << escapeJson(result.artifacts.sourcePath) << "\",\n";
     stream << "      \"build\": \"" << escapeJson(result.artifacts.buildPath) << "\",\n";
     stream << "      \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\"\n";
-    stream << "    }\n";
+    stream << "    },\n";
+    stream << "    \"resources\": []\n";
     stream << "  },\n";
     stream << "  \"discSet\": {\n";
     stream << "    \"setName\": \"" << escapeJson(result.discSet.setName) << "\",\n";
@@ -379,6 +380,38 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
         stream << "      \"valid\": " << (candidate.valid ? "true" : "false") << "\n";
         stream << "    }";
         if (i + 1 < result.exeCandidates.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ],\n";
+    stream << "  \"functions\": [\n";
+    for (size_t i = 0; i < result.functions.size(); ++i)
+    {
+        const auto& functionInfo = result.functions[i];
+        stream << "    {\n";
+        stream << "      \"name\": \"" << escapeJson(functionInfo.name) << "\",\n";
+        stream << "      \"entryAddress\": \"0x" << formatHex(functionInfo.entryAddress, 8)
+               << "\",\n";
+        stream << "      \"endAddress\": \"0x" << formatHex(functionInfo.endAddress, 8) << "\",\n";
+        stream << "      \"hasPrologue\": " << (functionInfo.hasPrologue ? "true" : "false")
+               << ",\n";
+        stream << "      \"hasEpilogue\": " << (functionInfo.hasEpilogue ? "true" : "false")
+               << ",\n";
+        stream << "      \"directCalls\": [";
+        for (size_t callIndex = 0; callIndex < functionInfo.directCalls.size(); ++callIndex)
+        {
+            stream << "\"0x" << formatHex(functionInfo.directCalls[callIndex], 8) << "\"";
+            if (callIndex + 1 < functionInfo.directCalls.size())
+            {
+                stream << ", ";
+            }
+        }
+        stream << "],\n";
+        stream << "      \"indirectCallCount\": " << functionInfo.indirectCallCount << "\n";
+        stream << "    }";
+        if (i + 1 < result.functions.size())
         {
             stream << ",";
         }

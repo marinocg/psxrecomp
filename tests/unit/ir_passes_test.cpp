@@ -1,4 +1,5 @@
 #include "psxrecomp/ir/control_flow.h"
+#include "psxrecomp/ir/optimizations.h"
 #include "psxrecomp/ir/ssa.h"
 #include "psxrecomp/ir/verify.h"
 
@@ -115,6 +116,68 @@ int main()
 
     auto useBeforeVerify = psxrecomp::ir::verifyFunction(useBeforeDef);
     assert(!useBeforeVerify.success());
+
+    Function optimizations{"optimizations", 0x6000, {}};
+    optimizations.blocks.push_back(BasicBlock{"entry", {}, {}});
+    optimizations.blocks[0].instructions.push_back(
+        Instruction{Opcode::ADD,
+                    {Value::makeImmediate(1), Value::makeImmediate(2)},
+                    {Value::makeTemporary(1)},
+                    0x6000});
+    optimizations.blocks[0].instructions.push_back(
+        Instruction{Opcode::MOVE, {Value::makeTemporary(1)}, {Value::makeTemporary(2)}, 0x6004});
+    optimizations.blocks[0].instructions.push_back(Instruction{
+        Opcode::STORE, {Value::makeAddress(0x7000), Value::makeTemporary(2)}, {}, 0x6008});
+    optimizations.blocks[0].instructions.push_back(
+        Instruction{Opcode::ADD,
+                    {Value::makeImmediate(3), Value::makeImmediate(4)},
+                    {Value::makeTemporary(3)},
+                    0x600C});
+    optimizations.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x6010});
+
+    auto stats = psxrecomp::ir::runOptimizations(optimizations);
+    assert(stats.constantsFolded > 0);
+    assert(stats.deadInstructionsRemoved > 0);
+    bool foundFolded = false;
+    for (const auto& instruction : optimizations.blocks[0].instructions)
+    {
+        if (instruction.opcode == Opcode::MOVE && !instruction.inputs.empty() &&
+            instruction.inputs.front().kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs.front().immediate == 3)
+        {
+            foundFolded = true;
+            break;
+        }
+    }
+    assert(foundFolded);
+
+    Function crossBlockDce{"cross_block_dce", 0x7000, {}};
+    crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}});
+    crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}});
+    crossBlockDce.blocks[0].instructions.push_back(
+        Instruction{Opcode::ADD,
+                    {Value::makeImmediate(10), Value::makeImmediate(20)},
+                    {Value::makeTemporary(1)},
+                    0x7000});
+    crossBlockDce.blocks[0].instructions.push_back(
+        Instruction{Opcode::JUMP, {Value::makeAddress(0x7008)}, {}, 0x7004});
+    crossBlockDce.blocks[1].instructions.push_back(
+        Instruction{Opcode::MOVE, {Value::makeTemporary(1)}, {Value::makeTemporary(2)}, 0x7008});
+    crossBlockDce.blocks[1].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x700C});
+
+    psxrecomp::ir::runOptimizations(crossBlockDce);
+    bool producerKept = false;
+    for (const auto& instruction : crossBlockDce.blocks[0].instructions)
+    {
+        if (!instruction.outputs.empty() &&
+            instruction.outputs.front().kind == psxrecomp::ir::ValueKind::TEMPORARY &&
+            instruction.outputs.front().temporaryId == 1)
+        {
+            producerKept = true;
+            break;
+        }
+    }
+    assert(producerKept);
 
     return 0;
 }

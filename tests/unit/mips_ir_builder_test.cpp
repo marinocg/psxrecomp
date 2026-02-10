@@ -48,15 +48,16 @@ int main()
     auto result = buildIrFromMips(instructions);
 
     assert(result.errors.empty());
-    assert(result.instructions.size() == 8);
+    assert(result.instructions.size() == 9);
     assert(result.instructions[0].opcode == Opcode::ADD);
     assert(result.instructions[1].opcode == Opcode::ADD);
     assert(result.instructions[2].opcode == Opcode::COMPARE_EQ);
-    assert(result.instructions[3].opcode == Opcode::BRANCH);
-    assert(result.instructions[4].opcode == Opcode::ADD);
-    assert(result.instructions[5].opcode == Opcode::LOAD);
-    assert(result.instructions[6].opcode == Opcode::ADD);
-    assert(result.instructions[7].opcode == Opcode::STORE);
+    assert(result.instructions[3].opcode == Opcode::NOP);
+    assert(result.instructions[4].opcode == Opcode::BRANCH);
+    assert(result.instructions[5].opcode == Opcode::ADD);
+    assert(result.instructions[6].opcode == Opcode::LOAD);
+    assert(result.instructions[7].opcode == Opcode::ADD);
+    assert(result.instructions[8].opcode == Opcode::STORE);
 
     const Address branchAddress = result.instructions[2].sourceAddress.value_or(0);
     assert(branchAddress == 0x80010008);

@@ -29,6 +29,20 @@ std::string opcodeToString(Opcode opcode)
         return "or";
     case Opcode::XOR:
         return "xor";
+    case Opcode::SHL:
+        return "shl";
+    case Opcode::SHR_LOGICAL:
+        return "shr_logical";
+    case Opcode::SHR_ARITH:
+        return "shr_arith";
+    case Opcode::MUL:
+        return "mul";
+    case Opcode::MULU:
+        return "mulu";
+    case Opcode::DIV:
+        return "div";
+    case Opcode::DIVU:
+        return "divu";
     case Opcode::COMPARE_EQ:
         return "cmp_eq";
     case Opcode::COMPARE_NE:
@@ -45,12 +59,18 @@ std::string opcodeToString(Opcode opcode)
         return "load";
     case Opcode::STORE:
         return "store";
+    case Opcode::MMIO_LOAD:
+        return "mmio_load";
+    case Opcode::MMIO_STORE:
+        return "mmio_store";
     case Opcode::BRANCH:
         return "branch";
     case Opcode::JUMP:
         return "jump";
     case Opcode::CALL:
         return "call";
+    case Opcode::SYSCALL:
+        return "syscall";
     case Opcode::RETURN:
         return "return";
     }
@@ -60,27 +80,32 @@ std::string opcodeToString(Opcode opcode)
 
 Value Value::invalid()
 {
-    return {ValueKind::INVALID, 0, 0, 0, 0};
+    return {ValueKind::INVALID, 0, 0, 0, 0, SpecialRegister::HI};
 }
 
 Value Value::makeRegister(Register reg)
 {
-    return {ValueKind::REGISTER, reg, 0, 0, 0};
+    return {ValueKind::REGISTER, reg, 0, 0, 0, SpecialRegister::HI};
 }
 
 Value Value::makeImmediate(s32 value)
 {
-    return {ValueKind::IMMEDIATE, 0, value, 0, 0};
+    return {ValueKind::IMMEDIATE, 0, value, 0, 0, SpecialRegister::HI};
 }
 
 Value Value::makeAddress(Address value)
 {
-    return {ValueKind::ADDRESS, 0, 0, value, 0};
+    return {ValueKind::ADDRESS, 0, 0, value, 0, SpecialRegister::HI};
 }
 
 Value Value::makeTemporary(u32 id)
 {
-    return {ValueKind::TEMPORARY, 0, 0, 0, id};
+    return {ValueKind::TEMPORARY, 0, 0, 0, id, SpecialRegister::HI};
+}
+
+Value Value::makeSpecial(SpecialRegister reg)
+{
+    return {ValueKind::SPECIAL, 0, 0, 0, 0, reg};
 }
 
 std::string Value::toString() const
@@ -102,6 +127,9 @@ std::string Value::toString() const
     case ValueKind::TEMPORARY:
         stream << "t" << temporaryId;
         return stream.str();
+    case ValueKind::SPECIAL:
+        stream << (specialReg == SpecialRegister::HI ? "hi" : "lo");
+        return stream.str();
     }
     return "<unknown>";
 }
@@ -109,7 +137,8 @@ std::string Value::toString() const
 bool operator==(const Value& lhs, const Value& rhs)
 {
     return lhs.kind == rhs.kind && lhs.reg == rhs.reg && lhs.immediate == rhs.immediate &&
-           lhs.address == rhs.address && lhs.temporaryId == rhs.temporaryId;
+           lhs.address == rhs.address && lhs.temporaryId == rhs.temporaryId &&
+           lhs.specialReg == rhs.specialReg;
 }
 
 std::string Instruction::toString() const

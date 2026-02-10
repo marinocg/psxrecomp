@@ -13,8 +13,8 @@ highlights dependencies between workstreams.
 - [x] ISO/BIN parsing ([iso_bin_roadmap.md](iso_bin_roadmap.md))
 - [x] PSX-EXE loading ([psx_exe_roadmap.md](psx_exe_roadmap.md))
 - [x] Disassembler ([mips_r3000_disassembler_roadmap.md](mips_r3000_disassembler_roadmap.md))
-- [ ] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
-- [ ] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
+- [x] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
+- [x] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
 - [ ] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
 - [ ] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
 - [ ] SPU emulation ([spu_emulation_roadmap.md](spu_emulation_roadmap.md))
@@ -57,8 +57,10 @@ Goal: translate common game code paths into IR with correct control flow.
 
 **Dependencies (complete these roadmaps)**
 - [x] Disassembler completeness (`mips_r3000_disassembler_roadmap.md`)
-- [ ] IR pipeline expansion (`ir_roadmap.md`)
-- [ ] Recompiler baseline codegen (`recompiler_roadmap.md`)
+- [x] IR pipeline expansion (`ir_roadmap.md`)
+- [x] Recompiler baseline codegen (`recompiler_roadmap.md`)
+
+Status note: IR and recompiler dependency roadmaps are now complete for M2.
 
 ### M3: Correct Runtime Semantics (In progress)
 Goal: make generated code interact with a faithful runtime model of PSX hardware.

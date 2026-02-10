@@ -26,6 +26,13 @@ enum class Opcode
     AND,
     OR,
     XOR,
+    SHL,
+    SHR_LOGICAL,
+    SHR_ARITH,
+    MUL,
+    MULU,
+    DIV,
+    DIVU,
     COMPARE_EQ,
     COMPARE_NE,
     COMPARE_LT,
@@ -34,9 +41,12 @@ enum class Opcode
     COMPARE_GE,
     LOAD,
     STORE,
+    MMIO_LOAD,
+    MMIO_STORE,
     BRANCH,
     JUMP,
     CALL,
+    SYSCALL,
     RETURN
 };
 
@@ -49,7 +59,17 @@ enum class ValueKind
     REGISTER,
     IMMEDIATE,
     ADDRESS,
-    TEMPORARY
+    TEMPORARY,
+    SPECIAL
+};
+
+/**
+ * @brief Special registers represented in IR.
+ */
+enum class SpecialRegister
+{
+    HI,
+    LO
 };
 
 /**
@@ -62,12 +82,14 @@ struct Value
     s32 immediate;
     Address address;
     u32 temporaryId;
+    SpecialRegister specialReg;
 
     static Value invalid();
     static Value makeRegister(Register reg);
     static Value makeImmediate(s32 value);
     static Value makeAddress(Address value);
     static Value makeTemporary(u32 id);
+    static Value makeSpecial(SpecialRegister reg);
 
     std::string toString() const;
 };

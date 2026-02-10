@@ -4,8 +4,8 @@ This report estimates current implementation coverage across major subsystems an
 what is present vs. missing. Percentages are coarse estimates intended for planning.
 
 ## Overall completion (estimate)
-- **Project-wide completion:** ~25%
-- **End-to-end playable pipeline:** ~20%
+- **Project-wide completion:** ~40%
+- **End-to-end playable pipeline:** ~30%
 
 ## Subsystem status (estimate)
 
@@ -48,23 +48,26 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Integration of analysis helpers into the pipeline/call graph builder.
 - Broader decode coverage for edge-case encodings and validation in real binaries.
 
-### IR Pipeline (~45%)
+### IR Pipeline (~85%)
 **Present**
-- IR data structures, CFG builder, SSA conversion, verification utilities.
-- Initial MIPS→IR translation for a subset of opcodes.
+- IR data structures, CFG builder, SSA conversion, and verification utilities.
+- Function boundary detection and call graph discovery in the pipeline.
+- MIPS→IR lowering for arithmetic/logical ops, shifts, mult/div, HI/LO moves, branches, jumps,
+  calls, returns, syscalls, and MMIO intrinsics with non-nop delay slots.
+- Optimization passes (constant folding, DCE, CSE, LICM) integrated into the pipeline.
 
 **Missing**
-- Full instruction coverage, delay-slot semantics, memory-mapped IO modeling.
-- Optimization passes and full SSA integration in pipeline output.
+- Expanded load/store variants (byte/halfword, unaligned) and coprocessor-specific IR modeling.
 
-### Recompiler / Codegen (~35%)
+### Recompiler / Codegen (~75%)
 **Present**
-- Basic C++ emission for a small IR subset.
-- Minimal runtime calls for load/store and intrinsics.
+- Structured C++ emission for core IR ops with control flow and phi-node lowering.
+- Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
+- Peephole optimizations, logging hooks, and debug metadata in generated output.
+- End-to-end pipeline validation and compile-and-run checks in unit tests.
 
 **Missing**
-- ABI/calling conventions, register allocation hints, structured control flow output.
-- Broader opcode lowering and optimized emission.
+- Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.
 
 ### Runtime Library (~30%)
 **Present**

@@ -121,6 +121,18 @@ void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
     m_discSwapInfo = std::move(info);
 }
 
+void PsxSystem::callBiosSyscall(u32 code, const u32* regs, size_t regCount)
+{
+    std::ostringstream stream;
+    stream << "BIOS syscall stub invoked: code=0x" << std::hex << code << std::dec
+           << ", regs=" << regCount;
+    if (regs != nullptr && regCount > 4)
+    {
+        stream << ", a0=0x" << std::hex << regs[4];
+    }
+    m_logger.log(LogLevel::Warn, stream.str());
+}
+
 const PsxSystem::DiscSwapInfo& PsxSystem::discSwapInfo() const
 {
     return m_discSwapInfo;

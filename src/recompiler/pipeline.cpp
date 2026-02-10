@@ -1,9 +1,11 @@
 #include "psxrecomp/recompiler/pipeline.h"
 
 #include "pipeline_helpers.h"
+#include "psxrecomp/disasm/analysis.h"
 #include "psxrecomp/disasm/instruction.h"
 #include "psxrecomp/ir/control_flow.h"
 #include "psxrecomp/ir/mips_ir_builder.h"
+#include "psxrecomp/ir/optimizations.h"
 #include "psxrecomp/iso/iso_boot.h"
 #include "psxrecomp/iso/iso_parser.h"
 #include "psxrecomp/iso/psx_exe_loader.h"
@@ -259,45 +261,135 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     const Address baseAddress = exeImage.header.loadAddress;
     const auto disassembled = disasm::MipsDisassembler::disassemble(
         exeImage.programData.data(), exeImage.programData.size(), baseAddress);
-
-    auto irBuild = ir::buildIrFromMips(disassembled);
-    warnings.insert(warnings.end(), irBuild.warnings.begin(), irBuild.warnings.end());
-    for (const auto& warning : irBuild.warnings)
+    if (disassembled.empty())
     {
-        PipelineDiagnostic entry;
-        entry.code = "IrWarning";
-        entry.severity = "warning";
-        entry.message = warning;
-        entry.context.file = activeDiscPath;
-        diagnostics.push_back(std::move(entry));
-    }
-
-    if (!irBuild.errors.empty())
-    {
-        std::ostringstream stream;
-        stream << "IR build failed:\n";
-        for (const auto& error : irBuild.errors)
-        {
-            stream << " - " << error << "\n";
-        }
-        return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
+        return buildPipelineError("Disassembler produced no instructions.", warnings, diagnostics,
+                                  result.exeCandidates);
     }
 
     const Address entryAddress = detail::resolveEntryAddress(exeImage);
-    auto flowResult = ir::buildControlFlowFunction("entry", entryAddress, irBuild.instructions);
-    if (!flowResult.errors.empty())
+    auto boundaries = disasm::findFunctionBoundaries(disassembled);
+    if (boundaries.empty())
     {
-        std::ostringstream stream;
-        stream << "Control-flow build failed:\n";
-        for (const auto& error : flowResult.errors)
-        {
-            stream << " - " << error << "\n";
-        }
-        return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
+        boundaries.push_back({entryAddress, disassembled.back().address, false, false});
     }
+    bool entryFound = false;
+    for (const auto& boundary : boundaries)
+    {
+        if (boundary.start == entryAddress)
+        {
+            entryFound = true;
+            break;
+        }
+    }
+    if (!entryFound)
+    {
+        boundaries.push_back({entryAddress, disassembled.back().address, false, false});
+    }
+    std::sort(boundaries.begin(), boundaries.end(),
+              [](const disasm::FunctionBoundary& lhs, const disasm::FunctionBoundary& rhs)
+              { return lhs.start < rhs.start; });
 
     ir::Program program;
-    program.functions.push_back(std::move(flowResult.function));
+    for (const auto& boundary : boundaries)
+    {
+        std::vector<disasm::Instruction> functionInstructions;
+        auto rangeBegin =
+            std::lower_bound(disassembled.begin(), disassembled.end(), boundary.start,
+                             [](const disasm::Instruction& instruction, Address target)
+                             { return instruction.address < target; });
+        auto rangeEnd = std::upper_bound(rangeBegin, disassembled.end(), boundary.end,
+                                         [](Address target, const disasm::Instruction& instruction)
+                                         { return target < instruction.address; });
+        functionInstructions.insert(functionInstructions.end(), rangeBegin, rangeEnd);
+        if (functionInstructions.empty())
+        {
+            PipelineDiagnostic entry;
+            entry.code = "FunctionSkipped";
+            entry.severity = "warning";
+            entry.message = "No instructions found for function boundary.";
+            entry.context.file = activeDiscPath;
+            diagnostics.push_back(entry);
+            warnings.push_back(entry.message);
+            continue;
+        }
+
+        const std::string functionName = "func_0x" + detail::formatHex(boundary.start, 8);
+        auto irBuild = ir::buildIrFromMips(functionInstructions);
+        warnings.insert(warnings.end(), irBuild.warnings.begin(), irBuild.warnings.end());
+        for (const auto& warning : irBuild.warnings)
+        {
+            PipelineDiagnostic entry;
+            entry.code = "IrWarning";
+            entry.severity = "warning";
+            entry.message = warning;
+            entry.context.file = activeDiscPath;
+            diagnostics.push_back(std::move(entry));
+        }
+
+        if (!irBuild.errors.empty())
+        {
+            std::ostringstream stream;
+            stream << "IR build failed for " << functionName << ":\n";
+            for (const auto& error : irBuild.errors)
+            {
+                stream << " - " << error << "\n";
+            }
+            return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
+        }
+
+        auto flowResult =
+            ir::buildControlFlowFunction(functionName, boundary.start, irBuild.instructions);
+        if (!flowResult.errors.empty())
+        {
+            std::ostringstream stream;
+            stream << "Control-flow build failed for " << functionName << ":\n";
+            for (const auto& error : flowResult.errors)
+            {
+                stream << " - " << error << "\n";
+            }
+            return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
+        }
+
+        PipelineResult::FunctionMetadata metadataEntry;
+        metadataEntry.name = functionName;
+        metadataEntry.entryAddress = boundary.start;
+        metadataEntry.endAddress = boundary.end;
+        metadataEntry.hasPrologue = boundary.hasPrologue;
+        metadataEntry.hasEpilogue = boundary.hasEpilogue;
+        for (const auto& instruction : functionInstructions)
+        {
+            if (instruction.opcode == disasm::Opcode::JAL)
+            {
+                if (auto target = instruction.getJumpTarget())
+                {
+                    metadataEntry.directCalls.push_back(*target);
+                }
+            }
+            else if (instruction.opcode == disasm::Opcode::JALR)
+            {
+                metadataEntry.indirectCallCount += 1;
+            }
+        }
+        std::sort(metadataEntry.directCalls.begin(), metadataEntry.directCalls.end());
+        metadataEntry.directCalls.erase(
+            std::unique(metadataEntry.directCalls.begin(), metadataEntry.directCalls.end()),
+            metadataEntry.directCalls.end());
+        result.functions.push_back(std::move(metadataEntry));
+
+        program.functions.push_back(std::move(flowResult.function));
+    }
+
+    if (program.functions.empty())
+    {
+        return buildPipelineError("No functions were generated from the disassembly.", warnings,
+                                  diagnostics, result.exeCandidates);
+    }
+
+    if (m_options.enableOptimizations)
+    {
+        ir::runOptimizations(program);
+    }
 
     CodeGenOptions codegenOptions;
     codegenOptions.enableOptimizations = m_options.enableOptimizations;
@@ -322,6 +414,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     ModuleMetadata metadata;
     metadata.discSetName = result.discSet.setName;
     metadata.activeDiscIndex = result.discSet.activeDiscIndex;
+    metadata.warnings = warnings;
     for (const auto& disc : result.discSet.discs)
     {
         ModuleMetadata::DiscEntry entry;

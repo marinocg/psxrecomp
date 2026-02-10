@@ -110,6 +110,7 @@ int main()
     std::ofstream runtimeHeader(runtimeHeaderPath);
     runtimeHeader << "#pragma once\n";
     runtimeHeader << "#include \"psxrecomp/types.h\"\n";
+    runtimeHeader << "#include <cstddef>\n";
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
@@ -129,6 +130,9 @@ int main()
     runtimeHeader << "    u8* getRam() { return m_ram; }\n";
     runtimeHeader << "    template <typename T> T read(Address) { return {}; }\n";
     runtimeHeader << "    template <typename T> void write(Address, T) {}\n";
+    runtimeHeader << "    template <typename T> T readMmioExplicit(Address) { return {}; }\n";
+    runtimeHeader << "    template <typename T> void writeMmioExplicit(Address, T) {}\n";
+    runtimeHeader << "    void callBiosSyscall(u32, const u32*, std::size_t) {}\n";
     runtimeHeader << "    void callGpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";

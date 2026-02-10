@@ -33,6 +33,7 @@ struct ModuleMetadata
     std::string discSetName;
     u32 activeDiscIndex = 0;
     std::vector<DiscEntry> discs;
+    std::vector<std::string> warnings;
 };
 
 /**

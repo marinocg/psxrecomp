@@ -11,6 +11,7 @@
 #include "psxrecomp/runtime/spu.h"
 #include "psxrecomp/types.h"
 
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -160,6 +161,20 @@ class PsxSystem
         std::abort();
     }
 
+    template <typename T> T readMmioExplicit(Address address)
+    {
+        Address physical = normalizeAddress(address);
+        return readMmio<T>(physical);
+    }
+
+    template <typename T> void writeMmioExplicit(Address address, T value)
+    {
+        Address physical = normalizeAddress(address);
+        writeMmio<T>(physical, value);
+    }
+
+    void callBiosSyscall(u32 code, const u32* regs, size_t regCount);
+
   private:
     std::vector<u8> m_ram;        // 2MB main RAM
     std::vector<u8> m_scratchpad; // 1KB scratchpad
@@ -182,14 +197,14 @@ class PsxSystem
 
     static bool isInRange(Address address, Address base, Address size)
     {
-        return address >= base && address < base + size;
+        return address >= base && (address - base) < size;
     }
 
     template <typename T> T readFromRegion(const u8* base, Address offset, Address size) const
     {
         static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
                       "Unsupported read size for runtime MMIO");
-        if (!base || offset + sizeof(T) > size)
+        if (!base || size < sizeof(T) || offset > (size - sizeof(T)))
         {
             return {};
         }
@@ -202,7 +217,7 @@ class PsxSystem
     {
         static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4,
                       "Unsupported write size for runtime MMIO");
-        if (!base || offset + sizeof(T) > size)
+        if (!base || size < sizeof(T) || offset > (size - sizeof(T)))
         {
             return;
         }

@@ -79,6 +79,13 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
         return result;
     }
 
+    if (std::find(orderedAddresses.begin(), orderedAddresses.end(), entryAddress) ==
+        orderedAddresses.end())
+    {
+        result.errors.push_back("Entry address not found in instruction stream.");
+        return result;
+    }
+
     std::unordered_set<Address> blockStarts;
     blockStarts.insert(entryAddress);
 
