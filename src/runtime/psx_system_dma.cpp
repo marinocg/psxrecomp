@@ -17,21 +17,23 @@ constexpr u32 DMA_SYNC_MODE_MASK = 0x3;
 constexpr u32 DMA_REQUEST_MODE = 0x1;
 constexpr u32 DMA_LINKED_LIST_MODE = 0x2;
 constexpr u32 DMA_LIST_END_MARKER = 0x00FFFFFF;
+constexpr u32 DMA_MAX_TRANSFER_WORDS = 0x200000u;
 
 u32 normalTransferWordCount(const DmaChannel& channel, u32 syncMode)
 {
     const u32 wordsPerBlock = channel.blockControl & 0xFFFF;
+    uint64_t totalWords = wordsPerBlock;
     if (syncMode == DMA_REQUEST_MODE)
     {
         const u32 blockCount = (channel.blockControl >> 16) & 0xFFFF;
-        const uint64_t totalWords = static_cast<uint64_t>(wordsPerBlock) * blockCount;
-        if (totalWords > 0xFFFFFFFFull)
-        {
-            return 0xFFFFFFFFu;
-        }
-        return static_cast<u32>(totalWords);
+        totalWords = static_cast<uint64_t>(wordsPerBlock) * blockCount;
     }
-    return wordsPerBlock;
+
+    if (totalWords > DMA_MAX_TRANSFER_WORDS)
+    {
+        return DMA_MAX_TRANSFER_WORDS;
+    }
+    return static_cast<u32>(totalWords);
 }
 
 } // namespace
