@@ -65,10 +65,13 @@ void Gpu::restoreStatus(u32 value)
 
 void Gpu::writeCommand(u32 value)
 {
-    if (m_fifo.size() < MAX_FIFO_DEPTH)
+    if (m_fifo.size() >= MAX_FIFO_DEPTH)
     {
-        m_fifo.push_back(value);
+        updateStatusBits();
+        return;
     }
+
+    m_fifo.push_back(value);
     writeVramWord(value);
     appendPacketWord(false, value);
     updateStatusBits();
@@ -365,8 +368,9 @@ void Gpu::updateStatusBits()
     constexpr u32 statusReadyMask = 1u << 26;
     constexpr u32 dmaRequestMask = 1u << 28;
     constexpr u32 interlaceMask = 1u << 31;
+    constexpr u32 statusBase = STATUS_READY & ~(statusReadyMask | dmaRequestMask | interlaceMask);
 
-    m_status = STATUS_READY;
+    m_status = statusBase;
 
     if (m_fifo.size() < MAX_FIFO_DEPTH)
     {

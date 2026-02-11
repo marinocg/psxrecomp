@@ -63,6 +63,23 @@ int main()
     gpu.writeCommand(0x00020002u);
     assert(gpu.frameBuffer()[0] != 0);
 
+    gpu.reset();
+    while (gpu.fifoDepth() < 64)
+    {
+        gpu.writeCommand(0x00000000u);
+    }
+    const auto statusWhenFull = gpu.readStatus();
+    assert((statusWhenFull & (1u << 26)) == 0);
+
+    const auto traceBeforeOverflowAttempt = gpu.commandTrace().size();
+
+    gpu.writeCommand(0x020000FFu);
+    gpu.writeCommand(0x00000000u);
+    gpu.writeCommand(0x00100010u);
+
+    assert(gpu.fifoDepth() == 64);
+    assert(gpu.commandTrace().size() == traceBeforeOverflowAttempt);
+
     const auto initialDepth = gpu.fifoDepth();
     gpu.tickGpu(2);
     assert(gpu.fifoDepth() <= initialDepth);
