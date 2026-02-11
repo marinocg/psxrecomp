@@ -179,6 +179,14 @@ int main()
     assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
            2u);
 
+    // Reset-on-target should not trigger early when counter starts above target.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0018u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 3u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 10u);
+    system.timers().tick(3, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
+           13u);
+
     std::vector<psxrecomp::u8> xaSector(2352, 0x00);
     xaSector[24] = 0x11;
     xaSector[25] = 0x22;

@@ -49,11 +49,33 @@ void TimerController::tickChannel(Channel& channel, size_t index, u32 cpuCycles,
 
     if (resetOnTarget)
     {
-        const u32 period = (channel.target == 0) ? 0x10000u : static_cast<u32>(channel.target);
-        const u32 total = static_cast<u32>(channel.counter) + steps;
-        const u32 targetEvents = total / period;
+        const u32 counter = channel.counter;
+        const u32 target = channel.target;
+        const u32 period = (target == 0) ? 0x10000u : target;
 
-        channel.counter = static_cast<u16>(total % period);
+        u32 firstEventSteps = 0;
+        if (target == 0)
+        {
+            firstEventSteps = 0x10000u - counter;
+        }
+        else if (counter < target)
+        {
+            firstEventSteps = target - counter;
+        }
+        else
+        {
+            firstEventSteps = (0x10000u - counter) + target;
+        }
+
+        if (steps < firstEventSteps)
+        {
+            channel.counter = static_cast<u16>((counter + steps) & 0xFFFFu);
+            return;
+        }
+
+        const u32 remainingAfterFirstEvent = steps - firstEventSteps;
+        const u32 targetEvents = 1 + (remainingAfterFirstEvent / period);
+        channel.counter = static_cast<u16>(remainingAfterFirstEvent % period);
         if (targetEvents > 0)
         {
             channel.targetReached = true;
