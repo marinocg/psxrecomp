@@ -4,6 +4,16 @@ This directory contains utility tools for the psxrecomp project.
 
 ## Current Tools
 
+### `iso_fixture_generator.py` (implemented)
+
+Generates deterministic ISO fixtures for debugging and validation:
+- `bad_invalid_pvd.iso`: intentionally malformed image (parser should fail).
+- `good_minimal.iso`: valid ISO with `SYSTEM.CNF` + minimal PS-X EXE.
+- `good_demo.iso` (optional): valid ISO packaging a caller-provided demo EXE.
+- `good_demo_with_assets.iso` (optional): demo EXE plus placeholder TIM/STR/XA assets (with --with-assets).
+
+See: `tools/iso_fixture_generator.md`.
+
 ### Planned Tools
 
 1. **iso_dump** - Extract and analyze PSX ISO files
@@ -73,3 +83,16 @@ When adding a new tool:
 ---
 
 *Tools will be implemented as the project matures.*
+
+### `validate_iso_fixtures.sh` (implemented)
+
+End-to-end validation helper that:
+1. Generates bad/good fixtures.
+2. Confirms bad fixture fails in CLI.
+3. Confirms good fixture recompiles.
+4. Configures/builds generated standalone CMake bundle.
+
+Usage:
+```bash
+tools/validate_iso_fixtures.sh ./build/psxrecomp /tmp/psxrecomp_iso_validation
+```

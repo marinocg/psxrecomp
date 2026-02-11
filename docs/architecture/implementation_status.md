@@ -4,30 +4,47 @@ This report estimates current implementation coverage across major subsystems an
 what is present vs. missing. Percentages are coarse estimates intended for planning.
 
 ## Overall completion (estimate)
-- **Project-wide completion:** ~48%
-- **End-to-end playable pipeline:** ~36%
+- **Project-wide completion:** ~52%
+- **End-to-end playable pipeline:** ~40%
 
 ## Subsystem status (estimate)
 
-### Pipeline & Tooling (~45%)
+## Subsystem scorecard (estimate)
+| Area | Estimated completion |
+|---|---:|
+| Pipeline & Tooling | ~55% |
+| ISO/BIN Parsing | ~85% |
+| PSX-EXE Loader | ~90% |
+| Disassembler | ~75% |
+| IR Pipeline | ~85% |
+| Recompiler / Codegen | ~75% |
+| Runtime Library | ~60% |
+| GPU Emulation | ~45% |
+| SPU Emulation | ~5% |
+| CD-ROM | ~15% |
+
+### Pipeline & Tooling (~55%)
 **Present**
 - Deterministic pipeline output layout with manifest emission.
 - Stable EXE candidate selection with structured diagnostics.
 - Multi-disc metadata surfaced in pipeline output and runtime hooks.
+- Bundle output includes resources plus runtime source/include copies for standalone CMake builds.
+- Fixture generator + validation scripts exist for malformed/good/rich ISO scenarios.
 
 **Missing**
-- Automated build/run of emitted C++ artifacts.
-- CLI automation around compiling generated output in CI.
+- Automated build/run of emitted C++ artifacts from the main CLI path.
+- CI automation around compiling generated output from representative fixture sets.
 
 ### ISO/BIN Parsing (~85%)
 **Present**
 - ISO 9660 parsing, track handling, file extraction, and path table lookups.
 - PSX EXE discovery heuristics, resource export helpers, and sector caching.
 - XA Mode 2 validation plus improved CUE parsing (sessions/pregaps).
+- XA resource discovery fallback for 2048-byte ISO images (extent-based when raw subheaders are unavailable).
 
 **Missing**
 - Broader mixed-mode validation beyond current XA checks.
-- Additional malformed image recovery and diagnostics.
+- Additional malformed image recovery and diagnostics for uncommon disc layouts.
 
 ### PSX-EXE Loader (~90%)
 **Present**
@@ -45,7 +62,6 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Code-vs-data segmentation helpers for mixed sections.
 
 **Missing**
-- Integration of analysis helpers into the pipeline/call graph builder (function boundaries and direct-call graph are now wired).
 - Broader decode coverage for edge-case encodings and validation in real binaries.
 
 ### IR Pipeline (~85%)

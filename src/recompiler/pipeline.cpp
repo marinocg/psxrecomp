@@ -67,6 +67,18 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     std::vector<std::string> warnings;
     std::vector<PipelineDiagnostic> diagnostics;
     PipelineResult result;
+    auto appendIsoParserErrors = [&](const iso::IsoParser& parser, const std::string& context)
+    {
+        for (const auto& error : parser.getErrors())
+        {
+            PipelineDiagnostic entry;
+            entry.code = "IsoParserError";
+            entry.severity = "error";
+            entry.message = context + ": " + error;
+            entry.context.file = activeDiscPath;
+            diagnostics.push_back(entry);
+        }
+    };
     result.discSet = detail::buildDiscSetMetadata(discPaths, activeDiscIndex, warnings);
 
     const std::string selectionRule =
@@ -74,17 +86,28 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         "load address, size, entry point, hash, validity, then path.";
     result.selectionInfo.rule = selectionRule;
 
+    auto fail = [&](const std::string& message)
+    {
+        PipelineResult failed =
+            buildPipelineError(message, warnings, diagnostics, result.exeCandidates);
+        failed.selectionInfo = result.selectionInfo;
+        failed.discSet = result.discSet;
+        return failed;
+    };
+
     if (detail::isIsoLikePath(inputFsPath))
     {
         iso::IsoParser parser(activeDiscPath);
         if (!parser.open() || !parser.isValid())
         {
-            std::string error = "Failed to open ISO image.";
+            appendIsoParserErrors(parser, "Failed to parse ISO image");
+            std::ostringstream error;
+            error << "Failed to open ISO image.";
             if (!parser.getLastError().empty())
             {
-                error += " " + parser.getLastError();
+                error << " Last parser error: " << parser.getLastError();
             }
-            return buildPipelineError(error, warnings, diagnostics, result.exeCandidates);
+            return fail(error.str());
         }
 
         std::vector<std::string> candidatePaths = parser.listExecutables();
@@ -108,8 +131,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
         if (uniquePaths.empty())
         {
-            return buildPipelineError("No PSX executable found in ISO image.", warnings,
-                                      diagnostics, result.exeCandidates);
+            appendIsoParserErrors(parser, "Executable discovery failed");
+            return fail("No PSX executable found in ISO image.");
         }
 
         for (const auto& path : uniquePaths)
@@ -216,8 +239,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         }
         if (!selectedIndex.has_value())
         {
-            return buildPipelineError("No valid PSX executable candidate found.", warnings,
-                                      diagnostics, result.exeCandidates);
+            return fail("No valid PSX executable candidate found.");
         }
 
         const auto& selected = result.exeCandidates[selectedIndex.value()];
@@ -225,8 +247,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         std::vector<u8> exeData = parser.extractFile(selected.path);
         if (!iso::PsxExeLoader::loadImage(exeData, exeImage, nullptr))
         {
-            return buildPipelineError("Failed to parse selected PSX executable.", warnings,
-                                      diagnostics, result.exeCandidates);
+            appendIsoParserErrors(parser, "Selected executable extraction failed");
+            return fail("Failed to parse selected PSX executable.");
         }
     }
     else
@@ -242,8 +264,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
                 errorStream << " Input appears to be ECM-compressed. Decode the image/executable "
                                "to BIN/ISO/EXE first, then retry.";
             }
-            return buildPipelineError(errorStream.str(), warnings, diagnostics,
-                                      result.exeCandidates);
+            return fail(errorStream.str());
         }
         detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
 
@@ -261,8 +282,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
     if (exeImage.programData.empty())
     {
-        return buildPipelineError("Executable program data is empty.", warnings, diagnostics,
-                                  result.exeCandidates);
+        return fail("Executable program data is empty.");
     }
 
     const Address baseAddress = exeImage.header.loadAddress;
@@ -270,8 +290,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         exeImage.programData.data(), exeImage.programData.size(), baseAddress);
     if (disassembled.empty())
     {
-        return buildPipelineError("Disassembler produced no instructions.", warnings, diagnostics,
-                                  result.exeCandidates);
+        return fail("Disassembler produced no instructions.");
     }
 
     const Address entryAddress = detail::resolveEntryAddress(exeImage);
@@ -342,7 +361,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             {
                 stream << " - " << error << "\n";
             }
-            return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
+            return fail(stream.str());
         }
 
         auto flowResult =
@@ -355,7 +374,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             {
                 stream << " - " << error << "\n";
             }
-            return buildPipelineError(stream.str(), warnings, diagnostics, result.exeCandidates);
+            return fail(stream.str());
         }
 
         PipelineResult::FunctionMetadata metadataEntry;
@@ -389,8 +408,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
     if (program.functions.empty())
     {
-        return buildPipelineError("No functions were generated from the disassembly.", warnings,
-                                  diagnostics, result.exeCandidates);
+        return fail("No functions were generated from the disassembly.");
     }
 
     if (m_options.enableOptimizations)
@@ -442,8 +460,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     std::filesystem::create_directories(outputDir, dirError);
     if (dirError)
     {
-        return buildPipelineError("Failed to create output directory: " + outputDir.string(),
-                                  warnings, diagnostics, result.exeCandidates);
+        return fail("Failed to create output directory: " + outputDir.string());
     }
 
     PipelineArtifacts artifacts;
@@ -453,12 +470,66 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     artifacts.buildPath = (outputDir / "CMakeLists.txt").string();
     artifacts.manifestPath = (outputDir / "manifest.json").string();
 
+    artifacts.resourcesPath = (outputDir / "resources").string();
+    artifacts.runtimeIncludePath = (outputDir / "runtime" / "include").string();
+    artifacts.runtimeSourcePath = (outputDir / "runtime" / "src").string();
+
     std::string writeError;
     if (!detail::writeFile(artifacts.headerPath, header, writeError) ||
         !detail::writeFile(artifacts.sourcePath, source, writeError) ||
         !detail::writeFile(artifacts.buildPath, buildFile, writeError))
     {
-        return buildPipelineError(writeError, warnings, diagnostics, result.exeCandidates);
+        return fail(writeError);
+    }
+
+    std::filesystem::path repoRoot =
+        detail::repositoryRootFromSourcePath(std::filesystem::path(__FILE__));
+    if (!detail::copyDirectoryRecursive(
+            repoRoot / "include" / "psxrecomp",
+            std::filesystem::path(artifacts.runtimeIncludePath) / "psxrecomp", writeError) ||
+        !detail::copyDirectoryRecursive(repoRoot / "src" / "runtime", artifacts.runtimeSourcePath,
+                                        writeError))
+    {
+        return fail(writeError);
+    }
+
+    if (detail::isIsoLikePath(inputFsPath))
+    {
+        iso::IsoParser parser(activeDiscPath);
+        if (parser.open() && parser.isValid())
+        {
+            std::filesystem::create_directories(artifacts.resourcesPath, dirError);
+            if (dirError)
+            {
+                return fail("Failed to create resources directory: " + artifacts.resourcesPath);
+            }
+            std::vector<std::pair<iso::ResourceType, std::string>> resourceTypes = {
+                {iso::ResourceType::TimTexture, "TIM"},
+                {iso::ResourceType::StrVideo, "STR"},
+                {iso::ResourceType::XaAudio, "XA"},
+            };
+            for (const auto& [type, label] : resourceTypes)
+            {
+                auto listed = parser.listResources(type);
+                for (const auto& resourcePath : listed)
+                {
+                    artifacts.exportedResources.push_back(resourcePath);
+                }
+                if (!parser.exportResources(type, artifacts.resourcesPath))
+                {
+                    warnings.push_back("Resource export reported errors for " + label + ".");
+                }
+            }
+            std::sort(artifacts.exportedResources.begin(), artifacts.exportedResources.end());
+            artifacts.exportedResources.erase(
+                std::unique(artifacts.exportedResources.begin(), artifacts.exportedResources.end()),
+                artifacts.exportedResources.end());
+        }
+        else
+        {
+            appendIsoParserErrors(parser, "Resource export skipped");
+            warnings.push_back("Resource export skipped due to parser errors.");
+        }
     }
 
     result.success = true;
@@ -471,7 +542,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         result, activeDiscPath, outputDir.string(), timestamp, m_options.pipelineVersion);
     if (!detail::writeFile(artifacts.manifestPath, manifest, writeError))
     {
-        return buildPipelineError(writeError, warnings, diagnostics, result.exeCandidates);
+        return fail(writeError);
     }
     return result;
 }

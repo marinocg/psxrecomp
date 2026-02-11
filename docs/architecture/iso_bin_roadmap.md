@@ -1,7 +1,13 @@
-# ISO/BIN Parser Roadmap
+# ISO/BIN Parser Roadmap (~85%)
 
 This roadmap tracks the current ISO/BIN parser state and planned work to cover the PlayStation CD
 image formats needed by the recompiler pipeline.
+
+| Track | Estimate |
+|---|---:|
+| Parser + extraction core | ~85% |
+| XA resource extraction workflows | ~80% |
+| Runtime XA streaming integration | ~15% |
 
 ## Current Status
 - [x] Primary Volume Descriptor (PVD) detection across 2048-byte and 2352-byte sector layouts.
@@ -38,4 +44,6 @@ image formats needed by the recompiler pipeline.
 - [x] Add sector caching and streaming to reduce redundant reads.
 - [x] Improve BIN/CUE parsing for uncommon cue syntax and pregap variants.
 - [x] Validate XA audio sector metadata for runtime streaming.
+- [x] XA resource fallback for 2048-byte ISO images when raw subheaders are unavailable.
+- [x] Add fixture tooling for malformed/good/rich ISO generation and validation scripts.
 - [ ] Integrate multi-disc set with runtime disc swap workflows.

@@ -320,6 +320,48 @@ std::string buildOutputDirectory(const std::filesystem::path& baseDir, const std
     return outputDir.string();
 }
 
+std::filesystem::path repositoryRootFromSourcePath(const std::filesystem::path& sourcePath)
+{
+    std::filesystem::path root = sourcePath;
+    for (int i = 0; i < 3; ++i)
+    {
+        if (!root.has_parent_path())
+        {
+            break;
+        }
+        root = root.parent_path();
+    }
+    return root;
+}
+
+bool copyDirectoryRecursive(const std::filesystem::path& source,
+                            const std::filesystem::path& destination, std::string& outError)
+{
+    std::error_code error;
+    if (!std::filesystem::exists(source, error) || error)
+    {
+        outError = "Missing source directory: " + source.string();
+        return false;
+    }
+    std::filesystem::create_directories(destination, error);
+    if (error)
+    {
+        outError = "Failed to create destination directory: " + destination.string();
+        return false;
+    }
+    std::filesystem::copy(source, destination,
+                          std::filesystem::copy_options::recursive |
+                              std::filesystem::copy_options::overwrite_existing,
+                          error);
+    if (error)
+    {
+        outError =
+            "Failed to copy directory from " + source.string() + " to " + destination.string();
+        return false;
+    }
+    return true;
+}
+
 std::string serializeManifest(const PipelineResult& result, const std::string& inputPath,
                               const std::string& outputDir, const std::string& timestamp,
                               const std::string& pipelineVersion)
@@ -345,7 +387,21 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
     stream << "      \"build\": \"" << escapeJson(result.artifacts.buildPath) << "\",\n";
     stream << "      \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\"\n";
     stream << "    },\n";
-    stream << "    \"resources\": []\n";
+    stream << "    \"resources\": [\n";
+    for (size_t i = 0; i < result.artifacts.exportedResources.size(); ++i)
+    {
+        stream << "      \"" << escapeJson(result.artifacts.exportedResources[i]) << "\"";
+        if (i + 1 < result.artifacts.exportedResources.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "    ],\n";
+    stream << "    \"runtimeInclude\": \"" << escapeJson(result.artifacts.runtimeIncludePath)
+           << "\",\n";
+    stream << "    \"runtimeSource\": \"" << escapeJson(result.artifacts.runtimeSourcePath)
+           << "\"\n";
     stream << "  },\n";
     stream << "  \"discSet\": {\n";
     stream << "    \"setName\": \"" << escapeJson(result.discSet.setName) << "\",\n";

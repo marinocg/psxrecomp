@@ -5,13 +5,79 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <vector>
 
 using iso_test::createCueImage;
 using iso_test::createMultiSessionCue;
 using iso_test::createTestIso;
 using iso_test::createTestIsoWithLabel;
 using iso_test::kSectorSize;
+
+std::filesystem::path createPlainIsoWithXaExtension()
+{
+    const uint32_t totalSectors = 32;
+    std::vector<uint8_t> image(totalSectors * kSectorSize, 0);
+
+    const uint32_t rootDirSector = 20;
+    const uint32_t rootDirSize = kSectorSize;
+    const uint32_t xaSector = 21;
+    const uint32_t pathTableSector = 18;
+
+    size_t pvdOffset = 16 * kSectorSize;
+    image[pvdOffset] = 1;
+    std::memcpy(image.data() + pvdOffset + 1, "CD001", 5);
+    image[pvdOffset + 6] = 1;
+    std::memcpy(image.data() + pvdOffset + 8, "PLAYSTATION", 11);
+    std::memcpy(image.data() + pvdOffset + 40, "XA_EXT_TEST", 11);
+    iso_test::writeLe32(image, pvdOffset + 80, totalSectors);
+    iso_test::writeLe16(image, pvdOffset + 120, 1);
+    iso_test::writeLe16(image, pvdOffset + 124, 1);
+    iso_test::writeLe16(image, pvdOffset + 128, kSectorSize);
+
+    size_t pathTableOffset = pathTableSector * kSectorSize;
+    size_t pathTableCursor = pathTableOffset;
+    pathTableCursor = iso_test::writePathTableEntry(image, pathTableCursor, std::string("\0", 1),
+                                                    rootDirSector, 1);
+    uint32_t pathTableSize = static_cast<uint32_t>(pathTableCursor - pathTableOffset);
+    iso_test::writeLe32(image, pvdOffset + 132, pathTableSize);
+    iso_test::writeLe32(image, pvdOffset + 140, pathTableSector);
+
+    size_t rootRecordOffset = pvdOffset + 156;
+    image[rootRecordOffset] = 34;
+    iso_test::writeLe32(image, rootRecordOffset + 2, rootDirSector);
+    iso_test::writeLe32(image, rootRecordOffset + 10, rootDirSize);
+    image[rootRecordOffset + 25] = 0x02;
+    iso_test::writeLe16(image, rootRecordOffset + 28, 1);
+    image[rootRecordOffset + 32] = 1;
+    image[rootRecordOffset + 33] = 0;
+
+    size_t terminatorOffset = 17 * kSectorSize;
+    image[terminatorOffset] = 255;
+    std::memcpy(image.data() + terminatorOffset + 1, "CD001", 5);
+    image[terminatorOffset + 6] = 1;
+
+    size_t rootDirOffset = rootDirSector * kSectorSize;
+    size_t cursor = rootDirOffset;
+    cursor += iso_test::writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector,
+                                             rootDirSize, 0x02);
+    cursor += iso_test::writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector,
+                                             rootDirSize, 0x02);
+    iso_test::writeDirectoryRecord(image, cursor, "AUDIO.XA;1", xaSector, 512, 0x00);
+
+    std::string xaData = "NOT_RAW_XA_BUT_RESOURCE";
+    std::memcpy(image.data() + xaSector * kSectorSize, xaData.data(), xaData.size());
+
+    auto path = std::filesystem::temp_directory_path() /
+                ("psxrecomp_xa_ext_" + std::to_string(iso_test::generateUniqueSuffix()) + ".iso");
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(image.data()),
+              static_cast<std::streamsize>(image.size()));
+    out.close();
+    return path;
+}
 
 int main()
 {
@@ -75,6 +141,15 @@ int main()
     auto xaResources = cueParser.listResources(psxrecomp::iso::ResourceType::XaAudio);
     assert(xaResources.size() == 1);
     assert(xaResources.front() == "AUDIO.XA");
+
+    auto plainXaIso = createPlainIsoWithXaExtension();
+    psxrecomp::iso::IsoParser plainXaParser(plainXaIso.string());
+    assert(plainXaParser.open());
+    assert(plainXaParser.isValid());
+    auto plainXaResources = plainXaParser.listResources(psxrecomp::iso::ResourceType::XaAudio);
+    assert(plainXaResources.size() == 1);
+    assert(plainXaResources.front() == "AUDIO.XA");
+    std::filesystem::remove(plainXaIso);
 
     auto exportDir = std::filesystem::temp_directory_path() /
                      ("psxrecomp_exports_" + std::to_string(iso_test::generateUniqueSuffix()));
