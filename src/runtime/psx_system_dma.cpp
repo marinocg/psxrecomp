@@ -10,6 +10,7 @@ namespace runtime
 namespace
 {
 constexpr u32 DMA_DIRECTION_FROM_RAM = 0x00000001;
+constexpr u32 DMA_ADDRESS_DECREMENT = 0x00000002;
 constexpr u32 DMA_SYNC_MODE_SHIFT = 9;
 constexpr u32 DMA_SYNC_MODE_MASK = 0x3;
 constexpr u32 DMA_LINKED_LIST_MODE = 0x2;
@@ -38,9 +39,19 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         }
 
         const Address base = channel.baseAddress & 0x1FFFFC;
+        const bool decrementAddress = (channel.channelControl & DMA_ADDRESS_DECREMENT) != 0;
+        Address current = base;
         for (u32 i = 0; i < wordCount; ++i)
         {
-            write<u32>(base + i * sizeof(u32), m_gpu.readData());
+            write<u32>(current, m_gpu.readData());
+            if (decrementAddress)
+            {
+                current = (current - sizeof(u32)) & 0x1FFFFC;
+            }
+            else
+            {
+                current = (current + sizeof(u32)) & 0x1FFFFC;
+            }
         }
 
         transferredWords = wordCount;
@@ -80,9 +91,11 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             }
 
             const Address base = channel.baseAddress & 0x1FFFFC;
+            const bool decrementAddress = (channel.channelControl & DMA_ADDRESS_DECREMENT) != 0;
+            Address current = base;
             for (u32 i = 0; i < wordCount; ++i)
             {
-                const u32 value = read<u32>(base + i * sizeof(u32));
+                const u32 value = read<u32>(current);
                 switch (port)
                 {
                 case DmaPort::Gpu:
@@ -96,6 +109,15 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                     break;
                 default:
                     break;
+                }
+
+                if (decrementAddress)
+                {
+                    current = (current - sizeof(u32)) & 0x1FFFFC;
+                }
+                else
+                {
+                    current = (current + sizeof(u32)) & 0x1FFFFC;
                 }
             }
 

@@ -46,6 +46,18 @@ int main()
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Dma)) !=
            0);
 
+    // GPU DMA RAM->GPU should honor address decrement mode in normal sync.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    system.write<psxrecomp::u32>(0x00013FFC, 0xBBBBBBBBu);
+    system.write<psxrecomp::u32>(0x00014000, 0xAAAAAAAAu);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00014000);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000002);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000003);
+
+    assert(system.gpu().fifoDepth() == 2);
+    assert(system.gpu().peekFifo() == 0xAAAAAAAAu);
+
     system.gpu().reset();
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
     system.write<psxrecomp::u32>(0x00012000, 0x03800000u);
