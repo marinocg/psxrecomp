@@ -226,6 +226,19 @@ int main()
     assert(readVramPixel(gpu, 0, 1) == 0x5566u);
     assert(readVramPixel(gpu, 1, 1) == 0x7788u);
 
+    // Odd-pixel transfers keep final pixel in low 16 bits and zero-fill high readback bits.
+    gpu.reset();
+    writePacket(gpu, {0xA0000000u, 0x00050005u, 0x00010003u});
+    gpu.writeCommand(0xBBBBAAAAu);
+    gpu.writeCommand(0xDEADCCCCu);
+    assert(readVramPixel(gpu, 5, 5) == 0xAAAAu);
+    assert(readVramPixel(gpu, 6, 5) == 0xBBBBu);
+    assert(readVramPixel(gpu, 7, 5) == 0xCCCCu);
+
+    writePacket(gpu, {0xC0000000u, 0x00050005u, 0x00010003u});
+    assert(gpu.readData() == 0xBBBBAAAAu);
+    assert(gpu.readData() == 0x0000CCCCu);
+
     // Masking rules affect transfer writes.
     gpu.reset();
     writePacket(gpu, {0xA0000000u, 0x00000000u, 0x00010001u});

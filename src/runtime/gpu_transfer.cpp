@@ -197,20 +197,20 @@ void Gpu::executeVramToVramBlit(const PacketState& packet)
     const auto [width, height] = decodeTransferSize(packet.words[3]);
 
     const size_t totalPixels = static_cast<size_t>(width) * height;
-    std::vector<u16> copyBuffer(totalPixels, 0);
+    m_blitScratch.assign(totalPixels, 0);
 
     for (size_t i = 0; i < totalPixels; ++i)
     {
         const u16 x = static_cast<u16>(srcX + (i % width));
         const u16 y = static_cast<u16>(srcY + (i / width));
-        copyBuffer[i] = readVramPixel(x, y);
+        m_blitScratch[i] = readVramPixel(x, y);
     }
 
     for (size_t i = 0; i < totalPixels; ++i)
     {
         const u16 x = static_cast<u16>(dstX + (i % width));
         const u16 y = static_cast<u16>(dstY + (i / width));
-        writeVramPixel(x, y, copyBuffer[i]);
+        writeVramPixel(x, y, m_blitScratch[i]);
     }
 }
 

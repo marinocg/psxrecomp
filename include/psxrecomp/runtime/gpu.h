@@ -144,6 +144,7 @@ class Gpu
 
     std::deque<u32> m_fifo;
     std::vector<u32> m_vram;
+    std::vector<u16> m_blitScratch;
     TransferState m_transferState;
 
     std::vector<GpuCommand> m_commandTrace;
