@@ -20,7 +20,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 | Recompiler / Codegen | ~75% |
 | Runtime Library | ~60% |
 | GPU Emulation | ~74% |
-| SPU Emulation | ~5% |
+| SPU Emulation | ~45% |
 | CD-ROM | ~15% |
 
 ### Pipeline & Tooling (~55%)
@@ -121,12 +121,21 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Full display/timing synchronization semantics from Phase 4 are still pending (scanline cadence, throughput limits, IRQ timing).
 - External capture-based parity gates integrated into CI.
 
-### SPU Emulation (~5%)
+### SPU Emulation (~45%)
 **Present**
-- Early scaffolding and documentation.
+- M3 dependency gate coverage is in place for Phase 1-2 scope (core voice model, mixing path, backend hookup).
+- SPU register map constants plus per-voice channel model/state tracking.
+- Core ADSR envelope state machine with key-on/key-off transitions.
+- SPU RAM transfer cursor with DMA read/write support and RAM dump integration.
+- ADPCM block decode path with pitch stepping and loop/end flag handling.
+- Stereo voice mixer, master volume controls, and basic feedback reverb ring.
+- Pluggable audio backend interface with deterministic null/capture backend behavior.
+- Unit coverage for register writes, DMA interactions, key lifecycle, decode/mix flow.
 
 **Missing**
-- Voice synthesis, envelopes, XA audio path, mixing/timing.
+- XA/CD-ROM streaming path into SPU voice/mixer flow.
+- Timing/IRQ accuracy model and hardware-verified envelope/reverb edge behavior.
+- Golden audio capture parity tests against hardware traces.
 
 ### CD-ROM (~15%)
 **Present**
