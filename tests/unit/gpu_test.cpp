@@ -191,6 +191,12 @@ int main()
     gpu.writeStatus(0x04000003u);
     const auto statusGpuToCpu = gpu.readStatus();
     assert(((statusGpuToCpu >> 29) & 0x3u) == 0x3u);
+    assert((statusGpuToCpu & (1u << 27)) != 0);
+
+    // GPUREAD readiness bit should drop while CPU->VRAM payload transfer is active.
+    writePacket(gpu, {0xA0000000u, 0x00000000u, 0x00010002u});
+    assert((gpu.readStatus() & (1u << 27)) == 0);
+    gpu.writeCommand(0xAAAABBBBu);
 
     gpu.writeStatus(0x03000001u);
     assert((gpu.readStatus() & (1u << 23)) != 0);

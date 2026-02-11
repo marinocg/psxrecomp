@@ -302,8 +302,8 @@ void Gpu::updateStatusBits()
         m_status |= statusReadyToReceiveCommand;
     }
 
-    const bool readyToSend = m_transferState.mode == TransferState::Mode::VramToCpu &&
-                             m_transferState.remainingWords > 0;
+    const bool readyToSend = (m_registers.dmaDirection == Registers::DmaDirection::GpuReadToCpu) &&
+                             (m_transferState.mode != TransferState::Mode::CpuToVram);
     if (readyToSend)
     {
         m_status |= statusReadyToSendToCpu;
