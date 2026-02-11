@@ -222,6 +222,24 @@ int main()
         (void)system.cdrom().readDma();
     }
     assert(system.cdrom().readDma() == 0xDDCCBBAAu);
+
+    // CD-ROM queued sectors are bounded to avoid unbounded memory growth.
+    PsxSystem boundedQueueSystem;
+    assert(boundedQueueSystem.initialize());
+    for (int i = 0; i < 80; ++i)
+    {
+        std::vector<psxrecomp::u8> sector(2048, 0);
+        sector[0] = static_cast<psxrecomp::u8>(i);
+        boundedQueueSystem.cdrom().enqueueDataSector(sector);
+    }
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
+                                                        0x01);
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
+                                                        0x06);
+    boundedQueueSystem.runFrame();
+    const psxrecomp::u32 boundedWord = boundedQueueSystem.cdrom().readDma();
+    assert((boundedWord & 0xFFu) == 16u);
+
     bool fired = false;
     system.scheduler().schedule(5, [&fired]() { fired = true; });
     system.scheduler().tick(4);

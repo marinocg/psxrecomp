@@ -210,6 +210,10 @@ u32 Cdrom::lastDmaWord() const
 
 void Cdrom::enqueueDataSector(const std::vector<u8>& data)
 {
+    if (m_sectorQueue.size() >= MAX_QUEUED_SECTORS)
+    {
+        m_sectorQueue.pop_front();
+    }
     m_sectorQueue.push_back(data);
 }
 

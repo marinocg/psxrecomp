@@ -37,6 +37,7 @@ class Cdrom
     static constexpr size_t MAX_PARAMS = 16;
     static constexpr size_t RESPONSE_CAPACITY = 32;
     static constexpr size_t DATA_FIFO_CAPACITY = 4096;
+    static constexpr size_t MAX_QUEUED_SECTORS = 64;
     static constexpr u32 CDROM_READ_CYCLES = 338688;
 
     u8 m_status = 0;
