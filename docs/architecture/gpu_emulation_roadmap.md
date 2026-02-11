@@ -41,7 +41,7 @@ Phase 0 spec artifacts:
 - `docs/architecture/gpu/phase0_spec_lock.md` (normative behavior/tier/fallback rules consumed by implementation and review checklists)
 - `docs/architecture/gpu/trace_corpus.md` (how corpus JSON files are curated/promoted for parity workloads)
 - `docs/architecture/gpu/golden_frame_metadata.schema.json` (schema that replay/capture tooling validates against before comparing hashes)
-- `tests/fixtures/gpu_trace_corpus/` (versioned manifest/scenes/golden metadata JSON fixtures used by upcoming replay and frame-comparison tests)
+- `tests/fixtures/gpu_trace_corpus/` (versioned manifest/scenes/golden metadata JSON fixtures that define the Phase 0 contract; fully automated replay consumption is delivered in Phase 7)
 
 ## Phase 1 — Command Processor & Register Correctness
 Goal: command ingestion reflects PSX packet semantics and register behavior.

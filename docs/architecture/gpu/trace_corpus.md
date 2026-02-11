@@ -13,6 +13,13 @@ The initial Phase 0 corpus includes three representative scene classes:
 3. **FMV overlay**
    - Prioritizes transfer operations and overlay primitives during display mode changes.
 
+
+## Current corpus maturity
+
+The Phase 0 JSON files are **descriptor/golden metadata inputs**, not a complete raw trace archive yet.
+Their immediate purpose is to lock contracts for tooling and CI design; full trace replay ingestion is
+implemented later in Phase 7.
+
 ## Storage layout
 
 - Corpus manifest: `tests/fixtures/gpu_trace_corpus/manifest.json`
@@ -22,13 +29,13 @@ The initial Phase 0 corpus includes three representative scene classes:
 ### Intended use of each JSON artifact
 
 - `manifest.json`
-  - Entry point consumed by replay/capture tooling to enumerate scenes and expected golden artifacts.
+  - Entry point consumed by replay/capture tooling to enumerate scenes and expected golden artifacts (and currently used as the contract definition before replay tooling lands).
   - Defines coverage dimensions (category + GP0/GP1 family tags) used for roadmap progress reporting.
 - `scenes/*.json`
-  - Per-scene workload descriptors used by trace-replay runners to select and label command streams.
+  - Per-scene workload descriptors used by trace-replay runners to select and label command streams; in Phase 0 these are planning descriptors that lock required scene coverage.
   - Declares command-mix expectations so corpus growth can be audited against targeted command families.
 - `golden_frames/*.json`
-  - Canonical per-frame output expectations used by automated frame comparison jobs.
+  - Canonical per-frame output expectations used by automated frame comparison jobs; in Phase 0 these serve as schema-valid sample goldens until capture automation is wired.
   - Stores display semantics + hashes so parity gates can detect both pixel drift and metadata drift.
 
 ## Scene acceptance rules
