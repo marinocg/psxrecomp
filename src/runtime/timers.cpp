@@ -1,7 +1,5 @@
 #include "psxrecomp/runtime/timers.h"
 
-#include <algorithm>
-
 namespace psxrecomp
 {
 namespace runtime
@@ -14,7 +12,84 @@ constexpr u16 MODE_IRQ_ON_TARGET = 1u << 4;
 constexpr u16 MODE_IRQ_ON_OVERFLOW = 1u << 5;
 constexpr u16 MODE_TARGET_REACHED_FLAG = 1u << 11;
 constexpr u16 MODE_OVERFLOW_REACHED_FLAG = 1u << 12;
+
+bool crossedTargetNoOverflow(u16 counter, u16 target, u16 newCounter)
+{
+    return target > counter && target <= newCounter;
+}
+
+void raiseTimerInterrupt(const TimerController::InterruptCallback& onInterrupt, InterruptLine line,
+                         bool enabled)
+{
+    if (enabled && onInterrupt)
+    {
+        onInterrupt(line);
+    }
+}
+
 } // namespace
+
+void TimerController::tickChannel(Channel& channel, size_t index, u32 cpuCycles,
+                                  const InterruptCallback& onInterrupt)
+{
+    const u32 divider = TimerController::dividerForChannel(index, channel);
+    const uint64_t totalCycles = static_cast<uint64_t>(channel.cycleCarry) + cpuCycles;
+    const u32 steps = static_cast<u32>(totalCycles / divider);
+    channel.cycleCarry = static_cast<u32>(totalCycles % divider);
+
+    if (steps == 0)
+    {
+        return;
+    }
+
+    const bool resetOnTarget = (channel.mode & MODE_RESET_ON_TARGET) != 0;
+    const bool irqOnTarget = (channel.mode & MODE_IRQ_ON_TARGET) != 0;
+    const bool irqOnOverflow = (channel.mode & MODE_IRQ_ON_OVERFLOW) != 0;
+    const InterruptLine line = TimerController::interruptLineForTimer(index);
+
+    if (resetOnTarget && channel.target != 0)
+    {
+        const u32 period = channel.target;
+        const u32 total = static_cast<u32>(channel.counter) + steps;
+        const u32 targetEvents = total / period;
+
+        channel.counter = static_cast<u16>(total % period);
+        if (targetEvents > 0)
+        {
+            channel.targetReached = true;
+            raiseTimerInterrupt(onInterrupt, line, irqOnTarget);
+        }
+        return;
+    }
+
+    const u32 total = static_cast<u32>(channel.counter) + steps;
+    const u16 newCounter = static_cast<u16>(total & 0xFFFF);
+    const u32 overflowEvents = total >> 16;
+
+    bool targetReached = false;
+    if (overflowEvents > 0)
+    {
+        targetReached = true;
+    }
+    else
+    {
+        targetReached = crossedTargetNoOverflow(channel.counter, channel.target, newCounter);
+    }
+
+    if (targetReached)
+    {
+        channel.targetReached = true;
+        raiseTimerInterrupt(onInterrupt, line, irqOnTarget);
+    }
+
+    if (overflowEvents > 0)
+    {
+        channel.overflowReached = true;
+        raiseTimerInterrupt(onInterrupt, line, irqOnOverflow);
+    }
+
+    channel.counter = newCounter;
+}
 
 void TimerController::reset()
 {
@@ -101,40 +176,7 @@ void TimerController::tick(u32 cpuCycles, const InterruptCallback& onInterrupt)
 {
     for (size_t index = 0; index < m_channels.size(); ++index)
     {
-        Channel& channel = m_channels[index];
-        const u32 divider = dividerForChannel(index, channel);
-
-        const uint64_t totalCycles = static_cast<uint64_t>(channel.cycleCarry) + cpuCycles;
-        const u32 steps = static_cast<u32>(totalCycles / divider);
-        channel.cycleCarry = static_cast<u32>(totalCycles % divider);
-
-        for (u32 i = 0; i < steps; ++i)
-        {
-            ++channel.counter;
-
-            if (channel.counter == channel.target)
-            {
-                channel.targetReached = true;
-                if ((channel.mode & MODE_IRQ_ON_TARGET) != 0 && onInterrupt)
-                {
-                    onInterrupt(interruptLineForTimer(index));
-                }
-                if ((channel.mode & MODE_RESET_ON_TARGET) != 0)
-                {
-                    channel.counter = 0;
-                    continue;
-                }
-            }
-
-            if (channel.counter == 0)
-            {
-                channel.overflowReached = true;
-                if ((channel.mode & MODE_IRQ_ON_OVERFLOW) != 0 && onInterrupt)
-                {
-                    onInterrupt(interruptLineForTimer(index));
-                }
-            }
-        }
+        TimerController::tickChannel(m_channels[index], index, cpuCycles, onInterrupt);
     }
 }
 

@@ -41,6 +41,8 @@ class TimerController
 
     std::array<Channel, 3> m_channels = {};
 
+    static void tickChannel(Channel& channel, size_t index, u32 cpuCycles,
+                            const InterruptCallback& onInterrupt);
     static bool isValidIndex(size_t index);
     static u32 dividerForChannel(size_t index, const Channel& channel);
     static InterruptLine interruptLineForTimer(size_t index);

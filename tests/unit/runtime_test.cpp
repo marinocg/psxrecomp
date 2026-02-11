@@ -153,6 +153,24 @@ int main()
         system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
     assert((timer0Mode & (1u << 11)) != 0);
 
+    // Timer2 alternate divider mode should only advance every 8 CPU cycles.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 + 0x4,
+                                             0x0200u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 + 0x0, 0u);
+    system.timers().tick(7, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 +
+                                                   0x0) == 0u);
+    system.timers().tick(1, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 +
+                                                   0x0) == 1u);
+
+    // Timer overflow should wrap counter in free-running mode.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0000u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
+    system.timers().tick(4, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
+           2u);
+
     std::vector<psxrecomp::u8> xaSector(2352, 0x00);
     xaSector[24] = 0x11;
     xaSector[25] = 0x22;
