@@ -105,10 +105,12 @@ set(RUNTIME_SOURCES
     src/runtime/interrupt_controller.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
+    src/runtime/psx_system_mmio.cpp
     src/runtime/psx_system_dma.cpp
     src/runtime/resource_pack.cpp
     src/runtime/scheduler.cpp
     src/runtime/spu.cpp
+    src/runtime/timers.cpp
 )
 
 file(GLOB_RECURSE ALL_FORMAT_SOURCES CONFIGURE_DEPENDS

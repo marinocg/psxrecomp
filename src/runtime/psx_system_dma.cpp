@@ -46,12 +46,6 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     u32 transferredWords = 0;
     if (!fromRam)
     {
-        if (port != DmaPort::Gpu)
-        {
-            m_dma.clearTrigger(port);
-            return;
-        }
-
         const u32 syncMode = (channel.channelControl >> DMA_SYNC_MODE_SHIFT) & DMA_SYNC_MODE_MASK;
         if (syncMode == DMA_LINKED_LIST_MODE)
         {
@@ -71,7 +65,21 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         Address current = base;
         for (u32 i = 0; i < wordCount; ++i)
         {
-            write<u32>(current, m_gpu.readData());
+            u32 value = 0;
+            switch (port)
+            {
+            case DmaPort::Gpu:
+                value = m_gpu.readData();
+                break;
+            case DmaPort::Cdrom:
+                value = m_cdrom.readDma();
+                break;
+            default:
+                m_dma.clearTrigger(port);
+                return;
+            }
+
+            write<u32>(current, value);
             if (decrementAddress)
             {
                 current = (current - sizeof(u32)) & 0x1FFFFC;

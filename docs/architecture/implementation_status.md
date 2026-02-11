@@ -18,10 +18,10 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 | Disassembler | ~75% |
 | IR Pipeline | ~85% |
 | Recompiler / Codegen | ~75% |
-| Runtime Library | ~60% |
+| Runtime Library | ~68% |
 | GPU Emulation | ~74% |
 | SPU Emulation | ~45% |
-| CD-ROM | ~15% |
+| CD-ROM | ~42% |
 
 ### Pipeline & Tooling (~55%)
 **Present**
@@ -85,7 +85,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 **Missing**
 - Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.
 
-### Runtime Library (~60%)
+### Runtime Library (~68%)
 **Present**
 - Core PSX system scaffolding (memory, basic subsystems).
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
@@ -95,7 +95,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Resource pack loader for runtime assets (textures/audio/movie payload containers).
 
 **Missing**
-- Higher-fidelity timer behavior and cycle-accurate scheduling.
+- Cycle-exact timer edge behavior still needs hardware-trace validation.
 - Broader BIOS function coverage and return-value semantics.
 
 ### GPU Emulation (~74%)
@@ -137,12 +137,16 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Timing/IRQ accuracy model and hardware-verified envelope/reverb edge behavior.
 - Golden audio capture parity tests against hardware traces.
 
-### CD-ROM (~15%)
+### CD-ROM (~42%)
 **Present**
-- Basic data path with ISO parser integration.
+- Command/parameter/response FIFOs are wired through MMIO with interrupt flag handling.
+- DMA-readable data FIFO path now supports CD-ROM->RAM transfer semantics for streamed sectors.
+- Basic XA streaming controls are implemented (Setmode XA bit + ReadN/ReadS cadence with payload pumping).
 
 **Missing**
-- XA streaming, command timing, sector validation, error conditions.
+- XA-ADPCM decode handoff into SPU playback.
+- Command timing state machine fidelity (seek latency, busy windows, retries).
+- Sector/subheader validation and detailed error condition coverage.
 
 ## Recommended implementation order
 1. **Expand MIPS→IR coverage** (ALU, shifts, mult/div, load/store variants, branches).
