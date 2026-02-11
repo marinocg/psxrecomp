@@ -197,7 +197,7 @@ void Gpu::executeVramToVramBlit(const PacketState& packet)
     const auto [width, height] = decodeTransferSize(packet.words[3]);
 
     const size_t totalPixels = static_cast<size_t>(width) * height;
-    m_blitScratch.assign(totalPixels, 0);
+    m_blitScratch.resize(totalPixels);
 
     for (size_t i = 0; i < totalPixels; ++i)
     {

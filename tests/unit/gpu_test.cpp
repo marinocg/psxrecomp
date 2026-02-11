@@ -226,6 +226,16 @@ int main()
     assert(readVramPixel(gpu, 0, 1) == 0x5566u);
     assert(readVramPixel(gpu, 1, 1) == 0x7788u);
 
+    // Overlapping VRAM -> VRAM blit must read source before writes clobber it.
+    gpu.reset();
+    writePacket(gpu, {0xA0000000u, 0x00000000u, 0x00010004u});
+    gpu.writeCommand(0x22221111u);
+    gpu.writeCommand(0x44443333u);
+    writePacket(gpu, {0x80000000u, 0x00000000u, 0x00000001u, 0x00010003u});
+    assert(readVramPixel(gpu, 1, 0) == 0x1111u);
+    assert(readVramPixel(gpu, 2, 0) == 0x2222u);
+    assert(readVramPixel(gpu, 3, 0) == 0x3333u);
+
     // Odd-pixel transfers keep final pixel in low 16 bits and zero-fill high readback bits.
     gpu.reset();
     writePacket(gpu, {0xA0000000u, 0x00050005u, 0x00010003u});
