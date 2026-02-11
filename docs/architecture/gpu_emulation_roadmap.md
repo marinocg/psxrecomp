@@ -56,12 +56,12 @@ Goal: command ingestion reflects PSX packet semantics and register behavior.
 ## Phase 2 — VRAM & Transfer Pipeline
 Goal: VRAM behavior matches hardware-visible semantics.
 
-- [ ] Implement CPU->VRAM transfer mode semantics (setup + payload state machine).
-- [ ] Implement VRAM->CPU readback mode semantics.
-- [ ] Implement VRAM->VRAM blit semantics.
-- [ ] Implement transfer clipping/wrapping behavior (1024x512 bounds).
-- [ ] Validate transfer endian/packing behavior and masking rules.
-- [ ] Add deterministic VRAM operation tests (including edge wrapping cases).
+- [x] Implement CPU->VRAM transfer mode semantics (setup + payload state machine).
+- [x] Implement VRAM->CPU readback mode semantics.
+- [x] Implement VRAM->VRAM blit semantics.
+- [x] Implement transfer clipping/wrapping behavior (1024x512 bounds).
+- [x] Validate transfer endian/packing behavior and masking rules.
+- [x] Add deterministic VRAM operation tests (including edge wrapping cases).
 
 ## Phase 3 — Reference Software Rasterizer (Accuracy First)
 Goal: establish a trusted, deterministic software baseline.

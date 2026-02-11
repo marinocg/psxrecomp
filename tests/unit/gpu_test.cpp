@@ -3,11 +3,15 @@
 #include <array>
 #include <cassert>
 #include <cstddef>
+#include <initializer_list>
+#include <utility>
 
 namespace
 {
 using psxrecomp::runtime::Gpu;
 using psxrecomp::runtime::GpuCommandKind;
+
+constexpr psxrecomp::u16 kVramWidth = psxrecomp::runtime::SoftwareGpuRenderer::Width;
 
 void writePacket(Gpu& gpu, std::initializer_list<psxrecomp::u32> words)
 {
@@ -21,6 +25,18 @@ void assertLastCommand(const Gpu& gpu, GpuCommandKind kind)
 {
     assert(!gpu.commandTrace().empty());
     assert(gpu.commandTrace().back().kind == kind);
+}
+
+psxrecomp::u16 readVramPixel(const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
+{
+    const auto& vram = gpu.vramWords();
+    const size_t pixel = static_cast<size_t>(y) * kVramWidth + x;
+    const psxrecomp::u32 word = vram[pixel / 2];
+    if ((pixel & 1u) == 0)
+    {
+        return static_cast<psxrecomp::u16>(word & 0xFFFFu);
+    }
+    return static_cast<psxrecomp::u16>((word >> 16) & 0xFFFFu);
 }
 } // namespace
 
@@ -115,11 +131,11 @@ int main()
             }
             else if (opcode == 0x80)
             {
-                writePacket(gpu, {0x80000000u, 0x0u, 0x0u, 0x00010001u, 0x0u});
+                writePacket(gpu, {0x80000000u, 0x0u, 0x0u, 0x00010001u});
             }
             else if (opcode == 0xA0 || opcode == 0xC0)
             {
-                writePacket(gpu, {decodeCases[i].first, 0x0u, 0x00010001u, 0x0u});
+                writePacket(gpu, {decodeCases[i].first, 0x0u, 0x00010001u});
             }
             else
             {
@@ -175,7 +191,6 @@ int main()
     gpu.writeStatus(0x04000003u);
     const auto statusGpuToCpu = gpu.readStatus();
     assert(((statusGpuToCpu >> 29) & 0x3u) == 0x3u);
-    assert((statusGpuToCpu & (1u << 27)) != 0);
 
     gpu.writeStatus(0x03000001u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
@@ -188,6 +203,42 @@ int main()
 
     gpu.writeStatus(0x00000000u);
     assert((gpu.readStatus() & (1u << 31)) == 0);
+
+    // CPU -> VRAM setup + payload with wrap-around and little-endian pixel packing.
+    gpu.reset();
+    writePacket(gpu, {0xA0000000u, 0x01FF03FFu, 0x00020002u});
+    gpu.writeCommand(0x33441122u);
+    gpu.writeCommand(0x77885566u);
+    assert(readVramPixel(gpu, 1023, 511) == 0x1122u);
+    assert(readVramPixel(gpu, 0, 511) == 0x3344u);
+    assert(readVramPixel(gpu, 1023, 0) == 0x5566u);
+    assert(readVramPixel(gpu, 0, 0) == 0x7788u);
+
+    // VRAM -> CPU setup + readback preserves packing order.
+    writePacket(gpu, {0xC0000000u, 0x01FF03FFu, 0x00020002u});
+    assert(gpu.readData() == 0x33441122u);
+    assert(gpu.readData() == 0x77885566u);
+
+    // VRAM -> VRAM blit wraps edges and handles overlap via temporary buffer.
+    writePacket(gpu, {0x80000000u, 0x01FF03FFu, 0x00000000u, 0x00020002u});
+    assert(readVramPixel(gpu, 0, 0) == 0x1122u);
+    assert(readVramPixel(gpu, 1, 0) == 0x3344u);
+    assert(readVramPixel(gpu, 0, 1) == 0x5566u);
+    assert(readVramPixel(gpu, 1, 1) == 0x7788u);
+
+    // Masking rules affect transfer writes.
+    gpu.reset();
+    writePacket(gpu, {0xA0000000u, 0x00000000u, 0x00010001u});
+    gpu.writeCommand(0x00008001u);
+    writePacket(gpu, {0xE6000002u});
+    writePacket(gpu, {0xA0000000u, 0x00000000u, 0x00010001u});
+    gpu.writeCommand(0x00000002u);
+    assert(readVramPixel(gpu, 0, 0) == 0x8001u);
+
+    writePacket(gpu, {0xE6000001u});
+    writePacket(gpu, {0xA0000000u, 0x00000001u, 0x00010001u});
+    gpu.writeCommand(0x00000003u);
+    assert(readVramPixel(gpu, 1, 0) == 0x8003u);
 
     gpu.restoreStatus(0x12345678u);
     assert(gpu.readStatus() == 0x12345678u);

@@ -5,6 +5,7 @@
 
 #include <deque>
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace psxrecomp
@@ -26,7 +27,7 @@ class Gpu
     void reset();
 
     u32 readStatus() const;
-    u32 readData() const;
+    u32 readData();
     void writeStatus(u32 value);
     void restoreStatus(u32 value);
 
@@ -86,7 +87,32 @@ class Gpu
         bool displayEnabled = true;
         bool interlaced = false;
         bool irqPending = false;
+        bool forceMaskBit = false;
+        bool checkMaskBeforeDraw = false;
         DmaDirection dmaDirection = DmaDirection::Off;
+    };
+
+    struct TransferState
+    {
+        enum class Mode
+        {
+            None,
+            CpuToVram,
+            VramToCpu,
+        };
+
+        Mode mode = Mode::None;
+        u16 x = 0;
+        u16 y = 0;
+        u16 width = 0;
+        u16 height = 0;
+        size_t pixelIndex = 0;
+        size_t remainingWords = 0;
+
+        bool active() const
+        {
+            return mode != Mode::None && remainingWords > 0;
+        }
     };
 
     size_t expectedGp0Words(u8 opcode) const;
@@ -96,7 +122,15 @@ class Gpu
     GpuCommand decodePacket(const PacketState& packet) const;
     static void applyRegisterEffects(const GpuCommand& command, Registers& registers);
 
-    void writeVramWord(u32 value);
+    static std::pair<u16, u16> decodeTransferPosition(u32 packed);
+    static std::pair<u16, u16> decodeTransferSize(u32 packed);
+    u16 readVramPixel(u16 x, u16 y) const;
+    void writeVramPixel(u16 x, u16 y, u16 value);
+    void beginCpuToVramTransfer(const PacketState& packet);
+    void consumeCpuToVramWord(u32 value);
+    void beginVramToCpuTransfer(const PacketState& packet);
+    u32 consumeVramToCpuWord();
+    void executeVramToVramBlit(const PacketState& packet);
     void updateStatusBits();
     void updateRendererState();
 
@@ -110,7 +144,7 @@ class Gpu
 
     std::deque<u32> m_fifo;
     std::vector<u32> m_vram;
-    size_t m_vramWriteCursor = 0;
+    TransferState m_transferState;
 
     std::vector<GpuCommand> m_commandTrace;
     size_t m_malformedPacketCount = 0;

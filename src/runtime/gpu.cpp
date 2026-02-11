@@ -31,7 +31,7 @@ void Gpu::reset()
     m_registers = {};
     m_fifo.clear();
     m_vram.assign(VramWordCount, 0);
-    m_vramWriteCursor = 0;
+    m_transferState = {};
     m_commandTrace.clear();
     m_packet = {};
     m_malformedPacketCount = 0;
@@ -46,8 +46,14 @@ u32 Gpu::readStatus() const
     return m_status;
 }
 
-u32 Gpu::readData() const
+u32 Gpu::readData()
 {
+    if (m_transferState.mode == TransferState::Mode::VramToCpu &&
+        m_transferState.remainingWords > 0)
+    {
+        m_readData = consumeVramToCpuWord();
+        updateStatusBits();
+    }
     return m_readData;
 }
 
@@ -63,6 +69,13 @@ void Gpu::restoreStatus(u32 value)
 
 void Gpu::writeCommand(u32 value)
 {
+    if (m_transferState.mode == TransferState::Mode::CpuToVram)
+    {
+        consumeCpuToVramWord(value);
+        updateStatusBits();
+        return;
+    }
+
     if (m_fifo.size() >= MAX_FIFO_DEPTH)
     {
         updateStatusBits();
@@ -70,13 +83,19 @@ void Gpu::writeCommand(u32 value)
     }
 
     m_fifo.push_back(value);
-    writeVramWord(value);
     appendPacketWord(false, value);
     updateStatusBits();
 }
 
 void Gpu::writeDma(u32 value)
 {
+    if (m_transferState.mode == TransferState::Mode::CpuToVram)
+    {
+        consumeCpuToVramWord(value);
+        updateStatusBits();
+        return;
+    }
+
     if (m_registers.dmaDirection == Registers::DmaDirection::CpuToGp0 ||
         m_registers.dmaDirection == Registers::DmaDirection::Fifo)
     {
@@ -212,11 +231,28 @@ void Gpu::processPacket(const PacketState& packet)
     const auto command = decodePacket(packet);
     applyRegisterEffects(command, m_registers);
 
+    if (!command.fromGp1)
+    {
+        if (command.kind == GpuCommandKind::CpuToVramSetup)
+        {
+            beginCpuToVramTransfer(packet);
+        }
+        else if (command.kind == GpuCommandKind::VramToCpuSetup)
+        {
+            beginVramToCpuTransfer(packet);
+        }
+        else if (command.kind == GpuCommandKind::VramToVramBlit)
+        {
+            executeVramToVramBlit(packet);
+        }
+    }
+
     if (command.fromGp1 && (command.kind == GpuCommandKind::Reset ||
                             command.kind == GpuCommandKind::ResetCommandBuffer))
     {
         m_fifo.clear();
         m_packet = {};
+        m_transferState = {};
 
         if (command.kind == GpuCommandKind::Reset)
         {
@@ -231,16 +267,6 @@ void Gpu::processPacket(const PacketState& packet)
     trimCommandTrace(m_commandTrace, MAX_COMMAND_TRACE);
     m_commandTrace.push_back(command);
     updateStatusBits();
-}
-
-void Gpu::writeVramWord(u32 value)
-{
-    if (m_vram.empty())
-    {
-        return;
-    }
-    m_vram[m_vramWriteCursor] = value;
-    m_vramWriteCursor = (m_vramWriteCursor + 1) % m_vram.size();
 }
 
 void Gpu::updateStatusBits()
@@ -269,13 +295,15 @@ void Gpu::updateStatusBits()
         m_status |= statusIrqRequest;
     }
 
-    const bool canAcceptCommands = m_fifo.size() < MAX_FIFO_DEPTH;
+    const bool canAcceptCommands = (m_fifo.size() < MAX_FIFO_DEPTH) &&
+                                   (m_transferState.mode != TransferState::Mode::CpuToVram);
     if (canAcceptCommands)
     {
         m_status |= statusReadyToReceiveCommand;
     }
 
-    const bool readyToSend = m_registers.dmaDirection == Registers::DmaDirection::GpuReadToCpu;
+    const bool readyToSend = m_transferState.mode == TransferState::Mode::VramToCpu &&
+                             m_transferState.remainingWords > 0;
     if (readyToSend)
     {
         m_status |= statusReadyToSendToCpu;
@@ -292,7 +320,7 @@ void Gpu::updateStatusBits()
         break;
     case Registers::DmaDirection::Fifo:
     case Registers::DmaDirection::CpuToGp0:
-        request = canAcceptCommands;
+        request = canAcceptCommands || m_transferState.mode == TransferState::Mode::CpuToVram;
         break;
     case Registers::DmaDirection::GpuReadToCpu:
         request = readyToSend;
