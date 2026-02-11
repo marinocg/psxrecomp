@@ -19,6 +19,18 @@ The initial Phase 0 corpus includes three representative scene classes:
 - Per-scene descriptors: `tests/fixtures/gpu_trace_corpus/scenes/`
 - Golden metadata examples: `tests/fixtures/gpu_trace_corpus/golden_frames/`
 
+### Intended use of each JSON artifact
+
+- `manifest.json`
+  - Entry point consumed by replay/capture tooling to enumerate scenes and expected golden artifacts.
+  - Defines coverage dimensions (category + GP0/GP1 family tags) used for roadmap progress reporting.
+- `scenes/*.json`
+  - Per-scene workload descriptors used by trace-replay runners to select and label command streams.
+  - Declares command-mix expectations so corpus growth can be audited against targeted command families.
+- `golden_frames/*.json`
+  - Canonical per-frame output expectations used by automated frame comparison jobs.
+  - Stores display semantics + hashes so parity gates can detect both pixel drift and metadata drift.
+
 ## Scene acceptance rules
 
 A scene is accepted into the corpus when it provides:

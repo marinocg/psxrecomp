@@ -32,16 +32,16 @@ Goal: lock expected behavior before deeper implementation.
 
 - [x] Define canonical GPU behavior matrix by command family (GP0 draw, GP0 transfer, GP1 control).
 - [x] Define required accuracy tiers (`reference`, `semi-accurate`, `enhanced`) and allowed deltas.
-- [x] Build trace corpus from representative games/demos (2D UI-heavy, 3D geometry-heavy, FMV-overlay).
-- [x] Add golden frame metadata format (resolution, crop, interlace field, CRC/hash).
+- [x] Build trace corpus from representative games/demos (2D UI-heavy, 3D geometry-heavy, FMV-overlay) used as deterministic replay inputs for Phase 7 trace harness + CI drift checks.
+- [x] Add golden frame metadata format (resolution, crop, interlace field, CRC/hash) used as the canonical per-frame contract for capture comparison thresholds and parity gating.
 - [x] Document unsupported behavior policy (warn, fallback, hard-fail in debug).
 
 
 Phase 0 spec artifacts:
-- `docs/architecture/gpu/phase0_spec_lock.md`
-- `docs/architecture/gpu/trace_corpus.md`
-- `docs/architecture/gpu/golden_frame_metadata.schema.json`
-- `tests/fixtures/gpu_trace_corpus/`
+- `docs/architecture/gpu/phase0_spec_lock.md` (normative behavior/tier/fallback rules consumed by implementation and review checklists)
+- `docs/architecture/gpu/trace_corpus.md` (how corpus JSON files are curated/promoted for parity workloads)
+- `docs/architecture/gpu/golden_frame_metadata.schema.json` (schema that replay/capture tooling validates against before comparing hashes)
+- `tests/fixtures/gpu_trace_corpus/` (versioned manifest/scenes/golden metadata JSON fixtures used by upcoming replay and frame-comparison tests)
 
 ## Phase 1 — Command Processor & Register Correctness
 Goal: command ingestion reflects PSX packet semantics and register behavior.
