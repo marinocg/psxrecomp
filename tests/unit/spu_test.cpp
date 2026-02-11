@@ -58,7 +58,7 @@ int main()
 
     // Simple ADPCM block with non-zero payload.
     spu.writeRegister(Spu::RegisterMap::RamTransferAddress, 0x0000);
-    spu.writeDma(packBytes(0x0C, 0x00, 0x11, 0x11));
+    spu.writeDma(packBytes(0x0C, 0x02, 0x11, 0x11));
     spu.writeDma(packBytes(0x11, 0x11, 0x11, 0x11));
     spu.writeDma(packBytes(0x11, 0x11, 0x11, 0x11));
     spu.writeDma(packBytes(0x11, 0x11, 0x11, 0x11));
@@ -69,6 +69,7 @@ int main()
     spu.writeRegister(Spu::RegisterMap::ReverbDepthLeft, 0x2000);
     spu.writeRegister(Spu::RegisterMap::ReverbDepthRight, 0x2000);
     spu.writeRegister(Spu::RegisterMap::ReverbOnLow, 0x0001);
+    assert(spu.voices()[0].reverbEnabled);
 
     auto backend = std::make_shared<CaptureBackend>();
     spu.setAudioBackend(backend);
@@ -81,7 +82,7 @@ int main()
 
     const auto& mixed = spu.mixedAudioBuffer();
     assert(!mixed.empty());
-    assert(mixed.size() >= Spu::SamplesPerTick * 2);
+    assert(mixed.size() == Spu::SamplesPerTick * 2);
 
     bool sawNonZero = false;
     for (int16_t sample : mixed)
@@ -96,6 +97,11 @@ int main()
 
     assert(!backend->buffers.empty());
     assert(!backend->buffers.back().empty());
+    assert(backend->buffers.back().size() == mixed.size());
+
+    // A second tick should not accumulate samples unboundedly.
+    spu.tick(Spu::SamplesPerTick * 768);
+    assert(spu.mixedAudioBuffer().size() == Spu::SamplesPerTick * 2);
 
     // Key-off should transition to release and eventually disable the voice.
     spu.writeRegister(Spu::RegisterMap::KeyOffLow, 0x0001);

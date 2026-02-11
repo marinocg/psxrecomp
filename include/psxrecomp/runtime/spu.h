@@ -60,12 +60,16 @@ class Spu
         bool keyOn = false;
         bool keyOff = true;
         bool isActive = false;
-        bool loopEnabled = false;
+        bool repeatAddressValid = false;
+        bool reverbEnabled = false;
 
         EnvelopePhase envelopePhase = EnvelopePhase::Off;
         float envelopeLevel = 0.0f;
         float samplePosition = 0.0f;
         u16 currentAddress = 0;
+
+        int prevSample1 = 0;
+        int prevSample2 = 0;
 
         std::array<int16_t, 28> decodedBlock{};
         size_t decodedSampleIndex = 28;
@@ -121,16 +125,16 @@ class Spu
     static size_t registerIndex(u32 offset);
 
     Voice& voiceAt(size_t voiceIndex);
-    const Voice& voiceAt(size_t voiceIndex) const;
 
     void onGlobalRegisterWrite(u32 offset, u16 value);
     void onVoiceRegisterWrite(size_t voiceIndex, u32 voiceOffset, u16 value);
 
     void applyVoiceMask(u16 lowMask, u16 highMask, bool keyOn);
+    void applyReverbMask(u16 lowMask, u16 highMask);
     void updateEnvelope(Voice& voice);
     int16_t nextVoiceSample(Voice& voice);
     void loadAdpcmBlock(Voice& voice);
-    int16_t decodeAdpcmNibble(int nibble, int& predictor, int shift) const;
+    int16_t decodeAdpcmNibble(int nibble, int shift, int filter, int prev1, int prev2) const;
     void mixQueuedSamples();
     static float normalizedSignedVolume(u16 value);
 
