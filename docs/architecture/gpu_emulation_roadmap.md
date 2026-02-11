@@ -46,12 +46,12 @@ Phase 0 spec artifacts:
 ## Phase 1 — Command Processor & Register Correctness
 Goal: command ingestion reflects PSX packet semantics and register behavior.
 
-- [ ] Complete GP0 packet sizing/decoding coverage (draw, transfer, env, misc).
-- [ ] Complete GP1 control command coverage (reset, DMA direction, display range/mode, interrupt ack).
-- [ ] Implement command FIFO behavior and command consumption boundaries accurately.
-- [ ] Implement GPUSTAT bit-accurate behavior for FIFO/DMA/display/interlace state.
-- [ ] Implement DMA direction + linked-list handling interactions with GPU command ingestion.
-- [ ] Add exhaustive command decoder tests (valid + malformed packets).
+- [x] Complete GP0 packet sizing/decoding coverage (draw, transfer, env, misc).
+- [x] Complete GP1 control command coverage (reset, DMA direction, display range/mode, interrupt ack).
+- [x] Implement command FIFO behavior and command consumption boundaries accurately.
+- [x] Implement GPUSTAT bit-accurate behavior for FIFO/DMA/display/interlace state.
+- [x] Implement DMA direction + linked-list handling interactions with GPU command ingestion.
+- [x] Add exhaustive command decoder tests (valid + malformed packets).
 
 ## Phase 2 — VRAM & Transfer Pipeline
 Goal: VRAM behavior matches hardware-visible semantics.

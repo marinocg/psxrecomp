@@ -25,6 +25,7 @@ void trimCommandTrace(std::vector<GpuCommand>& trace, size_t maxSize)
 void Gpu::reset()
 {
     m_status = STATUS_READY;
+    m_readData = 0;
     m_gpuCycles = 0;
     m_oddField = false;
     m_registers = {};
@@ -33,6 +34,7 @@ void Gpu::reset()
     m_vramWriteCursor = 0;
     m_commandTrace.clear();
     m_packet = {};
+    m_malformedPacketCount = 0;
     selectBackend(m_backend);
     m_referenceRenderer.reset();
     updateRendererState();
@@ -46,11 +48,7 @@ u32 Gpu::readStatus() const
 
 u32 Gpu::readData() const
 {
-    if (m_fifo.empty())
-    {
-        return 0;
-    }
-    return m_fifo.front();
+    return m_readData;
 }
 
 void Gpu::writeStatus(u32 value)
@@ -79,7 +77,14 @@ void Gpu::writeCommand(u32 value)
 
 void Gpu::writeDma(u32 value)
 {
-    writeCommand(value);
+    if (m_registers.dmaDirection == Registers::DmaDirection::CpuToGp0 ||
+        m_registers.dmaDirection == Registers::DmaDirection::Fifo)
+    {
+        writeCommand(value);
+        return;
+    }
+
+    updateStatusBits();
 }
 
 size_t Gpu::fifoDepth() const
@@ -109,6 +114,11 @@ const std::vector<u16>& Gpu::frameBuffer() const
 const std::vector<GpuCommand>& Gpu::commandTrace() const
 {
     return m_commandTrace;
+}
+
+size_t Gpu::malformedPacketCount() const
+{
+    return m_malformedPacketCount;
 }
 
 FrameComparison Gpu::compareCurrentFrameWithReference() const
@@ -170,42 +180,6 @@ void Gpu::tickDisplayLine()
     updateStatusBits();
 }
 
-size_t Gpu::expectedGp0Words(u8 opcode) const
-{
-    if (opcode == 0x02)
-    {
-        return 3;
-    }
-    if (opcode == 0x20)
-    {
-        return 4;
-    }
-    if (opcode == 0x28)
-    {
-        return 5;
-    }
-    if (opcode == 0x64)
-    {
-        return 3;
-    }
-    if (opcode >= 0xE1 && opcode <= 0xE5)
-    {
-        return 1;
-    }
-
-    return 1;
-}
-
-size_t Gpu::expectedGp1Words(u8 opcode) const
-{
-    if (opcode == 0x00 || opcode == 0x03 || opcode == 0x08)
-    {
-        return 1;
-    }
-
-    return 1;
-}
-
 void Gpu::appendPacketWord(bool fromGp1, u32 value)
 {
     const u8 opcode = static_cast<u8>((value >> 24) & 0xFF);
@@ -218,6 +192,7 @@ void Gpu::appendPacketWord(bool fromGp1, u32 value)
 
     if (m_packet.fromGp1 != fromGp1)
     {
+        ++m_malformedPacketCount;
         m_packet = {};
         m_packet.opcode = opcode;
         m_packet.fromGp1 = fromGp1;
@@ -232,54 +207,23 @@ void Gpu::appendPacketWord(bool fromGp1, u32 value)
     }
 }
 
-void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
-{
-    if (!command.fromGp1)
-    {
-        switch (command.kind)
-        {
-        case GpuCommandKind::DrawMode:
-            if (!command.words.empty())
-            {
-                registers.texturePage = static_cast<u16>(command.words[0] & 0x7FF);
-            }
-            break;
-        case GpuCommandKind::DrawSprite:
-            if (command.words.size() > 1)
-            {
-                registers.clut = static_cast<u16>((command.words[1] >> 16) & 0x7FFF);
-            }
-            break;
-        default:
-            break;
-        }
-        return;
-    }
-
-    if (command.kind == GpuCommandKind::DisplayEnable)
-    {
-        if (!command.words.empty())
-        {
-            registers.displayEnabled = (command.words[0] & 0x1) == 0;
-        }
-    }
-    else if (command.kind == GpuCommandKind::DisplayMode)
-    {
-        if (!command.words.empty())
-        {
-            registers.interlaced = (command.words[0] & 0x20) != 0;
-        }
-    }
-    else if (command.kind == GpuCommandKind::Reset)
-    {
-        registers = {};
-    }
-}
-
 void Gpu::processPacket(const PacketState& packet)
 {
-    auto command = decodePacket(packet);
+    const auto command = decodePacket(packet);
     applyRegisterEffects(command, m_registers);
+
+    if (command.fromGp1 && (command.kind == GpuCommandKind::Reset ||
+                            command.kind == GpuCommandKind::ResetCommandBuffer))
+    {
+        m_fifo.clear();
+        m_packet = {};
+
+        if (command.kind == GpuCommandKind::Reset)
+        {
+            m_gpuCycles = 0;
+            m_oddField = false;
+        }
+    }
 
     updateRendererState();
     m_renderer->submit(command);
@@ -287,70 +231,6 @@ void Gpu::processPacket(const PacketState& packet)
     trimCommandTrace(m_commandTrace, MAX_COMMAND_TRACE);
     m_commandTrace.push_back(command);
     updateStatusBits();
-}
-
-GpuCommand Gpu::decodePacket(const PacketState& packet) const
-{
-    GpuCommand command;
-    command.opcode = packet.opcode;
-    command.fromGp1 = packet.fromGp1;
-    command.words = packet.words;
-
-    if (packet.fromGp1)
-    {
-        switch (packet.opcode)
-        {
-        case 0x00:
-            command.kind = GpuCommandKind::Reset;
-            break;
-        case 0x03:
-            command.kind = GpuCommandKind::DisplayEnable;
-            break;
-        case 0x08:
-            command.kind = GpuCommandKind::DisplayMode;
-            break;
-        default:
-            command.kind = GpuCommandKind::Unknown;
-            break;
-        }
-        return command;
-    }
-
-    switch (packet.opcode)
-    {
-    case 0x02:
-        command.kind = GpuCommandKind::FillRectangle;
-        break;
-    case 0x20:
-        command.kind = GpuCommandKind::DrawTriangle;
-        break;
-    case 0x28:
-        command.kind = GpuCommandKind::DrawQuad;
-        break;
-    case 0x64:
-        command.kind = GpuCommandKind::DrawSprite;
-        break;
-    case 0xE1:
-        command.kind = GpuCommandKind::DrawMode;
-        break;
-    case 0xE2:
-        command.kind = GpuCommandKind::TextureWindow;
-        break;
-    case 0xE3:
-        command.kind = GpuCommandKind::DrawingAreaTopLeft;
-        break;
-    case 0xE4:
-        command.kind = GpuCommandKind::DrawingAreaBottomRight;
-        break;
-    case 0xE5:
-        command.kind = GpuCommandKind::DrawingOffset;
-        break;
-    default:
-        command.kind = GpuCommandKind::Unknown;
-        break;
-    }
-
-    return command;
 }
 
 void Gpu::writeVramWord(u32 value)
@@ -365,24 +245,67 @@ void Gpu::writeVramWord(u32 value)
 
 void Gpu::updateStatusBits()
 {
-    constexpr u32 statusReadyMask = 1u << 26;
-    constexpr u32 dmaRequestMask = 1u << 28;
-    constexpr u32 interlaceMask = 1u << 31;
-    constexpr u32 statusBase = STATUS_READY & ~(statusReadyMask | dmaRequestMask | interlaceMask);
+    constexpr u32 statusReadyToReceiveCommand = 1u << 26;
+    constexpr u32 statusReadyToSendToCpu = 1u << 27;
+    constexpr u32 statusDmaRequest = 1u << 28;
+    constexpr u32 statusDisplayDisable = 1u << 23;
+    constexpr u32 statusIrqRequest = 1u << 24;
+    constexpr u32 statusDmaDirectionShift = 29;
+    constexpr u32 statusInterlaceField = 1u << 31;
+
+    constexpr u32 statusDynamicMask = statusReadyToReceiveCommand | statusReadyToSendToCpu |
+                                      statusDmaRequest | statusDisplayDisable | statusIrqRequest |
+                                      (0x3u << statusDmaDirectionShift) | statusInterlaceField;
+    const u32 statusBase = STATUS_READY & ~statusDynamicMask;
 
     m_status = statusBase;
 
-    if (m_fifo.size() < MAX_FIFO_DEPTH)
+    if (!m_registers.displayEnabled)
     {
-        m_status |= statusReadyMask;
+        m_status |= statusDisplayDisable;
     }
-    if (!m_fifo.empty())
+    if (m_registers.irqPending)
     {
-        m_status |= dmaRequestMask;
+        m_status |= statusIrqRequest;
     }
+
+    const bool canAcceptCommands = m_fifo.size() < MAX_FIFO_DEPTH;
+    if (canAcceptCommands)
+    {
+        m_status |= statusReadyToReceiveCommand;
+    }
+
+    const bool readyToSend = m_registers.dmaDirection == Registers::DmaDirection::GpuReadToCpu;
+    if (readyToSend)
+    {
+        m_status |= statusReadyToSendToCpu;
+    }
+
+    const auto dmaDirectionBits = static_cast<u32>(m_registers.dmaDirection) & 0x3u;
+    m_status |= (dmaDirectionBits << statusDmaDirectionShift);
+
+    bool request = false;
+    switch (m_registers.dmaDirection)
+    {
+    case Registers::DmaDirection::Off:
+        request = false;
+        break;
+    case Registers::DmaDirection::Fifo:
+    case Registers::DmaDirection::CpuToGp0:
+        request = canAcceptCommands;
+        break;
+    case Registers::DmaDirection::GpuReadToCpu:
+        request = readyToSend;
+        break;
+    }
+    if (request)
+    {
+        m_status |= statusDmaRequest;
+    }
+
     if (m_registers.interlaced && m_oddField)
     {
-        m_status |= interlaceMask;
+        m_status |= statusInterlaceField;
     }
 }
 

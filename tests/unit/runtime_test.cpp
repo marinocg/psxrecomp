@@ -34,6 +34,7 @@ int main()
     Address gpuBase =
         psxrecomp::runtime::DmaController::ChannelBase +
         psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Gpu);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
     system.write<psxrecomp::u32>(0x00010000, 0x11111111);
     system.write<psxrecomp::u32>(0x00010004, 0x22222222);
     system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00010000);
@@ -44,6 +45,19 @@ int main()
     assert(system.gpu().peekFifo() == 0x11111111);
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Dma)) !=
            0);
+
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    system.write<psxrecomp::u32>(0x00012000, 0x03800000u);
+    system.write<psxrecomp::u32>(0x00012004, 0x020000FFu);
+    system.write<psxrecomp::u32>(0x00012008, 0x00000000u);
+    system.write<psxrecomp::u32>(0x0001200C, 0x00010001u);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00012000);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000000);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000401);
+    assert(!system.gpu().commandTrace().empty());
+    assert(system.gpu().commandTrace().back().kind ==
+           psxrecomp::runtime::GpuCommandKind::FillRectangle);
 
     Address spuBase =
         psxrecomp::runtime::DmaController::ChannelBase +

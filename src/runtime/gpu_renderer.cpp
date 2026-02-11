@@ -171,7 +171,8 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
         return;
     }
     const auto pos = decodeVertex(command.words[1]);
-    const auto size = decodeVertex(command.words[2]);
+    const size_t sizeWordIndex = command.words.size() >= 4 ? 3u : 2u;
+    const auto size = decodeVertex(command.words[sizeWordIndex]);
 
     u16 color = toColor15(command.words[0]);
     if ((m_texturePage & 0x3) != 0)
