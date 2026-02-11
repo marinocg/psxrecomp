@@ -84,6 +84,17 @@ int main()
     assert(system.gpu().commandTrace().back().kind ==
            psxrecomp::runtime::GpuCommandKind::FillRectangle);
 
+    // Linked-list GPU DMA should wrap command read addresses in 2MB RAM window.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    system.write<psxrecomp::u32>(0x001FFFFC, 0x01FFFFFFu);
+    system.write<psxrecomp::u32>(0x00000000, 0x00000000u);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, 0x001FFFFC);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000000);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000401);
+    assert(system.gpu().fifoDepth() == 1);
+    assert(system.gpu().peekFifo() == 0x00000000u);
+
     // GPU DMA RAM<-GPU path should read GPUREAD words into RAM when channel direction is to RAM.
     system.gpu().reset();
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000003u);

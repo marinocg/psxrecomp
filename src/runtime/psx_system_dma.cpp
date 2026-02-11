@@ -1,5 +1,6 @@
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <cstdint>
 #include <sstream>
 
 namespace psxrecomp
@@ -23,7 +24,12 @@ u32 normalTransferWordCount(const DmaChannel& channel, u32 syncMode)
     if (syncMode == DMA_REQUEST_MODE)
     {
         const u32 blockCount = (channel.blockControl >> 16) & 0xFFFF;
-        return wordsPerBlock * blockCount;
+        const uint64_t totalWords = static_cast<uint64_t>(wordsPerBlock) * blockCount;
+        if (totalWords > 0xFFFFFFFFull)
+        {
+            return 0xFFFFFFFFu;
+        }
+        return static_cast<u32>(totalWords);
     }
     return wordsPerBlock;
 }
@@ -89,7 +95,8 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 const u32 commandCount = (header >> 24) & 0xFF;
                 for (u32 i = 0; i < commandCount; ++i)
                 {
-                    m_gpu.writeDma(read<u32>(nodeAddress + (i + 1) * sizeof(u32)));
+                    const Address commandAddress = (nodeAddress + (i + 1) * sizeof(u32)) & 0x1FFFFC;
+                    m_gpu.writeDma(read<u32>(commandAddress));
                 }
                 transferredWords += commandCount;
 
