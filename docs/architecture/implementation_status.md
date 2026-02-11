@@ -19,7 +19,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 | IR Pipeline | ~85% |
 | Recompiler / Codegen | ~75% |
 | Runtime Library | ~60% |
-| GPU Emulation | ~50% |
+| GPU Emulation | ~58% |
 | SPU Emulation | ~5% |
 | CD-ROM | ~15% |
 
@@ -98,20 +98,24 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Higher-fidelity timer behavior and cycle-accurate scheduling.
 - Broader BIOS function coverage and return-value semantics.
 
-### GPU Emulation (~50%)
+### GPU Emulation (~58%)
 **Present**
 - GP0/GP1 packet decoding into structured command traces.
-- Register/status handling with FIFO depth and timing-oriented status updates.
+- Expanded GP0 packet sizing/decoding coverage across draw, transfer, environment, and misc command families.
+- Complete GP1 control decode coverage for reset, DMA direction, display range/mode controls, and IRQ acknowledgment.
+- Register/status handling with FIFO depth, malformed packet tracking, and timing-oriented status updates.
 - VRAM write semantics and software reference rendering for rectangles/triangles/quads/sprites.
 - Pluggable GPU renderer interface with software and semi-accurate backend scaffolding.
 - Runtime backend switching and frame comparison helpers for validation workflows.
+- DMA direction-aware GPU ingestion plus GPU linked-list DMA path handling in runtime DMA transfers.
+- Exhaustive decoder tests now cover valid and malformed GP0/GP1 command packet streams.
 - Detailed phased execution plan with checkboxes for software accuracy + hardware parity delivery.
 - Phase 0 spec lock is complete: behavior matrix, accuracy tiers, trace corpus, golden frame metadata schema, and unsupported behavior policy are now versioned.
 
 **Missing**
 - Hardware API-specific backend implementation (OpenGL/Vulkan/Metal).
 - Capture replay tooling to execute the new trace corpus in automated parity tests (planned for Phase 7).
-- Robust VRAM transfer/readback semantics and richer GP0/GP1 command coverage.
+- Full VRAM transfer/readback execution semantics (state-machine payload/readback behavior and VRAM-to-VRAM copy fidelity).
 - Pixel-accurate blending/texturing and full timing parity with production emulators.
 - External capture-based parity gates integrated into CI.
 

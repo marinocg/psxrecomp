@@ -12,7 +12,6 @@ namespace runtime
 namespace
 {
 constexpr u32 CYCLES_PER_FRAME = 564480;
-constexpr u32 DMA_DIRECTION_FROM_RAM = 0x00000001;
 
 void appendU32(std::vector<u8>& out, u32 value)
 {
@@ -448,52 +447,5 @@ void PsxSystem::writeMmio8(Address address, u8 value)
         }
     }
 }
-void PsxSystem::handleDmaTransfer(DmaPort port)
-{
-    const auto& channel = m_dma.channel(port);
-    u32 wordCount = channel.blockControl & 0xFFFF;
-    if (wordCount == 0)
-    {
-        m_dma.clearTrigger(port);
-        return;
-    }
-
-    bool fromRam = (channel.channelControl & DMA_DIRECTION_FROM_RAM) != 0;
-    if (!fromRam)
-    {
-        m_dma.clearTrigger(port);
-        return;
-    }
-
-    Address base = channel.baseAddress & 0x1FFFFC;
-    for (u32 i = 0; i < wordCount; ++i)
-    {
-        u32 value = read<u32>(base + i * sizeof(u32));
-        switch (port)
-        {
-        case DmaPort::Gpu:
-            m_gpu.writeDma(value);
-            break;
-        case DmaPort::Spu:
-            m_spu.writeDma(value);
-            break;
-        case DmaPort::Cdrom:
-            m_cdrom.writeDma(value);
-            break;
-        default:
-            break;
-        }
-    }
-
-    m_dma.clearTrigger(port);
-    m_interrupts.raise(InterruptLine::Dma);
-    m_debugOverlay.incrementDmaTransfers();
-    m_debugOverlay.incrementInterruptsRaised();
-
-    std::ostringstream message;
-    message << "DMA transfer on port " << static_cast<int>(port) << " words=" << wordCount;
-    m_logger.log(LogLevel::Debug, "dma", message.str());
-}
-
 } // namespace runtime
 } // namespace psxrecomp

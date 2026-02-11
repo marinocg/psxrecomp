@@ -97,11 +97,13 @@ set(RUNTIME_SOURCES
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gpu.cpp
+    src/runtime/gpu_commands.cpp
     src/runtime/gpu_renderer.cpp
     src/runtime/input.cpp
     src/runtime/interrupt_controller.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
+    src/runtime/psx_system_dma.cpp
     src/runtime/resource_pack.cpp
     src/runtime/scheduler.cpp
     src/runtime/spu.cpp
@@ -209,6 +211,7 @@ if(BUILD_TESTS)
     add_executable(gpu_test
         tests/unit/gpu_test.cpp
         src/runtime/gpu.cpp
+        src/runtime/gpu_commands.cpp
         src/runtime/gpu_renderer.cpp
     )
     target_include_directories(gpu_test PRIVATE ${CMAKE_SOURCE_DIR}/include)

@@ -1,67 +1,142 @@
 #include "psxrecomp/runtime/gpu.h"
 
+#include <array>
 #include <cassert>
+#include <cstddef>
+
+namespace
+{
+using psxrecomp::runtime::Gpu;
+using psxrecomp::runtime::GpuCommandKind;
+
+void writePacket(Gpu& gpu, std::initializer_list<psxrecomp::u32> words)
+{
+    for (const auto word : words)
+    {
+        gpu.writeCommand(word);
+    }
+}
+
+void assertLastCommand(const Gpu& gpu, GpuCommandKind kind)
+{
+    assert(!gpu.commandTrace().empty());
+    assert(gpu.commandTrace().back().kind == kind);
+}
+} // namespace
 
 int main()
 {
-    using psxrecomp::runtime::Gpu;
-
     Gpu gpu;
     gpu.reset();
 
-    gpu.writeCommand(0x020000FFu);
-    gpu.writeCommand(0x00000000u);
-    gpu.writeCommand(0x00100010u);
+    writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00100010u});
+    assertLastCommand(gpu, GpuCommandKind::FillRectangle);
+    assert(!gpu.frameBuffer().empty());
+    assert(gpu.frameBuffer()[0] != 0);
+    assert(gpu.readData() == 0);
 
-    assert(!gpu.commandTrace().empty());
-    const auto& command = gpu.commandTrace().back();
-    assert(command.kind == psxrecomp::runtime::GpuCommandKind::FillRectangle);
-
-    const auto& frame = gpu.frameBuffer();
-    assert(!frame.empty());
-    assert(frame[0] != 0);
-
-    gpu.writeCommand(0xE1000001u);
-    gpu.writeCommand(0x6400FF00u);
-    gpu.writeCommand(0x00010001u);
-    gpu.writeCommand(0x00020002u);
-
-    assert(gpu.commandTrace().size() >= 3);
+    writePacket(gpu, {0xE1000001u});
+    writePacket(gpu, {0x6400FF00u, 0x00010001u, 0x00020002u, 0x00010001u});
+    assertLastCommand(gpu, GpuCommandKind::DrawSprite);
 
     gpu.selectBackend(Gpu::Backend::SemiAccurate);
     assert(gpu.backend() == Gpu::Backend::SemiAccurate);
-
-    gpu.reset();
-    gpu.writeCommand(0xE1000000u);
-    gpu.writeCommand(0x6400FF00u);
-    gpu.writeCommand(0x00000000u);
-    gpu.writeCommand(0x00010001u);
-    const auto firstColor = gpu.frameBuffer()[0];
-    gpu.writeCommand(0xE1000003u);
-    gpu.writeCommand(0x6400FF00u);
-    gpu.writeCommand(0x00010001u);
-    gpu.writeCommand(0x00010001u);
-    const auto secondColor = gpu.frameBuffer()[static_cast<size_t>(1) * 1024 + 1];
-    assert(firstColor != secondColor);
-
     gpu.selectBackend(Gpu::Backend::Software);
-    assert(gpu.frameBuffer()[0] == firstColor);
-    assert(gpu.frameBuffer()[static_cast<size_t>(1) * 1024 + 1] == secondColor);
 
     gpu.reset();
+    writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00100010u});
+    assert(gpu.compareCurrentFrameWithReference().matches());
 
-    gpu.writeCommand(0x020000FFu);
-    gpu.writeCommand(0x00000000u);
-    gpu.writeCommand(0x00100010u);
+    const std::array<std::pair<psxrecomp::u32, GpuCommandKind>, 25> decodeCases = {{
+        {0x00000000u, GpuCommandKind::Nop},
+        {0x01000000u, GpuCommandKind::InterruptRequest},
+        {0x20000000u, GpuCommandKind::DrawTriangle},
+        {0x28000000u, GpuCommandKind::DrawQuad},
+        {0x40000000u, GpuCommandKind::DrawLine},
+        {0x58000000u, GpuCommandKind::DrawPolyline},
+        {0x60000000u, GpuCommandKind::DrawSprite},
+        {0x64000000u, GpuCommandKind::DrawSprite},
+        {0x80000000u, GpuCommandKind::VramToVramBlit},
+        {0xA0000000u, GpuCommandKind::CpuToVramSetup},
+        {0xC0000000u, GpuCommandKind::VramToCpuSetup},
+        {0xE1000000u, GpuCommandKind::DrawMode},
+        {0xE2000000u, GpuCommandKind::TextureWindow},
+        {0xE3000000u, GpuCommandKind::DrawingAreaTopLeft},
+        {0xE4000000u, GpuCommandKind::DrawingAreaBottomRight},
+        {0xE5000000u, GpuCommandKind::DrawingOffset},
+        {0xE6000000u, GpuCommandKind::MaskBitSetting},
+        {0x00000000u, GpuCommandKind::Reset},
+        {0x03000000u, GpuCommandKind::DisplayEnable},
+        {0x04000000u, GpuCommandKind::DmaDirection},
+        {0x05000000u, GpuCommandKind::DisplayVramStart},
+        {0x06000000u, GpuCommandKind::DisplayHorizontalRange},
+        {0x07000000u, GpuCommandKind::DisplayVerticalRange},
+        {0x08000000u, GpuCommandKind::DisplayMode},
+        {0x02000000u, GpuCommandKind::AcknowledgeIrq},
+    }};
 
-    auto comparison = gpu.compareCurrentFrameWithReference();
-    assert(comparison.matches());
+    for (size_t i = 0; i < decodeCases.size(); ++i)
+    {
+        gpu.reset();
+        if (i >= 17)
+        {
+            gpu.writeStatus(decodeCases[i].first);
+        }
+        else
+        {
+            const auto opcode = static_cast<psxrecomp::u8>((decodeCases[i].first >> 24) & 0xFF);
+            if (opcode == 0x02)
+            {
+                writePacket(gpu, {0x02000000u, 0x00000000u, 0x00010001u});
+            }
+            else if (opcode == 0x20)
+            {
+                writePacket(gpu, {0x20000000u, 0x0u, 0x00010000u, 0x00000001u});
+            }
+            else if (opcode == 0x28)
+            {
+                writePacket(gpu, {0x28000000u, 0x0u, 0x00010000u, 0x00000001u, 0x00010001u});
+            }
+            else if (opcode == 0x40)
+            {
+                writePacket(gpu, {0x40000000u, 0x00000000u, 0x00010001u, 0x0u});
+            }
+            else if (opcode == 0x58)
+            {
+                writePacket(gpu, {0x58000000u});
+            }
+            else if (opcode == 0x60)
+            {
+                writePacket(gpu, {0x60000000u, 0x00000000u, 0x00010001u});
+            }
+            else if (opcode == 0x64)
+            {
+                writePacket(gpu, {0x64000000u, 0x00010001u, 0x00200010u, 0x00020002u});
+            }
+            else if (opcode == 0x80)
+            {
+                writePacket(gpu, {0x80000000u, 0x0u, 0x0u, 0x00010001u, 0x0u});
+            }
+            else if (opcode == 0xA0 || opcode == 0xC0)
+            {
+                writePacket(gpu, {decodeCases[i].first, 0x0u, 0x00010001u, 0x0u});
+            }
+            else
+            {
+                writePacket(gpu, {decodeCases[i].first});
+            }
+        }
+
+        assertLastCommand(gpu, decodeCases[i].second);
+    }
 
     gpu.reset();
-    gpu.writeCommand(0x020000FFu);
-    gpu.writeCommand(0x0000FFFFu);
-    gpu.writeCommand(0x00020002u);
-    assert(gpu.frameBuffer()[0] != 0);
+    const auto traceBeforeMalformed = gpu.commandTrace().size();
+    gpu.writeCommand(0x20000000u);
+    gpu.writeStatus(0x03000000u);
+    assert(gpu.commandTrace().size() == traceBeforeMalformed + 1);
+    assert(gpu.malformedPacketCount() == 1);
+    assertLastCommand(gpu, GpuCommandKind::DisplayEnable);
 
     gpu.reset();
     while (gpu.fifoDepth() < 64)
@@ -72,11 +147,7 @@ int main()
     assert((statusWhenFull & (1u << 26)) == 0);
 
     const auto traceBeforeOverflowAttempt = gpu.commandTrace().size();
-
-    gpu.writeCommand(0x020000FFu);
-    gpu.writeCommand(0x00000000u);
-    gpu.writeCommand(0x00100010u);
-
+    writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00100010u});
     assert(gpu.fifoDepth() == 64);
     assert(gpu.commandTrace().size() == traceBeforeOverflowAttempt);
 
@@ -84,15 +155,42 @@ int main()
     gpu.tickGpu(2);
     assert(gpu.fifoDepth() <= initialDepth);
 
+    gpu.reset();
+    const auto fifoDepthBeforeOffDma = gpu.fifoDepth();
+    gpu.writeDma(0x12345678u);
+    assert(gpu.fifoDepth() == fifoDepthBeforeOffDma);
+
+    gpu.writeStatus(0x04000002u);
+    const auto statusCpuToGp0 = gpu.readStatus();
+    assert(((statusCpuToGp0 >> 29) & 0x3u) == 0x2u);
+    assert((statusCpuToGp0 & (1u << 28)) != 0);
+
+    gpu.writeDma(0xAABBCCDDu);
+    assert(gpu.fifoDepth() == fifoDepthBeforeOffDma + 1);
+    assert(gpu.readData() == 0);
+
+    gpu.writeStatus(0x01000000u);
+    assert(gpu.fifoDepth() == 0);
+
+    gpu.writeStatus(0x04000003u);
+    const auto statusGpuToCpu = gpu.readStatus();
+    assert(((statusGpuToCpu >> 29) & 0x3u) == 0x3u);
+    assert((statusGpuToCpu & (1u << 27)) != 0);
+
+    gpu.writeStatus(0x03000001u);
+    assert((gpu.readStatus() & (1u << 23)) != 0);
+
+    gpu.writeStatus(0x08000020u);
+    const auto beforeLineTick = gpu.readStatus();
+    gpu.tickDisplayLine();
+    const auto afterLineTick = gpu.readStatus();
+    assert((beforeLineTick ^ afterLineTick) & (1u << 31));
+
+    gpu.writeStatus(0x00000000u);
+    assert((gpu.readStatus() & (1u << 31)) == 0);
+
     gpu.restoreStatus(0x12345678u);
     assert(gpu.readStatus() == 0x12345678u);
-
-    const auto before = gpu.readStatus();
-    gpu.writeStatus(0x08000020u);
-    gpu.tickDisplayLine();
-    const auto after = gpu.readStatus();
-    assert(before != 0);
-    assert(after != 0);
 
     return 0;
 }

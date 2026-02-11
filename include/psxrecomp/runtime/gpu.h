@@ -39,6 +39,7 @@ class Gpu
     const std::vector<u32>& vramWords() const;
     const std::vector<u16>& frameBuffer() const;
     const std::vector<GpuCommand>& commandTrace() const;
+    size_t malformedPacketCount() const;
 
     FrameComparison compareCurrentFrameWithReference() const;
 
@@ -63,13 +64,29 @@ class Gpu
 
     struct Registers
     {
+        enum class DmaDirection : u8
+        {
+            Off = 0,
+            Fifo = 1,
+            CpuToGp0 = 2,
+            GpuReadToCpu = 3,
+        };
+
         u16 texturePage = 0;
         u16 clut = 0;
         u16 drawAreaTopLeft = 0;
         u16 drawAreaBottomRight = 0;
         u16 drawingOffset = 0;
+        u16 displayXStart = 0;
+        u16 displayYStart = 0;
+        u16 displayXRangeStart = 0;
+        u16 displayXRangeEnd = 0;
+        u16 displayYRangeStart = 0;
+        u16 displayYRangeEnd = 0;
         bool displayEnabled = true;
         bool interlaced = false;
+        bool irqPending = false;
+        DmaDirection dmaDirection = DmaDirection::Off;
     };
 
     size_t expectedGp0Words(u8 opcode) const;
@@ -84,6 +101,7 @@ class Gpu
     void updateRendererState();
 
     u32 m_status = 0;
+    u32 m_readData = 0;
     u32 m_gpuCycles = 0;
     bool m_oddField = false;
 
@@ -95,6 +113,7 @@ class Gpu
     size_t m_vramWriteCursor = 0;
 
     std::vector<GpuCommand> m_commandTrace;
+    size_t m_malformedPacketCount = 0;
 
     Backend m_backend = Backend::Software;
     std::unique_ptr<GpuRenderer> m_renderer = std::make_unique<SoftwareGpuRenderer>();
