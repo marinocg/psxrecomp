@@ -121,6 +121,31 @@ int main()
     assert(foundBlock800c);
     assert(foundBlock8014);
 
+    std::vector<Instruction> externalTargetInstructions;
+    externalTargetInstructions.push_back(
+        makeInstruction(Opcode::JUMP, {Value::makeAddress(0x899195B0)}, {}, 0x9000));
+    externalTargetInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x9004));
+    ControlFlowBuildResult externalTargetCfg = psxrecomp::ir::buildControlFlowFunction(
+        "external_target", 0x9000, externalTargetInstructions);
+    assert(externalTargetCfg.errors.empty());
+    bool foundExternalBlock = false;
+    bool foundJumpBlock = false;
+    for (const auto& block : externalTargetCfg.function.blocks)
+    {
+        if (block.name == "block_external")
+        {
+            foundExternalBlock = true;
+        }
+        if (block.name == "block_0x9000")
+        {
+            foundJumpBlock = true;
+            assert(block.successors.size() == 1);
+            assert(block.successors[0] == "block_external");
+        }
+    }
+    assert(foundExternalBlock);
+    assert(foundJumpBlock);
+
     using psxrecomp::ir::Function;
 
     Function phiMismatch{"phi_mismatch", 0x3000, {}};

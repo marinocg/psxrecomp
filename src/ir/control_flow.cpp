@@ -19,13 +19,6 @@ std::string formatBlockName(Address address)
     return stream.str();
 }
 
-std::string formatAddress(Address address)
-{
-    std::ostringstream stream;
-    stream << std::hex << address;
-    return stream.str();
-}
-
 bool isTerminator(Opcode opcode)
 {
     return opcode == Opcode::BRANCH || opcode == Opcode::JUMP || opcode == Opcode::RETURN;
@@ -48,6 +41,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                                                 const std::vector<Instruction>& instructions)
 {
     ControlFlowBuildResult result{Function{std::string(functionName), entryAddress, {}}, {}, {}};
+    constexpr const char* ExternalBlockName = "block_external";
 
     if (instructions.empty())
     {
@@ -145,6 +139,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
         nextAddressByAddress[orderedAddresses[index]] = orderedAddresses[index + 1];
     }
 
+    bool needsExternalBlock = false;
     for (auto& block : result.function.blocks)
     {
         if (block.instructions.empty())
@@ -169,8 +164,12 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             auto successorIt = result.addressToBlockName.find(target);
             if (successorIt == result.addressToBlockName.end())
             {
-                result.errors.push_back("Missing successor block for address 0x" +
-                                        formatAddress(target));
+                needsExternalBlock = true;
+                if (std::find(block.successors.begin(), block.successors.end(),
+                              ExternalBlockName) == block.successors.end())
+                {
+                    block.successors.push_back(ExternalBlockName);
+                }
                 return;
             }
             if (std::find(block.successors.begin(), block.successors.end(), successorIt->second) ==
@@ -220,6 +219,17 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                 addSuccessor(*nextAddress);
             }
             break;
+        }
+    }
+
+    if (needsExternalBlock)
+    {
+        auto hasExternalBlock =
+            std::any_of(result.function.blocks.begin(), result.function.blocks.end(),
+                        [](const BasicBlock& block) { return block.name == ExternalBlockName; });
+        if (!hasExternalBlock)
+        {
+            result.function.blocks.push_back(BasicBlock{ExternalBlockName, {}, {}});
         }
     }
 
