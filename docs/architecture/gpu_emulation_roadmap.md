@@ -66,16 +66,16 @@ Goal: VRAM behavior matches hardware-visible semantics.
 ## Phase 3 — Reference Software Rasterizer (Accuracy First)
 Goal: establish a trusted, deterministic software baseline.
 
-- [ ] Implement pixel-accurate triangle rasterization rules (edge inclusion/top-left conventions).
-- [ ] Implement quad decomposition/raster behavior consistent with PSX ordering.
-- [ ] Implement line rendering rules (including degenerate and steep-slope cases).
-- [ ] Implement sprite drawing with correct texel fetch behavior.
-- [ ] Implement drawing area clip, draw offset, and texture window behavior.
-- [ ] Implement texture sampling modes (4/8/16-bit), CLUT lookup, and texture page selection.
-- [ ] Implement transparency/blending modes and mask bit behavior.
-- [ ] Implement dithering and color modulation paths.
-- [ ] Implement semi-transparency ordering behavior and relevant edge cases.
-- [ ] Add software renderer conformance tests per primitive/effect type.
+- [x] Implement pixel-accurate triangle rasterization rules (edge inclusion/top-left conventions).
+- [x] Implement quad decomposition/raster behavior consistent with PSX ordering.
+- [x] Implement line rendering rules (including degenerate and steep-slope cases).
+- [x] Implement sprite drawing with correct texel fetch behavior.
+- [x] Implement drawing area clip, draw offset, and texture window behavior.
+- [x] Implement texture sampling modes (4/8/16-bit), CLUT lookup, and texture page selection.
+- [x] Implement transparency/blending modes and mask bit behavior.
+- [x] Implement dithering and color modulation paths.
+- [x] Implement semi-transparency ordering behavior and relevant edge cases.
+- [x] Add software renderer conformance tests per primitive/effect type.
 
 ## Phase 4 — Display, Timing, and Synchronization
 Goal: synchronize command processing and display output semantics.
