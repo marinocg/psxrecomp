@@ -12,11 +12,22 @@ on:
   push:
     branches:
       - "main"
+    paths:
+      - "src/**"
+      - "include/**"
+      - "tools/iso_fixture_generator*"
+      - "tools/validate_iso_fixtures.sh"
+      - "CMakeLists.txt"
+
+concurrency:
+  group: fixture-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   fixture-e2e:
     name: Fixture E2E validation
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,8 +37,8 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install CMake + Ninja
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
 
       - name: Configure
         run: cmake -S . -B build -G Ninja -DBUILD_TESTS=ON -DBUILD_CLI=ON

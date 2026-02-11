@@ -13,6 +13,9 @@ FIXTURE_DIR="$WORK_DIR/fixtures"
 OUT_DIR="$WORK_DIR/out"
 mkdir -p "$WORK_DIR"
 
+echo "Running fixture validation in: $WORK_DIR"
+echo "Using recompiler binary: $PSXRECOMP_BIN"
+
 cmd=(python3 tools/iso_fixture_generator.py --output-dir "$FIXTURE_DIR")
 if [[ -n "$DEMO_EXE" ]]; then
   cmd+=(--demo-exe "$DEMO_EXE" --with-assets)
