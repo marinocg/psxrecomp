@@ -352,5 +352,13 @@ int main()
     const auto blendMode1 = readFramePixel(gpu, 8, 8);
     assert(blendMode0 != blendMode1);
 
+    // Dithering should vary nearby primitive pixels when enabled.
+    gpu.reset();
+    writePacket(gpu, {0xE1000200u}); // dithering enabled
+    writePacket(gpu, {0x40012345u, 0x00280028u, 0x002A0028u, 0x00000000u});
+    const auto ditherLeft = readFramePixel(gpu, 40, 40);
+    const auto ditherRight = readFramePixel(gpu, 41, 40);
+    assert(ditherLeft != ditherRight);
+
     return 0;
 }

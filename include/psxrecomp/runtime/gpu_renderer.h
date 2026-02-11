@@ -116,20 +116,22 @@ class SoftwareGpuRenderer final : public GpuRenderer
         u8 offsetY = 0;
     };
 
-    void fillRect(s32 x, s32 y, u16 width, u16 height, u16 color, bool transparent);
+    void fillRect(s32 x, s32 y, u16 width, u16 height, u16 color, bool transparent,
+                  bool allowDither);
     void drawTriangle(const GpuCommand& command);
     void drawQuad(const GpuCommand& command);
     void drawLine(const GpuCommand& command);
     void drawSprite(const GpuCommand& command);
-    void drawLineImpl(const GpuVertex& from, const GpuVertex& to, u16 color, bool transparent);
+    void drawLineImpl(const GpuVertex& from, const GpuVertex& to, u16 color, bool transparent,
+                      bool allowDither);
     void rasterTriangle(const GpuVertex& a, const GpuVertex& b, const GpuVertex& c, u16 color,
-                        bool transparent);
+                        bool transparent, bool allowDither);
     GpuVertex applyDrawOffset(const GpuVertex& v) const;
     bool isInsideDrawBounds(s16 x, s16 y) const;
     u16 sampleTexture(u8 u, u8 v, u16 texturePage, u16 clut) const;
     u16 blendColors(u16 source, u16 destination) const;
     static u16 modulateColor(u16 texel, u16 vertexColor);
-    void writePixel(s16 x, s16 y, u16 color, bool transparent);
+    void writePixel(s16 x, s16 y, u16 color, bool transparent, bool allowDither);
     static bool hasSemiTransparency(const GpuCommand& command);
     void applyDrawMode(u32 value);
     void applyTextureWindow(u32 value);

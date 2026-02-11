@@ -43,6 +43,17 @@ u16 packColor(const BlendColor& color)
     return static_cast<u16>((b << 10) | (g << 5) | r);
 }
 
+BlendColor applyDitherBias(const BlendColor& color, s16 x, s16 y)
+{
+    constexpr std::array<s16, 16> kDitherMatrix = {-4, +0, -3, +1, +2, -2, +3, -1,
+                                                   -3, +1, -4, +0, +3, -1, +2, -2};
+    const size_t index = static_cast<size_t>((y & 3) * 4 + (x & 3));
+    const s16 bias = kDitherMatrix[index];
+    return BlendColor{static_cast<s16>(std::clamp<s16>(color.r + bias, 0, 255)),
+                      static_cast<s16>(std::clamp<s16>(color.g + bias, 0, 255)),
+                      static_cast<s16>(std::clamp<s16>(color.b + bias, 0, 255))};
+}
+
 s32 signArea2(const GpuVertex& a, const GpuVertex& b, const GpuVertex& c)
 {
     const s32 ax = a.x;
@@ -67,7 +78,7 @@ u16 wrapCoord(s32 value, u16 size)
 } // namespace
 
 void SoftwareGpuRenderer::drawLineImpl(const GpuVertex& from, const GpuVertex& to, u16 color,
-                                       bool transparent)
+                                       bool transparent, bool allowDither)
 {
     s32 x0 = from.x;
     s32 y0 = from.y;
@@ -82,7 +93,7 @@ void SoftwareGpuRenderer::drawLineImpl(const GpuVertex& from, const GpuVertex& t
 
     while (true)
     {
-        writePixel(static_cast<s16>(x0), static_cast<s16>(y0), color, transparent);
+        writePixel(static_cast<s16>(x0), static_cast<s16>(y0), color, transparent, allowDither);
         if (x0 == x1 && y0 == y1)
         {
             break;
@@ -102,7 +113,8 @@ void SoftwareGpuRenderer::drawLineImpl(const GpuVertex& from, const GpuVertex& t
 }
 
 void SoftwareGpuRenderer::rasterTriangle(const GpuVertex& aIn, const GpuVertex& bIn,
-                                         const GpuVertex& cIn, u16 color, bool transparent)
+                                         const GpuVertex& cIn, u16 color, bool transparent,
+                                         bool allowDither)
 {
     GpuVertex a = aIn;
     GpuVertex b = bIn;
@@ -133,7 +145,7 @@ void SoftwareGpuRenderer::rasterTriangle(const GpuVertex& aIn, const GpuVertex& 
             if ((e0 > 0 || (e0 == 0 && e0TopLeft)) && (e1 > 0 || (e1 == 0 && e1TopLeft)) &&
                 (e2 > 0 || (e2 == 0 && e2TopLeft)))
             {
-                writePixel(x, y, color, transparent);
+                writePixel(x, y, color, transparent, allowDither);
             }
         }
     }
@@ -246,7 +258,7 @@ u16 SoftwareGpuRenderer::modulateColor(u16 texel, u16 vertexColor)
     return packColor(out);
 }
 
-void SoftwareGpuRenderer::writePixel(s16 x, s16 y, u16 color, bool transparent)
+void SoftwareGpuRenderer::writePixel(s16 x, s16 y, u16 color, bool transparent, bool allowDither)
 {
     if (m_interlaced && ((y & 1) != static_cast<s16>(m_oddField)))
     {
@@ -266,6 +278,10 @@ void SoftwareGpuRenderer::writePixel(s16 x, s16 y, u16 color, bool transparent)
     }
 
     u16 output = color;
+    if (allowDither)
+    {
+        output = packColor(applyDitherBias(unpackColor(output), x, y));
+    }
     if (transparent)
     {
         output = blendColors(color, destination);

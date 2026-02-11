@@ -1,7 +1,6 @@
 #include "psxrecomp/runtime/gpu_renderer.h"
 
 #include <algorithm>
-#include <array>
 
 namespace psxrecomp
 {
@@ -20,21 +19,11 @@ u16 narrow8To5(u8 value)
     return static_cast<u16>(value >> 3);
 }
 
-u16 toColor15(u32 color24, bool dither)
+u16 toColor15(u32 color24, bool /*dither*/)
 {
     s16 r = static_cast<s16>(color24 & 0xFF);
     s16 g = static_cast<s16>((color24 >> 8) & 0xFF);
     s16 b = static_cast<s16>((color24 >> 16) & 0xFF);
-
-    if (dither)
-    {
-        constexpr std::array<s16, 16> matrix = {-4, +0, -3, +1, +2, -2, +3, -1,
-                                                -3, +1, -4, +0, +3, -1, +2, -2};
-        const s16 bias = matrix[0];
-        r = std::clamp<s16>(static_cast<s16>(r + bias), 0, 255);
-        g = std::clamp<s16>(static_cast<s16>(g + bias), 0, 255);
-        b = std::clamp<s16>(static_cast<s16>(b + bias), 0, 255);
-    }
 
     const u16 r5 = narrow8To5(static_cast<u8>(r));
     const u16 g5 = narrow8To5(static_cast<u8>(g));
@@ -97,7 +86,7 @@ void SoftwareGpuRenderer::submit(const GpuCommand& command)
         const auto size = decodeVertex(command.words[2]);
         fillRect(pos.x, pos.y, static_cast<u16>(std::max<s16>(0, size.x)),
                  static_cast<u16>(std::max<s16>(0, size.y)), toColor15(command.words[0], false),
-                 false);
+                 false, false);
         break;
     }
     case GpuCommandKind::DrawTriangle:
@@ -164,13 +153,15 @@ void SoftwareGpuRenderer::setClut(u16 clut)
     m_clut = clut;
 }
 
-void SoftwareGpuRenderer::fillRect(s32 x, s32 y, u16 width, u16 height, u16 color, bool transparent)
+void SoftwareGpuRenderer::fillRect(s32 x, s32 y, u16 width, u16 height, u16 color, bool transparent,
+                                   bool allowDither)
 {
     for (u16 row = 0; row < height; ++row)
     {
         for (u16 col = 0; col < width; ++col)
         {
-            writePixel(static_cast<s16>(x + col), static_cast<s16>(y + row), color, transparent);
+            writePixel(static_cast<s16>(x + col), static_cast<s16>(y + row), color, transparent,
+                       allowDither);
         }
     }
 }
@@ -188,17 +179,17 @@ void SoftwareGpuRenderer::drawTriangle(const GpuCommand& command)
 
     if (signArea2(v0, v1, v2) == 0)
     {
-        drawLineImpl(v0, v1, toColor15(command.words[0], m_ditheringEnabled),
-                     hasSemiTransparency(command));
-        drawLineImpl(v1, v2, toColor15(command.words[0], m_ditheringEnabled),
-                     hasSemiTransparency(command));
-        drawLineImpl(v2, v0, toColor15(command.words[0], m_ditheringEnabled),
-                     hasSemiTransparency(command));
+        drawLineImpl(v0, v1, toColor15(command.words[0], false), hasSemiTransparency(command),
+                     m_ditheringEnabled);
+        drawLineImpl(v1, v2, toColor15(command.words[0], false), hasSemiTransparency(command),
+                     m_ditheringEnabled);
+        drawLineImpl(v2, v0, toColor15(command.words[0], false), hasSemiTransparency(command),
+                     m_ditheringEnabled);
         return;
     }
 
-    rasterTriangle(v0, v1, v2, toColor15(command.words[0], m_ditheringEnabled),
-                   hasSemiTransparency(command));
+    rasterTriangle(v0, v1, v2, toColor15(command.words[0], false), hasSemiTransparency(command),
+                   m_ditheringEnabled);
 }
 
 void SoftwareGpuRenderer::drawQuad(const GpuCommand& command)
@@ -208,15 +199,15 @@ void SoftwareGpuRenderer::drawQuad(const GpuCommand& command)
         return;
     }
 
-    const u16 color = toColor15(command.words[0], m_ditheringEnabled);
+    const u16 color = toColor15(command.words[0], false);
     const bool transparent = hasSemiTransparency(command);
     GpuVertex v0 = applyDrawOffset(decodeVertex(command.words[1]));
     GpuVertex v1 = applyDrawOffset(decodeVertex(command.words[2]));
     GpuVertex v2 = applyDrawOffset(decodeVertex(command.words[3]));
     GpuVertex v3 = applyDrawOffset(decodeVertex(command.words[4]));
 
-    rasterTriangle(v0, v1, v2, color, transparent);
-    rasterTriangle(v1, v2, v3, color, transparent);
+    rasterTriangle(v0, v1, v2, color, transparent, m_ditheringEnabled);
+    rasterTriangle(v1, v2, v3, color, transparent, m_ditheringEnabled);
 }
 
 void SoftwareGpuRenderer::drawLine(const GpuCommand& command)
@@ -228,8 +219,8 @@ void SoftwareGpuRenderer::drawLine(const GpuCommand& command)
 
     const GpuVertex v0 = applyDrawOffset(decodeVertex(command.words[1]));
     const GpuVertex v1 = applyDrawOffset(decodeVertex(command.words[2]));
-    drawLineImpl(v0, v1, toColor15(command.words[0], m_ditheringEnabled),
-                 hasSemiTransparency(command));
+    drawLineImpl(v0, v1, toColor15(command.words[0], false), hasSemiTransparency(command),
+                 m_ditheringEnabled);
 }
 
 void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
@@ -270,8 +261,8 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
                     continue;
                 }
             }
-            writePixel(static_cast<s16>(pos.x + x), static_cast<s16>(pos.y + y), color,
-                       transparent);
+            writePixel(static_cast<s16>(pos.x + x), static_cast<s16>(pos.y + y), color, transparent,
+                       m_ditheringEnabled);
         }
     }
 }
