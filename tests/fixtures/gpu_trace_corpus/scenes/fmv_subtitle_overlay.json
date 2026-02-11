@@ -1,0 +1,15 @@
+{
+  "id": "fmv_subtitle_overlay",
+  "traceId": "fmv_subtitle_overlay_trace_v1",
+  "category": "fmv_overlay",
+  "expectedCommandMix": {
+    "cpuToVramTransfer": 60,
+    "drawSprite": 32,
+    "displayMode": 4,
+    "displayEnable": 4
+  },
+  "notes": [
+    "Exercises transfer and display control interactions.",
+    "Unsupported transfer edge-cases should emit warnings with trace markers."
+  ]
+}

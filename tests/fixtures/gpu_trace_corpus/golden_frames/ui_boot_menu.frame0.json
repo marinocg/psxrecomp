@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "traceId": "ui_boot_menu_trace_v1",
+  "frameIndex": 0,
+  "accuracyTier": "reference",
+  "display": {
+    "width": 320,
+    "height": 240,
+    "crop": {
+      "left": 0,
+      "top": 0,
+      "right": 319,
+      "bottom": 239
+    },
+    "interlaced": false,
+    "field": "progressive"
+  },
+  "hashes": {
+    "frameCrc32": "8A53D211",
+    "frameFnv1a64": "A3015E9C21BA731F",
+    "commandTraceHash": "0E1B6C4A339D5F10"
+  },
+  "notes": [
+    "Reference mode hash baseline for UI path smoke checks."
+  ]
+}

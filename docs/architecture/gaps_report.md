@@ -12,7 +12,7 @@ master roadmap.
 | IR & Optimization | ~85% | Improving |
 | Recompiler / Code Generation | ~75% | Improving |
 | Runtime Library | ~60% | Moderate gap |
-| GPU Emulation | ~45% | Significant gap |
+| GPU Emulation | ~50% | Significant gap |
 | SPU Emulation | ~5% | Major gap |
 | CD-ROM Runtime | ~15% | Major gap |
 | Testing & Validation | ~35% | Significant gap |
@@ -43,13 +43,13 @@ master roadmap.
 - DMA/interrupt routing is present; cycle-accurate timing remains incomplete.
 - BIOS/syscall coverage is partial.
 
-## GPU / SPU / CD-ROM (GPU ~45% / SPU ~5% / CD-ROM ~15%)
-- GPU: command/raster accuracy and VRAM behavior are incomplete.
+## GPU / SPU / CD-ROM (GPU ~50% / SPU ~5% / CD-ROM ~15%)
+- GPU: command/raster accuracy and VRAM behavior are incomplete, but Phase 0 specification artifacts (behavior matrix, tier policy, corpus manifest, golden metadata schema) are now in place for deterministic parity work.
 - SPU: voice synthesis, envelopes, and full audio path are still missing.
 - CD-ROM: XA resource extraction works for raw and 2048-byte ISO workflows, but runtime XA streaming/decoding/timing is still incomplete.
 
 ## Testing & Validation (~35%)
-- Strong unit coverage exists (including fixture-based ISO/pipeline checks), but there is still no golden-output emulator parity suite.
+- Strong unit coverage exists (including fixture-based ISO/pipeline checks), and GPU parity groundwork now includes a versioned trace corpus + golden metadata format; however, there is still no automated golden-output emulator parity suite.
 - No standardized catalog of larger real-world demo/game regression inputs in CI.
 - End-to-end runtime playback validation remains mostly manual.
 

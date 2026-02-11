@@ -1,0 +1,16 @@
+{
+  "id": "geometry_spin_demo",
+  "traceId": "geometry_spin_demo_trace_v1",
+  "category": "geometry_3d",
+  "expectedCommandMix": {
+    "drawTriangle": 1402,
+    "drawQuad": 387,
+    "drawMode": 84,
+    "displayMode": 4,
+    "displayEnable": 2
+  },
+  "notes": [
+    "Primary source for primitive raster parity checks.",
+    "Used for semi-accurate tolerance calibration."
+  ]
+}
