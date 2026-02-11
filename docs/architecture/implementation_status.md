@@ -123,6 +123,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 ### SPU Emulation (~45%)
 **Present**
+- M3 dependency gate coverage is in place for Phase 1-2 scope (core voice model, mixing path, backend hookup).
 - SPU register map constants plus per-voice channel model/state tracking.
 - Core ADSR envelope state machine with key-on/key-off transitions.
 - SPU RAM transfer cursor with DMA read/write support and RAM dump integration.
