@@ -284,7 +284,7 @@ void SoftwareGpuRenderer::writePixel(s16 x, s16 y, u16 color, bool transparent, 
     }
     if (transparent)
     {
-        output = blendColors(color, destination);
+        output = blendColors(output, destination);
     }
     if (m_forceMaskBit)
     {

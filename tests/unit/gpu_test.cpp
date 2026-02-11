@@ -352,6 +352,19 @@ int main()
     const auto blendMode1 = readFramePixel(gpu, 8, 8);
     assert(blendMode0 != blendMode1);
 
+    // Dithering should vary semi-transparent primitive output across neighboring pixels.
+    gpu.reset();
+    writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
+    writePacket(gpu, {0xE1000001u}); // blend mode 0
+    writePacket(gpu, {0x42020202u, 0x00320032u, 0x00340032u, 0x00000000u});
+    gpu.reset();
+    writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
+    writePacket(gpu, {0xE1000201u}); // blend mode 0 + dithering
+    writePacket(gpu, {0x42020202u, 0x00320032u, 0x00340032u, 0x00000000u});
+    const auto transparentDitherLeft = readFramePixel(gpu, 50, 50);
+    const auto transparentDitherRight = readFramePixel(gpu, 51, 50);
+    assert(transparentDitherLeft != transparentDitherRight);
+
     // Dithering should vary nearby primitive pixels when enabled.
     gpu.reset();
     writePacket(gpu, {0xE1000200u}); // dithering enabled
