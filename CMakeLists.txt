@@ -97,6 +97,7 @@ set(RUNTIME_SOURCES
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gpu.cpp
+    src/runtime/gpu_transfer.cpp
     src/runtime/gpu_commands.cpp
     src/runtime/gpu_renderer.cpp
     src/runtime/input.cpp
@@ -211,6 +212,7 @@ if(BUILD_TESTS)
     add_executable(gpu_test
         tests/unit/gpu_test.cpp
         src/runtime/gpu.cpp
+        src/runtime/gpu_transfer.cpp
         src/runtime/gpu_commands.cpp
         src/runtime/gpu_renderer.cpp
     )

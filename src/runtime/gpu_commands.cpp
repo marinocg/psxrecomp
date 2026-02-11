@@ -26,13 +26,17 @@ size_t Gpu::expectedGp0Words(u8 opcode) const
     }
 
     if (isOpcodeInRange(opcode, 0x20, 0x23) || isOpcodeInRange(opcode, 0x40, 0x47) ||
-        isOpcodeInRange(opcode, 0x64, 0x67) || opcode == 0xA0 || opcode == 0xC0)
+        isOpcodeInRange(opcode, 0x64, 0x67))
     {
         return 4;
     }
 
-    if (isOpcodeInRange(opcode, 0x28, 0x2B) || isOpcodeInRange(opcode, 0x50, 0x57) ||
-        opcode == 0x80)
+    if (opcode == 0xA0 || opcode == 0xC0 || opcode == 0x80)
+    {
+        return 3 + (opcode == 0x80 ? 1 : 0);
+    }
+
+    if (isOpcodeInRange(opcode, 0x28, 0x2B) || isOpcodeInRange(opcode, 0x50, 0x57))
     {
         return 5;
     }
@@ -105,6 +109,13 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
             if (!command.words.empty())
             {
                 registers.drawingOffset = static_cast<u16>(command.words[0] & 0xFFFF);
+            }
+            break;
+        case GpuCommandKind::MaskBitSetting:
+            if (!command.words.empty())
+            {
+                registers.forceMaskBit = (command.words[0] & 0x1) != 0;
+                registers.checkMaskBeforeDraw = (command.words[0] & 0x2) != 0;
             }
             break;
         default:

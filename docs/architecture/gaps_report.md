@@ -44,7 +44,7 @@ master roadmap.
 - BIOS/syscall coverage is partial.
 
 ## GPU / SPU / CD-ROM (GPU ~50% / SPU ~5% / CD-ROM ~15%)
-- GPU: command/raster accuracy and VRAM behavior are incomplete, but Phase 0 specification artifacts (behavior matrix, tier policy, corpus manifest, golden metadata schema) are now in place for deterministic parity work.
+- GPU: command/raster accuracy still has significant gaps, but Phase 2 VRAM transfer/readback/blit semantics (including wrapping and masking/packing behavior) are now implemented on top of the Phase 0 specification artifacts.
 - SPU: voice synthesis, envelopes, and full audio path are still missing.
 - CD-ROM: XA resource extraction works for raw and 2048-byte ISO workflows, but runtime XA streaming/decoding/timing is still incomplete.
 

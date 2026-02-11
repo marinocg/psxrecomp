@@ -46,6 +46,31 @@ int main()
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Dma)) !=
            0);
 
+    // GPU DMA RAM->GPU should honor address decrement mode in normal sync.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    system.write<psxrecomp::u32>(0x00013FFC, 0xBBBBBBBBu);
+    system.write<psxrecomp::u32>(0x00014000, 0xAAAAAAAAu);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00014000);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000002);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000003);
+
+    assert(system.gpu().fifoDepth() == 2);
+    assert(system.gpu().peekFifo() == 0xAAAAAAAAu);
+
+    // GPU DMA RAM->GPU request mode should transfer blockCount * wordsPerBlock words.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    system.write<psxrecomp::u32>(0x00014100, 0x11111111u);
+    system.write<psxrecomp::u32>(0x00014104, 0x22222222u);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00014100);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00020001);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000201);
+    assert(system.gpu().fifoDepth() == 2);
+    assert(system.gpu().peekFifo() == 0x11111111u);
+    system.gpu().tickGpu(2);
+    assert(system.gpu().peekFifo() == 0x22222222u);
+
     system.gpu().reset();
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
     system.write<psxrecomp::u32>(0x00012000, 0x03800000u);
@@ -58,6 +83,42 @@ int main()
     assert(!system.gpu().commandTrace().empty());
     assert(system.gpu().commandTrace().back().kind ==
            psxrecomp::runtime::GpuCommandKind::FillRectangle);
+
+    // Linked-list GPU DMA should wrap command read addresses in 2MB RAM window.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    system.write<psxrecomp::u32>(0x001FFFFC, 0x01FFFFFFu);
+    system.write<psxrecomp::u32>(0x00000000, 0x00000000u);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, 0x001FFFFC);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000000);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000401);
+    assert(system.gpu().fifoDepth() == 1);
+    assert(system.gpu().peekFifo() == 0x00000000u);
+
+    // GPU DMA RAM<-GPU path should read GPUREAD words into RAM when channel direction is to RAM.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000003u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xA0000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00010002u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x22221111u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000003u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xC0000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00010002u);
+
+    const Address gpuReadDmaBase = 0x00013000;
+    system.write<psxrecomp::u32>(gpuBase + 0x0, gpuReadDmaBase);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000001);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000000);
+    assert(system.read<psxrecomp::u32>(gpuReadDmaBase) == 0x22221111u);
+
+    // GPU DMA RAM<-GPU linked-list sync mode is invalid and should be ignored.
+    system.write<psxrecomp::u32>(gpuReadDmaBase + 4, 0xCAFEBABEu);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, gpuReadDmaBase + 4);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000001);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000400);
+    assert(system.read<psxrecomp::u32>(gpuReadDmaBase + 4) == 0xCAFEBABEu);
 
     Address spuBase =
         psxrecomp::runtime::DmaController::ChannelBase +
