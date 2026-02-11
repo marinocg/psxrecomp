@@ -9,6 +9,20 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 ## Subsystem status (estimate)
 
+## Subsystem scorecard (estimate)
+| Area | Estimated completion |
+|---|---:|
+| Pipeline & Tooling | ~55% |
+| ISO/BIN Parsing | ~85% |
+| PSX-EXE Loader | ~90% |
+| Disassembler | ~75% |
+| IR Pipeline | ~85% |
+| Recompiler / Codegen | ~75% |
+| Runtime Library | ~60% |
+| GPU Emulation | ~45% |
+| SPU Emulation | ~5% |
+| CD-ROM | ~15% |
+
 ### Pipeline & Tooling (~55%)
 **Present**
 - Deterministic pipeline output layout with manifest emission.
