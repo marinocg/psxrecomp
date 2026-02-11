@@ -47,9 +47,9 @@ void TimerController::tickChannel(Channel& channel, size_t index, u32 cpuCycles,
     const bool irqOnOverflow = (channel.mode & MODE_IRQ_ON_OVERFLOW) != 0;
     const InterruptLine line = TimerController::interruptLineForTimer(index);
 
-    if (resetOnTarget && channel.target != 0)
+    if (resetOnTarget)
     {
-        const u32 period = channel.target;
+        const u32 period = (channel.target == 0) ? 0x10000u : static_cast<u32>(channel.target);
         const u32 total = static_cast<u32>(channel.counter) + steps;
         const u32 targetEvents = total / period;
 

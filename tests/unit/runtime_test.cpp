@@ -171,6 +171,14 @@ int main()
     assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
            2u);
 
+    // Reset-on-target with target=0 should behave as 0x10000 period (no divide-by-zero).
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0008u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 0x0000u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
+    system.timers().tick(4, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
+           2u);
+
     std::vector<psxrecomp::u8> xaSector(2352, 0x00);
     xaSector[24] = 0x11;
     xaSector[25] = 0x22;
