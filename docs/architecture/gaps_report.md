@@ -12,7 +12,7 @@ master roadmap.
 | IR & Optimization | ~85% | Improving |
 | Recompiler / Code Generation | ~75% | Improving |
 | Runtime Library | ~60% | Moderate gap |
-| GPU Emulation | ~50% | Significant gap |
+| GPU Emulation | ~74% | Improving |
 | SPU Emulation | ~5% | Major gap |
 | CD-ROM Runtime | ~15% | Major gap |
 | Testing & Validation | ~35% | Significant gap |
@@ -43,8 +43,8 @@ master roadmap.
 - DMA/interrupt routing is present; cycle-accurate timing remains incomplete.
 - BIOS/syscall coverage is partial.
 
-## GPU / SPU / CD-ROM (GPU ~50% / SPU ~5% / CD-ROM ~15%)
-- GPU: command/raster accuracy still has significant gaps, but Phase 2 VRAM transfer/readback/blit semantics (including wrapping and masking/packing behavior) are now implemented on top of the Phase 0 specification artifacts.
+## GPU / SPU / CD-ROM (GPU ~74% / SPU ~5% / CD-ROM ~15%)
+- GPU: Phase 3 reference rasterization is now feature-complete (triangle/quad/line/sprite rules, clipping/offset/texture-window state, texture sampling, CLUT, blending, mask bits, and dithering paths), while timing/display synchronization and cross-emulator capture parity remain open.
 - SPU: voice synthesis, envelopes, and full audio path are still missing.
 - CD-ROM: XA resource extraction works for raw and 2048-byte ISO workflows, but runtime XA streaming/decoding/timing is still incomplete.
 

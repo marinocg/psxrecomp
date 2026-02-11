@@ -9,34 +9,45 @@ namespace runtime
 
 namespace
 {
-u16 toColor15(u32 color24)
-{
-    const u16 r = static_cast<u16>((color24 >> 3) & 0x1F);
-    const u16 g = static_cast<u16>((color24 >> 11) & 0x1F);
-    const u16 b = static_cast<u16>((color24 >> 19) & 0x1F);
-    return static_cast<u16>((b << 10) | (g << 5) | r);
-}
-
 GpuVertex decodeVertex(u32 packed)
 {
-    GpuVertex vertex;
-    vertex.x = static_cast<s16>(packed & 0xFFFF);
-    vertex.y = static_cast<s16>((packed >> 16) & 0xFFFF);
-    return vertex;
+    return GpuVertex{static_cast<s16>(packed & 0xFFFF), static_cast<s16>((packed >> 16) & 0xFFFF)};
 }
 
-u16 clampExtent(s32 value, u16 maximum)
+u16 narrow8To5(u8 value)
 {
-    if (value <= 0)
-    {
-        return 0;
-    }
-    if (value >= static_cast<s32>(maximum))
-    {
-        return maximum;
-    }
-    return static_cast<u16>(value);
+    return static_cast<u16>(value >> 3);
 }
+
+u16 toColor15(u32 color24, bool /*dither*/)
+{
+    s16 r = static_cast<s16>(color24 & 0xFF);
+    s16 g = static_cast<s16>((color24 >> 8) & 0xFF);
+    s16 b = static_cast<s16>((color24 >> 16) & 0xFF);
+
+    const u16 r5 = narrow8To5(static_cast<u8>(r));
+    const u16 g5 = narrow8To5(static_cast<u8>(g));
+    const u16 b5 = narrow8To5(static_cast<u8>(b));
+    return static_cast<u16>((b5 << 10) | (g5 << 5) | r5);
+}
+
+s32 signArea2(const GpuVertex& a, const GpuVertex& b, const GpuVertex& c)
+{
+    const s32 ax = a.x;
+    const s32 ay = a.y;
+    const s32 bx = b.x;
+    const s32 by = b.y;
+    const s32 cx = c.x;
+    const s32 cy = c.y;
+    return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+}
+
+s16 signExtend11(u16 value)
+{
+    const s16 signedValue = static_cast<s16>(value & 0x7FF);
+    return (signedValue & 0x400) != 0 ? static_cast<s16>(signedValue | ~0x7FF) : signedValue;
+}
+
 } // namespace
 
 void SoftwareGpuRenderer::reset()
@@ -46,28 +57,70 @@ void SoftwareGpuRenderer::reset()
     m_oddField = false;
     m_texturePage = 0;
     m_clut = 0;
+    m_drawBounds = {};
+    m_drawOffset = {};
+    m_textureWindow = {};
+    m_forceMaskBit = false;
+    m_checkMaskBeforeDraw = false;
+    m_blendMode = 0;
+    m_ditheringEnabled = false;
 }
 
 void SoftwareGpuRenderer::submit(const GpuCommand& command)
 {
+    if (command.words.empty())
+    {
+        return;
+    }
+
     switch (command.kind)
     {
     case GpuCommandKind::FillRectangle:
-        if (command.words.size() >= 3)
+    {
+        if (command.words.size() < 3)
         {
-            const auto pos = decodeVertex(command.words[1]);
-            const auto size = decodeVertex(command.words[2]);
-            fillRect(pos.x, pos.y, size.x, size.y, toColor15(command.words[0]));
+            return;
         }
+        const auto pos = applyDrawOffset(decodeVertex(command.words[1]));
+        const auto size = decodeVertex(command.words[2]);
+        fillRect(pos.x, pos.y, static_cast<u16>(std::max<s16>(0, size.x)),
+                 static_cast<u16>(std::max<s16>(0, size.y)), toColor15(command.words[0], false),
+                 false, false);
         break;
+    }
     case GpuCommandKind::DrawTriangle:
         drawTriangle(command);
         break;
     case GpuCommandKind::DrawQuad:
         drawQuad(command);
         break;
+    case GpuCommandKind::DrawLine:
+        drawLine(command);
+        break;
     case GpuCommandKind::DrawSprite:
         drawSprite(command);
+        break;
+    case GpuCommandKind::DrawMode:
+        applyDrawMode(command.words[0]);
+        break;
+    case GpuCommandKind::TextureWindow:
+        applyTextureWindow(command.words[0]);
+        break;
+    case GpuCommandKind::DrawingAreaTopLeft:
+        m_drawBounds.left = static_cast<s16>(command.words[0] & 0x3FF);
+        m_drawBounds.top = static_cast<s16>((command.words[0] >> 10) & 0x1FF);
+        break;
+    case GpuCommandKind::DrawingAreaBottomRight:
+        m_drawBounds.right = static_cast<s16>(command.words[0] & 0x3FF);
+        m_drawBounds.bottom = static_cast<s16>((command.words[0] >> 10) & 0x1FF);
+        break;
+    case GpuCommandKind::DrawingOffset:
+        m_drawOffset.x = signExtend11(static_cast<u16>(command.words[0] & 0x7FF));
+        m_drawOffset.y = signExtend11(static_cast<u16>((command.words[0] >> 11) & 0x7FF));
+        break;
+    case GpuCommandKind::MaskBitSetting:
+        m_forceMaskBit = (command.words[0] & 0x1) != 0;
+        m_checkMaskBeforeDraw = (command.words[0] & 0x2) != 0;
         break;
     default:
         break;
@@ -99,22 +152,15 @@ void SoftwareGpuRenderer::setClut(u16 clut)
     m_clut = clut;
 }
 
-void SoftwareGpuRenderer::fillRect(s32 x, s32 y, u16 width, u16 height, u16 color)
+void SoftwareGpuRenderer::fillRect(s32 x, s32 y, u16 width, u16 height, u16 color, bool transparent,
+                                   bool allowDither)
 {
-    const u16 xBegin = clampExtent(x, Width);
-    const u16 yBegin = clampExtent(y, Height);
-    const u16 xEnd = clampExtent(x + width, Width);
-    const u16 yEnd = clampExtent(y + height, Height);
-
-    for (u16 py = yBegin; py < yEnd; ++py)
+    for (u16 row = 0; row < height; ++row)
     {
-        if (m_interlaced && ((py & 1u) != static_cast<u16>(m_oddField)))
+        for (u16 col = 0; col < width; ++col)
         {
-            continue;
-        }
-        for (u16 px = xBegin; px < xEnd; ++px)
-        {
-            m_frameBuffer[static_cast<size_t>(py) * Width + px] = color;
+            writePixel(static_cast<s16>(x + col), static_cast<s16>(y + row), color, transparent,
+                       allowDither);
         }
     }
 }
@@ -126,19 +172,23 @@ void SoftwareGpuRenderer::drawTriangle(const GpuCommand& command)
         return;
     }
 
-    const auto v0 = decodeVertex(command.words[1]);
-    const auto v1 = decodeVertex(command.words[2]);
-    const auto v2 = decodeVertex(command.words[3]);
+    GpuVertex v0 = applyDrawOffset(decodeVertex(command.words[1]));
+    GpuVertex v1 = applyDrawOffset(decodeVertex(command.words[2]));
+    GpuVertex v2 = applyDrawOffset(decodeVertex(command.words[3]));
 
-    const s16 minX = std::min({v0.x, v1.x, v2.x});
-    const s16 minY = std::min({v0.y, v1.y, v2.y});
-    const s16 maxX = std::max({v0.x, v1.x, v2.x});
-    const s16 maxY = std::max({v0.y, v1.y, v2.y});
+    if (signArea2(v0, v1, v2) == 0)
+    {
+        drawLineImpl(v0, v1, toColor15(command.words[0], false), hasSemiTransparency(command),
+                     m_ditheringEnabled);
+        drawLineImpl(v1, v2, toColor15(command.words[0], false), hasSemiTransparency(command),
+                     m_ditheringEnabled);
+        drawLineImpl(v2, v0, toColor15(command.words[0], false), hasSemiTransparency(command),
+                     m_ditheringEnabled);
+        return;
+    }
 
-    const s32 width = std::max<s32>(0, static_cast<s32>(maxX) - minX + 1);
-    const s32 height = std::max<s32>(0, static_cast<s32>(maxY) - minY + 1);
-    fillRect(minX, minY, static_cast<u16>(width), static_cast<u16>(height),
-             toColor15(command.words[0]));
+    rasterTriangle(v0, v1, v2, toColor15(command.words[0], false), hasSemiTransparency(command),
+                   m_ditheringEnabled);
 }
 
 void SoftwareGpuRenderer::drawQuad(const GpuCommand& command)
@@ -148,20 +198,28 @@ void SoftwareGpuRenderer::drawQuad(const GpuCommand& command)
         return;
     }
 
-    const auto v0 = decodeVertex(command.words[1]);
-    const auto v1 = decodeVertex(command.words[2]);
-    const auto v2 = decodeVertex(command.words[3]);
-    const auto v3 = decodeVertex(command.words[4]);
+    const u16 color = toColor15(command.words[0], false);
+    const bool transparent = hasSemiTransparency(command);
+    GpuVertex v0 = applyDrawOffset(decodeVertex(command.words[1]));
+    GpuVertex v1 = applyDrawOffset(decodeVertex(command.words[2]));
+    GpuVertex v2 = applyDrawOffset(decodeVertex(command.words[3]));
+    GpuVertex v3 = applyDrawOffset(decodeVertex(command.words[4]));
 
-    const s16 minX = std::min({v0.x, v1.x, v2.x, v3.x});
-    const s16 minY = std::min({v0.y, v1.y, v2.y, v3.y});
-    const s16 maxX = std::max({v0.x, v1.x, v2.x, v3.x});
-    const s16 maxY = std::max({v0.y, v1.y, v2.y, v3.y});
+    rasterTriangle(v0, v1, v2, color, transparent, m_ditheringEnabled);
+    rasterTriangle(v1, v2, v3, color, transparent, m_ditheringEnabled);
+}
 
-    const s32 width = std::max<s32>(0, static_cast<s32>(maxX) - minX + 1);
-    const s32 height = std::max<s32>(0, static_cast<s32>(maxY) - minY + 1);
-    fillRect(minX, minY, static_cast<u16>(width), static_cast<u16>(height),
-             toColor15(command.words[0]));
+void SoftwareGpuRenderer::drawLine(const GpuCommand& command)
+{
+    if (command.words.size() < 3)
+    {
+        return;
+    }
+
+    const GpuVertex v0 = applyDrawOffset(decodeVertex(command.words[1]));
+    const GpuVertex v1 = applyDrawOffset(decodeVertex(command.words[2]));
+    drawLineImpl(v0, v1, toColor15(command.words[0], false), hasSemiTransparency(command),
+                 m_ditheringEnabled);
 }
 
 void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
@@ -170,22 +228,62 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
     {
         return;
     }
-    const auto pos = decodeVertex(command.words[1]);
+
+    const bool textured = (command.opcode & 0x04) != 0;
+    const bool transparent = hasSemiTransparency(command);
+    const auto pos = applyDrawOffset(decodeVertex(command.words[1]));
     const size_t sizeWordIndex = command.words.size() >= 4 ? 3u : 2u;
     const auto size = decodeVertex(command.words[sizeWordIndex]);
+    const u16 width = static_cast<u16>(std::max<s16>(1, size.x));
+    const u16 height = static_cast<u16>(std::max<s16>(1, size.y));
 
-    u16 color = toColor15(command.words[0]);
-    if ((m_texturePage & 0x3) != 0)
-    {
-        color ^= 0x0003;
-    }
-    if ((m_clut & 0x1F) != 0)
-    {
-        color ^= 0x001C;
-    }
+    const u8 baseU = static_cast<u8>(command.words.size() > 2 ? command.words[2] & 0xFF : 0);
+    const u8 baseV = static_cast<u8>(command.words.size() > 2 ? (command.words[2] >> 8) & 0xFF : 0);
+    const u16 vertexColor = toColor15(command.words[0], false);
 
-    fillRect(pos.x, pos.y, static_cast<u16>(std::max<s32>(1, size.x)),
-             static_cast<u16>(std::max<s32>(1, size.y)), color);
+    for (u16 y = 0; y < height; ++y)
+    {
+        for (u16 x = 0; x < width; ++x)
+        {
+            u16 color = vertexColor;
+            if (textured)
+            {
+                const u8 texU = static_cast<u8>(baseU + x);
+                const u8 texV = static_cast<u8>(baseV + y);
+                color = sampleTexture(texU, texV, m_texturePage, m_clut);
+                const bool rawTextured = (command.opcode & 0x1) != 0;
+                if (!rawTextured)
+                {
+                    color = modulateColor(color, vertexColor);
+                }
+                if (color == 0)
+                {
+                    continue;
+                }
+            }
+            writePixel(static_cast<s16>(pos.x + x), static_cast<s16>(pos.y + y), color, transparent,
+                       m_ditheringEnabled);
+        }
+    }
+}
+
+bool SoftwareGpuRenderer::hasSemiTransparency(const GpuCommand& command)
+{
+    return (command.opcode & 0x2) != 0;
+}
+
+void SoftwareGpuRenderer::applyDrawMode(u32 value)
+{
+    m_blendMode = static_cast<u8>((value >> 5) & 0x3);
+    m_ditheringEnabled = (value & (1u << 9)) != 0;
+}
+
+void SoftwareGpuRenderer::applyTextureWindow(u32 value)
+{
+    m_textureWindow.maskX = static_cast<u8>(value & 0x1F);
+    m_textureWindow.maskY = static_cast<u8>((value >> 5) & 0x1F);
+    m_textureWindow.offsetX = static_cast<u8>((value >> 10) & 0x1F);
+    m_textureWindow.offsetY = static_cast<u8>((value >> 15) & 0x1F);
 }
 
 void SemiAccurateGpuRenderer::reset()
@@ -226,8 +324,10 @@ void SemiAccurateGpuRenderer::setClut(u16 clut)
 FrameComparison compareFrames(const std::vector<u16>& lhs, const std::vector<u16>& rhs)
 {
     FrameComparison result;
-    result.totalPixels = std::min(lhs.size(), rhs.size());
-    for (size_t i = 0; i < result.totalPixels; ++i)
+    result.totalPixels = std::max(lhs.size(), rhs.size());
+
+    const size_t overlap = std::min(lhs.size(), rhs.size());
+    for (size_t i = 0; i < overlap; ++i)
     {
         if (lhs[i] != rhs[i])
         {
@@ -236,7 +336,7 @@ FrameComparison compareFrames(const std::vector<u16>& lhs, const std::vector<u16
     }
     result.differentPixels += (lhs.size() > rhs.size()) ? (lhs.size() - rhs.size()) : 0;
     result.differentPixels += (rhs.size() > lhs.size()) ? (rhs.size() - lhs.size()) : 0;
-    result.totalPixels = std::max(lhs.size(), rhs.size());
+
     return result;
 }
 

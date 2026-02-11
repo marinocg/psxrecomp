@@ -38,6 +38,12 @@ psxrecomp::u16 readVramPixel(const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
     }
     return static_cast<psxrecomp::u16>((word >> 16) & 0xFFFFu);
 }
+
+psxrecomp::u16 readFramePixel(const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
+{
+    const auto& frame = gpu.frameBuffer();
+    return frame[static_cast<size_t>(y) * kVramWidth + x];
+}
 } // namespace
 
 int main()
@@ -271,6 +277,111 @@ int main()
 
     gpu.restoreStatus(0x12345678u);
     assert(gpu.readStatus() == 0x12345678u);
+
+    // Phase 3 rasterizer coverage: clip/offset + primitive rasterization rules.
+    gpu.reset();
+    writePacket(gpu, {0xE3000000u}); // top-left = 0,0
+    writePacket(gpu, {0xE4000808u}); // bottom-right = 8,2
+    writePacket(gpu, {0xE5001001u}); // x offset +1, y offset +2
+    writePacket(gpu, {0x400000FFu, 0x00000000u, 0x00000004u, 0x00000000u}); // horizontal line
+    assert(readFramePixel(gpu, 1, 2) != 0);
+    assert(readFramePixel(gpu, 5, 2) != 0);
+    assert(readFramePixel(gpu, 10, 2) == 0);
+
+    // Degenerate line should still draw a single pixel.
+    writePacket(gpu, {0x400000FFu, 0x00000002u, 0x00000002u, 0x00000000u});
+    assert(readFramePixel(gpu, 3, 2) != 0);
+
+    // Triangle top-left fill convention should include origin and exclude outside edge.
+    gpu.reset();
+    writePacket(gpu, {0x200000FFu, 0x00000000u, 0x00040000u, 0x00000004u});
+    assert(readFramePixel(gpu, 0, 0) != 0);
+    assert(readFramePixel(gpu, 4, 4) == 0);
+
+    // Quad decomposition fills interior from both triangle halves.
+    gpu.reset();
+    writePacket(gpu, {0x28000080u, 0x00020002u, 0x00060002u, 0x00020006u, 0x00060006u});
+    assert(readFramePixel(gpu, 4, 4) != 0);
+
+    // Texturing pipeline: 4/8/16-bit page selection + CLUT path.
+    gpu.reset();
+    // 4-bit indexed fetch: default texel index is 0, so CLUT entry 0 should be returned.
+    writePacket(gpu, {0x0200FF00u, 0x00010000u, 0x00010001u});
+    const auto clut4Color = readFramePixel(gpu, 0, 1);
+    writePacket(gpu, {0xE1000001u});
+    writePacket(gpu, {0x64FFFFFFu, 0x000A000Au, 0x00400003u, 0x00010001u});
+    assert(readFramePixel(gpu, 10, 10) == clut4Color);
+
+    // 8-bit indexed fetch should also resolve through CLUT entry 0.
+    gpu.reset();
+    writePacket(gpu, {0x020000FFu, 0x00020000u, 0x00010001u});
+    const auto clut8Color = readFramePixel(gpu, 0, 2);
+    writePacket(gpu, {0xE1000081u});
+    writePacket(gpu, {0x64FFFFFFu, 0x00140014u, 0x00800001u, 0x00010001u});
+    assert(readFramePixel(gpu, 20, 20) == clut8Color);
+
+    // Textured raw-vs-modulated sprite behavior should follow opcode raw bit.
+    gpu.reset();
+    writePacket(gpu, {0x02FFFFFFu, 0x00000000u, 0x00010001u});
+    writePacket(gpu, {0xE1000100u}); // 16-bit texture mode
+    writePacket(gpu, {0x64404040u, 0x00200020u, 0x00000000u, 0x00010001u});
+    const auto modulatedPixel = readFramePixel(gpu, 32, 32);
+    writePacket(gpu, {0x65404040u, 0x00210020u, 0x00000000u, 0x00010001u});
+    const auto rawPixel = readFramePixel(gpu, 33, 32);
+    assert(modulatedPixel != rawPixel);
+
+    // 16-bit texture fetch reads direct texel value without CLUT.
+    gpu.reset();
+    writePacket(gpu, {0x02FFFFFFu, 0x00000000u, 0x00010001u});
+    const auto tex16Color = readFramePixel(gpu, 0, 0);
+    writePacket(gpu, {0xE1000100u});
+    writePacket(gpu, {0x64FFFFFFu, 0x001E001Eu, 0x00000000u, 0x00010001u});
+    assert(readFramePixel(gpu, 30, 30) == tex16Color);
+
+    // Blending + mask bit behavior.
+    gpu.reset();
+    writePacket(gpu, {0x020000FFu, 0x00050005u, 0x00010001u});
+    writePacket(gpu, {0xE6000003u}); // force mask + check masked
+    writePacket(gpu, {0x22000020u, 0x00050005u, 0x00060005u, 0x00050006u});
+    const auto blended = readFramePixel(gpu, 5, 5);
+    assert((blended & 0x8000u) != 0);
+    writePacket(gpu, {0x02000000u, 0x00050005u, 0x00010001u});
+    assert(readFramePixel(gpu, 5, 5) == blended);
+
+    // Blend mode selection should influence semi-transparent output.
+    gpu.reset();
+    writePacket(gpu, {0x02008040u, 0x00080008u, 0x00010001u});
+    writePacket(gpu, {0xE1000001u}); // blend mode 0, raw texture disabled
+    writePacket(gpu, {0x22000020u, 0x00080008u, 0x00090008u, 0x00080009u});
+    const auto blendMode0 = readFramePixel(gpu, 8, 8);
+
+    gpu.reset();
+    writePacket(gpu, {0x02008040u, 0x00080008u, 0x00010001u});
+    writePacket(gpu, {0xE1000021u}); // blend mode 1, additive
+    writePacket(gpu, {0x22000020u, 0x00080008u, 0x00090008u, 0x00080009u});
+    const auto blendMode1 = readFramePixel(gpu, 8, 8);
+    assert(blendMode0 != blendMode1);
+
+    // Dithering should vary semi-transparent primitive output across neighboring pixels.
+    gpu.reset();
+    writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
+    writePacket(gpu, {0xE1000001u}); // blend mode 0
+    writePacket(gpu, {0x2A020202u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
+    gpu.reset();
+    writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
+    writePacket(gpu, {0xE1000201u}); // blend mode 0 + dithering
+    writePacket(gpu, {0x2A020202u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
+    const auto transparentDitherLeft = readFramePixel(gpu, 50, 50);
+    const auto transparentDitherRight = readFramePixel(gpu, 51, 50);
+    assert(transparentDitherLeft != transparentDitherRight);
+
+    // Dithering should vary nearby primitive pixels when enabled.
+    gpu.reset();
+    writePacket(gpu, {0xE1000200u}); // dithering enabled
+    writePacket(gpu, {0x40012345u, 0x00280028u, 0x002A0028u, 0x00000000u});
+    const auto ditherLeft = readFramePixel(gpu, 40, 40);
+    const auto ditherRight = readFramePixel(gpu, 41, 40);
+    assert(ditherLeft != ditherRight);
 
     return 0;
 }

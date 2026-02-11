@@ -19,7 +19,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 | IR Pipeline | ~85% |
 | Recompiler / Codegen | ~75% |
 | Runtime Library | ~60% |
-| GPU Emulation | ~58% |
+| GPU Emulation | ~74% |
 | SPU Emulation | ~5% |
 | CD-ROM | ~15% |
 
@@ -98,16 +98,18 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Higher-fidelity timer behavior and cycle-accurate scheduling.
 - Broader BIOS function coverage and return-value semantics.
 
-### GPU Emulation (~66%)
+### GPU Emulation (~74%)
 **Present**
 - GP0/GP1 packet decoding into structured command traces.
 - Expanded GP0 packet sizing/decoding coverage across draw, transfer, environment, and misc command families.
 - Complete GP1 control decode coverage for reset, DMA direction, display range/mode controls, and IRQ acknowledgment.
 - Register/status handling with FIFO depth, malformed packet tracking, and timing-oriented status updates.
-- VRAM write semantics and software reference rendering for rectangles/triangles/quads/sprites.
+- Pixel-accurate Phase 3 software rasterizer paths are implemented for triangles/quads/lines/sprites with top-left edge rules, draw-area clipping, draw offsets, texture-window addressing, and deterministic primitive ordering.
 - Phase 2 VRAM transfer pipeline is implemented: CPU->VRAM payload state machine, VRAM->CPU readback sequencing, VRAM->VRAM blits, edge wrapping, and mask/packing behavior.
 - Pluggable GPU renderer interface with software and semi-accurate backend scaffolding.
 - Runtime backend switching and frame comparison helpers for validation workflows.
+- Software renderer now covers texture sampling modes (4/8/16-bit), CLUT lookups, texture page selection, semi-transparency modes, mask-bit behavior, dithering toggles, and color modulation paths.
+- Conformance unit coverage now exercises Phase 3 primitive/effect behavior including degenerate lines, quad decomposition, clip/offset rules, texturing, blending, and mask interactions.
 - DMA direction-aware GPU ingestion plus GPU linked-list DMA path handling in runtime DMA transfers.
 - Exhaustive decoder tests now cover valid and malformed GP0/GP1 command packet streams.
 - Detailed phased execution plan with checkboxes for software accuracy + hardware parity delivery.
@@ -116,7 +118,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 **Missing**
 - Hardware API-specific backend implementation (OpenGL/Vulkan/Metal).
 - Capture replay tooling to execute the new trace corpus in automated parity tests (planned for Phase 7).
-- Pixel-accurate blending/texturing and full timing parity with production emulators.
+- Full display/timing synchronization semantics from Phase 4 are still pending (scanline cadence, throughput limits, IRQ timing).
 - External capture-based parity gates integrated into CI.
 
 ### SPU Emulation (~5%)

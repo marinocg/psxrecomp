@@ -100,6 +100,7 @@ set(RUNTIME_SOURCES
     src/runtime/gpu_transfer.cpp
     src/runtime/gpu_commands.cpp
     src/runtime/gpu_renderer.cpp
+    src/runtime/gpu_renderer_primitives.cpp
     src/runtime/input.cpp
     src/runtime/interrupt_controller.cpp
     src/runtime/logger.cpp
@@ -215,6 +216,7 @@ if(BUILD_TESTS)
         src/runtime/gpu_transfer.cpp
         src/runtime/gpu_commands.cpp
         src/runtime/gpu_renderer.cpp
+        src/runtime/gpu_renderer_primitives.cpp
     )
     target_include_directories(gpu_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME gpu_test COMMAND gpu_test)
