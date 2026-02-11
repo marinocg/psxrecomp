@@ -59,6 +59,24 @@ int main()
     assert(system.gpu().commandTrace().back().kind ==
            psxrecomp::runtime::GpuCommandKind::FillRectangle);
 
+    // GPU DMA RAM<-GPU path should read GPUREAD words into RAM when channel direction is to RAM.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000003u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xA0000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00010002u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x22221111u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000003u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xC0000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x00010002u);
+
+    const Address gpuReadDmaBase = 0x00013000;
+    system.write<psxrecomp::u32>(gpuBase + 0x0, gpuReadDmaBase);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000001);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000000);
+    assert(system.read<psxrecomp::u32>(gpuReadDmaBase) == 0x22221111u);
+
     Address spuBase =
         psxrecomp::runtime::DmaController::ChannelBase +
         psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);

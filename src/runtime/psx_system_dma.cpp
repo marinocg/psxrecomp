@@ -20,38 +20,16 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
 {
     const auto& channel = m_dma.channel(port);
     const bool fromRam = (channel.channelControl & DMA_DIRECTION_FROM_RAM) != 0;
-    if (!fromRam)
-    {
-        m_dma.clearTrigger(port);
-        return;
-    }
-
-    const u32 syncMode = (channel.channelControl >> DMA_SYNC_MODE_SHIFT) & DMA_SYNC_MODE_MASK;
 
     u32 transferredWords = 0;
-    if (port == DmaPort::Gpu && syncMode == DMA_LINKED_LIST_MODE)
+    if (!fromRam)
     {
-        Address nodeAddress = channel.baseAddress & 0x1FFFFC;
-        for (u32 nodeCount = 0; nodeCount < 0x2000; ++nodeCount)
+        if (port != DmaPort::Gpu)
         {
-            const u32 header = read<u32>(nodeAddress);
-            const u32 commandCount = (header >> 24) & 0xFF;
-            for (u32 i = 0; i < commandCount; ++i)
-            {
-                m_gpu.writeDma(read<u32>(nodeAddress + (i + 1) * sizeof(u32)));
-            }
-            transferredWords += commandCount;
-
-            const u32 nextAddress = header & DMA_LIST_END_MARKER;
-            if (nextAddress == DMA_LIST_END_MARKER)
-            {
-                break;
-            }
-            nodeAddress = nextAddress & 0x1FFFFC;
+            m_dma.clearTrigger(port);
+            return;
         }
-    }
-    else
-    {
+
         const u32 wordCount = channel.blockControl & 0xFFFF;
         if (wordCount == 0)
         {
@@ -62,24 +40,67 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         const Address base = channel.baseAddress & 0x1FFFFC;
         for (u32 i = 0; i < wordCount; ++i)
         {
-            const u32 value = read<u32>(base + i * sizeof(u32));
-            switch (port)
-            {
-            case DmaPort::Gpu:
-                m_gpu.writeDma(value);
-                break;
-            case DmaPort::Spu:
-                m_spu.writeDma(value);
-                break;
-            case DmaPort::Cdrom:
-                m_cdrom.writeDma(value);
-                break;
-            default:
-                break;
-            }
+            write<u32>(base + i * sizeof(u32), m_gpu.readData());
         }
 
         transferredWords = wordCount;
+    }
+    else
+    {
+        const u32 syncMode = (channel.channelControl >> DMA_SYNC_MODE_SHIFT) & DMA_SYNC_MODE_MASK;
+
+        if (port == DmaPort::Gpu && syncMode == DMA_LINKED_LIST_MODE)
+        {
+            Address nodeAddress = channel.baseAddress & 0x1FFFFC;
+            for (u32 nodeCount = 0; nodeCount < 0x2000; ++nodeCount)
+            {
+                const u32 header = read<u32>(nodeAddress);
+                const u32 commandCount = (header >> 24) & 0xFF;
+                for (u32 i = 0; i < commandCount; ++i)
+                {
+                    m_gpu.writeDma(read<u32>(nodeAddress + (i + 1) * sizeof(u32)));
+                }
+                transferredWords += commandCount;
+
+                const u32 nextAddress = header & DMA_LIST_END_MARKER;
+                if (nextAddress == DMA_LIST_END_MARKER)
+                {
+                    break;
+                }
+                nodeAddress = nextAddress & 0x1FFFFC;
+            }
+        }
+        else
+        {
+            const u32 wordCount = channel.blockControl & 0xFFFF;
+            if (wordCount == 0)
+            {
+                m_dma.clearTrigger(port);
+                return;
+            }
+
+            const Address base = channel.baseAddress & 0x1FFFFC;
+            for (u32 i = 0; i < wordCount; ++i)
+            {
+                const u32 value = read<u32>(base + i * sizeof(u32));
+                switch (port)
+                {
+                case DmaPort::Gpu:
+                    m_gpu.writeDma(value);
+                    break;
+                case DmaPort::Spu:
+                    m_spu.writeDma(value);
+                    break;
+                case DmaPort::Cdrom:
+                    m_cdrom.writeDma(value);
+                    break;
+                default:
+                    break;
+                }
+            }
+
+            transferredWords = wordCount;
+        }
     }
 
     m_dma.clearTrigger(port);
