@@ -1,22 +1,22 @@
 cmake_minimum_required(VERSION 3.15)
 project(psxrecomp VERSION 0.1.0 LANGUAGES CXX)
 
-# Set C++ standard
+#Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Export compile commands for IDEs
+#Export compile commands for IDEs
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Build options
+#Build options
 option(BUILD_TESTS "Build unit tests" ON)
 option(BUILD_EXAMPLES "Build examples" ON)
 option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
-# Compiler warnings
+#Compiler warnings
 if(ENABLE_WARNINGS)
     if(MSVC)
         add_compile_options(/W4 /WX-)
@@ -42,10 +42,10 @@ if(ENABLE_CLANG_TIDY)
     endif()
 endif()
 
-# Include directories
+#Include directories
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# Source files will be organized by component
+#Source files will be organized by component
 set(ISO_SOURCES
     src/iso/cue_sheet.cpp
     src/iso/iso_boot.cpp
@@ -226,6 +226,13 @@ if(BUILD_TESTS)
     )
     target_include_directories(runtime_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME runtime_test COMMAND runtime_test)
+
+    add_executable(spu_test
+        tests/unit/spu_test.cpp
+        src/runtime/spu.cpp
+    )
+    target_include_directories(spu_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME spu_test COMMAND spu_test)
 
     add_executable(pipeline_test
         tests/unit/pipeline_test.cpp

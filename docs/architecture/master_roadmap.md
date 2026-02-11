@@ -70,7 +70,7 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 - [ ] DMA, interrupts, timers, and scheduler correctness.
 - [ ] CD-ROM data path with XA streaming basics.
 - [x] GPU command packet ingestion and minimal rasterization.
-- [ ] SPU voice and streaming scaffolding (even if simplified).
+- [x] SPU voice synthesis scaffolding, ADSR/mixing core, and backend audio hooks (simplified reference path).
 - [x] Debug tooling: runtime logs, memory dumps, and performance overlays.
 
 **Dependencies (complete these roadmaps)**
