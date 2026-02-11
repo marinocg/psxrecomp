@@ -356,11 +356,11 @@ int main()
     gpu.reset();
     writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
     writePacket(gpu, {0xE1000001u}); // blend mode 0
-    writePacket(gpu, {0x42020202u, 0x00320032u, 0x00340032u, 0x00000000u});
+    writePacket(gpu, {0x2A020202u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
     gpu.reset();
     writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
     writePacket(gpu, {0xE1000201u}); // blend mode 0 + dithering
-    writePacket(gpu, {0x42020202u, 0x00320032u, 0x00340032u, 0x00000000u});
+    writePacket(gpu, {0x2A020202u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
     const auto transparentDitherLeft = readFramePixel(gpu, 50, 50);
     const auto transparentDitherRight = readFramePixel(gpu, 51, 50);
     assert(transparentDitherLeft != transparentDitherRight);
