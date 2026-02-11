@@ -35,6 +35,9 @@ DiscSetMetadata buildDiscSetMetadata(const std::vector<std::string>& discPaths, 
 std::string makeDeterministicTag(u32 loadAddress, const std::string& hash);
 std::string buildOutputDirectory(const std::filesystem::path& baseDir, const std::string& inputStem,
                                  const std::string& volumeLabel, const std::string& exeTag);
+bool copyDirectoryRecursive(const std::filesystem::path& source,
+                            const std::filesystem::path& destination, std::string& outError);
+std::filesystem::path repositoryRootFromSourcePath(const std::filesystem::path& sourcePath);
 std::string serializeManifest(const PipelineResult& result, const std::string& inputPath,
                               const std::string& outputDir, const std::string& timestamp,
                               const std::string& pipelineVersion);

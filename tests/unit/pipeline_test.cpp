@@ -87,10 +87,15 @@ int main()
     assert(!resultA.artifacts.sourcePath.empty());
     assert(!resultA.artifacts.buildPath.empty());
     assert(!resultA.artifacts.manifestPath.empty());
+    assert(!resultA.artifacts.resourcesPath.empty());
+    assert(!resultA.artifacts.runtimeIncludePath.empty());
+    assert(!resultA.artifacts.runtimeSourcePath.empty());
     assert(std::filesystem::exists(resultA.artifacts.headerPath));
     assert(std::filesystem::exists(resultA.artifacts.sourcePath));
     assert(std::filesystem::exists(resultA.artifacts.buildPath));
     assert(std::filesystem::exists(resultA.artifacts.manifestPath));
+    assert(std::filesystem::exists(resultA.artifacts.runtimeIncludePath));
+    assert(std::filesystem::exists(resultA.artifacts.runtimeSourcePath));
 
     auto resultB = pipeline.run(exePath.string());
     assert(resultB.success);
@@ -98,6 +103,8 @@ int main()
     assert(resultA.artifacts.sourcePath == resultB.artifacts.sourcePath);
     assert(resultA.artifacts.buildPath == resultB.artifacts.buildPath);
     assert(resultA.artifacts.manifestPath == resultB.artifacts.manifestPath);
+    assert(resultA.artifacts.runtimeIncludePath == resultB.artifacts.runtimeIncludePath);
+    assert(resultA.artifacts.runtimeSourcePath == resultB.artifacts.runtimeSourcePath);
 
     std::ifstream manifestA(resultA.artifacts.manifestPath);
     std::stringstream manifestBufferA;
@@ -114,6 +121,8 @@ int main()
     assert(manifestContentA.find("\"timestamp\"") != std::string::npos);
     assert(manifestContentA.find("\"input\"") != std::string::npos);
     assert(manifestContentA.find("\"output\"") != std::string::npos);
+    assert(manifestContentA.find("\"runtimeInclude\"") != std::string::npos);
+    assert(manifestContentA.find("\"runtimeSource\"") != std::string::npos);
 
     {
         std::ofstream ecmFile(ecmPath, std::ios::binary);

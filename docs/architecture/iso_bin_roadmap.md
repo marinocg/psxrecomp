@@ -38,4 +38,6 @@ image formats needed by the recompiler pipeline.
 - [x] Add sector caching and streaming to reduce redundant reads.
 - [x] Improve BIN/CUE parsing for uncommon cue syntax and pregap variants.
 - [x] Validate XA audio sector metadata for runtime streaming.
+- [x] XA resource fallback for 2048-byte ISO images when raw subheaders are unavailable.
+- [x] Add fixture tooling for malformed/good/rich ISO generation and validation scripts.
 - [ ] Integrate multi-disc set with runtime disc swap workflows.

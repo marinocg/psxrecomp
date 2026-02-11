@@ -191,17 +191,24 @@ std::vector<std::string> IsoParser::listFilesByExtension(const std::vector<std::
 
 bool IsoParser::validateXaAudioFile(const std::string& path)
 {
-    if (m_rawSectorSize != detail::kRawSectorSize)
-    {
-        addError("XA validation requires raw sector access.");
-        return false;
-    }
-
     DirectoryRecord target{};
     std::vector<DirectoryRecord> extents;
     if (!findFileExtents(path, target, extents))
     {
         return false;
+    }
+
+    if (m_rawSectorSize != detail::kRawSectorSize)
+    {
+        // For pure 2048-byte ISO images there is no XA subheader/EDC metadata,
+        // so strict XA validation is impossible. Accept non-empty .XA resources
+        // based on filesystem extents so resources can still be exported.
+        if (target.dataLength == 0 || extents.empty())
+        {
+            addError("XA resource entry has no data extents.");
+            return false;
+        }
+        return true;
     }
 
     std::sort(extents.begin(), extents.end(),

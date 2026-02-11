@@ -239,21 +239,33 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
 {
     std::ostringstream stream;
     stream << "cmake_minimum_required(VERSION 3.15)\n";
-    stream << "project(" << projectName << " LANGUAGES CXX)\n";
     stream << "set(CMAKE_CXX_STANDARD 17)\n";
     stream << "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n";
-    stream << "set(CMAKE_CXX_EXTENSIONS OFF)\n";
-    stream << "\n";
-    stream << "set(PSXRECOMP_INCLUDE_DIR \"\" CACHE PATH \"Path to psxrecomp headers\")\n";
-    stream << "set(PSXRECOMP_RESOURCE_DIR \"\" CACHE PATH \"Path to resource directory\")\n";
+    stream << "set(CMAKE_CXX_EXTENSIONS OFF)\n\n";
+    stream << "set(PSXRECOMP_RUNTIME_INCLUDE_DIR \"${CMAKE_CURRENT_LIST_DIR}/runtime/include\" "
+              "CACHE PATH \"Path to runtime/include\")\n";
+    stream << "set(PSXRECOMP_RUNTIME_SOURCE_DIR \"${CMAKE_CURRENT_LIST_DIR}/runtime/src\" CACHE "
+              "PATH \"Path to runtime/src\")\n";
+    stream << "set(PSXRECOMP_RESOURCE_DIR \"${CMAKE_CURRENT_LIST_DIR}/resources\" CACHE PATH "
+              "\"Path to resource directory\")\n";
     stream << "option(PSXRECOMP_ENABLE_LOGGING \"Enable recompiled logging\" OFF)\n";
     stream << "set(PSXRECOMP_LOG_LEVEL 1 CACHE STRING \"Logging level\")\n";
     stream << "option(PSXRECOMP_ENABLE_CHECKS \"Enable runtime checks\" ON)\n";
     stream << "set(PSXRECOMP_OPT_LEVEL 2 CACHE STRING \"Optimization level hint\")\n";
-    stream << "if(NOT PSXRECOMP_INCLUDE_DIR)\n";
-    stream << "    message(FATAL_ERROR \"PSXRECOMP_INCLUDE_DIR is not set.\")\n";
-    stream << "endif()\n";
-    stream << "\n";
+    stream << "if(NOT EXISTS ${PSXRECOMP_RUNTIME_INCLUDE_DIR}/psxrecomp/types.h)\n";
+    stream << "    message(FATAL_ERROR \"PSX runtime include directory is invalid: "
+              "${PSXRECOMP_RUNTIME_INCLUDE_DIR}\")\n";
+    stream << "endif()\n\n";
+    stream << "file(GLOB PSXRECOMP_RUNTIME_SOURCES CONFIGURE_DEPENDS "
+              "${PSXRECOMP_RUNTIME_SOURCE_DIR}/*.cpp)\n";
+    stream << "if(NOT PSXRECOMP_RUNTIME_SOURCES)\n";
+    stream << "    message(FATAL_ERROR \"No runtime sources found in "
+              "${PSXRECOMP_RUNTIME_SOURCE_DIR}\")\n";
+    stream << "endif()\n\n";
+    stream << "add_library(psxrecomp_runtime STATIC ${PSXRECOMP_RUNTIME_SOURCES})\n";
+    stream << "target_include_directories(psxrecomp_runtime PUBLIC "
+              "${PSXRECOMP_RUNTIME_INCLUDE_DIR})\n\n";
+    stream << "project(" << projectName << " LANGUAGES CXX)\n";
     stream << "add_library(" << projectName << " " << projectName << ".cpp)\n";
     stream << "target_compile_definitions(" << projectName << " PUBLIC\n";
     stream << "    PSXRECOMP_ENABLE_LOGGING=$<BOOL:${PSXRECOMP_ENABLE_LOGGING}>\n";
@@ -262,10 +274,11 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "    PSXRECOMP_OPT_LEVEL=${PSXRECOMP_OPT_LEVEL}\n";
     stream << ")\n";
     stream << "target_include_directories(" << projectName << " PUBLIC\n";
-    stream << "    ${PSXRECOMP_INCLUDE_DIR}\n";
-    stream << "    include\n";
+    stream << "    ${PSXRECOMP_RUNTIME_INCLUDE_DIR}\n";
+    stream << "    ${CMAKE_CURRENT_LIST_DIR}\n";
     stream << ")\n";
-    stream << "if(PSXRECOMP_RESOURCE_DIR)\n";
+    stream << "target_link_libraries(" << projectName << " PUBLIC psxrecomp_runtime)\n\n";
+    stream << "if(EXISTS ${PSXRECOMP_RESOURCE_DIR})\n";
     stream << "    add_custom_command(TARGET " << projectName << " POST_BUILD\n";
     stream << "        COMMAND ${CMAKE_COMMAND} -E copy_directory\n";
     stream << "            ${PSXRECOMP_RESOURCE_DIR}\n";

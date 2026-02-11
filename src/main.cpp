@@ -71,7 +71,13 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
         std::cout << "    \"header\": \"" << escapeJson(result.artifacts.headerPath) << "\",\n";
         std::cout << "    \"source\": \"" << escapeJson(result.artifacts.sourcePath) << "\",\n";
         std::cout << "    \"build\": \"" << escapeJson(result.artifacts.buildPath) << "\",\n";
-        std::cout << "    \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\"\n";
+        std::cout << "    \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\",\n";
+        std::cout << "    \"resources\": \"" << escapeJson(result.artifacts.resourcesPath)
+                  << "\",\n";
+        std::cout << "    \"runtimeInclude\": \"" << escapeJson(result.artifacts.runtimeIncludePath)
+                  << "\",\n";
+        std::cout << "    \"runtimeSource\": \"" << escapeJson(result.artifacts.runtimeSourcePath)
+                  << "\"\n";
         std::cout << "  },\n";
     }
     std::cout << "  \"warnings\": [\n";
@@ -287,6 +293,12 @@ int main(int argc, char* argv[])
     std::cout << "Source:   " << result.artifacts.sourcePath << "\n";
     std::cout << "CMake:    " << result.artifacts.buildPath << "\n";
     std::cout << "Manifest: " << result.artifacts.manifestPath << "\n";
+    std::cout << "Resources:" << (result.artifacts.resourcesPath.empty() ? " (none)" : "")
+              << (result.artifacts.resourcesPath.empty() ? ""
+                                                         : " " + result.artifacts.resourcesPath)
+              << "\n";
+    std::cout << "Runtime include: " << result.artifacts.runtimeIncludePath << "\n";
+    std::cout << "Runtime source:  " << result.artifacts.runtimeSourcePath << "\n";
 
     return 0;
 }
