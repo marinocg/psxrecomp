@@ -98,5 +98,5 @@ tools/validate_iso_fixtures.sh ./build/psxrecomp /tmp/psxrecomp_iso_validation
 ```
 
 CI coverage:
-- `.github/workflows/fixture-e2e.yml` now runs this script end-to-end for pull requests that touch the recompiler pipeline inputs and on `main`, while branch pushes use a lightweight build+targeted-test job to reduce Actions credits.
+- `.github/workflows/fixture-e2e.yml` now runs this script end-to-end for pull requests that touch the recompiler pipeline inputs and on `main` pushes. Lighter branch-push coverage remains in the existing CI workflow.
 - Artifacts include fixture JSON outputs (`bad.json`, `good.json`, optional `good_rich.json`) and `fixtures_manifest.json` for triage.
