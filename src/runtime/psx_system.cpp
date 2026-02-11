@@ -83,6 +83,7 @@ void PsxSystem::reset()
     m_interrupts.reset();
     m_scheduler.reset();
     m_debugOverlay.reset();
+    m_timers.reset();
 
     m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
 }
@@ -95,6 +96,19 @@ void PsxSystem::boot()
 void PsxSystem::runFrame()
 {
     m_spu.tick(CYCLES_PER_FRAME);
+    m_cdrom.tick(CYCLES_PER_FRAME);
+    m_timers.tick(CYCLES_PER_FRAME,
+                  [this](InterruptLine line)
+                  {
+                      m_interrupts.raise(line);
+                      m_debugOverlay.incrementInterruptsRaised();
+                  });
+    if (m_cdrom.hasIrqRequest() &&
+        (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
+    {
+        m_interrupts.raise(InterruptLine::Cdrom);
+        m_debugOverlay.incrementInterruptsRaised();
+    }
     m_scheduler.tick(CYCLES_PER_FRAME);
     m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
     m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
@@ -153,6 +167,11 @@ RuntimeLogger& PsxSystem::logger()
 RuntimeDebugOverlay& PsxSystem::debugOverlay()
 {
     return m_debugOverlay;
+}
+
+TimerController& PsxSystem::timers()
+{
+    return m_timers;
 }
 
 void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
@@ -270,6 +289,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_dma.reset();
     m_scheduler.reset();
     m_debugOverlay.reset();
+    m_timers.reset();
     return true;
 }
 uint64_t PsxSystem::stateChecksum() const
@@ -313,138 +333,6 @@ void PsxSystem::callBiosSyscall(u32 code, const u32* regs, size_t regCount)
         }
         m_logger.log(LogLevel::Warn, "bios", stream.str());
         return;
-    }
-}
-u32 PsxSystem::readMmio32(Address address)
-{
-    if (address == Mmio::GPU_GP1)
-    {
-        return m_gpu.readStatus();
-    }
-    if (address == Mmio::GPU_GP0)
-    {
-        return m_gpu.readData();
-    }
-    if (address == Mmio::INTERRUPT_STATUS)
-    {
-        return m_interrupts.readStatus();
-    }
-    if (address == Mmio::INTERRUPT_MASK)
-    {
-        return m_interrupts.readMask();
-    }
-    if (isInRange(address, Mmio::DMA_BASE, Mmio::DMA_SIZE))
-    {
-        return m_dma.readRegister(address);
-    }
-
-    return 0;
-}
-
-u16 PsxSystem::readMmio16(Address address)
-{
-    if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
-    {
-        return m_spu.readRegister(address - Mmio::SPU_BASE);
-    }
-    if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
-    {
-        return m_input.readState();
-    }
-
-    return 0;
-}
-
-u8 PsxSystem::readMmio8(Address address)
-{
-    if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
-    {
-        switch (address - Mmio::CDROM_BASE)
-        {
-        case 0:
-            return m_cdrom.readStatus();
-        case 1:
-            return m_cdrom.readData();
-        case 2:
-            return m_cdrom.readInterruptFlags();
-        case 3:
-            return m_cdrom.readInterruptEnable();
-        default:
-            return 0;
-        }
-    }
-
-    return 0;
-}
-
-void PsxSystem::writeMmio32(Address address, u32 value)
-{
-    if (address == Mmio::GPU_GP0)
-    {
-        m_gpu.writeCommand(value);
-        return;
-    }
-    if (address == Mmio::GPU_GP1)
-    {
-        m_gpu.writeStatus(value);
-        return;
-    }
-    if (address == Mmio::INTERRUPT_STATUS)
-    {
-        m_interrupts.writeStatus(value);
-        return;
-    }
-    if (address == Mmio::INTERRUPT_MASK)
-    {
-        m_interrupts.writeMask(value);
-        return;
-    }
-    if (isInRange(address, Mmio::DMA_BASE, Mmio::DMA_SIZE))
-    {
-        auto triggered = m_dma.writeRegister(address, value);
-        if (triggered)
-        {
-            handleDmaTransfer(*triggered);
-        }
-        return;
-    }
-}
-
-void PsxSystem::writeMmio16(Address address, u16 value)
-{
-    if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
-    {
-        m_spu.writeRegister(address - Mmio::SPU_BASE, value);
-        return;
-    }
-    if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
-    {
-        (void)value;
-        return;
-    }
-}
-
-void PsxSystem::writeMmio8(Address address, u8 value)
-{
-    if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
-    {
-        switch (address - Mmio::CDROM_BASE)
-        {
-        case 0:
-            m_cdrom.writeCommand(value);
-            break;
-        case 1:
-            m_cdrom.writeParam(value);
-            break;
-        case 2:
-            m_cdrom.writeInterruptFlags(value);
-            break;
-        case 3:
-            m_cdrom.writeInterruptEnable(value);
-            break;
-        default:
-            break;
-        }
     }
 }
 } // namespace runtime

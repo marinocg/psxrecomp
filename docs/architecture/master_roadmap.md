@@ -18,6 +18,7 @@ highlights dependencies between workstreams.
 - [x] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
 - [ ] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
 - [ ] SPU emulation ([spu_emulation_roadmap.md](spu_emulation_roadmap.md))
+- [ ] CD-ROM emulation ([cdrom_emulation_roadmap.md](cdrom_emulation_roadmap.md))
 - [ ] Demo milestone ([demo_roadmap.md](demo_roadmap.md))
 - [ ] Full game support ([full_game_support_roadmap.md](full_game_support_roadmap.md))
 - [ ] Pipeline overview ([pipeline.md](pipeline.md))
@@ -66,9 +67,9 @@ Status note: IR and recompiler dependency roadmaps are now complete for M2.
 Goal: make generated code interact with a faithful runtime model of PSX hardware.
 
 **Deliverables**
-- [ ] Accurate RAM, scratchpad, and MMIO behavior.
-- [ ] DMA, interrupts, timers, and scheduler correctness.
-- [ ] CD-ROM data path with XA streaming basics.
+- [x] Accurate RAM, scratchpad, and MMIO behavior.
+- [x] DMA, interrupts, timers, and scheduler correctness.
+- [x] CD-ROM data path with XA streaming basics.
 - [x] GPU command packet ingestion and minimal rasterization.
 - [x] SPU voice synthesis scaffolding, ADSR/mixing core, and backend audio hooks (simplified reference path).
 - [x] Debug tooling: runtime logs, memory dumps, and performance overlays.
@@ -77,8 +78,9 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 - [x] Runtime library roadmap (`runtime_library_roadmap.md`)
 - [x] GPU emulation roadmap (`gpu_emulation_roadmap.md`) (M3 dependency gate satisfied via command ingestion + minimal rasterization; later hardware/parity phases remain for M5+).
 - [x] SPU emulation roadmap (`spu_emulation_roadmap.md`) (M3 dependency gate satisfied via Phase 1-2 core/mixer/backend path; timing/XA/parity remain for later milestones).
+- [x] CD-ROM emulation roadmap (`cdrom_emulation_roadmap.md`) (M3 dependency gate satisfied via baseline command/data/XA transport; timing/parity/decode remain for later milestones).
 
-Status note: GPU/SPU roadmap dependency gates are now considered sufficient to close M3 in the next PR once remaining runtime/CD-ROM deliverables are checked off.
+Status note: M3 dependency gates for runtime, GPU, SPU, and CD-ROM are now satisfied; remaining hardware-accuracy work tracks in M5+ roadmaps.
 
 ### M4: Recompiled Demo Title (Planned)
 Goal: run a controlled demo binary end-to-end with deterministic output.

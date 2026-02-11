@@ -4,6 +4,7 @@
 #include <cassert>
 #include <filesystem>
 #include <fstream>
+#include <vector>
 
 namespace MemoryMap = psxrecomp::MemoryMap;
 
@@ -136,6 +137,118 @@ int main()
     assert(system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1) ==
            0x00);
 
+    // Timer0 target IRQ should fire once runFrame advances cycles.
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_MASK,
+                                             static_cast<psxrecomp::u32>(InterruptLine::Timer0));
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 3u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0018u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0u);
+    assert((system.interrupts().readStatus() &
+            static_cast<psxrecomp::u32>(InterruptLine::Timer0)) == 0);
+    system.runFrame();
+    assert((system.interrupts().readStatus() &
+            static_cast<psxrecomp::u32>(InterruptLine::Timer0)) != 0);
+
+    const psxrecomp::u16 timer0Mode =
+        system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
+    assert((timer0Mode & (1u << 11)) != 0);
+
+    // Timer2 alternate divider mode should only advance every 8 CPU cycles.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 + 0x4,
+                                             0x0200u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 + 0x0, 0u);
+    system.timers().tick(7, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 +
+                                                   0x0) == 0u);
+    system.timers().tick(1, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 +
+                                                   0x0) == 1u);
+
+    // Timer overflow should wrap counter in free-running mode.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0000u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
+    system.timers().tick(4, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
+           2u);
+
+    // Reset-on-target with target=0 should behave as 0x10000 period (no divide-by-zero).
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0008u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 0x0000u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
+    system.timers().tick(4, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
+           2u);
+
+    // Reset-on-target should not trigger early when counter starts above target.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0018u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 3u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 10u);
+    system.timers().tick(3, nullptr);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
+           13u);
+
+    // Target flag must not latch on overflow if target value was not crossed.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0000u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 0x7FFFu);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
+    system.timers().tick(2, nullptr);
+    const psxrecomp::u16 noTargetOnOverflowMode =
+        system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
+    assert((noTargetOnOverflowMode & (1u << 11)) == 0u);
+
+    std::vector<psxrecomp::u8> xaSector(2352, 0x00);
+    xaSector[24] = 0x11;
+    xaSector[25] = 0x22;
+    xaSector[26] = 0x33;
+    xaSector[27] = 0x44;
+    system.cdrom().enqueueDataSector(xaSector);
+
+    std::vector<psxrecomp::u8> xaSector2(2352, 0x00);
+    xaSector2[24] = 0xAA;
+    xaSector2[25] = 0xBB;
+    xaSector2[26] = 0xCC;
+    xaSector2[27] = 0xDD;
+    system.cdrom().enqueueDataSector(xaSector2);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x01);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x40);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0x0E);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0x06);
+    system.runFrame();
+
+    Address cdromBase =
+        psxrecomp::runtime::DmaController::ChannelBase +
+        psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Cdrom);
+    const Address cdromDmaOut = 0x00015000;
+    system.write<psxrecomp::u32>(cdromBase + 0x0, cdromDmaOut);
+    system.write<psxrecomp::u32>(cdromBase + 0x4, 0x00000001);
+    system.write<psxrecomp::u32>(cdromBase + 0x8, 0x01000000);
+    assert(system.read<psxrecomp::u32>(cdromDmaOut) == 0x44332211u);
+
+    // A second frame should queue another sector without dropping bytes when FIFO fills.
+    system.runFrame();
+    for (int i = 0; i < 581; ++i)
+    {
+        (void)system.cdrom().readDma();
+    }
+    assert(system.cdrom().readDma() == 0xDDCCBBAAu);
+
+    // CD-ROM queued sectors are bounded to avoid unbounded memory growth.
+    PsxSystem boundedQueueSystem;
+    assert(boundedQueueSystem.initialize());
+    for (int i = 0; i < 80; ++i)
+    {
+        std::vector<psxrecomp::u8> sector(2048, 0);
+        sector[0] = static_cast<psxrecomp::u8>(i);
+        boundedQueueSystem.cdrom().enqueueDataSector(sector);
+    }
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
+                                                        0x01);
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
+                                                        0x06);
+    boundedQueueSystem.runFrame();
+    const psxrecomp::u32 boundedWord = boundedQueueSystem.cdrom().readDma();
+    assert((boundedWord & 0xFFu) == 16u);
+
     bool fired = false;
     system.scheduler().schedule(5, [&fired]() { fired = true; });
     system.scheduler().tick(4);
@@ -163,7 +276,7 @@ int main()
     assert(lastEvent->level == LogLevel::Warn);
 
     system.runFrame();
-    assert(system.debugOverlay().frameCounter() == 1);
+    assert(system.debugOverlay().frameCounter() >= 1);
     assert(system.debugOverlay().dmaTransfers() >= 2);
 
     auto ramDump = system.dumpRam();
@@ -179,8 +292,8 @@ int main()
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xAABBCCDDu);
     assert(system.gpu().fifoDepth() > 0);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0x1Au);
-    assert(system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0) ==
-           0x1Au);
+    assert((system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0) &
+            0x1Fu) == 0x1Au);
 
     assert(system.deserializeState(state));
     auto checksum2 = system.stateChecksum();

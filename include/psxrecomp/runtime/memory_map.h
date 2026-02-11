@@ -14,6 +14,9 @@ constexpr Address DMA_SIZE = 0x00000080;
 constexpr Address INTERRUPT_STATUS = 0x1F801070;
 constexpr Address INTERRUPT_MASK = 0x1F801074;
 
+constexpr Address TIMER_BASE = 0x1F801100;
+constexpr Address TIMER_SIZE = 0x00000030;
+
 constexpr Address GPU_GP0 = 0x1F801810;
 constexpr Address GPU_GP1 = 0x1F801814;
 

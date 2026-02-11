@@ -10,6 +10,7 @@
 #include "psxrecomp/runtime/memory_map.h"
 #include "psxrecomp/runtime/scheduler.h"
 #include "psxrecomp/runtime/spu.h"
+#include "psxrecomp/runtime/timers.h"
 #include "psxrecomp/types.h"
 
 #include <cstddef>
@@ -147,6 +148,7 @@ class PsxSystem
     Scheduler& scheduler();
     RuntimeLogger& logger();
     RuntimeDebugOverlay& debugOverlay();
+    TimerController& timers();
 
     void setDiscSwapInfo(DiscSwapInfo info);
     const DiscSwapInfo& discSwapInfo() const;
@@ -200,6 +202,7 @@ class PsxSystem
     Scheduler m_scheduler;
     RuntimeLogger m_logger;
     RuntimeDebugOverlay m_debugOverlay;
+    TimerController m_timers;
     DiscSwapInfo m_discSwapInfo;
 
     static Address normalizeAddress(Address address)

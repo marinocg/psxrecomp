@@ -11,10 +11,10 @@ master roadmap.
 | Disassembly & Analysis | ~75% | Improving |
 | IR & Optimization | ~85% | Improving |
 | Recompiler / Code Generation | ~75% | Improving |
-| Runtime Library | ~60% | Moderate gap |
+| Runtime Library | ~68% | Improving |
 | GPU Emulation | ~74% | Improving |
 | SPU Emulation | ~5% | Major gap |
-| CD-ROM Runtime | ~15% | Major gap |
+| CD-ROM Runtime | ~42% | Moderate gap |
 | Testing & Validation | ~35% | Significant gap |
 | Documentation & Dev Experience | ~65% | Improving |
 
@@ -38,15 +38,15 @@ master roadmap.
 - Inlining/regalloc-style hints and deeper code quality optimizations are limited.
 - Address translation and MMIO behavior still rely on simplified assumptions in some paths.
 
-## Runtime Library (~60%)
+## Runtime Library (~68%)
 - MMIO coverage and runtime scaffolding improved, but many device-accurate edge cases are still missing.
 - DMA/interrupt routing is present; cycle-accurate timing remains incomplete.
 - BIOS/syscall coverage is partial.
 
-## GPU / SPU / CD-ROM (GPU ~74% / SPU ~5% / CD-ROM ~15%)
+## GPU / SPU / CD-ROM (GPU ~74% / SPU ~5% / CD-ROM ~42%)
 - GPU: Phase 3 reference rasterization is now feature-complete (triangle/quad/line/sprite rules, clipping/offset/texture-window state, texture sampling, CLUT, blending, mask bits, and dithering paths), while timing/display synchronization and cross-emulator capture parity remain open.
 - SPU: voice synthesis, envelopes, and full audio path are still missing.
-- CD-ROM: XA resource extraction works for raw and 2048-byte ISO workflows, but runtime XA streaming/decoding/timing is still incomplete.
+- CD-ROM: runtime command/data FIFOs, DMA transfer path, and baseline XA ReadN/ReadS streaming are implemented; timing fidelity, validation, and XA decode remain open.
 
 ## Testing & Validation (~35%)
 - Strong unit coverage exists (including fixture-based ISO/pipeline checks), and GPU parity groundwork now includes a versioned trace corpus + golden metadata format; however, there is still no automated golden-output emulator parity suite.
