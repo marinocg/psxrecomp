@@ -58,10 +58,10 @@ int main()
 
     // Simple ADPCM block with non-zero payload.
     spu.writeRegister(Spu::RegisterMap::RamTransferAddress, 0x0000);
-    spu.writeDma(packBytes(0x0C, 0x02, 0x11, 0x11));
-    spu.writeDma(packBytes(0x11, 0x11, 0x11, 0x11));
-    spu.writeDma(packBytes(0x11, 0x11, 0x11, 0x11));
-    spu.writeDma(packBytes(0x11, 0x11, 0x11, 0x11));
+    spu.writeDma(packBytes(0x00, 0x02, 0x77, 0x77));
+    spu.writeDma(packBytes(0x77, 0x77, 0x77, 0x77));
+    spu.writeDma(packBytes(0x77, 0x77, 0x77, 0x77));
+    spu.writeDma(packBytes(0x77, 0x77, 0x77, 0x77));
 
     // Enable voice 0 with key-on and mixer settings.
     spu.writeRegister(Spu::RegisterMap::MainVolumeLeft, 0x3FFF);
@@ -70,6 +70,9 @@ int main()
     spu.writeRegister(Spu::RegisterMap::ReverbDepthRight, 0x2000);
     spu.writeRegister(Spu::RegisterMap::ReverbOnLow, 0x0001);
     assert(spu.voices()[0].reverbEnabled);
+    spu.writeRegister(Spu::RegisterMap::ReverbOnHigh, 0x0001);
+    assert(spu.voices()[0].reverbEnabled);
+    assert(spu.voices()[16].reverbEnabled);
 
     auto backend = std::make_shared<CaptureBackend>();
     spu.setAudioBackend(backend);

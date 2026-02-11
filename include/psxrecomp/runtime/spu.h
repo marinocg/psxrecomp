@@ -130,7 +130,7 @@ class Spu
     void onVoiceRegisterWrite(size_t voiceIndex, u32 voiceOffset, u16 value);
 
     void applyVoiceMask(u16 lowMask, u16 highMask, bool keyOn);
-    void applyReverbMask(u16 lowMask, u16 highMask);
+    void applyReverbMask(u32 voiceMask);
     void updateEnvelope(Voice& voice);
     int16_t nextVoiceSample(Voice& voice);
     void loadAdpcmBlock(Voice& voice);

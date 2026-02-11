@@ -239,11 +239,14 @@ void Spu::onGlobalRegisterWrite(u32 offset, u16 value)
         applyVoiceMask(0, value, false);
         break;
     case RegisterMap::ReverbOnLow:
-        applyReverbMask(value, 0);
-        break;
     case RegisterMap::ReverbOnHigh:
-        applyReverbMask(0, value);
+    {
+        const u32 mask =
+            static_cast<u32>(m_registers[registerIndex(RegisterMap::ReverbOnLow)]) |
+            (static_cast<u32>(m_registers[registerIndex(RegisterMap::ReverbOnHigh)]) << 16);
+        applyReverbMask(mask);
         break;
+    }
     case RegisterMap::RamTransferAddress:
         m_ramTransferCursor = (static_cast<size_t>(value) / 2) % m_ram.size();
         break;
@@ -319,12 +322,11 @@ void Spu::applyVoiceMask(u16 lowMask, u16 highMask, bool keyOn)
     }
 }
 
-void Spu::applyReverbMask(u16 lowMask, u16 highMask)
+void Spu::applyReverbMask(u32 voiceMask)
 {
-    const u32 mask = static_cast<u32>(lowMask) | (static_cast<u32>(highMask) << 16);
     for (size_t voiceIndex = 0; voiceIndex < VoiceCount; ++voiceIndex)
     {
-        voiceAt(voiceIndex).reverbEnabled = (mask & (1u << voiceIndex)) != 0;
+        voiceAt(voiceIndex).reverbEnabled = (voiceMask & (1u << voiceIndex)) != 0;
     }
 }
 
@@ -430,7 +432,7 @@ void Spu::loadAdpcmBlock(Voice& voice)
 
     if (blockEnd)
     {
-        if (voice.repeatAddressValid)
+        if (loopBlock && voice.repeatAddressValid)
         {
             voice.currentAddress = voice.repeatAddress;
         }
