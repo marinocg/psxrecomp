@@ -1,0 +1,16 @@
+{
+  "id": "ui_boot_menu",
+  "traceId": "ui_boot_menu_trace_v1",
+  "category": "ui_2d",
+  "expectedCommandMix": {
+    "fillRectangle": 24,
+    "drawSprite": 96,
+    "drawMode": 14,
+    "textureWindow": 6,
+    "displayMode": 2
+  },
+  "notes": [
+    "Exercises frequent drawing area and texture window changes.",
+    "No known unsupported commands in this capture."
+  ]
+}

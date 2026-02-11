@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://psxrecomp.dev/schemas/gpu/golden_frame_metadata.schema.json",
+  "title": "PSXRecomp GPU Golden Frame Metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "traceId",
+    "frameIndex",
+    "accuracyTier",
+    "display",
+    "hashes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "traceId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "frameIndex": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "accuracyTier": {
+      "type": "string",
+      "enum": ["reference", "semi-accurate", "enhanced"]
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "width",
+        "height",
+        "crop",
+        "interlaced",
+        "field"
+      ],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "crop": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["left", "top", "right", "bottom"],
+          "properties": {
+            "left": { "type": "integer", "minimum": 0 },
+            "top": { "type": "integer", "minimum": 0 },
+            "right": { "type": "integer", "minimum": 0 },
+            "bottom": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "interlaced": { "type": "boolean" },
+        "field": {
+          "type": "string",
+          "enum": ["progressive", "even", "odd"]
+        }
+      }
+    },
+    "hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frameCrc32", "frameFnv1a64"],
+      "properties": {
+        "frameCrc32": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{8}$"
+        },
+        "frameFnv1a64": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{16}$"
+        },
+        "commandTraceHash": {
+          "type": "string",
+          "pattern": "^[A-Fa-f0-9]{16}$"
+        }
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

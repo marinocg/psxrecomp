@@ -30,11 +30,18 @@ This roadmap tracks the work needed to implement a production-grade PSX GPU emul
 ## Phase 0 — Spec Lock & Test Corpus (Prerequisite)
 Goal: lock expected behavior before deeper implementation.
 
-- [ ] Define canonical GPU behavior matrix by command family (GP0 draw, GP0 transfer, GP1 control).
-- [ ] Define required accuracy tiers (`reference`, `semi-accurate`, `enhanced`) and allowed deltas.
-- [ ] Build trace corpus from representative games/demos (2D UI-heavy, 3D geometry-heavy, FMV-overlay).
-- [ ] Add golden frame metadata format (resolution, crop, interlace field, CRC/hash).
-- [ ] Document unsupported behavior policy (warn, fallback, hard-fail in debug).
+- [x] Define canonical GPU behavior matrix by command family (GP0 draw, GP0 transfer, GP1 control).
+- [x] Define required accuracy tiers (`reference`, `semi-accurate`, `enhanced`) and allowed deltas.
+- [x] Build trace corpus from representative games/demos (2D UI-heavy, 3D geometry-heavy, FMV-overlay).
+- [x] Add golden frame metadata format (resolution, crop, interlace field, CRC/hash).
+- [x] Document unsupported behavior policy (warn, fallback, hard-fail in debug).
+
+
+Phase 0 spec artifacts:
+- `docs/architecture/gpu/phase0_spec_lock.md`
+- `docs/architecture/gpu/trace_corpus.md`
+- `docs/architecture/gpu/golden_frame_metadata.schema.json`
+- `tests/fixtures/gpu_trace_corpus/`
 
 ## Phase 1 — Command Processor & Register Correctness
 Goal: command ingestion reflects PSX packet semantics and register behavior.

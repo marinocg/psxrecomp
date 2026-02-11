@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "description": "Phase 0 GPU trace corpus for parity bring-up.",
+  "scenes": [
+    {
+      "id": "ui_boot_menu",
+      "category": "ui_2d",
+      "descriptor": "scenes/ui_boot_menu.json",
+      "goldenFrames": ["golden_frames/ui_boot_menu.frame0.json"]
+    },
+    {
+      "id": "geometry_spin_demo",
+      "category": "geometry_3d",
+      "descriptor": "scenes/geometry_spin_demo.json",
+      "goldenFrames": ["golden_frames/geometry_spin_demo.frame120.json"]
+    },
+    {
+      "id": "fmv_subtitle_overlay",
+      "category": "fmv_overlay",
+      "descriptor": "scenes/fmv_subtitle_overlay.json",
+      "goldenFrames": ["golden_frames/fmv_subtitle_overlay.frame30.json"]
+    }
+  ],
+  "coverage": {
+    "categories": ["ui_2d", "geometry_3d", "fmv_overlay"],
+    "gp0Families": ["draw", "transfer", "env"],
+    "gp1Families": ["control", "display", "dma_direction"]
+  }
+}

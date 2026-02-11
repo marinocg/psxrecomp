@@ -19,7 +19,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 | IR Pipeline | ~85% |
 | Recompiler / Codegen | ~75% |
 | Runtime Library | ~60% |
-| GPU Emulation | ~45% |
+| GPU Emulation | ~50% |
 | SPU Emulation | ~5% |
 | CD-ROM | ~15% |
 
@@ -98,7 +98,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Higher-fidelity timer behavior and cycle-accurate scheduling.
 - Broader BIOS function coverage and return-value semantics.
 
-### GPU Emulation (~45%)
+### GPU Emulation (~50%)
 **Present**
 - GP0/GP1 packet decoding into structured command traces.
 - Register/status handling with FIFO depth and timing-oriented status updates.
@@ -106,9 +106,11 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Pluggable GPU renderer interface with software and semi-accurate backend scaffolding.
 - Runtime backend switching and frame comparison helpers for validation workflows.
 - Detailed phased execution plan with checkboxes for software accuracy + hardware parity delivery.
+- Phase 0 spec lock is complete: behavior matrix, accuracy tiers, trace corpus, golden frame metadata schema, and unsupported behavior policy are now versioned.
 
 **Missing**
 - Hardware API-specific backend implementation (OpenGL/Vulkan/Metal).
+- Capture replay tooling to execute the new trace corpus in automated parity tests (planned for Phase 7).
 - Robust VRAM transfer/readback semantics and richer GP0/GP1 command coverage.
 - Pixel-accurate blending/texturing and full timing parity with production emulators.
 - External capture-based parity gates integrated into CI.

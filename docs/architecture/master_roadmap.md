@@ -75,7 +75,7 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 
 **Dependencies (complete these roadmaps)**
 - [x] Runtime library roadmap (`runtime_library_roadmap.md`)
-- [ ] GPU emulation roadmap (`gpu_emulation_roadmap.md`) (phased plan now split into Reference-Ready, Hardware-Ready, Production-Ready gates).
+- [ ] GPU emulation roadmap (`gpu_emulation_roadmap.md`) (Phase 0 prerequisite complete; remaining phases track Reference-Ready, Hardware-Ready, Production-Ready gates).
 - [ ] SPU emulation roadmap (`spu_emulation_roadmap.md`)
 
 ### M4: Recompiled Demo Title (Planned)
