@@ -187,6 +187,15 @@ int main()
     assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
            13u);
 
+    // Target flag must not latch on overflow if target value was not crossed.
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0000u);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 0x7FFFu);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
+    system.timers().tick(2, nullptr);
+    const psxrecomp::u16 noTargetOnOverflowMode =
+        system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
+    assert((noTargetOnOverflowMode & (1u << 11)) == 0u);
+
     std::vector<psxrecomp::u8> xaSector(2352, 0x00);
     xaSector[24] = 0x11;
     xaSector[25] = 0x22;

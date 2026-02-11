@@ -13,9 +13,19 @@ constexpr u16 MODE_IRQ_ON_OVERFLOW = 1u << 5;
 constexpr u16 MODE_TARGET_REACHED_FLAG = 1u << 11;
 constexpr u16 MODE_OVERFLOW_REACHED_FLAG = 1u << 12;
 
-bool crossedTargetNoOverflow(u16 counter, u16 target, u16 newCounter)
+bool didCounterHitTarget(u16 counter, u16 target, u32 steps)
 {
-    return target > counter && target <= newCounter;
+    if (steps == 0)
+    {
+        return false;
+    }
+
+    u32 distance = (static_cast<u32>(target) - static_cast<u32>(counter)) & 0xFFFFu;
+    if (distance == 0)
+    {
+        distance = 0x10000u;
+    }
+    return steps >= distance;
 }
 
 void raiseTimerInterrupt(const TimerController::InterruptCallback& onInterrupt, InterruptLine line,
@@ -88,15 +98,7 @@ void TimerController::tickChannel(Channel& channel, size_t index, u32 cpuCycles,
     const u16 newCounter = static_cast<u16>(total & 0xFFFF);
     const u32 overflowEvents = total >> 16;
 
-    bool targetReached = false;
-    if (overflowEvents > 0)
-    {
-        targetReached = true;
-    }
-    else
-    {
-        targetReached = crossedTargetNoOverflow(channel.counter, channel.target, newCounter);
-    }
+    const bool targetReached = didCounterHitTarget(channel.counter, channel.target, steps);
 
     if (targetReached)
     {
