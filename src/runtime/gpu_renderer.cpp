@@ -64,7 +64,6 @@ void SoftwareGpuRenderer::reset()
     m_checkMaskBeforeDraw = false;
     m_blendMode = 0;
     m_ditheringEnabled = false;
-    m_modulateTextured = true;
 }
 
 void SoftwareGpuRenderer::submit(const GpuCommand& command)
@@ -252,7 +251,8 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
                 const u8 texU = static_cast<u8>(baseU + x);
                 const u8 texV = static_cast<u8>(baseV + y);
                 color = sampleTexture(texU, texV, m_texturePage, m_clut);
-                if (m_modulateTextured)
+                const bool rawTextured = (command.opcode & 0x1) != 0;
+                if (!rawTextured)
                 {
                     color = modulateColor(color, vertexColor);
                 }
@@ -276,7 +276,6 @@ void SoftwareGpuRenderer::applyDrawMode(u32 value)
 {
     m_blendMode = static_cast<u8>((value >> 5) & 0x3);
     m_ditheringEnabled = (value & (1u << 9)) != 0;
-    m_modulateTextured = (value & 0x1) == 0;
 }
 
 void SoftwareGpuRenderer::applyTextureWindow(u32 value)

@@ -148,7 +148,6 @@ class SoftwareGpuRenderer final : public GpuRenderer
     bool m_checkMaskBeforeDraw = false;
     u8 m_blendMode = 0;
     bool m_ditheringEnabled = false;
-    bool m_modulateTextured = true;
 };
 
 class SemiAccurateGpuRenderer final : public GpuRenderer

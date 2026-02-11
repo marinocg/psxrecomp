@@ -320,6 +320,16 @@ int main()
     writePacket(gpu, {0x64FFFFFFu, 0x00140014u, 0x00800001u, 0x00010001u});
     assert(readFramePixel(gpu, 20, 20) == clut8Color);
 
+    // Textured raw-vs-modulated sprite behavior should follow opcode raw bit.
+    gpu.reset();
+    writePacket(gpu, {0x02FFFFFFu, 0x00000000u, 0x00010001u});
+    writePacket(gpu, {0xE1000100u}); // 16-bit texture mode
+    writePacket(gpu, {0x64404040u, 0x00200020u, 0x00000000u, 0x00010001u});
+    const auto modulatedPixel = readFramePixel(gpu, 32, 32);
+    writePacket(gpu, {0x65404040u, 0x00210020u, 0x00000000u, 0x00010001u});
+    const auto rawPixel = readFramePixel(gpu, 33, 32);
+    assert(modulatedPixel != rawPixel);
+
     // 16-bit texture fetch reads direct texel value without CLUT.
     gpu.reset();
     writePacket(gpu, {0x02FFFFFFu, 0x00000000u, 0x00010001u});
