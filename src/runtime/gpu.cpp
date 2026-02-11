@@ -125,12 +125,17 @@ void Gpu::selectBackend(Backend backend)
         m_renderer = std::make_unique<SemiAccurateGpuRenderer>();
     }
     m_renderer->reset();
-    updateRendererState();
-
+    Registers replayRegisters{};
     for (const auto& command : m_commandTrace)
     {
+        applyRegisterEffects(command, replayRegisters);
+        m_renderer->setInterlaced(replayRegisters.interlaced);
+        m_renderer->setOddField(m_oddField);
+        m_renderer->setTexturePage(replayRegisters.texturePage);
+        m_renderer->setClut(replayRegisters.clut);
         m_renderer->submit(command);
     }
+    updateRendererState();
 }
 
 Gpu::Backend Gpu::backend() const
@@ -224,42 +229,54 @@ void Gpu::appendPacketWord(bool fromGp1, u32 value)
     }
 }
 
-void Gpu::processPacket(const PacketState& packet)
+void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
 {
-    auto command = decodePacket(packet);
-
     if (!command.fromGp1)
     {
         switch (command.kind)
         {
         case GpuCommandKind::DrawMode:
-            m_registers.texturePage = static_cast<u16>(command.words[0] & 0x7FF);
+            if (!command.words.empty())
+            {
+                registers.texturePage = static_cast<u16>(command.words[0] & 0x7FF);
+            }
             break;
         case GpuCommandKind::DrawSprite:
             if (command.words.size() > 1)
             {
-                m_registers.clut = static_cast<u16>((command.words[1] >> 16) & 0x7FFF);
+                registers.clut = static_cast<u16>((command.words[1] >> 16) & 0x7FFF);
             }
             break;
         default:
             break;
         }
+        return;
     }
-    else
+
+    if (command.kind == GpuCommandKind::DisplayEnable)
     {
-        if (command.kind == GpuCommandKind::DisplayEnable)
+        if (!command.words.empty())
         {
-            m_registers.displayEnabled = (command.words[0] & 0x1) == 0;
-        }
-        else if (command.kind == GpuCommandKind::DisplayMode)
-        {
-            m_registers.interlaced = (command.words[0] & 0x20) != 0;
-        }
-        else if (command.kind == GpuCommandKind::Reset)
-        {
-            m_registers = {};
+            registers.displayEnabled = (command.words[0] & 0x1) == 0;
         }
     }
+    else if (command.kind == GpuCommandKind::DisplayMode)
+    {
+        if (!command.words.empty())
+        {
+            registers.interlaced = (command.words[0] & 0x20) != 0;
+        }
+    }
+    else if (command.kind == GpuCommandKind::Reset)
+    {
+        registers = {};
+    }
+}
+
+void Gpu::processPacket(const PacketState& packet)
+{
+    auto command = decodePacket(packet);
+    applyRegisterEffects(command, m_registers);
 
     updateRendererState();
     m_renderer->submit(command);

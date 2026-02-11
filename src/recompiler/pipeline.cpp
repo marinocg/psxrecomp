@@ -237,7 +237,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
             std::ostringstream errorStream;
             errorStream << "Failed to load PSX executable.";
-            if (inputFsPath.extension() == ".ecm")
+            if (detail::toLower(inputFsPath.extension().string()) == ".ecm")
             {
                 errorStream << " Input appears to be ECM-compressed. Decode the image/executable "
                                "to BIN/ISO/EXE first, then retry.";

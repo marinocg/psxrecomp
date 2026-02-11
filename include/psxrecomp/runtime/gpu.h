@@ -77,6 +77,7 @@ class Gpu
     void appendPacketWord(bool fromGp1, u32 value);
     void processPacket(const PacketState& packet);
     GpuCommand decodePacket(const PacketState& packet) const;
+    static void applyRegisterEffects(const GpuCommand& command, Registers& registers);
 
     void writeVramWord(u32 value);
     void updateStatusBits();
@@ -96,7 +97,7 @@ class Gpu
     std::vector<GpuCommand> m_commandTrace;
 
     Backend m_backend = Backend::Software;
-    std::unique_ptr<GpuRenderer> m_renderer;
+    std::unique_ptr<GpuRenderer> m_renderer = std::make_unique<SoftwareGpuRenderer>();
     SoftwareGpuRenderer m_referenceRenderer;
 };
 

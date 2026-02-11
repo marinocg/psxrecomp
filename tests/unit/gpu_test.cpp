@@ -30,6 +30,24 @@ int main()
 
     gpu.selectBackend(Gpu::Backend::SemiAccurate);
     assert(gpu.backend() == Gpu::Backend::SemiAccurate);
+
+    gpu.reset();
+    gpu.writeCommand(0xE1000000u);
+    gpu.writeCommand(0x6400FF00u);
+    gpu.writeCommand(0x00000000u);
+    gpu.writeCommand(0x00010001u);
+    const auto firstColor = gpu.frameBuffer()[0];
+    gpu.writeCommand(0xE1000003u);
+    gpu.writeCommand(0x6400FF00u);
+    gpu.writeCommand(0x00010001u);
+    gpu.writeCommand(0x00010001u);
+    const auto secondColor = gpu.frameBuffer()[static_cast<size_t>(1) * 1024 + 1];
+    assert(firstColor != secondColor);
+
+    gpu.selectBackend(Gpu::Backend::Software);
+    assert(gpu.frameBuffer()[0] == firstColor);
+    assert(gpu.frameBuffer()[static_cast<size_t>(1) * 1024 + 1] == secondColor);
+
     gpu.reset();
 
     gpu.writeCommand(0x020000FFu);
