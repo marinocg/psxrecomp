@@ -6,7 +6,68 @@ SDK_ROOT="${SCRIPT_DIR}/psn00bsdk"
 INSTALL_PREFIX="${SDK_ROOT}/local"
 
 sudo apt-get update
-sudo apt-get install -y   build-essential   cmake   git   libelf-dev   ninja-build   pkg-config   python3   python3-pip   make
+sudo apt-get install -y \
+  build-essential \
+  cmake \
+  curl \
+  git \
+  libelf-dev \
+  ninja-build \
+  pkg-config \
+  python3 \
+  python3-pip \
+  unzip \
+  make
+
+mkdir -p "${SDK_ROOT}" "${INSTALL_PREFIX}"
+
+install_from_prebuilt() {
+  local release_json asset_url asset_name archive_path extract_dir
+
+  release_json="$(curl -fsSL https://api.github.com/repos/Lameguy64/PSn00bSDK/releases/latest)" || return 1
+
+  asset_url="$(python3 - <<'PY' "$release_json"
+import json, re, sys
+release = json.loads(sys.argv[1])
+for asset in release.get('assets', []):
+    name = asset.get('name', '')
+    if re.search(r'linux', name, re.I) and re.search(r'(x86_64|amd64)', name, re.I):
+        if re.search(r'\.(tar\.gz|tgz|zip)$', name, re.I):
+            print(asset.get('browser_download_url', ''))
+            break
+PY
+)"
+
+  if [[ -z "${asset_url}" ]]; then
+    return 1
+  fi
+
+  asset_name="$(basename "${asset_url}")"
+  archive_path="${SDK_ROOT}/${asset_name}"
+  extract_dir="${SDK_ROOT}/_prebuilt_extract"
+
+  echo "Downloading prebuilt PSn00bSDK asset: ${asset_name}"
+  curl -fL "${asset_url}" -o "${archive_path}"
+
+  rm -rf "${extract_dir}"
+  mkdir -p "${extract_dir}"
+
+  case "${asset_name}" in
+    *.zip) unzip -q "${archive_path}" -d "${extract_dir}" ;;
+    *.tar.gz|*.tgz) tar -xzf "${archive_path}" -C "${extract_dir}" ;;
+    *) return 1 ;;
+  esac
+
+  local candidate
+  candidate="$(find "${extract_dir}" -type d -name include | head -n1 | xargs -r dirname)"
+  if [[ -z "${candidate}" || ! -d "${candidate}/bin" || ! -d "${candidate}/lib" ]]; then
+    return 1
+  fi
+
+  rm -rf "${INSTALL_PREFIX}"/*
+  cp -a "${candidate}"/* "${INSTALL_PREFIX}/"
+  return 0
+}
 
 if ! command -v mipsel-none-elf-gcc >/dev/null 2>&1; then
   echo "mipsel-none-elf-gcc not found. Attempting to install Debian/Ubuntu cross compiler packages..."
@@ -20,14 +81,19 @@ if ! command -v mipsel-none-elf-gcc >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ ! -d "${SDK_ROOT}" ]]; then
-  git clone --recursive https://github.com/Lameguy64/PSn00bSDK.git "${SDK_ROOT}"
-fi
+if ! install_from_prebuilt; then
+  echo "No suitable prebuilt Linux release found; building PSn00bSDK from source."
 
-cd "${SDK_ROOT}"
-cmake -S . -B build -G Ninja
-cmake --build build -j"$(nproc)"
-cmake --install build --prefix "${INSTALL_PREFIX}"
+  if [[ ! -d "${SDK_ROOT}/.git" ]]; then
+    rm -rf "${SDK_ROOT}"
+    git clone --recursive https://github.com/Lameguy64/PSn00bSDK.git "${SDK_ROOT}"
+  fi
+
+  cd "${SDK_ROOT}"
+  cmake -S . -B build -G Ninja
+  cmake --build build -j"$(nproc)"
+  cmake --install build --prefix "${INSTALL_PREFIX}"
+fi
 
 if ! command -v mkpsxiso >/dev/null 2>&1; then
   sudo apt-get install -y mkpsxiso || true
