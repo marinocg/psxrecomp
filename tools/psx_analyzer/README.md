@@ -34,9 +34,14 @@ used by strict parsers/decompilers.
 
 ## CI workflow integration
 
-The repository workflow `.github/workflows/demo_iso_validation.yml` now runs this
-normalizer against executable candidates in `${RUNNER_TEMP}/demo_iso_validation_out`
-before the demo decompilation/validation step.
+The repository workflow `.github/workflows/demo_iso_validation.yml` now integrates
+normalization into the demo pipeline itself:
 
-If your generation step uses a different folder, update `DEMO_OUT_DIR` in that
-workflow.
+1. Prepare demo staging content.
+2. Normalize staged executable files in `staging_dir` **before ISO packing**.
+3. Pack ISOs from normalized staging content.
+4. Run recompiler validation.
+5. Run emulator smoke validation (expected to fail on black-screen regressions).
+
+This avoids a "spare tool" flow and ensures the fixed executable is what gets
+packed into the generated image that the emulator boots.

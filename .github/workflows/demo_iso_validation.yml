@@ -1,18 +1,65 @@
-name: Demo ISO Validation
+name: Demo ISO Build + Recompile + Emulator Validation
 
 on:
   workflow_dispatch:
-  pull_request:
-    paths:
-      - '.github/workflows/demo_iso_validation.yml'
-      - 'tools/psx_analyzer/**'
+    inputs:
+      prepare_demo_cmd:
+        description: Command that prepares demo staging folders/files before ISO packing
+        required: true
+        type: string
+      pack_iso_cmd:
+        description: Command that packs staged demos into ISO/CUE outputs
+        required: true
+        type: string
+      decompile_cmd:
+        description: Command that runs the recompiler/decompiler validation against generated ISOs
+        required: true
+        type: string
+      emulator_smoke_cmd:
+        description: Command that runs emulator smoke tests for generated ISOs (must fail on black screen)
+        required: true
+        type: string
+      staging_dir:
+        description: Directory containing staged demo content before ISO packing
+        required: true
+        default: ${{ runner.temp }}/demo_stage
+        type: string
+      generated_iso_dir:
+        description: Directory where generated ISO/CUE files are written
+        required: true
+        default: ${{ runner.temp }}/demo_isos
+        type: string
+  workflow_call:
+    inputs:
+      prepare_demo_cmd:
+        required: true
+        type: string
+      pack_iso_cmd:
+        required: true
+        type: string
+      decompile_cmd:
+        required: true
+        type: string
+      emulator_smoke_cmd:
+        required: true
+        type: string
+      staging_dir:
+        required: true
+        type: string
+      generated_iso_dir:
+        required: true
+        type: string
 
 jobs:
-  validate-demos:
+  build-and-validate-demos:
     runs-on: ubuntu-latest
     env:
-      DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
-      DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
+      STAGING_DIR: ${{ inputs.staging_dir }}
+      GENERATED_ISO_DIR: ${{ inputs.generated_iso_dir }}
+      PREPARE_DEMO_CMD: ${{ inputs.prepare_demo_cmd }}
+      PACK_ISO_CMD: ${{ inputs.pack_iso_cmd }}
+      DECOMPILE_CMD: ${{ inputs.decompile_cmd }}
+      EMULATOR_SMOKE_CMD: ${{ inputs.emulator_smoke_cmd }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,40 +69,67 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Build/extract demo ISO artifacts
+      - name: Prepare demo staging content
+        shell: bash
         run: |
-          echo "Hook your existing demo generation process here."
-          echo "Expected executable candidates under: ${DEMO_OUT_DIR}"
+          set -euo pipefail
+          mkdir -p "${STAGING_DIR}" "${GENERATED_ISO_DIR}"
+          eval "${PREPARE_DEMO_CMD}"
 
-      - name: Normalize extracted PS-X EXE candidates
+      - name: Normalize staged PS-X executable files (pre-ISO packing)
         shell: bash
         run: |
           set -euo pipefail
 
-          if [ ! -d "${DEMO_OUT_DIR}" ]; then
-            echo "No validation output directory found at ${DEMO_OUT_DIR}; skipping normalization."
-            exit 0
+          mapfile -t candidates < <(find "${STAGING_DIR}" -type f \( -iname '*.exe' -o -iname '*.psx' -o -iname '*.bin' \))
+
+          if [ "${#candidates[@]}" -eq 0 ]; then
+            echo "No executable candidates found in staging dir: ${STAGING_DIR}" >&2
+            exit 1
           fi
 
-          mapfile -t exe_candidates < <(find "${DEMO_OUT_DIR}" -type f \( -iname '*.exe' -o -iname '*.psx' -o -iname '*.bin' \))
-
-          if [ "${#exe_candidates[@]}" -eq 0 ]; then
-            echo "No executable candidates found under ${DEMO_OUT_DIR}; nothing to normalize."
-            exit 0
-          fi
-
-          for candidate in "${exe_candidates[@]}"; do
+          normalized_count=0
+          for candidate in "${candidates[@]}"; do
             normalized="${candidate}.normalized"
-
             if python3 tools/psx_analyzer/normalize_psx_exe.py "${candidate}" -o "${normalized}" --json; then
               mv "${normalized}" "${candidate}"
-              echo "Normalized: ${candidate}"
+              normalized_count=$((normalized_count + 1))
+              echo "Normalized staged executable: ${candidate}"
             else
-              echo "Skipping (not a normalizable PS-X EXE): ${candidate}"
               rm -f "${normalized}"
             fi
           done
 
-      - name: Run demo ISO validation/decompilation
+          if [ "${normalized_count}" -eq 0 ]; then
+            echo "Found executable candidates but none were valid PS-X EXE files after normalization attempts." >&2
+            exit 1
+          fi
+
+      - name: Pack normalized staging content into ISOs
+        shell: bash
         run: |
-          echo "Run your existing demo validation/decompilation command here, now with normalized EXEs in place."
+          set -euo pipefail
+          eval "${PACK_ISO_CMD}"
+
+      - name: Ensure ISO/CUE artifacts were produced
+        shell: bash
+        run: |
+          set -euo pipefail
+          iso_count=$(find "${GENERATED_ISO_DIR}" -type f \( -iname '*.iso' -o -iname '*.bin' -o -iname '*.cue' \) | wc -l)
+          if [ "${iso_count}" -eq 0 ]; then
+            echo "No ISO/BIN/CUE artifacts produced in ${GENERATED_ISO_DIR}" >&2
+            exit 1
+          fi
+          echo "Generated image artifacts: ${iso_count}"
+
+      - name: Recompiler validation (must fail if EXE magic is still invalid)
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "${DECOMPILE_CMD}"
+
+      - name: Emulator smoke validation (must fail on black screen)
+        shell: bash
+        run: |
+          set -euo pipefail
+          eval "${EMULATOR_SMOKE_CMD}"
