@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       demo_artifact_run_id:
-        description: "Optional workflow run ID from 'Build demo ISOs' to validate generated ISOs"
+        description: "Optional demo build identifier: workflow run ID, run number, or full run URL from 'Build demo ISOs'"
         required: false
         type: string
   workflow_run:
@@ -71,14 +71,13 @@ jobs:
           github.event_name == 'workflow_run' ||
           (github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != '')
         id: demo-artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_API_URL: ${{ github.api_url }}
+          GH_REPOSITORY: ${{ github.repository }}
         run: |
-          normalize_run_id() {
+          extract_numeric_token() {
             local value="$1"
-            if [[ -z "$value" ]]; then
-              return
-            fi
-
-            # Accept either a numeric run id or a full URL to a workflow run.
             value="${value%/}"
             if [[ "$value" =~ /actions/runs/([0-9]+)$ ]]; then
               echo "${BASH_REMATCH[1]}"
@@ -87,19 +86,65 @@ jobs:
             fi
           }
 
+          api_get() {
+            local url="$1"
+            local response
+            local status
+
+            response="$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -w $'\n%{http_code}' "$url")"
+            status="${response##*$'\n'}"
+            body="${response%$'\n'*}"
+            printf '%s' "$status"
+          }
+
+          resolve_run_number_to_id() {
+            local run_number="$1"
+            local status
+            local workflow_name
+
+            # Search recent demo workflow runs for matching run_number.
+            status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100")"
+            if [[ "$status" != "200" ]]; then
+              echo "Failed to query demo workflow runs (HTTP ${status})." >&2
+              return 1
+            fi
+
+            workflow_name="$(jq -r --argjson n "$run_number" '.workflow_runs[] | select(.run_number == $n) | .id' <<< "$body" | head -n1)"
+            if [[ -n "$workflow_name" && "$workflow_name" != "null" ]]; then
+              echo "$workflow_name"
+            fi
+          }
+
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            raw_run_id="${{ github.event.workflow_run.id }}"
-          else
-            raw_run_id="${{ inputs.demo_artifact_run_id }}"
+            raw_id="${{ github.event.workflow_run.id }}"
+            echo "run_id=$raw_id" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          run_id="$(normalize_run_id "$raw_run_id")"
-          if [[ -z "$run_id" ]]; then
-            echo "Unable to determine a valid demo artifact workflow run id from: $raw_run_id" >&2
+          raw_input="${{ inputs.demo_artifact_run_id }}"
+          token="$(extract_numeric_token "$raw_input")"
+          if [[ -z "$token" ]]; then
+            echo "Invalid demo_artifact_run_id: '$raw_input'. Provide a run id, run number, or run URL." >&2
             exit 1
           fi
 
-          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          # First interpret token as a run id.
+          status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/runs/${token}")"
+          if [[ "$status" == "200" ]]; then
+            echo "run_id=$token" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Fallback: interpret token as run number from Build demo ISOs workflow.
+          run_id="$(resolve_run_number_to_id "$token")"
+          if [[ -n "$run_id" ]]; then
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Unable to resolve demo_artifact_run_id '$raw_input'." >&2
+          echo "Use a valid Build demo ISOs run id, run number, or URL." >&2
+          exit 1
 
       - name: Download demo ISO artifacts
         if: steps.demo-artifact.outputs.run_id != ''
