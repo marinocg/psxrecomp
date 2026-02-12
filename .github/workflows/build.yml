@@ -118,6 +118,25 @@ jobs:
           make -C examples/demos/gputest
           make -C examples/demos/memorytest
 
+      - name: Validate PS-X EXE signatures
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          exe_paths = [
+            Path('examples/demos/helloworld/HELLOWLD.EXE'),
+            Path('examples/demos/gputest/GPUTEST.EXE'),
+            Path('examples/demos/memorytest/MEMTEST.EXE'),
+          ]
+
+          for exe in exe_paths:
+            if not exe.is_file():
+              raise SystemExit(f"missing demo executable: {exe}")
+            magic = exe.read_bytes()[:8]
+            if magic != b"PS-X EXE":
+              raise SystemExit(f"invalid PS-X EXE header in {exe}: {magic!r}")
+          PY
+
       - name: Upload demo images
         uses: actions/upload-artifact@v4
         with:

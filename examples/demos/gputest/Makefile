@@ -8,6 +8,7 @@ $(error PSN00BSDK is not set. Set PSN00BSDK to your PSn00bSDK install root.)
 endif
 
 TARGET_EXE := $(PROJECT_NAME).EXE
+TARGET_ELF := $(BUILD_DIR)/$(PROJECT_NAME).elf
 TARGET_ISO := $(PROJECT_NAME).iso
 TARGET_CUE := $(PROJECT_NAME).cue
 
@@ -15,6 +16,7 @@ SRC_DIR := src
 BUILD_DIR := build
 
 CC := mipsel-none-elf-gcc
+ELF2X := $(or $(shell command -v elf2x 2>/dev/null),$(firstword $(wildcard $(PSN00BSDK)/bin/elf2x)))
 
 # Support both PSn00bSDK layouts:
 # - CMake install prefix: include/ + lib/psx.ld
@@ -49,6 +51,10 @@ ifeq ($(wildcard $(SDK_LDSCRIPT)),)
   $(error PSn00bSDK linker script not found. Expected $(PSN00BSDK)/lib/psx.ld, $(PSN00BSDK)/lib/libpsn00b/ldscripts/exe.ld, or $(PSN00BSDK)/libpsn00b/ldscripts/exe.ld)
 endif
 
+ifeq ($(strip $(ELF2X)),)
+  $(error elf2x not found. Expected it in PATH or at $(PSN00BSDK)/bin/elf2x)
+endif
+
 CFLAGS := -O2 -G0 -ffreestanding -Wall -Wextra -Werror -I$(SDK_INCLUDE)
 
 LIB_VARIANT := exe_nogprel
@@ -75,13 +81,16 @@ $(BUILD_DIR):
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET_EXE): $(OBJECTS)
+$(TARGET_ELF): $(OBJECTS)
 	$(CC) -o $@ $(OBJECTS) $(LDFLAGS)
+
+$(TARGET_EXE): $(TARGET_ELF)
+	$(ELF2X) $< $@
 
 $(TARGET_ISO): $(TARGET_EXE) system.cnf mkpsxiso.xml
 	mkpsxiso -y -o $(TARGET_ISO) -c $(TARGET_CUE) mkpsxiso.xml
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET_EXE) $(TARGET_ISO) $(TARGET_CUE) $(PROJECT_NAME)
+	rm -rf $(BUILD_DIR) $(TARGET_EXE) $(TARGET_ELF) $(TARGET_ISO) $(TARGET_CUE) $(PROJECT_NAME)
 
 .PHONY: all clean
