@@ -55,7 +55,9 @@ ifeq ($(strip $(ELF2X)),)
   $(error elf2x not found. Expected it in PATH or at $(PSN00BSDK)/bin/elf2x)
 endif
 
-CFLAGS := -O2 -G0 -ffreestanding -Wall -Wextra -Werror -I$(SDK_INCLUDE)
+ARCH_FLAGS := -march=r3000 -mtune=r3000 -msoft-float
+
+CFLAGS := $(ARCH_FLAGS) -O2 -G0 -ffreestanding -fno-builtin -fno-stack-protector -Wall -Wextra -Werror -I$(SDK_INCLUDE)
 
 LIB_VARIANT := exe_nogprel
 ifeq ($(wildcard $(SDK_LIB)/libpsxapi_$(LIB_VARIANT).a),)
@@ -68,7 +70,7 @@ else
   SDK_LIBS := -lpsxgte_$(LIB_VARIANT) -lpsxgpu_$(LIB_VARIANT) -lpsxetc_$(LIB_VARIANT) -lpsxpress_$(LIB_VARIANT) -lpsxapi_$(LIB_VARIANT) -lc_$(LIB_VARIANT) -llzp_$(LIB_VARIANT)
 endif
 
-LDFLAGS := -T$(SDK_LDSCRIPT) -L$(SDK_LIB) -Wl,--start-group $(SDK_LIBS) -Wl,--end-group
+LDFLAGS := $(ARCH_FLAGS) -T$(SDK_LDSCRIPT) -L$(SDK_LIB) -Wl,--start-group $(SDK_LIBS) -Wl,--end-group
 
 SOURCES := $(wildcard $(SRC_DIR)/*.c)
 OBJECTS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))

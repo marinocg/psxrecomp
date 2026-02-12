@@ -36,12 +36,25 @@ jobs:
             Path('examples/demos/memorytest/MEMTEST.EXE'),
           ]
 
+          import struct
+
           for exe in exe_paths:
             if not exe.is_file():
               raise SystemExit(f"missing demo executable: {exe}")
-            magic = exe.read_bytes()[:8]
+
+            data = exe.read_bytes()
+            magic = data[:8]
             if magic != b"PS-X EXE":
               raise SystemExit(f"invalid PS-X EXE header in {exe}: {magic!r}")
+
+            entry_point = struct.unpack_from("<I", data, 0x10)[0]
+            load_address = struct.unpack_from("<I", data, 0x18)[0]
+            load_size = struct.unpack_from("<I", data, 0x1C)[0]
+            if entry_point == 0 or load_address == 0 or load_size == 0:
+              raise SystemExit(
+                f"invalid PS-X EXE fields in {exe}: "
+                f"entry=0x{entry_point:08X}, load=0x{load_address:08X}, size={load_size}"
+              )
           PY
 
       - name: Upload demo images
