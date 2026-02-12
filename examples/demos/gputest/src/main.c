@@ -10,8 +10,6 @@ typedef struct {
 
 int main(void) {
     GpuContext ctx;
-    RECT screenRect = {0, 0, 320, 240};
-    RECT boxRect = {0, 0, 48, 48};
     int frame = 0;
 
     ResetGraph(0);
@@ -34,26 +32,25 @@ int main(void) {
     PutDrawEnv(&ctx.draw[ctx.activeBuffer]);
 
     FntLoad(960, 0);
-    FntOpen(16, 16, 320, 208, 0, 512);
+    int fontId = FntOpen(16, 16, 320, 208, 0, 512);
 
     while (1) {
         int x = frame % 256;
         int y = (frame / 2) % 192;
-        u_char r = (u_char)(frame & 0xFF);
-        u_char g = (u_char)((frame * 2) & 0xFF);
-        u_char b = (u_char)((frame * 3) & 0xFF);
+        uint8_t r = (uint8_t)(frame & 0xFF);
+        uint8_t g = (uint8_t)((frame * 2) & 0xFF);
+        uint8_t b = (uint8_t)((frame * 3) & 0xFF);
 
-        boxRect.x = (short)x;
-        boxRect.y = (short)y;
+        ctx.draw[ctx.activeBuffer].r0 = r;
+        ctx.draw[ctx.activeBuffer].g0 = g;
+        ctx.draw[ctx.activeBuffer].b0 = b;
+        PutDrawEnv(&ctx.draw[ctx.activeBuffer]);
 
-        ClearImage(&screenRect, 0, 0, 40);
-        ClearImage(&boxRect, r, g, b);
-
-        FntPrint("PSn00bSDK GPU test\n");
-        FntPrint("Frame: %d\n", frame);
-        FntPrint("Square: (%d, %d)\n", x, y);
-        FntPrint("Color: (%d, %d, %d)\n", r, g, b);
-        FntFlush(-1);
+        FntPrint(fontId, "PSn00bSDK GPU test\n");
+        FntPrint(fontId, "Frame: %d\n", frame);
+        FntPrint(fontId, "Square: (%d, %d)\n", x, y);
+        FntPrint(fontId, "Color: (%d, %d, %d)\n", r, g, b);
+        FntFlush(fontId);
 
         DrawSync(0);
         VSync(0);

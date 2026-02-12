@@ -15,8 +15,54 @@ SRC_DIR := src
 BUILD_DIR := build
 
 CC := mipsel-none-elf-gcc
-CFLAGS := -O2 -G0 -Wall -Wextra -Werror -I$(PSN00BSDK)/include
-LDFLAGS := -T$(PSN00BSDK)/lib/psx.ld -L$(PSN00BSDK)/lib -lpsxgte -lpsxgpu -lpsxapi -lpsxetc -lpsxpress
+
+# Support both PSn00bSDK layouts:
+# - CMake install prefix: include/ + lib/psx.ld
+# - Repo/prebuilt layout: libpsn00b/include + libpsn00b/ldscripts/exe.ld
+SDK_INCLUDE := $(PSN00BSDK)/include
+SDK_LIB := $(PSN00BSDK)/lib
+SDK_LDSCRIPT := $(SDK_LIB)/psx.ld
+
+ifeq ($(wildcard $(SDK_INCLUDE)/psxapi.h),)
+  SDK_INCLUDE := $(PSN00BSDK)/include/libpsn00b
+endif
+
+ifeq ($(wildcard $(SDK_INCLUDE)/psxapi.h),)
+  SDK_INCLUDE := $(PSN00BSDK)/libpsn00b/include
+endif
+
+ifeq ($(wildcard $(SDK_LDSCRIPT)),)
+  SDK_LIB := $(PSN00BSDK)/lib/libpsn00b/release
+  SDK_LDSCRIPT := $(PSN00BSDK)/lib/libpsn00b/ldscripts/exe.ld
+endif
+
+ifeq ($(wildcard $(SDK_LDSCRIPT)),)
+  SDK_LIB := $(PSN00BSDK)/libpsn00b/release
+  SDK_LDSCRIPT := $(PSN00BSDK)/libpsn00b/ldscripts/exe.ld
+endif
+
+ifeq ($(wildcard $(SDK_INCLUDE)/psxapi.h),)
+  $(error PSn00bSDK headers not found. Expected $(PSN00BSDK)/include/psxapi.h, $(PSN00BSDK)/include/libpsn00b/psxapi.h, or $(PSN00BSDK)/libpsn00b/include/psxapi.h)
+endif
+
+ifeq ($(wildcard $(SDK_LDSCRIPT)),)
+  $(error PSn00bSDK linker script not found. Expected $(PSN00BSDK)/lib/psx.ld, $(PSN00BSDK)/lib/libpsn00b/ldscripts/exe.ld, or $(PSN00BSDK)/libpsn00b/ldscripts/exe.ld)
+endif
+
+CFLAGS := -O2 -G0 -ffreestanding -Wall -Wextra -Werror -I$(SDK_INCLUDE)
+
+LIB_VARIANT := exe_nogprel
+ifeq ($(wildcard $(SDK_LIB)/libpsxapi_$(LIB_VARIANT).a),)
+  LIB_VARIANT :=
+endif
+
+ifeq ($(LIB_VARIANT),)
+  SDK_LIBS := -lpsxgte -lpsxgpu -lpsxetc -lpsxpress -lpsxapi -lc -llzp
+else
+  SDK_LIBS := -lpsxgte_$(LIB_VARIANT) -lpsxgpu_$(LIB_VARIANT) -lpsxetc_$(LIB_VARIANT) -lpsxpress_$(LIB_VARIANT) -lpsxapi_$(LIB_VARIANT) -lc_$(LIB_VARIANT) -llzp_$(LIB_VARIANT)
+endif
+
+LDFLAGS := -T$(SDK_LDSCRIPT) -L$(SDK_LIB) -Wl,--start-group $(SDK_LIBS) -Wl,--end-group
 
 SOURCES := $(wildcard $(SRC_DIR)/*.c)
 OBJECTS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
@@ -33,9 +79,9 @@ $(TARGET_EXE): $(OBJECTS)
 	$(CC) -o $@ $(OBJECTS) $(LDFLAGS)
 
 $(TARGET_ISO): $(TARGET_EXE) system.cnf mkpsxiso.xml
-	mkpsxiso -y mkpsxiso.xml
+	mkpsxiso -y -o $(TARGET_ISO) -c $(TARGET_CUE) mkpsxiso.xml
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET_EXE) $(TARGET_ISO) $(TARGET_CUE)
+	rm -rf $(BUILD_DIR) $(TARGET_EXE) $(TARGET_ISO) $(TARGET_CUE) $(PROJECT_NAME)
 
 .PHONY: all clean

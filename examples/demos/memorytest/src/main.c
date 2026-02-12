@@ -18,7 +18,7 @@ int main(void) {
 
     ResetGraph(0);
     FntLoad(960, 0);
-    FntOpen(16, 16, 320, 208, 0, 512);
+    int fontId = FntOpen(16, 16, 320, 208, 0, 512);
 
     for (int i = 0; i < BUFFER_WORDS; ++i) {
         testBuffer[i] = patternForIndex(i);
@@ -31,17 +31,17 @@ int main(void) {
     }
 
     while (1) {
-        FntPrint("PSn00bSDK memory test\n");
-        FntPrint("Buffer words: %d\n", BUFFER_WORDS);
-        FntPrint("Errors: %d\n", errors);
+        FntPrint(fontId, "PSn00bSDK memory test\n");
+        FntPrint(fontId, "Buffer words: %d\n", BUFFER_WORDS);
+        FntPrint(fontId, "Errors: %d\n", errors);
 
         if (errors == 0) {
-            FntPrint("Result: PASS\n");
+            FntPrint(fontId, "Result: PASS\n");
         } else {
-            FntPrint("Result: FAIL\n");
+            FntPrint(fontId, "Result: FAIL\n");
         }
 
-        FntFlush(-1);
+        FntFlush(fontId);
         VSync(0);
     }
 

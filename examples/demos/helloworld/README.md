@@ -66,5 +66,6 @@ After setup, open a new shell and verify:
 ```bash
 mipsel-none-elf-gcc --version
 mkpsxiso -h
-test -f "$PSN00BSDK/include/psxapi.h"
+test -f "$PSN00BSDK/include/psxapi.h" || test -f "$PSN00BSDK/libpsn00b/include/psxapi.h"
+test -f "$PSN00BSDK/lib/psx.ld" || test -f "$PSN00BSDK/libpsn00b/ldscripts/exe.ld"
 ```
