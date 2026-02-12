@@ -36,16 +36,17 @@ function Install-FromPrebuilt {
     }
     Expand-Archive -Path $archivePath -DestinationPath $ExtractDir -Force
 
-    $includeDir = Get-ChildItem -Path $ExtractDir -Directory -Recurse |
-        Where-Object { $_.Name -eq 'include' } |
+    $header = Get-ChildItem -Path $ExtractDir -File -Recurse |
+        Where-Object { $_.Name -eq 'psxapi.h' } |
         Select-Object -First 1
 
-    if (-not $includeDir) {
+    if (-not $header) {
         return $false
     }
 
-    $candidateRoot = Split-Path -Parent $includeDir.FullName
-    if (-not (Test-Path (Join-Path $candidateRoot 'bin')) -or -not (Test-Path (Join-Path $candidateRoot 'lib'))) {
+    $includeDir = Split-Path -Parent $header.FullName
+    $candidateRoot = Split-Path -Parent $includeDir
+    if (-not (Test-Path (Join-Path $candidateRoot 'include\psxapi.h')) -or -not (Test-Path (Join-Path $candidateRoot 'lib\psx.ld'))) {
         return $false
     }
 
@@ -78,6 +79,10 @@ if (-not $usedPrebuilt) {
     cmake --build build --config Release
     cmake --install build --prefix $InstallPrefix
     Pop-Location
+}
+
+if (-not (Test-Path (Join-Path $InstallPrefix 'include\psxapi.h')) -or -not (Test-Path (Join-Path $InstallPrefix 'lib\psx.ld'))) {
+    throw "PSn00bSDK installation is incomplete. Expected $InstallPrefix\include\psxapi.h and $InstallPrefix\lib\psx.ld"
 }
 
 $PathToAdd = "$InstallPrefix\bin"

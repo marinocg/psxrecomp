@@ -59,13 +59,18 @@ PY
   esac
 
   local candidate
-  candidate="$(find "${extract_dir}" -type d -name include | head -n1 | xargs -r dirname)"
-  if [[ -z "${candidate}" || ! -d "${candidate}/bin" || ! -d "${candidate}/lib" ]]; then
+  candidate="$(find "${extract_dir}" -type f -name psxapi.h | head -n1 | xargs -r dirname | xargs -r dirname)"
+  if [[ -z "${candidate}" || ! -f "${candidate}/include/psxapi.h" || ! -f "${candidate}/lib/psx.ld" ]]; then
     return 1
   fi
 
   rm -rf "${INSTALL_PREFIX}"/*
   cp -a "${candidate}"/* "${INSTALL_PREFIX}/"
+
+  if [[ ! -f "${INSTALL_PREFIX}/include/psxapi.h" || ! -f "${INSTALL_PREFIX}/lib/psx.ld" ]]; then
+    return 1
+  fi
+
   return 0
 }
 
@@ -93,6 +98,12 @@ if ! install_from_prebuilt; then
   cmake -S . -B build -G Ninja
   cmake --build build -j"$(nproc)"
   cmake --install build --prefix "${INSTALL_PREFIX}"
+fi
+
+if [[ ! -f "${INSTALL_PREFIX}/include/psxapi.h" || ! -f "${INSTALL_PREFIX}/lib/psx.ld" ]]; then
+  echo "ERROR: PSn00bSDK installation is incomplete: expected ${INSTALL_PREFIX}/include/psxapi.h and ${INSTALL_PREFIX}/lib/psx.ld" >&2
+  echo "Try re-running the installer; if it still fails, delete ${SDK_ROOT} and run again to force a clean source build." >&2
+  exit 1
 fi
 
 if ! command -v mkpsxiso >/dev/null 2>&1; then
