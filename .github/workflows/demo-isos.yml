@@ -24,6 +24,7 @@ jobs:
           make -C examples/demos/helloworld
           make -C examples/demos/gputest
           make -C examples/demos/memorytest
+          make -C examples/demos/advancedhello
 
       - name: Validate PS-X EXE signatures
         run: |
@@ -34,6 +35,7 @@ jobs:
             Path('examples/demos/helloworld/HELLOWLD.EXE'),
             Path('examples/demos/gputest/GPUTEST.EXE'),
             Path('examples/demos/memorytest/MEMTEST.EXE'),
+            Path('examples/demos/advancedhello/ADVHELLO.EXE'),
           ]
 
           import struct
@@ -77,3 +79,6 @@ jobs:
             examples/demos/memorytest/MEMTEST.iso
             examples/demos/memorytest/MEMTEST.cue
             examples/demos/memorytest/MEMTEST.EXE
+            examples/demos/advancedhello/ADVHELLO.iso
+            examples/demos/advancedhello/ADVHELLO.cue
+            examples/demos/advancedhello/ADVHELLO.EXE
