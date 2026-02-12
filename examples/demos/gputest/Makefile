@@ -8,7 +8,7 @@ $(error PSN00BSDK is not set. Set PSN00BSDK to your PSn00bSDK install root.)
 endif
 
 TARGET_EXE := $(PROJECT_NAME).EXE
-TARGET_ELF := $(BUILD_DIR)/$(PROJECT_NAME).elf
+TARGET_ELF = $(BUILD_DIR)/$(PROJECT_NAME).elf
 TARGET_ISO := $(PROJECT_NAME).iso
 TARGET_CUE := $(PROJECT_NAME).cue
 
