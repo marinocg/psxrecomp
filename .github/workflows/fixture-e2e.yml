@@ -27,6 +27,10 @@ on:
       - "tools/validate_iso_fixtures.sh"
       - "CMakeLists.txt"
 
+permissions:
+  contents: read
+  actions: read
+
 concurrency:
   group: fixture-e2e-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -68,11 +72,34 @@ jobs:
           (github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != '')
         id: demo-artifact
         run: |
+          normalize_run_id() {
+            local value="$1"
+            if [[ -z "$value" ]]; then
+              return
+            fi
+
+            # Accept either a numeric run id or a full URL to a workflow run.
+            value="${value%/}"
+            if [[ "$value" =~ /actions/runs/([0-9]+)$ ]]; then
+              echo "${BASH_REMATCH[1]}"
+            elif [[ "$value" =~ ^[0-9]+$ ]]; then
+              echo "$value"
+            fi
+          }
+
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+            raw_run_id="${{ github.event.workflow_run.id }}"
           else
-            echo "run_id=${{ inputs.demo_artifact_run_id }}" >> "$GITHUB_OUTPUT"
+            raw_run_id="${{ inputs.demo_artifact_run_id }}"
           fi
+
+          run_id="$(normalize_run_id "$raw_run_id")"
+          if [[ -z "$run_id" ]]; then
+            echo "Unable to determine a valid demo artifact workflow run id from: $raw_run_id" >&2
+            exit 1
+          fi
+
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
 
       - name: Download demo ISO artifacts
         if: steps.demo-artifact.outputs.run_id != ''
