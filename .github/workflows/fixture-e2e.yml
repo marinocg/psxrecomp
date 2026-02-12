@@ -99,20 +99,35 @@ jobs:
 
           resolve_run_number_to_id() {
             local run_number="$1"
+            local page=1
             local status
-            local workflow_name
+            local run_id
 
-            # Search recent demo workflow runs for matching run_number.
-            status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100")"
-            if [[ "$status" != "200" ]]; then
-              echo "Failed to query demo workflow runs (HTTP ${status})." >&2
-              return 1
-            fi
+            while :; do
+              # Search paginated demo workflow runs for matching run_number.
+              status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100&page=${page}")"
+              if [[ "$status" != "200" ]]; then
+                echo "Failed to query demo workflow runs (HTTP ${status})." >&2
+                return 1
+              fi
 
-            workflow_name="$(jq -r --argjson n "$run_number" '.workflow_runs[] | select(.run_number == $n) | .id' <<< "$body" | head -n1)"
-            if [[ -n "$workflow_name" && "$workflow_name" != "null" ]]; then
-              echo "$workflow_name"
-            fi
+              run_id="$(jq -r --argjson n "$run_number" '.workflow_runs[] | select(.run_number == $n) | .id' <<< "$body" | head -n1)"
+              if [[ -n "$run_id" && "$run_id" != "null" ]]; then
+                echo "$run_id"
+                return 0
+              fi
+
+              if [[ "$(jq -r '.workflow_runs | length' <<< "$body")" == "0" ]]; then
+                # No more pages.
+                return 0
+              fi
+
+              page=$((page + 1))
+              if (( page > 50 )); then
+                echo "Reached pagination safety limit while resolving run number ${run_number}." >&2
+                return 1
+              fi
+            done
           }
 
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
@@ -161,8 +176,7 @@ jobs:
           DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
           DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
         run: |
-          shopt -s nullglob
-          isos=("$DEMO_ISO_DIR"/*.iso)
+          mapfile -d '' -t isos < <(find "$DEMO_ISO_DIR" -type f -name '*.iso' -print0)
           if [[ ${#isos[@]} -eq 0 ]]; then
             echo "No demo ISO artifacts were downloaded from run ${{ steps.demo-artifact.outputs.run_id }}." >&2
             exit 1
