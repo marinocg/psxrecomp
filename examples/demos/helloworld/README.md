@@ -18,19 +18,7 @@ examples/demos/helloworld/
     └── windows/install-psn00bsdk.ps1
 ```
 
-## Requirements
-
-- PSn00bSDK toolchain (`mipsel-none-elf-gcc` and PSX libraries)
-- `mkpsxiso`
-- `make`
-
-> The included platform scripts install PSn00bSDK to a local folder and print the environment variables you should export in your shell.
-
----
-
-## Build steps (all platforms)
-
-From repository root:
+## Build steps
 
 ```bash
 cd examples/demos/helloworld
@@ -38,7 +26,6 @@ make
 ```
 
 Generated outputs:
-
 - `HELLOWLD.EXE`
 - `HELLOWLD.iso`
 - `HELLOWLD.cue`
@@ -49,8 +36,6 @@ Clean outputs:
 make clean
 ```
 
----
-
 ## Linux setup
 
 ```bash
@@ -58,14 +43,7 @@ cd examples/demos/helloworld/toolchains/linux
 ./install-psn00bsdk.sh
 ```
 
-Then open a new shell (or source your profile) and verify:
-
-```bash
-mipsel-none-elf-gcc --version
-mkpsxiso --version
-```
-
----
+> WSL/Ubuntu note: if setup fails with `Could not find ... mipsel-none-elf-gcc`, install `gcc-mipsel-none-elf` and `binutils-mipsel-none-elf`, then re-run the setup script.
 
 ## macOS setup
 
@@ -74,15 +52,6 @@ cd examples/demos/helloworld/toolchains/macos
 ./install-psn00bsdk.sh
 ```
 
-Then open a new shell (or source your profile) and verify:
-
-```bash
-mipsel-none-elf-gcc --version
-mkpsxiso --version
-```
-
----
-
 ## Windows setup (PowerShell)
 
 ```powershell
@@ -90,16 +59,9 @@ cd examples\demos\helloworld\toolchains\windows
 powershell -ExecutionPolicy Bypass -File .\install-psn00bsdk.ps1
 ```
 
-After installation, open a new PowerShell window and verify:
+After setup, open a new shell and verify:
 
-```powershell
+```bash
 mipsel-none-elf-gcc --version
-mkpsxiso --version
+mkpsxiso -h
 ```
-
----
-
-## Testing the generated ISO
-
-You can boot `HELLOWLD.iso` in emulators such as DuckStation/PCSX-Redux or on hardware using your preferred ODE/modchip workflow.
-

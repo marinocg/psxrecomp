@@ -1,6 +1,6 @@
 # PSn00bSDK GPU test ISO demo (PSX)
 
-This demo builds a PlayStation 1 `gpu test` executable and packages it as a bootable CD image with **PSn00bSDK** + **mkpsxiso**.
+This demo builds a PlayStation 1 GPU test executable and packages it as a bootable CD image with **PSn00bSDK** + **mkpsxiso**.
 
 ## Project layout
 
@@ -26,7 +26,6 @@ make
 ```
 
 Generated outputs:
-
 - `GPUTEST.EXE`
 - `GPUTEST.iso`
 - `GPUTEST.cue`
@@ -46,6 +45,8 @@ cd examples/demos/gputest/toolchains/linux
 ./install-psn00bsdk.sh
 ```
 
+> WSL/Ubuntu note: if setup fails with `Could not find ... mipsel-none-elf-gcc`, install `gcc-mipsel-none-elf` and `binutils-mipsel-none-elf`, then re-run the setup script.
+
 ### macOS
 
 ```bash
@@ -64,5 +65,5 @@ After setup, open a new shell and verify:
 
 ```bash
 mipsel-none-elf-gcc --version
-mkpsxiso --version
+mkpsxiso -h
 ```
