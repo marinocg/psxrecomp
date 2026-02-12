@@ -7,6 +7,9 @@ on:
         description: "Optional workflow run ID from 'Build demo ISOs' to validate generated ISOs"
         required: false
         type: string
+  workflow_run:
+    workflows: ["Build demo ISOs"]
+    types: [completed]
   pull_request:
     paths:
       - "src/**"
@@ -31,6 +34,7 @@ concurrency:
 jobs:
   fixture-e2e:
     name: Fixture E2E validation
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -58,23 +62,42 @@ jobs:
           rm -rf "$VALIDATION_DIR"
           tools/validate_iso_fixtures.sh ./build/psxrecomp "$VALIDATION_DIR"
 
+      - name: Resolve demo artifact run id
+        if: |
+          github.event_name == 'workflow_run' ||
+          (github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != '')
+        id: demo-artifact
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_id=${{ inputs.demo_artifact_run_id }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Download demo ISO artifacts
-        if: github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != ''
+        if: steps.demo-artifact.outputs.run_id != ''
         uses: dawidd6/action-download-artifact@v6
         with:
-          run_id: ${{ inputs.demo_artifact_run_id }}
+          run_id: ${{ steps.demo-artifact.outputs.run_id }}
           name: psxrecomp-demos-ubuntu-latest
           path: ${{ runner.temp }}/demo_isos
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate generated demo ISOs
-        if: github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != ''
+        if: steps.demo-artifact.outputs.run_id != ''
         env:
           DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
           DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
         run: |
+          shopt -s nullglob
+          isos=("$DEMO_ISO_DIR"/*.iso)
+          if [[ ${#isos[@]} -eq 0 ]]; then
+            echo "No demo ISO artifacts were downloaded from run ${{ steps.demo-artifact.outputs.run_id }}." >&2
+            exit 1
+          fi
+
           mkdir -p "$DEMO_OUT_DIR"
-          for iso in "$DEMO_ISO_DIR"/*.iso; do
+          for iso in "${isos[@]}"; do
             echo "Validating ${iso}"
             ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$iso" > "$DEMO_OUT_DIR/$(basename "$iso").json"
           done
