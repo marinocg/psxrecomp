@@ -57,7 +57,7 @@ endif
 
 ARCH_FLAGS := -march=r3000 -mtune=r3000 -msoft-float
 
-CFLAGS := $(ARCH_FLAGS) -O2 -G0 -ffreestanding -fno-builtin -fno-stack-protector -Wall -Wextra -Werror -I$(SDK_INCLUDE)
+CFLAGS := $(ARCH_FLAGS) -O2 -G0 -ffreestanding -fno-builtin -fno-stack-protector -fno-strict-aliasing -Wall -Wextra -Werror -I$(SDK_INCLUDE)
 
 LIB_VARIANT := exe_nogprel
 ifeq ($(wildcard $(SDK_LIB)/libpsxapi_$(LIB_VARIANT).a),)
