@@ -12,11 +12,9 @@ examples/demos/memorytest/
 ├── system.cnf
 ├── src/
 │   └── main.c
-└── toolchains/
-    ├── linux/install-psn00bsdk.sh
-    ├── macos/install-psn00bsdk.sh
-    └── windows/install-psn00bsdk.ps1
 ```
+
+Toolchain setup scripts are shared for all demos in `examples/demos/toolchains/`.
 
 ## Build
 
@@ -41,7 +39,7 @@ make clean
 ### Linux
 
 ```bash
-cd examples/demos/memorytest/toolchains/linux
+cd examples/demos/toolchains/linux
 ./install-psn00bsdk.sh
 ```
 
@@ -50,14 +48,14 @@ cd examples/demos/memorytest/toolchains/linux
 ### macOS
 
 ```bash
-cd examples/demos/memorytest/toolchains/macos
+cd examples/demos/toolchains/macos
 ./install-psn00bsdk.sh
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-cd examples\demos\memorytest\toolchains\windows
+cd examples\demos\toolchains\windows
 powershell -ExecutionPolicy Bypass -File .\install-psn00bsdk.ps1
 ```
 
