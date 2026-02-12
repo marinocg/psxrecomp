@@ -31,6 +31,8 @@ int main(void) {
     PutDispEnv(&ctx.disp[ctx.activeBuffer]);
     PutDrawEnv(&ctx.draw[ctx.activeBuffer]);
 
+    SetDispMask(1);
+
     FntLoad(960, 0);
     int fontId = FntOpen(16, 16, 320, 208, 0, 512);
 
