@@ -99,12 +99,20 @@ jobs:
 
           resolve_run_number_to_id() {
             local run_number="$1"
+            local run_id=""
+
+            if command -v gh >/dev/null 2>&1; then
+              run_id="$(gh api --paginate "repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100" --jq ".workflow_runs[] | select(.run_number == ${run_number}) | .id" | head -n1 || true)"
+              if [[ -n "$run_id" ]]; then
+                echo "$run_id"
+                return 0
+              fi
+            fi
+
+            # Fallback without gh pagination support.
             local page=1
             local status
-            local run_id
-
             while :; do
-              # Search paginated demo workflow runs for matching run_number.
               status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100&page=${page}")"
               if [[ "$status" != "200" ]]; then
                 echo "Failed to query demo workflow runs (HTTP ${status})." >&2
@@ -118,12 +126,11 @@ jobs:
               fi
 
               if [[ "$(jq -r '.workflow_runs | length' <<< "$body")" == "0" ]]; then
-                # No more pages.
                 return 0
               fi
 
               page=$((page + 1))
-              if (( page > 50 )); then
+              if (( page > 500 )); then
                 echo "Reached pagination safety limit while resolving run number ${run_number}." >&2
                 return 1
               fi
@@ -185,7 +192,23 @@ jobs:
           mkdir -p "$DEMO_OUT_DIR"
           for iso in "${isos[@]}"; do
             echo "Validating ${iso}"
-            ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$iso" > "$DEMO_OUT_DIR/$(basename "$iso").json"
+            json_out="$DEMO_OUT_DIR/$(basename "$iso").json"
+            err_out="$DEMO_OUT_DIR/$(basename "$iso").stderr.log"
+
+            if ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$iso" > "$json_out" 2> "$err_out"; then
+              continue
+            fi
+
+            cue="${iso%.iso}.cue"
+            if [[ -f "$cue" ]]; then
+              echo "ISO validation failed for ${iso}; retrying with cue ${cue}" >&2
+              if ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$cue" > "$json_out" 2> "$err_out"; then
+                continue
+              fi
+            fi
+
+            echo "Validation failed for ${iso}. See ${err_out} for details." >&2
+            exit 1
           done
 
       - name: Upload fixture validation artifacts
