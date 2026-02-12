@@ -28,6 +28,7 @@ cmake-build-*/
 
 # Executables
 *.exe
+*.EXE
 *.out
 *.app
 psxrecomp
@@ -81,6 +82,7 @@ core
 *.cue
 *.img
 test_roms/commercial/
+examples/demos/toolchains/linux/psn00bsdk/
 
 # Generated code
 generated/

@@ -1,0 +1,5 @@
+build/
+*.EXE
+*.iso
+*.cue
+GPUTEST

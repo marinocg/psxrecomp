@@ -80,3 +80,24 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  demos:
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSn00bSDK toolchain (prebuilt)
+        run: ./examples/demos/toolchains/linux/install-psn00bsdk.sh
+
+      - name: Configure demo environment
+        run: |
+          echo "PSN00BSDK=${GITHUB_WORKSPACE}/examples/demos/toolchains/linux/psn00bsdk/local" >> "${GITHUB_ENV}"
+          echo "${GITHUB_WORKSPACE}/examples/demos/toolchains/linux/psn00bsdk/local/bin" >> "${GITHUB_PATH}"
+
+      - name: Build demos
+        run: |
+          make -C examples/demos/helloworld
+          make -C examples/demos/gputest
+          make -C examples/demos/memorytest
