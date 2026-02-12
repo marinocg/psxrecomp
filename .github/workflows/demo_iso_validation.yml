@@ -1,0 +1,61 @@
+name: Demo ISO Validation
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/demo_iso_validation.yml'
+      - 'tools/psx_analyzer/**'
+
+jobs:
+  validate-demos:
+    runs-on: ubuntu-latest
+    env:
+      DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
+      DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build/extract demo ISO artifacts
+        run: |
+          echo "Hook your existing demo generation process here."
+          echo "Expected executable candidates under: ${DEMO_OUT_DIR}"
+
+      - name: Normalize extracted PS-X EXE candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -d "${DEMO_OUT_DIR}" ]; then
+            echo "No validation output directory found at ${DEMO_OUT_DIR}; skipping normalization."
+            exit 0
+          fi
+
+          mapfile -t exe_candidates < <(find "${DEMO_OUT_DIR}" -type f \( -iname '*.exe' -o -iname '*.psx' -o -iname '*.bin' \))
+
+          if [ "${#exe_candidates[@]}" -eq 0 ]; then
+            echo "No executable candidates found under ${DEMO_OUT_DIR}; nothing to normalize."
+            exit 0
+          fi
+
+          for candidate in "${exe_candidates[@]}"; do
+            normalized="${candidate}.normalized"
+
+            if python3 tools/psx_analyzer/normalize_psx_exe.py "${candidate}" -o "${normalized}" --json; then
+              mv "${normalized}" "${candidate}"
+              echo "Normalized: ${candidate}"
+            else
+              echo "Skipping (not a normalizable PS-X EXE): ${candidate}"
+              rm -f "${normalized}"
+            fi
+          done
+
+      - name: Run demo ISO validation/decompilation
+        run: |
+          echo "Run your existing demo validation/decompilation command here, now with normalized EXEs in place."

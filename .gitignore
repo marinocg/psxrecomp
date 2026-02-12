@@ -96,3 +96,7 @@ docs/latex/
 
 # Misc
 .cache/
+
+# Python
+__pycache__/
+*.pyc

@@ -30,3 +30,13 @@ The script tries the following strategies in order:
 
 If normalization succeeds, the output begins at the `PS-X EXE` header and can be
 used by strict parsers/decompilers.
+
+
+## CI workflow integration
+
+The repository workflow `.github/workflows/demo_iso_validation.yml` now runs this
+normalizer against executable candidates in `${RUNNER_TEMP}/demo_iso_validation_out`
+before the demo decompilation/validation step.
+
+If your generation step uses a different folder, update `DEMO_OUT_DIR` in that
+workflow.
