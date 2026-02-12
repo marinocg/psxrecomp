@@ -4,6 +4,15 @@ This directory contains utility tools for the psxrecomp project.
 
 ## Current Tools
 
+
+### Implemented Tools
+
+1. **psx_analyzer/normalize_psx_exe.py** - Repair malformed extracted PS-X EXE candidates
+   - Detects shifted `PS-X EXE` magic
+   - Strips Mode 2 raw sector wrappers (2352-byte sectors)
+   - Produces normalized executables for strict decompilers
+
+
 ### Planned Tools
 
 1. **iso_dump** - Extract and analyze PSX ISO files

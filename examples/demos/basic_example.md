@@ -247,3 +247,17 @@ This example shows the basic structure. Real games would have:
 - Dynamic memory allocation
 - Complex control flow
 - Interrupt handlers
+
+
+## Troubleshooting Demo Black Screen / Missing EXE Magic
+
+If the demo boots to a black screen and decompilation reports `Missing PS-X EXE signature`,
+the extracted `*.EXE` often still contains raw CD sector wrappers.
+
+Normalize the executable first:
+
+```bash
+python3 tools/psx_analyzer/normalize_psx_exe.py HELLOWLD.EXE -o HELLOWLD.fixed.EXE
+```
+
+Then use `HELLOWLD.fixed.EXE` as the decompiler input.
