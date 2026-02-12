@@ -185,10 +185,11 @@ jobs:
           path: ${{ runner.temp }}/demo_isos
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate downloaded demo artifact set
+      - name: Validate downloaded demo artifacts with psxrecomp
         if: steps.demo-artifact.outputs.run_id != ''
         env:
           DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
+          DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
         run: |
           mapfile -d '' -t demo_isos < <(find "$DEMO_ISO_DIR" -type f -name '*.iso' -print0)
           if [[ ${#demo_isos[@]} -eq 0 ]]; then
@@ -196,24 +197,46 @@ jobs:
             exit 1
           fi
 
+          mkdir -p "$DEMO_OUT_DIR"
+          failures=0
+
           for iso in "${demo_isos[@]}"; do
             base="${iso%.iso}"
             cue="${base}.cue"
             exe="${base}.EXE"
+            name="$(basename "$base")"
+            demo_dir="$DEMO_OUT_DIR/$name"
+            json_out="$demo_dir/result.json"
+            err_out="$demo_dir/stderr.log"
 
-            echo "Checking artifact trio for $(basename "$base")"
-            [[ -s "$iso" ]] || { echo "Missing or empty ISO: $iso" >&2; exit 1; }
-            [[ -s "$cue" ]] || { echo "Missing or empty CUE: $cue" >&2; exit 1; }
-            [[ -s "$exe" ]] || { echo "Missing or empty EXE: $exe" >&2; exit 1; }
+            echo "Validating downloaded demo set: ${name}"
+            [[ -s "$iso" ]] || { echo "Missing or empty ISO: $iso" >&2; failures=$((failures + 1)); continue; }
+            [[ -s "$cue" ]] || { echo "Missing or empty CUE: $cue" >&2; failures=$((failures + 1)); continue; }
+            [[ -s "$exe" ]] || { echo "Missing or empty EXE: $exe" >&2; failures=$((failures + 1)); continue; }
 
-            # Ensure cue references the correct image filename.
-            if ! grep -Fqi "\"$(basename "$iso")\"" "$cue"; then
-              echo "CUE does not reference $(basename "$iso"): $cue" >&2
-              exit 1
+            mkdir -p "$demo_dir"
+            input="$iso"
+            if grep -Fqi "\"$(basename "$iso")\"" "$cue"; then
+              input="$cue"
+            fi
+
+            if ! ./build/psxrecomp --json -o "$demo_dir" "$input" > "$json_out" 2> "$err_out"; then
+              echo "psxrecomp exited non-zero for ${name} (${input}). See ${err_out}." >&2
+              failures=$((failures + 1))
+              continue
+            fi
+
+            if ! jq -e '.success == true' "$json_out" > /dev/null; then
+              echo "psxrecomp reported unsuccessful result for ${name}. See ${json_out}." >&2
+              failures=$((failures + 1))
+              continue
             fi
           done
 
-          echo "Validated ${#demo_isos[@]} demo artifact set(s)."
+          if (( failures > 0 )); then
+            echo "Demo artifact validation failed for ${failures} set(s)." >&2
+            exit 1
+          fi
 
       - name: Upload fixture validation artifacts
         if: always()
@@ -226,4 +249,6 @@ jobs:
             ${{ runner.temp }}/psxrecomp_iso_validation/good_rich.json
             ${{ runner.temp }}/psxrecomp_iso_validation/fixtures/fixtures_manifest.json
             ${{ runner.temp }}/psxrecomp_iso_validation/out/**/CMakeLists.txt
+            ${{ runner.temp }}/demo_iso_validation_out/**/result.json
+            ${{ runner.temp }}/demo_iso_validation_out/**/stderr.log
           if-no-files-found: warn
