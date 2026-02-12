@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       demo_artifact_run_id:
-        description: "Optional workflow run ID from 'Build demo ISOs' to validate generated ISOs"
+        description: "Optional demo build identifier: workflow run ID, run number, or full run URL from 'Build demo ISOs'"
         required: false
         type: string
   workflow_run:
@@ -26,6 +26,10 @@ on:
       - "tools/iso_fixture_generator*"
       - "tools/validate_iso_fixtures.sh"
       - "CMakeLists.txt"
+
+permissions:
+  contents: read
+  actions: read
 
 concurrency:
   group: fixture-e2e-${{ github.workflow }}-${{ github.ref }}
@@ -67,12 +71,110 @@ jobs:
           github.event_name == 'workflow_run' ||
           (github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != '')
         id: demo-artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_API_URL: ${{ github.api_url }}
+          GH_REPOSITORY: ${{ github.repository }}
         run: |
+          extract_numeric_token() {
+            local value="$1"
+            value="${value%/}"
+            if [[ "$value" =~ /actions/runs/([0-9]+)$ ]]; then
+              echo "${BASH_REMATCH[1]}"
+            elif [[ "$value" =~ ^[0-9]+$ ]]; then
+              echo "$value"
+            fi
+          }
+
+          api_get() {
+            local url="$1"
+            local response
+            local status
+
+            response="$(curl -sS -H "Authorization: Bearer ${GH_TOKEN}" -H "Accept: application/vnd.github+json" -w $'\n%{http_code}' "$url")"
+            status="${response##*$'\n'}"
+            body="${response%$'\n'*}"
+            printf '%s' "$status"
+          }
+
+          resolve_run_number_to_id() {
+            local run_number="$1"
+            local run_id=""
+
+            if command -v gh >/dev/null 2>&1; then
+              run_id="$(gh api --paginate "repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100" --jq ".workflow_runs[] | select(.run_number == ${run_number}) | .id" | head -n1 || true)"
+              if [[ -n "$run_id" ]]; then
+                echo "$run_id"
+                return 0
+              fi
+            fi
+
+            # Fallback without gh pagination support.
+            local page=1
+            local status
+            local prev_first_id=""
+            while :; do
+              status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100&page=${page}")"
+              if [[ "$status" != "200" ]]; then
+                echo "Failed to query demo workflow runs (HTTP ${status})." >&2
+                return 1
+              fi
+
+              run_id="$(jq -r --argjson n "$run_number" '.workflow_runs[] | select(.run_number == $n) | .id' <<< "$body" | head -n1)"
+              if [[ -n "$run_id" && "$run_id" != "null" ]]; then
+                echo "$run_id"
+                return 0
+              fi
+
+              if [[ "$(jq -r '.workflow_runs | length' <<< "$body")" == "0" ]]; then
+                return 0
+              fi
+
+              first_id="$(jq -r '.workflow_runs[0].id // empty' <<< "$body")"
+              if [[ -n "$first_id" && "$first_id" == "$prev_first_id" ]]; then
+                # Stop if API keeps returning the same page payload.
+                return 0
+              fi
+              prev_first_id="$first_id"
+
+              page=$((page + 1))
+              if (( page > 500 )); then
+                echo "Reached pagination safety limit while resolving run number ${run_number}." >&2
+                return 1
+              fi
+            done
+          }
+
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
-            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "run_id=${{ inputs.demo_artifact_run_id }}" >> "$GITHUB_OUTPUT"
+            raw_id="${{ github.event.workflow_run.id }}"
+            echo "run_id=$raw_id" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          raw_input="${{ inputs.demo_artifact_run_id }}"
+          token="$(extract_numeric_token "$raw_input")"
+          if [[ -z "$token" ]]; then
+            echo "Invalid demo_artifact_run_id: '$raw_input'. Provide a run id, run number, or run URL." >&2
+            exit 1
+          fi
+
+          # First interpret token as a run id.
+          status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/runs/${token}")"
+          if [[ "$status" == "200" ]]; then
+            echo "run_id=$token" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Fallback: interpret token as run number from Build demo ISOs workflow.
+          run_id="$(resolve_run_number_to_id "$token")"
+          if [[ -n "$run_id" ]]; then
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Unable to resolve demo_artifact_run_id '$raw_input'." >&2
+          echo "Use a valid Build demo ISOs run id, run number, or URL." >&2
+          exit 1
 
       - name: Download demo ISO artifacts
         if: steps.demo-artifact.outputs.run_id != ''
@@ -83,24 +185,58 @@ jobs:
           path: ${{ runner.temp }}/demo_isos
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate generated demo ISOs
+      - name: Validate downloaded demo artifacts with psxrecomp
         if: steps.demo-artifact.outputs.run_id != ''
         env:
           DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
           DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
         run: |
-          shopt -s nullglob
-          isos=("$DEMO_ISO_DIR"/*.iso)
-          if [[ ${#isos[@]} -eq 0 ]]; then
+          mapfile -d '' -t demo_isos < <(find "$DEMO_ISO_DIR" -type f -name '*.iso' -print0)
+          if [[ ${#demo_isos[@]} -eq 0 ]]; then
             echo "No demo ISO artifacts were downloaded from run ${{ steps.demo-artifact.outputs.run_id }}." >&2
             exit 1
           fi
 
           mkdir -p "$DEMO_OUT_DIR"
-          for iso in "${isos[@]}"; do
-            echo "Validating ${iso}"
-            ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$iso" > "$DEMO_OUT_DIR/$(basename "$iso").json"
+          failures=0
+
+          for iso in "${demo_isos[@]}"; do
+            base="${iso%.iso}"
+            cue="${base}.cue"
+            exe="${base}.EXE"
+            name="$(basename "$base")"
+            demo_dir="$DEMO_OUT_DIR/$name"
+            json_out="$demo_dir/result.json"
+            err_out="$demo_dir/stderr.log"
+
+            echo "Validating downloaded demo set: ${name}"
+            [[ -s "$iso" ]] || { echo "Missing or empty ISO: $iso" >&2; failures=$((failures + 1)); continue; }
+            [[ -s "$cue" ]] || { echo "Missing or empty CUE: $cue" >&2; failures=$((failures + 1)); continue; }
+            [[ -s "$exe" ]] || { echo "Missing or empty EXE: $exe" >&2; failures=$((failures + 1)); continue; }
+
+            mkdir -p "$demo_dir"
+            input="$iso"
+            if grep -Fqi "\"$(basename "$iso")\"" "$cue"; then
+              input="$cue"
+            fi
+
+            if ! ./build/psxrecomp --json -o "$demo_dir" "$input" > "$json_out" 2> "$err_out"; then
+              echo "psxrecomp exited non-zero for ${name} (${input}). See ${err_out}." >&2
+              failures=$((failures + 1))
+              continue
+            fi
+
+            if ! jq -e '.success == true' "$json_out" > /dev/null; then
+              echo "psxrecomp reported unsuccessful result for ${name}. See ${json_out}." >&2
+              failures=$((failures + 1))
+              continue
+            fi
           done
+
+          if (( failures > 0 )); then
+            echo "Demo artifact validation failed for ${failures} set(s)." >&2
+            exit 1
+          fi
 
       - name: Upload fixture validation artifacts
         if: always()
@@ -113,5 +249,6 @@ jobs:
             ${{ runner.temp }}/psxrecomp_iso_validation/good_rich.json
             ${{ runner.temp }}/psxrecomp_iso_validation/fixtures/fixtures_manifest.json
             ${{ runner.temp }}/psxrecomp_iso_validation/out/**/CMakeLists.txt
-            ${{ runner.temp }}/demo_iso_validation_out/*.json
+            ${{ runner.temp }}/demo_iso_validation_out/**/result.json
+            ${{ runner.temp }}/demo_iso_validation_out/**/stderr.log
           if-no-files-found: warn
