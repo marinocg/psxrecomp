@@ -55,6 +55,12 @@ jobs:
                 f"invalid PS-X EXE fields in {exe}: "
                 f"entry=0x{entry_point:08X}, load=0x{load_address:08X}, size={load_size}"
               )
+
+            if entry_point < 0x80000000 or load_address < 0x80000000:
+              raise SystemExit(
+                f"unexpected PS-X EXE address range in {exe}: "
+                f"entry=0x{entry_point:08X}, load=0x{load_address:08X}"
+              )
           PY
 
       - name: Upload demo images
