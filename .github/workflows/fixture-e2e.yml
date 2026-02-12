@@ -112,6 +112,7 @@ jobs:
             # Fallback without gh pagination support.
             local page=1
             local status
+            local prev_first_id=""
             while :; do
               status="$(api_get "${GH_API_URL}/repos/${GH_REPOSITORY}/actions/workflows/demo-isos.yml/runs?per_page=100&page=${page}")"
               if [[ "$status" != "200" ]]; then
@@ -128,6 +129,13 @@ jobs:
               if [[ "$(jq -r '.workflow_runs | length' <<< "$body")" == "0" ]]; then
                 return 0
               fi
+
+              first_id="$(jq -r '.workflow_runs[0].id // empty' <<< "$body")"
+              if [[ -n "$first_id" && "$first_id" == "$prev_first_id" ]]; then
+                # Stop if API keeps returning the same page payload.
+                return 0
+              fi
+              prev_first_id="$first_id"
 
               page=$((page + 1))
               if (( page > 500 )); then
@@ -177,38 +185,24 @@ jobs:
           path: ${{ runner.temp }}/demo_isos
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate generated demo ISOs
+      - name: Validate generated demo artifacts
         if: steps.demo-artifact.outputs.run_id != ''
         env:
           DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
           DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
         run: |
-          mapfile -d '' -t isos < <(find "$DEMO_ISO_DIR" -type f -name '*.iso' -print0)
-          if [[ ${#isos[@]} -eq 0 ]]; then
-            echo "No demo ISO artifacts were downloaded from run ${{ steps.demo-artifact.outputs.run_id }}." >&2
+          mapfile -d '' -t demo_exes < <(find "$DEMO_ISO_DIR" -type f -name '*.EXE' -print0)
+          if [[ ${#demo_exes[@]} -eq 0 ]]; then
+            echo "No demo EXE artifacts were downloaded from run ${{ steps.demo-artifact.outputs.run_id }}." >&2
             exit 1
           fi
 
           mkdir -p "$DEMO_OUT_DIR"
-          for iso in "${isos[@]}"; do
-            echo "Validating ${iso}"
-            json_out="$DEMO_OUT_DIR/$(basename "$iso").json"
-            err_out="$DEMO_OUT_DIR/$(basename "$iso").stderr.log"
-
-            if ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$iso" > "$json_out" 2> "$err_out"; then
-              continue
-            fi
-
-            cue="${iso%.iso}.cue"
-            if [[ -f "$cue" ]]; then
-              echo "ISO validation failed for ${iso}; retrying with cue ${cue}" >&2
-              if ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$cue" > "$json_out" 2> "$err_out"; then
-                continue
-              fi
-            fi
-
-            echo "Validation failed for ${iso}. See ${err_out} for details." >&2
-            exit 1
+          for demo_exe in "${demo_exes[@]}"; do
+            demo_name="$(basename "$demo_exe" .EXE)"
+            demo_work_dir="$DEMO_OUT_DIR/$demo_name"
+            echo "Validating demo EXE ${demo_exe} via generated fixture ISO"
+            tools/validate_iso_fixtures.sh ./build/psxrecomp "$demo_work_dir" "$demo_exe"
           done
 
       - name: Upload fixture validation artifacts
