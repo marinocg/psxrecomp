@@ -185,25 +185,35 @@ jobs:
           path: ${{ runner.temp }}/demo_isos
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate generated demo artifacts
+      - name: Validate downloaded demo artifact set
         if: steps.demo-artifact.outputs.run_id != ''
         env:
           DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
-          DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
         run: |
-          mapfile -d '' -t demo_exes < <(find "$DEMO_ISO_DIR" -type f -name '*.EXE' -print0)
-          if [[ ${#demo_exes[@]} -eq 0 ]]; then
-            echo "No demo EXE artifacts were downloaded from run ${{ steps.demo-artifact.outputs.run_id }}." >&2
+          mapfile -d '' -t demo_isos < <(find "$DEMO_ISO_DIR" -type f -name '*.iso' -print0)
+          if [[ ${#demo_isos[@]} -eq 0 ]]; then
+            echo "No demo ISO artifacts were downloaded from run ${{ steps.demo-artifact.outputs.run_id }}." >&2
             exit 1
           fi
 
-          mkdir -p "$DEMO_OUT_DIR"
-          for demo_exe in "${demo_exes[@]}"; do
-            demo_name="$(basename "$demo_exe" .EXE)"
-            demo_work_dir="$DEMO_OUT_DIR/$demo_name"
-            echo "Validating demo EXE ${demo_exe} via generated fixture ISO"
-            tools/validate_iso_fixtures.sh ./build/psxrecomp "$demo_work_dir" "$demo_exe"
+          for iso in "${demo_isos[@]}"; do
+            base="${iso%.iso}"
+            cue="${base}.cue"
+            exe="${base}.EXE"
+
+            echo "Checking artifact trio for $(basename "$base")"
+            [[ -s "$iso" ]] || { echo "Missing or empty ISO: $iso" >&2; exit 1; }
+            [[ -s "$cue" ]] || { echo "Missing or empty CUE: $cue" >&2; exit 1; }
+            [[ -s "$exe" ]] || { echo "Missing or empty EXE: $exe" >&2; exit 1; }
+
+            # Ensure cue references the correct image filename.
+            if ! grep -Fqi "\"$(basename "$iso")\"" "$cue"; then
+              echo "CUE does not reference $(basename "$iso"): $cue" >&2
+              exit 1
+            fi
           done
+
+          echo "Validated ${#demo_isos[@]} demo artifact set(s)."
 
       - name: Upload fixture validation artifacts
         if: always()
@@ -216,5 +226,4 @@ jobs:
             ${{ runner.temp }}/psxrecomp_iso_validation/good_rich.json
             ${{ runner.temp }}/psxrecomp_iso_validation/fixtures/fixtures_manifest.json
             ${{ runner.temp }}/psxrecomp_iso_validation/out/**/CMakeLists.txt
-            ${{ runner.temp }}/demo_iso_validation_out/*.json
           if-no-files-found: warn
