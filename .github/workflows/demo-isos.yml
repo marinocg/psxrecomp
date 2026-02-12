@@ -1,0 +1,41 @@
+name: Build demo ISOs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  demos:
+    name: Build demo ISOs (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install PSn00bSDK toolchain (prebuilt)
+        run: ./examples/demos/toolchains/linux/install-psn00bsdk.sh
+
+      - name: Configure demo environment
+        run: |
+          echo "PSN00BSDK=${GITHUB_WORKSPACE}/examples/demos/toolchains/linux/psn00bsdk/local" >> "${GITHUB_ENV}"
+          echo "${GITHUB_WORKSPACE}/examples/demos/toolchains/linux/psn00bsdk/local/bin" >> "${GITHUB_PATH}"
+
+      - name: Build demos
+        run: |
+          make -C examples/demos/helloworld
+          make -C examples/demos/gputest
+          make -C examples/demos/memorytest
+
+      - name: Upload demo images
+        uses: actions/upload-artifact@v4
+        with:
+          name: psxrecomp-demos-ubuntu-latest
+          path: |
+            examples/demos/helloworld/HELLOWLD.iso
+            examples/demos/helloworld/HELLOWLD.cue
+            examples/demos/helloworld/HELLOWLD.EXE
+            examples/demos/gputest/GPUTEST.iso
+            examples/demos/gputest/GPUTEST.cue
+            examples/demos/gputest/GPUTEST.EXE
+            examples/demos/memorytest/MEMTEST.iso
+            examples/demos/memorytest/MEMTEST.cue
+            examples/demos/memorytest/MEMTEST.EXE

@@ -2,6 +2,11 @@ name: Fixture E2E CI
 
 on:
   workflow_dispatch:
+    inputs:
+      demo_artifact_run_id:
+        description: "Optional workflow run ID from 'Build demo ISOs' to validate generated ISOs"
+        required: false
+        type: string
   pull_request:
     paths:
       - "src/**"
@@ -53,6 +58,27 @@ jobs:
           rm -rf "$VALIDATION_DIR"
           tools/validate_iso_fixtures.sh ./build/psxrecomp "$VALIDATION_DIR"
 
+      - name: Download demo ISO artifacts
+        if: github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != ''
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          run_id: ${{ inputs.demo_artifact_run_id }}
+          name: psxrecomp-demos-ubuntu-latest
+          path: ${{ runner.temp }}/demo_isos
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate generated demo ISOs
+        if: github.event_name == 'workflow_dispatch' && inputs.demo_artifact_run_id != ''
+        env:
+          DEMO_ISO_DIR: ${{ runner.temp }}/demo_isos
+          DEMO_OUT_DIR: ${{ runner.temp }}/demo_iso_validation_out
+        run: |
+          mkdir -p "$DEMO_OUT_DIR"
+          for iso in "$DEMO_ISO_DIR"/*.iso; do
+            echo "Validating ${iso}"
+            ./build/psxrecomp --json -o "$DEMO_OUT_DIR" "$iso" > "$DEMO_OUT_DIR/$(basename "$iso").json"
+          done
+
       - name: Upload fixture validation artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -64,4 +90,5 @@ jobs:
             ${{ runner.temp }}/psxrecomp_iso_validation/good_rich.json
             ${{ runner.temp }}/psxrecomp_iso_validation/fixtures/fixtures_manifest.json
             ${{ runner.temp }}/psxrecomp_iso_validation/out/**/CMakeLists.txt
+            ${{ runner.temp }}/demo_iso_validation_out/*.json
           if-no-files-found: warn

@@ -81,9 +81,27 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-  demos:
+  detect-demo-changes:
     runs-on: ubuntu-latest
     needs: build-test
+    outputs:
+      demos: ${{ steps.filter.outputs.demos }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect demo changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            demos:
+              - 'examples/demos/**'
+
+  demos:
+    runs-on: ubuntu-latest
+    needs: detect-demo-changes
+    if: needs.detect-demo-changes.outputs.demos == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
