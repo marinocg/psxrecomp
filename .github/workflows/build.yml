@@ -117,6 +117,59 @@ jobs:
           make -C examples/demos/helloworld
           make -C examples/demos/gputest
           make -C examples/demos/memorytest
+          make -C examples/demos/advancedhello
+
+      - name: Validate ISO root layout
+        run: |
+          python3 tools/inspect_demo_iso.py             examples/demos/helloworld/HELLOWLD.iso             examples/demos/gputest/GPUTEST.iso             examples/demos/memorytest/MEMTEST.iso             examples/demos/advancedhello/ADVHELLO.iso
+
+      - name: Validate PS-X EXE signatures
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          exe_paths = [
+            Path('examples/demos/helloworld/HELLOWLD.EXE'),
+            Path('examples/demos/gputest/GPUTEST.EXE'),
+            Path('examples/demos/memorytest/MEMTEST.EXE'),
+            Path('examples/demos/advancedhello/ADVHELLO.EXE'),
+          ]
+
+          import struct
+
+          for exe in exe_paths:
+            if not exe.is_file():
+              raise SystemExit(f"missing demo executable: {exe}")
+
+            data = exe.read_bytes()
+            magic = data[:8]
+            if magic != b"PS-X EXE":
+              raise SystemExit(f"invalid PS-X EXE header in {exe}: {magic!r}")
+
+            entry_point = struct.unpack_from("<I", data, 0x10)[0]
+            load_address = struct.unpack_from("<I", data, 0x18)[0]
+            load_size = struct.unpack_from("<I", data, 0x1C)[0]
+            if entry_point == 0 or load_address == 0 or load_size == 0:
+              raise SystemExit(
+                f"invalid PS-X EXE fields in {exe}: "
+                f"entry=0x{entry_point:08X}, load=0x{load_address:08X}, size={load_size}"
+              )
+
+            if entry_point < 0x80000000 or load_address < 0x80000000:
+              raise SystemExit(
+                f"unexpected PS-X EXE address range in {exe}: "
+                f"entry=0x{entry_point:08X}, load=0x{load_address:08X}"
+              )
+          PY
+
+      - name: Inspect demo executables for diagnostics
+        run: |
+          mkdir -p demo-inspect
+          python3 tools/inspect_demo_exe.py --out-dir demo-inspect \
+            examples/demos/helloworld/HELLOWLD.EXE \
+            examples/demos/gputest/GPUTEST.EXE \
+            examples/demos/memorytest/MEMTEST.EXE \
+            examples/demos/advancedhello/ADVHELLO.EXE
 
       - name: Upload demo images
         uses: actions/upload-artifact@v4
@@ -132,3 +185,11 @@ jobs:
             examples/demos/memorytest/MEMTEST.iso
             examples/demos/memorytest/MEMTEST.cue
             examples/demos/memorytest/MEMTEST.EXE
+            examples/demos/advancedhello/ADVHELLO.iso
+            examples/demos/advancedhello/ADVHELLO.cue
+            examples/demos/advancedhello/ADVHELLO.EXE
+            examples/demos/helloworld/build/*.map
+            examples/demos/gputest/build/*.map
+            examples/demos/memorytest/build/*.map
+            examples/demos/advancedhello/build/*.map
+            demo-inspect/*.txt

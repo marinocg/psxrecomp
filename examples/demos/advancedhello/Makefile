@@ -1,7 +1,7 @@
-# PSn00bSDK hello world demo project for PSXRecomp.
+# PSn00bSDK advanced hello demo project for PSXRecomp.
 # Requires PSN00BSDK and mkpsxiso in PATH.
 
-PROJECT_NAME := HELLOWLD
+PROJECT_NAME := ADVHELLO
 
 ifndef PSN00BSDK
 $(error PSN00BSDK is not set. Set PSN00BSDK to your PSn00bSDK install root.)
@@ -58,7 +58,7 @@ endif
 
 ARCH_FLAGS := -march=r3000 -mtune=r3000 -msoft-float
 
-BASE_CFLAGS := $(ARCH_FLAGS) -O2 -ffreestanding -fno-builtin -fno-stack-protector -Wall -Wextra -Werror -I$(SDK_INCLUDE)
+BASE_CFLAGS := $(ARCH_FLAGS) -O2 -ffreestanding -fno-builtin -fno-stack-protector -fno-strict-aliasing -Wall -Wextra -Werror -I$(SDK_INCLUDE)
 
 LIB_VARIANT := exe_nogprel
 GPREL_FLAG := -G0

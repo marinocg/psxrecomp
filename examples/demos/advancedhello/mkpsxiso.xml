@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<iso_project image_name="MEMTEST" cue_sheet="MEMTEST.cue">
+<iso_project image_name="ADVHELLO" cue_sheet="ADVHELLO.cue">
   <track type="data" source=".">
     <identifiers
       application="PLAYSTATION"
@@ -8,7 +8,7 @@
     />
     <directory_tree>
       <file name="SYSTEM.CNF" source="system.cnf" />
-      <file name="MEMTEST.EXE" source="MEMTEST.EXE" />
+      <file name="ADVHELLO.EXE" source="ADVHELLO.EXE" />
     </directory_tree>
   </track>
 </iso_project>

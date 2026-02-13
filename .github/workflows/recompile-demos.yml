@@ -1,0 +1,161 @@
+name: Recompile demo artifacts
+
+on:
+  workflow_run:
+    workflows: ["Build binaries"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Optional Build binaries workflow run ID to pull demo artifacts from"
+        required: false
+        type: string
+      ref:
+        description: "Git ref to checkout when run manually (used if run_id is not provided)"
+        required: false
+        default: "main"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  resolve:
+    name: Resolve source run
+    runs-on: ubuntu-latest
+    outputs:
+      run_id: ${{ steps.resolve.outputs.run_id }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      should_run: ${{ steps.resolve.outputs.should_run }}
+    steps:
+      - name: Resolve workflow source
+        id: resolve
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "${GITHUB_OUTPUT}"
+            echo "ref=${{ github.event.workflow_run.head_sha }}" >> "${GITHUB_OUTPUT}"
+            if [[ "${{ github.event.workflow_run.conclusion }}" == "success" ]]; then
+              echo "should_run=true" >> "${GITHUB_OUTPUT}"
+            else
+              echo "should_run=false" >> "${GITHUB_OUTPUT}"
+            fi
+          else
+            run_id="${{ github.event.inputs.run_id }}"
+            if [[ -z "${run_id}" ]]; then
+              echo "run_id=" >> "${GITHUB_OUTPUT}"
+            else
+              echo "run_id=${run_id}" >> "${GITHUB_OUTPUT}"
+            fi
+            echo "ref=${{ github.event.inputs.ref }}" >> "${GITHUB_OUTPUT}"
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+  recompile:
+    name: Recompile demos (${{ matrix.os }})
+    needs: resolve
+    if: needs.resolve.outputs.should_run == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+
+      - name: Install Ninja (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ninja
+
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja
+
+      - name: Build recompiler executable
+        run: make build
+
+      - name: Download demo artifact from build workflow run
+        if: needs.resolve.outputs.run_id != ''
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          run_id: ${{ needs.resolve.outputs.run_id }}
+          name: psxrecomp-demos-ubuntu-latest
+          path: input-demos
+          if_no_artifact_found: fail
+
+      - name: Download latest demo artifact from Build binaries workflow
+        if: needs.resolve.outputs.run_id == ''
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build.yml
+          branch: ${{ github.ref_name }}
+          name: psxrecomp-demos-ubuntu-latest
+          path: input-demos
+          if_no_artifact_found: fail
+
+      - name: Recompile demo ISOs
+        id: run_recomp
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p recompile-artifacts/source recompile-artifacts/logs recompile-artifacts/inputs
+
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then
+            BIN="$(pwd)/build/psxrecomp.exe"
+          else
+            BIN="$(pwd)/build/psxrecomp"
+          fi
+
+          cp "${BIN}" recompile-artifacts/
+
+          mapfile -t isos < <(find input-demos -type f -name '*.iso' | sort)
+          if [[ ${#isos[@]} -eq 0 ]]; then
+            echo "No ISO files found in downloaded demo artifact" >&2
+            exit 1
+          fi
+
+          failed=0
+          for iso in "${isos[@]}"; do
+            base="$(basename "${iso}" .iso)"
+            out_dir="recompile-artifacts/source/${base}"
+            mkdir -p "${out_dir}"
+            cp "${iso}" recompile-artifacts/inputs/
+
+            stdout_log="recompile-artifacts/logs/${base}.stdout.log"
+            stderr_log="recompile-artifacts/logs/${base}.stderr.log"
+            json_log="recompile-artifacts/logs/${base}.result.json"
+
+            echo "Running recompiler for ${iso}"
+            if "${BIN}" --json -o "${out_dir}" "${iso}" >"${stdout_log}" 2>"${stderr_log}"; then
+              cp "${stdout_log}" "${json_log}"
+            else
+              failed=1
+            fi
+          done
+
+          echo "failed=${failed}" >> "${GITHUB_OUTPUT}"
+
+      - name: Upload recompile artifact bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recompiled-demos-${{ matrix.os }}
+          path: recompile-artifacts
+
+      - name: Fail if any recompilation failed
+        if: steps.run_recomp.outputs.failed == '1'
+        shell: bash
+        run: |
+          echo "One or more demo recompilations failed; inspect uploaded logs/artifacts." >&2
+          exit 1

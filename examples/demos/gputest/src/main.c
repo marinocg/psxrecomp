@@ -9,7 +9,7 @@ typedef struct {
 } GpuContext;
 
 int main(void) {
-    GpuContext ctx;
+    static GpuContext ctx;
     int frame = 0;
 
     ResetGraph(0);
@@ -30,6 +30,8 @@ int main(void) {
     ctx.activeBuffer = 0;
     PutDispEnv(&ctx.disp[ctx.activeBuffer]);
     PutDrawEnv(&ctx.draw[ctx.activeBuffer]);
+
+    SetDispMask(1);
 
     FntLoad(960, 0);
     int fontId = FntOpen(16, 16, 320, 208, 0, 512);
@@ -55,8 +57,8 @@ int main(void) {
         DrawSync(0);
         VSync(0);
 
-        ctx.activeBuffer = !ctx.activeBuffer;
         PutDispEnv(&ctx.disp[ctx.activeBuffer]);
+        ctx.activeBuffer = !ctx.activeBuffer;
         PutDrawEnv(&ctx.draw[ctx.activeBuffer]);
 
         ++frame;
