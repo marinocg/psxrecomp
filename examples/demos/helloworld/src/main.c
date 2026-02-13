@@ -37,7 +37,10 @@ static void setupContext(RenderContext* ctx) {
     ctx->activeBuffer = 0;
     ctx->nextPacket = ctx->buffers[0].primBuffer;
     ClearOTagR(ctx->buffers[0].ot, OT_LENGTH);
+    ClearOTagR(ctx->buffers[1].ot, OT_LENGTH);
 
+    PutDispEnv(&ctx->buffers[0].dispEnv);
+    PutDrawEnv(&ctx->buffers[0].drawEnv);
     SetDispMask(1);
 }
 
@@ -52,22 +55,23 @@ static void flipBuffers(RenderContext* ctx) {
     DrawSync(0);
     VSync(0);
 
-    RenderBuffer* drawBuffer = &ctx->buffers[ctx->activeBuffer];
-    RenderBuffer* dispBuffer = &ctx->buffers[ctx->activeBuffer ^ 1];
+    RenderBuffer* buffer = &ctx->buffers[ctx->activeBuffer];
 
-    PutDispEnv(&dispBuffer->dispEnv);
-    DrawOTagEnv(&drawBuffer->ot[OT_LENGTH - 1], &drawBuffer->drawEnv);
+    PutDispEnv(&buffer->dispEnv);
+    DrawOTagEnv(&buffer->ot[OT_LENGTH - 1], &buffer->drawEnv);
 
     ctx->activeBuffer ^= 1;
-    ctx->nextPacket = dispBuffer->primBuffer;
-    ClearOTagR(dispBuffer->ot, OT_LENGTH);
+    RenderBuffer* next = &ctx->buffers[ctx->activeBuffer];
+    ctx->nextPacket = next->primBuffer;
+    ClearOTagR(next->ot, OT_LENGTH);
 }
 
 int main(void) {
-    RenderContext ctx;
+    static RenderContext ctx;
 
     ResetGraph(0);
     FntLoad(960, 0);
+    FntOpen(0, 0, SCREEN_XRES, SCREEN_YRES, 0, 512);
     setupContext(&ctx);
 
     for (;;) {

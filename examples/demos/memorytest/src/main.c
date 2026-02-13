@@ -78,8 +78,8 @@ int main(void) {
         DrawSync(0);
         VSync(0);
 
-        ctx.activeBuffer = !ctx.activeBuffer;
         PutDispEnv(&ctx.disp[ctx.activeBuffer]);
+        ctx.activeBuffer = !ctx.activeBuffer;
         PutDrawEnv(&ctx.draw[ctx.activeBuffer]);
     }
 
