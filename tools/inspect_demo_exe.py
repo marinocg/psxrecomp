@@ -2,6 +2,7 @@
 import argparse
 import struct
 import subprocess
+from subprocess import CalledProcessError
 from pathlib import Path
 
 
@@ -24,11 +25,27 @@ def inspect(path: Path, out_dir: Path):
     out.append('')
 
     objdump = 'mipsel-none-elf-objdump'
-    if subprocess.run(['bash','-lc',f'command -v {objdump} >/dev/null']).returncode == 0:
-        out.append('== objdump -f ==')
-        out.append(subprocess.check_output([objdump, '-f', str(path)], text=True, errors='ignore'))
-        out.append('== objdump -d (head) ==')
-        out.append(subprocess.check_output([objdump, '-d', str(path)], text=True, errors='ignore')[:8000])
+    if subprocess.run(['bash', '-lc', f'command -v {objdump} >/dev/null']).returncode == 0:
+        out.append('== objdump diagnostics ==')
+        candidates = [path]
+        elf_candidate = path.with_suffix('.elf')
+        if elf_candidate.exists():
+            candidates.append(elf_candidate)
+
+        ran = False
+        for candidate in candidates:
+            try:
+                out.append(f'-- candidate: {candidate}')
+                out.append(subprocess.check_output([objdump, '-f', str(candidate)], text=True, errors='ignore'))
+                out.append(subprocess.check_output([objdump, '-d', str(candidate)], text=True, errors='ignore')[:8000])
+                ran = True
+                break
+            except CalledProcessError as exc:
+                out.append(f'objdump failed for {candidate}: exit={exc.returncode}')
+                if exc.output:
+                    out.append(exc.output)
+        if not ran:
+            out.append('objdump unavailable for provided artifact format (this is non-fatal).')
     else:
         out.append('objdump not found in PATH')
 
