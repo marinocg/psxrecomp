@@ -150,14 +150,20 @@ jobs:
             if "${BIN}" --json -o "${out_dir}" "${iso}" >"${stdout_log}" 2>"${stderr_log}"; then
               cp "${stdout_log}" "${json_log}"
 
-              if [[ ! -f "${out_dir}/CMakeLists.txt" ]]; then
+              mapfile -t generated_cmake_files < <(find "${out_dir}" -type f -name 'CMakeLists.txt' | sort)
+              if [[ ${#generated_cmake_files[@]} -eq 0 ]]; then
                 echo "Generated output for ${base} is missing CMakeLists.txt" >&2
                 failed=1
                 continue
               fi
 
+              source_root="$(dirname "${generated_cmake_files[0]}")"
+              if [[ ${#generated_cmake_files[@]} -gt 1 ]]; then
+                echo "Multiple CMakeLists.txt files found for ${base}; using ${source_root}" >&2
+              fi
+
               generated_build_dir="${out_dir}/build-generated"
-              if "${CMAKE_BIN}" -S "${out_dir}" -B "${generated_build_dir}" -G Ninja >"recompile-artifacts/logs/${base}.cmake.configure.log" 2>&1 && \
+              if "${CMAKE_BIN}" -S "${source_root}" -B "${generated_build_dir}" -G Ninja >"recompile-artifacts/logs/${base}.cmake.configure.log" 2>&1 && \
                  "${CMAKE_BIN}" --build "${generated_build_dir}" >"recompile-artifacts/logs/${base}.cmake.build.log" 2>&1; then
                 demo_runnable_dir="recompile-artifacts/runnable/${base}"
                 mkdir -p "${demo_runnable_dir}/bin"
@@ -168,7 +174,9 @@ jobs:
                 done
 
                 for resource_dir_name in resources assets data; do
-                  if [[ -d "${out_dir}/${resource_dir_name}" ]]; then
+                  if [[ -d "${source_root}/${resource_dir_name}" ]]; then
+                    cp -R "${source_root}/${resource_dir_name}" "${demo_runnable_dir}/"
+                  elif [[ -d "${out_dir}/${resource_dir_name}" ]]; then
                     cp -R "${out_dir}/${resource_dir_name}" "${demo_runnable_dir}/"
                   fi
                 done
