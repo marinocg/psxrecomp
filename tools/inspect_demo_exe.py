@@ -33,6 +33,7 @@ def summarize_header(data: bytes):
     notes = []
     magic_ok = data[:8] == b'PS-X EXE'
     entry = u32(data, 0x10)
+    gp = u32(data, 0x14)
     load_addr = u32(data, 0x18)
     load_size = u32(data, 0x1C)
     stack = u32(data, 0x30)
@@ -43,6 +44,8 @@ def summarize_header(data: bytes):
         notes.append('ERROR: zero entry/load/size field detected')
     if entry and entry < 0x80000000:
         notes.append('WARN: entry point is not in KSEG0')
+    if gp == 0:
+        notes.append('WARN: header GP is zero; GP-relative code may fault at runtime.')
     if load_addr and load_addr < 0x80000000:
         notes.append('WARN: load address is not in KSEG0')
     if stack == 0:
@@ -81,6 +84,7 @@ def inspect(path: Path, out_dir: Path):
     out.append(f'size: {len(data)} bytes')
     out.append(f'magic: {data[:8]!r}')
     out.append(f'pc0(entry): 0x{u32(data, 0x10):08X}')
+    out.append(f'gp0: 0x{u32(data, 0x14):08X}')
     out.append(f't_addr(load): 0x{u32(data, 0x18):08X}')
     out.append(f't_size: {u32(data, 0x1C)}')
     out.append(f's_addr: 0x{u32(data, 0x30):08X}')

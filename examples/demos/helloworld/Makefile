@@ -60,19 +60,14 @@ ARCH_FLAGS := -march=r3000 -mtune=r3000 -msoft-float
 
 BASE_CFLAGS := $(ARCH_FLAGS) -O2 -ffreestanding -fno-builtin -fno-stack-protector -Wall -Wextra -Werror -I$(SDK_INCLUDE)
 
-LIB_VARIANT :=
-ifeq ($(wildcard $(SDK_LIB)/libpsxapi.a),)
-  LIB_VARIANT := exe_nogprel
+LIB_VARIANT := exe_nogprel
+GPREL_FLAG := -G0
+
+ifeq ($(wildcard $(SDK_LIB)/libpsxapi_$(LIB_VARIANT).a),)
+  $(error Required PSn00bSDK nogprel library variant missing at $(SDK_LIB)/libpsxapi_$(LIB_VARIANT).a)
 endif
 
-ifeq ($(LIB_VARIANT),)
-  # Prefer default SDK libraries (GP-relative small data enabled).
-  GPREL_FLAG := -G8
-else
-  # Fallback to *_exe_nogprel SDK libraries (no GP-relative small data).
-  GPREL_FLAG := -G0
-endif
-
+# Force no-GP-relative mode to avoid header GP=0 runtime faults on real PSX emulators.
 CFLAGS := $(BASE_CFLAGS) $(GPREL_FLAG)
 
 ifeq ($(LIB_VARIANT),)
