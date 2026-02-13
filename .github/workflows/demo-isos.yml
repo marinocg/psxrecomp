@@ -65,6 +65,15 @@ jobs:
               )
           PY
 
+      - name: Inspect demo executables for diagnostics
+        run: |
+          mkdir -p demo-inspect
+          python3 tools/inspect_demo_exe.py --out-dir demo-inspect \
+            examples/demos/helloworld/HELLOWLD.EXE \
+            examples/demos/gputest/GPUTEST.EXE \
+            examples/demos/memorytest/MEMTEST.EXE \
+            examples/demos/advancedhello/ADVHELLO.EXE
+
       - name: Upload demo images
         uses: actions/upload-artifact@v4
         with:
@@ -82,3 +91,8 @@ jobs:
             examples/demos/advancedhello/ADVHELLO.iso
             examples/demos/advancedhello/ADVHELLO.cue
             examples/demos/advancedhello/ADVHELLO.EXE
+            examples/demos/helloworld/build/*.map
+            examples/demos/gputest/build/*.map
+            examples/demos/memorytest/build/*.map
+            examples/demos/advancedhello/build/*.map
+            demo-inspect/*.txt

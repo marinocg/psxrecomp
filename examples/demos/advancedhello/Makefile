@@ -9,6 +9,7 @@ endif
 
 TARGET_EXE := $(PROJECT_NAME).EXE
 TARGET_ELF = $(BUILD_DIR)/$(PROJECT_NAME).elf
+TARGET_MAP = $(BUILD_DIR)/$(PROJECT_NAME).map
 TARGET_ISO := $(PROJECT_NAME).iso
 TARGET_CUE := $(PROJECT_NAME).cue
 
@@ -80,7 +81,7 @@ else
   SDK_LIBS := -lpsxgte_$(LIB_VARIANT) -lpsxgpu_$(LIB_VARIANT) -lpsxetc_$(LIB_VARIANT) -lpsxpress_$(LIB_VARIANT) -lpsxapi_$(LIB_VARIANT) -lc_$(LIB_VARIANT) -llzp_$(LIB_VARIANT)
 endif
 
-LDFLAGS := $(ARCH_FLAGS) -T$(SDK_LDSCRIPT) -L$(SDK_LIB) -Wl,--start-group $(SDK_LIBS) -Wl,--end-group
+LDFLAGS := $(ARCH_FLAGS) -T$(SDK_LDSCRIPT) -L$(SDK_LIB) -Wl,-Map,$(TARGET_MAP) -Wl,--start-group $(SDK_LIBS) -Wl,--end-group
 
 SOURCES := $(wildcard $(SRC_DIR)/*.c)
 OBJECTS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
@@ -103,6 +104,6 @@ $(TARGET_ISO): $(TARGET_EXE) system.cnf mkpsxiso.xml
 	mkpsxiso -y -o $(TARGET_ISO) -c $(TARGET_CUE) mkpsxiso.xml
 
 clean:
-	rm -rf $(BUILD_DIR) $(TARGET_EXE) $(TARGET_ELF) $(TARGET_ISO) $(TARGET_CUE) $(PROJECT_NAME)
+	rm -rf $(BUILD_DIR) $(TARGET_EXE) $(TARGET_ELF) $(TARGET_MAP) $(TARGET_ISO) $(TARGET_CUE) $(PROJECT_NAME)
 
 .PHONY: all clean
