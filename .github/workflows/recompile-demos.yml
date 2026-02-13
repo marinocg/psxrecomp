@@ -129,7 +129,10 @@ jobs:
             exit 1
           fi
 
-          mapfile -t isos < <(find input-demos -type f -name '*.iso' | sort)
+          isos=()
+          while IFS= read -r iso; do
+            isos+=("${iso}")
+          done < <(find input-demos -type f -name '*.iso' | sort)
           if [[ ${#isos[@]} -eq 0 ]]; then
             echo "No ISO files found in downloaded demo artifact" >&2
             exit 1
@@ -150,7 +153,10 @@ jobs:
             if "${BIN}" --json -o "${out_dir}" "${iso}" >"${stdout_log}" 2>"${stderr_log}"; then
               cp "${stdout_log}" "${json_log}"
 
-              mapfile -t generated_cmake_files < <(find "${out_dir}" -type f -name 'CMakeLists.txt' | sort)
+              generated_cmake_files=()
+              while IFS= read -r cmake_file; do
+                generated_cmake_files+=("${cmake_file}")
+              done < <(find "${out_dir}" -type f -name 'CMakeLists.txt' | sort)
               if [[ ${#generated_cmake_files[@]} -eq 0 ]]; then
                 echo "Generated output for ${base} is missing CMakeLists.txt" >&2
                 failed=1
@@ -168,10 +174,9 @@ jobs:
                 demo_runnable_dir="recompile-artifacts/runnable/${base}"
                 mkdir -p "${demo_runnable_dir}/bin"
 
-                mapfile -d '' -t built_executables < <(find "${generated_build_dir}" -type f \( -name '*.exe' -o -perm -u+x \) -print0)
-                for exe in "${built_executables[@]}"; do
+                while IFS= read -r -d '' exe; do
                   cp "${exe}" "${demo_runnable_dir}/bin/"
-                done
+                done < <(find "${generated_build_dir}" -type f \( -name '*.exe' -o -perm -u+x \) -print0)
 
                 for resource_dir_name in resources assets data; do
                   if [[ -d "${source_root}/${resource_dir_name}" ]]; then
