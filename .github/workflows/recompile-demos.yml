@@ -176,13 +176,24 @@ jobs:
 
                 while IFS= read -r -d '' exe; do
                   cp "${exe}" "${demo_runnable_dir}/bin/"
+
+                  exe_dir="$(dirname "${exe}")"
+                  if [[ "${RUNNER_OS}" == "Windows" ]]; then
+                    while IFS= read -r -d '' dll; do
+                      cp "${dll}" "${demo_runnable_dir}/bin/"
+                    done < <(find "${exe_dir}" -maxdepth 1 -type f -name '*.dll' -print0)
+                  fi
+
+                  if [[ -d "${exe_dir}/resources" ]]; then
+                    cp -R "${exe_dir}/resources" "${demo_runnable_dir}/bin/"
+                  fi
                 done < <(find "${generated_build_dir}" -type f \( -name '*.exe' -o -perm -u+x \) -print0)
 
                 for resource_dir_name in resources assets data; do
                   if [[ -d "${source_root}/${resource_dir_name}" ]]; then
-                    cp -R "${source_root}/${resource_dir_name}" "${demo_runnable_dir}/"
+                    cp -R "${source_root}/${resource_dir_name}" "${demo_runnable_dir}/bin/"
                   elif [[ -d "${out_dir}/${resource_dir_name}" ]]; then
-                    cp -R "${out_dir}/${resource_dir_name}" "${demo_runnable_dir}/"
+                    cp -R "${out_dir}/${resource_dir_name}" "${demo_runnable_dir}/bin/"
                   fi
                 done
               else
