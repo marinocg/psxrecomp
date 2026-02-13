@@ -9,7 +9,7 @@ typedef struct {
 } GpuContext;
 
 int main(void) {
-    GpuContext ctx;
+    static GpuContext ctx;
     int frame = 0;
 
     ResetGraph(0);

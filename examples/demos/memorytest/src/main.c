@@ -44,7 +44,7 @@ static void initGpu(GpuContext* ctx) {
 }
 
 int main(void) {
-    GpuContext ctx;
+    static GpuContext ctx;
     int errors = 0;
 
     initGpu(&ctx);
