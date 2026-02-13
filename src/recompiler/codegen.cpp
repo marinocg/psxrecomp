@@ -297,7 +297,6 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
     emitter.writeLine("#include \"psxrecomp/types.h\"");
-    emitter.writeLine("#include <array>");
     emitter.writeLine("#include <exception>");
     emitter.writeLine("#include <filesystem>");
     emitter.writeLine("#include <iostream>");
@@ -328,8 +327,13 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeBlank();
     emitter.writeLine("try");
     emitter.openBlock("");
-    emitter.writeLine("std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};");
-    emitter.writeLine("psxrecomp::runtime::PsxSystem system(ram.data());");
+    emitter.writeLine("psxrecomp::runtime::PsxSystem system;");
+    emitter.writeLine("if (!system.initialize())");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][error] Failed to initialize runtime system.\" << \"\\n\";");
+    emitter.writeLine("return 1;");
+    emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::run(system);");
     emitter.writeLine("std::cout << \"[psxrecomp] Module execution returned.\" << \"\\n\";");
