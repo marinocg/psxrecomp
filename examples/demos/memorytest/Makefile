@@ -76,7 +76,9 @@ else
   SDK_LIBS := -lpsxgte_$(LIB_VARIANT) -lpsxgpu_$(LIB_VARIANT) -lpsxetc_$(LIB_VARIANT) -lpsxpress_$(LIB_VARIANT) -lpsxapi_$(LIB_VARIANT) -lc_$(LIB_VARIANT) -llzp_$(LIB_VARIANT)
 endif
 
-LDFLAGS := $(ARCH_FLAGS) -T$(SDK_LDSCRIPT) -L$(SDK_LIB) -Wl,-Map,$(TARGET_MAP) -Wl,--start-group $(SDK_LIBS) -Wl,--end-group
+LINK_STARTUP_FLAGS := -nostartfiles
+
+LDFLAGS := $(ARCH_FLAGS) $(LINK_STARTUP_FLAGS) -T$(SDK_LDSCRIPT) -L$(SDK_LIB) -Wl,-Map,$(TARGET_MAP) -Wl,--start-group $(SDK_LIBS) -Wl,--end-group
 
 SOURCES := $(wildcard $(SRC_DIR)/*.c)
 OBJECTS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SOURCES))
