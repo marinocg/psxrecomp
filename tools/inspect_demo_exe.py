@@ -10,6 +10,23 @@ def u32(data, off):
     return struct.unpack_from('<I', data, off)[0]
 
 
+
+
+def elf_candidates(path: Path):
+    candidates = [path]
+
+    # Same basename next to EXE (rare, but cheap check).
+    same_dir_elf = path.with_suffix('.elf')
+    if same_dir_elf.exists():
+        candidates.append(same_dir_elf)
+
+    # Common repo layout: demo root has EXE, build/<name>.elf contains link artifact.
+    build_elf = path.parent / 'build' / f'{path.stem}.elf'
+    if build_elf.exists():
+        candidates.append(build_elf)
+
+    return candidates
+
 def inspect(path: Path, out_dir: Path):
     data = path.read_bytes()
     out = []
@@ -27,17 +44,14 @@ def inspect(path: Path, out_dir: Path):
     objdump = 'mipsel-none-elf-objdump'
     if subprocess.run(['bash', '-lc', f'command -v {objdump} >/dev/null']).returncode == 0:
         out.append('== objdump diagnostics ==')
-        candidates = [path]
-        elf_candidate = path.with_suffix('.elf')
-        if elf_candidate.exists():
-            candidates.append(elf_candidate)
+        candidates = elf_candidates(path)
 
         ran = False
         for candidate in candidates:
             try:
                 out.append(f'-- candidate: {candidate}')
-                out.append(subprocess.check_output([objdump, '-f', str(candidate)], text=True, errors='ignore'))
-                out.append(subprocess.check_output([objdump, '-d', str(candidate)], text=True, errors='ignore')[:8000])
+                out.append(subprocess.check_output([objdump, '-f', str(candidate)], text=True, errors='ignore', stderr=subprocess.STDOUT))
+                out.append(subprocess.check_output([objdump, '-d', str(candidate)], text=True, errors='ignore', stderr=subprocess.STDOUT)[:8000])
                 ran = True
                 break
             except CalledProcessError as exc:
