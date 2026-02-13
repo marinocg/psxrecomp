@@ -10,7 +10,7 @@ image formats needed by the recompiler pipeline.
 | Runtime XA streaming integration | ~15% |
 
 ## Current Status
-- [x] Primary Volume Descriptor (PVD) detection across 2048-byte and 2352-byte sector layouts.
+- [x] Primary Volume Descriptor (PVD) detection across 2048/2336/2352/2448-byte layouts with raw Mode 1 + Mode 2 offset probing.
 - [x] ISO 9660 directory record parsing and hierarchical path traversal.
 - [x] File extraction by path and sector streaming.
 - [x] SYSTEM.CNF BOOT line parsing with fallback to root .EXE scan.

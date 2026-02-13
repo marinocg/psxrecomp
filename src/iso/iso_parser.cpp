@@ -16,11 +16,11 @@ constexpr u32 kUserDataSize = detail::kUserDataSize;
 
 IsoParser::IsoParser(const std::string& filename)
     : m_filename(filename), m_inputFilename(filename), m_isOpen(false), m_isValid(false),
-      m_rawSectorSize(kUserDataSize), m_dataTrackStartLba(0), m_logicalBlockSize(kUserDataSize),
-      m_useJoliet(false), m_stream(), m_rawSectorScratch(), m_pvd{}, m_rootDirectory(),
-      m_rootExtent(0), m_rootSize(0), m_totalSectors(0), m_tracks(), m_errors(),
-      m_sectorCacheCapacity(64), m_rawSectorCache(), m_rawSectorCacheIndex(), m_userSectorCache(),
-      m_userSectorCacheIndex()
+      m_rawSectorSize(kUserDataSize), m_userDataOffset(0), m_dataTrackStartLba(0),
+      m_logicalBlockSize(kUserDataSize), m_useJoliet(false), m_stream(), m_rawSectorScratch(),
+      m_pvd{}, m_rootDirectory(), m_rootExtent(0), m_rootSize(0), m_totalSectors(0), m_tracks(),
+      m_errors(), m_sectorCacheCapacity(64), m_rawSectorCache(), m_rawSectorCacheIndex(),
+      m_userSectorCache(), m_userSectorCacheIndex()
 {
 }
 
