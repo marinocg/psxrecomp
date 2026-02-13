@@ -452,6 +452,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     const std::string header = codeGenerator.generateHeader(program, moduleName);
     const std::string source = codeGenerator.generateSource(program, moduleName, metadata);
     const std::string buildFile = codeGenerator.generateBuildFile(moduleName);
+    const std::string runnerSource = codeGenerator.generateRunnerSource(moduleName);
 
     std::filesystem::path outputDir =
         detail::buildOutputDirectory(std::filesystem::path(m_options.outputDirectory), inputStem,
@@ -467,6 +468,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     artifacts.moduleName = moduleName;
     artifacts.headerPath = (outputDir / (moduleName + ".h")).string();
     artifacts.sourcePath = (outputDir / (moduleName + ".cpp")).string();
+    const std::string runnerPath = (outputDir / (moduleName + "_runner.cpp")).string();
     artifacts.buildPath = (outputDir / "CMakeLists.txt").string();
     artifacts.manifestPath = (outputDir / "manifest.json").string();
 
@@ -477,6 +479,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     std::string writeError;
     if (!detail::writeFile(artifacts.headerPath, header, writeError) ||
         !detail::writeFile(artifacts.sourcePath, source, writeError) ||
+        !detail::writeFile(runnerPath, runnerSource, writeError) ||
         !detail::writeFile(artifacts.buildPath, buildFile, writeError))
     {
         return fail(writeError);

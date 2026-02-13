@@ -88,6 +88,8 @@ int main()
     assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("if (") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
+    assert(buildFile.find("add_executable") != std::string::npos);
+    assert(buildFile.find("_runner.cpp") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
