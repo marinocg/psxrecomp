@@ -37,49 +37,48 @@ bool hasPvdSignature(const std::array<u8, kUserDataSize>& sector)
 std::vector<LayoutProbe> buildLayoutProbes(u64 fileSize, u32 preferredSectorSize)
 {
     std::vector<LayoutProbe> probes;
-    auto pushProbe = [&probes](u32 sectorSize, u32 userDataOffset)
+
+    auto addProbeIfMissing = [&probes](u32 sectorSize, u32 userDataOffset)
     {
-        auto it = std::find_if(probes.begin(), probes.end(),
-                               [sectorSize, userDataOffset](const LayoutProbe& candidate)
-                               {
-                                   return candidate.sectorSize == sectorSize &&
-                                          candidate.userDataOffset == userDataOffset;
-                               });
-        if (it == probes.end())
+        for (const auto& candidate : probes)
         {
-            probes.push_back({sectorSize, userDataOffset});
+            if (candidate.sectorSize == sectorSize && candidate.userDataOffset == userDataOffset)
+            {
+                return;
+            }
         }
+        probes.push_back({sectorSize, userDataOffset});
     };
 
     if (preferredSectorSize != 0)
     {
-        pushProbe(preferredSectorSize, 0);
+        addProbeIfMissing(preferredSectorSize, 0);
     }
 
-    pushProbe(kUserDataSize, 0);
+    addProbeIfMissing(kUserDataSize, 0);
 
     if (fileSize % kRawSectorSize == 0)
     {
-        pushProbe(kRawSectorSize, 16);
-        pushProbe(kRawSectorSize, 24);
+        addProbeIfMissing(kRawSectorSize, 16);
+        addProbeIfMissing(kRawSectorSize, 24);
     }
     if (fileSize % kRawUserDataSectorSize == 0)
     {
-        pushProbe(kRawUserDataSectorSize, 0);
-        pushProbe(kRawUserDataSectorSize, 8);
+        addProbeIfMissing(kRawUserDataSectorSize, 0);
+        addProbeIfMissing(kRawUserDataSectorSize, 8);
     }
     if (fileSize % kRawSubchannelSectorSize == 0)
     {
-        pushProbe(kRawSubchannelSectorSize, 16);
-        pushProbe(kRawSubchannelSectorSize, 24);
+        addProbeIfMissing(kRawSubchannelSectorSize, 16);
+        addProbeIfMissing(kRawSubchannelSectorSize, 24);
     }
 
-    pushProbe(kRawSectorSize, 16);
-    pushProbe(kRawSectorSize, 24);
-    pushProbe(kRawUserDataSectorSize, 0);
-    pushProbe(kRawUserDataSectorSize, 8);
-    pushProbe(kRawSubchannelSectorSize, 16);
-    pushProbe(kRawSubchannelSectorSize, 24);
+    addProbeIfMissing(kRawSectorSize, 16);
+    addProbeIfMissing(kRawSectorSize, 24);
+    addProbeIfMissing(kRawUserDataSectorSize, 0);
+    addProbeIfMissing(kRawUserDataSectorSize, 8);
+    addProbeIfMissing(kRawSubchannelSectorSize, 16);
+    addProbeIfMissing(kRawSubchannelSectorSize, 24);
 
     return probes;
 }
