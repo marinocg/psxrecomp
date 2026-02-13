@@ -31,13 +31,28 @@ int main()
     Value temp0 = builder.createTemporary();
     Value temp1 = builder.createTemporary();
     Value temp2 = builder.createTemporary();
+    Value mulHi0 = builder.createTemporary();
+    Value mulLo0 = builder.createTemporary();
+    Value mulHi1 = builder.createTemporary();
+    Value mulLo1 = builder.createTemporary();
+    Value divHi0 = builder.createTemporary();
+    Value divLo0 = builder.createTemporary();
     Value regA0 = Value::makeRegister(static_cast<Register>(4));
 
     entry.instructions.push_back(
         builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(1)}, {temp0}, 0x80010000));
     entry.instructions.push_back(builder.makeInstruction(
         Opcode::ADD, {temp0, Value::makeImmediate(4)}, {temp1}, 0x80010004));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::BRANCH, {temp1}, {}, 0x80010008));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::MUL, {Value::makeImmediate(7), Value::makeImmediate(3)},
+                                {mulHi0, mulLo0}, 0x80010006));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::MULU, {Value::makeImmediate(5), Value::makeImmediate(2)},
+                                {mulHi1, mulLo1}, 0x80010007));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::DIV, {Value::makeImmediate(21), Value::makeImmediate(4)},
+                                {divHi0, divLo0}, 0x80010008));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::BRANCH, {temp1}, {}, 0x8001000C));
     entry.successors = {"then", "else"};
 
     thenBlock.instructions.push_back(
