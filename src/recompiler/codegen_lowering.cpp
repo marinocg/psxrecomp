@@ -42,25 +42,27 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         emitter.writeBlank();
         std::unordered_set<std::string> usedBlocks;
         std::unordered_map<std::string, std::string> blockNames;
-        std::vector<std::string> orderedBlockNames;
-        orderedBlockNames.reserve(function.blocks.size());
+        std::vector<std::string> blockIds;
+        blockIds.reserve(function.blocks.size());
         for (const auto& block : function.blocks)
         {
             std::string uniqueName = uniquifyIdentifier(block.name, usedBlocks);
-            blockNames.emplace(block.name, uniqueName);
-            orderedBlockNames.push_back(uniqueName);
+            if (blockNames.find(block.name) == blockNames.end())
+            {
+                blockNames.emplace(block.name, uniqueName);
+            }
+            blockIds.push_back(uniqueName);
         }
 
         emitter.writeLine("enum class BlockId {");
-        for (size_t index = 0; index < orderedBlockNames.size(); ++index)
+        for (size_t index = 0; index < blockIds.size(); ++index)
         {
-            emitter.writeLine("    " + orderedBlockNames[index] +
-                              (index + 1 < orderedBlockNames.size() ? "," : ""));
+            emitter.writeLine("    " + blockIds[index] + (index + 1 < blockIds.size() ? "," : ""));
         }
         emitter.writeLine("};");
-        if (!orderedBlockNames.empty())
+        if (!blockIds.empty())
         {
-            emitter.writeLine("BlockId block = BlockId::" + orderedBlockNames.front() + ";");
+            emitter.writeLine("BlockId block = BlockId::" + blockIds.front() + ";");
         }
         emitter.writeLine("BlockId previousBlock = block;");
         const auto indexMap = buildBlockIndex(function);
@@ -72,7 +74,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         for (size_t blockIndex = 0; blockIndex < function.blocks.size(); ++blockIndex)
         {
             const auto& block = function.blocks[blockIndex];
-            emitter.writeLine("case " + resolveBlockId(block.name, blockNames) + ":");
+            emitter.writeLine("case BlockId::" + blockIds[blockIndex] + ":");
             emitter.openBlock("");
             emitPhiAssignments(block, predecessors[blockIndex], blockNames, context, emitter);
             for (const auto& instruction : block.instructions)

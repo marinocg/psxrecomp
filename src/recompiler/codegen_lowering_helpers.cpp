@@ -156,7 +156,10 @@ std::unordered_map<std::string, size_t> buildBlockIndex(const ir::Function& func
     std::unordered_map<std::string, size_t> indexMap;
     for (size_t index = 0; index < function.blocks.size(); ++index)
     {
-        indexMap[function.blocks[index].name] = index;
+        if (indexMap.find(function.blocks[index].name) == indexMap.end())
+        {
+            indexMap[function.blocks[index].name] = index;
+        }
     }
     return indexMap;
 }

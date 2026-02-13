@@ -49,6 +49,17 @@ int main()
     elseBlock.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {regA0}, {temp2}));
     elseBlock.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}));
 
+    auto& duplicateNameFunction = builder.createFunction("duplicate_block_names", 0x80012000);
+    auto& duplicateEntry = builder.createBlock(duplicateNameFunction, "loop");
+    auto& duplicateLoop = builder.createBlock(duplicateNameFunction, "loop");
+
+    duplicateEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80012000));
+    duplicateEntry.successors = {"loop"};
+
+    duplicateLoop.instructions.push_back(
+        builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80012004));
+
     CodeGenerator generator;
     std::string header = generator.generateHeader(program, "module");
     std::string source = generator.generateSource(program, "module");
@@ -59,6 +70,7 @@ int main()
     assert(source.find("writeMemory32") != std::string::npos);
     assert(source.find("table_data") != std::string::npos);
     assert(source.find("switch (block)") != std::string::npos);
+    assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("if (") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
 
