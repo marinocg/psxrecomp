@@ -119,6 +119,10 @@ jobs:
           make -C examples/demos/memorytest
           make -C examples/demos/advancedhello
 
+      - name: Validate ISO root layout
+        run: |
+          python3 tools/inspect_demo_iso.py             examples/demos/helloworld/HELLOWLD.iso             examples/demos/gputest/GPUTEST.iso             examples/demos/memorytest/MEMTEST.iso             examples/demos/advancedhello/ADVHELLO.iso
+
       - name: Validate PS-X EXE signatures
         run: |
           python3 - <<'PY'

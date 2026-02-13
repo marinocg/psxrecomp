@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <iso_project image_name="HELLOWLD" cue_sheet="HELLOWLD.cue">
-  <track type="data" source="system.cnf">
+  <track type="data" source=".">
     <identifiers
       application="PLAYSTATION"
       publisher="psxrecomp"
