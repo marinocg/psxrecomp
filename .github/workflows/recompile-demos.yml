@@ -110,6 +110,7 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p recompile-artifacts/source recompile-artifacts/logs recompile-artifacts/inputs
+          mkdir -p recompile-artifacts/runnable
 
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
             BIN="$(pwd)/build/psxrecomp.exe"
@@ -118,6 +119,15 @@ jobs:
           fi
 
           cp "${BIN}" recompile-artifacts/
+
+          if command -v cmake >/dev/null 2>&1; then
+            CMAKE_BIN="$(command -v cmake)"
+          elif [[ -x "/Applications/CMake.app/Contents/bin/cmake" ]]; then
+            CMAKE_BIN="/Applications/CMake.app/Contents/bin/cmake"
+          else
+            echo "Unable to locate cmake in PATH." >&2
+            exit 1
+          fi
 
           mapfile -t isos < <(find input-demos -type f -name '*.iso' | sort)
           if [[ ${#isos[@]} -eq 0 ]]; then
@@ -139,6 +149,32 @@ jobs:
             echo "Running recompiler for ${iso}"
             if "${BIN}" --json -o "${out_dir}" "${iso}" >"${stdout_log}" 2>"${stderr_log}"; then
               cp "${stdout_log}" "${json_log}"
+
+              if [[ ! -f "${out_dir}/CMakeLists.txt" ]]; then
+                echo "Generated output for ${base} is missing CMakeLists.txt" >&2
+                failed=1
+                continue
+              fi
+
+              generated_build_dir="${out_dir}/build-generated"
+              if "${CMAKE_BIN}" -S "${out_dir}" -B "${generated_build_dir}" -G Ninja >"recompile-artifacts/logs/${base}.cmake.configure.log" 2>&1 && \
+                 "${CMAKE_BIN}" --build "${generated_build_dir}" >"recompile-artifacts/logs/${base}.cmake.build.log" 2>&1; then
+                demo_runnable_dir="recompile-artifacts/runnable/${base}"
+                mkdir -p "${demo_runnable_dir}/bin"
+
+                mapfile -d '' -t built_executables < <(find "${generated_build_dir}" -type f \( -name '*.exe' -o -perm -u+x \) -print0)
+                for exe in "${built_executables[@]}"; do
+                  cp "${exe}" "${demo_runnable_dir}/bin/"
+                done
+
+                for resource_dir_name in resources assets data; do
+                  if [[ -d "${out_dir}/${resource_dir_name}" ]]; then
+                    cp -R "${out_dir}/${resource_dir_name}" "${demo_runnable_dir}/"
+                  fi
+                done
+              else
+                failed=1
+              fi
             else
               failed=1
             fi
