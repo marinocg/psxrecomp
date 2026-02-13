@@ -72,6 +72,10 @@ void setup_context(RenderContext *ctx, int w, int h, int r, int g, int b) {
 	ctx->active_buffer = 0;
 	ctx->next_packet   = ctx->buffers[0].buffer;
 	ClearOTagR(ctx->buffers[0].ot, OT_LENGTH);
+	ClearOTagR(ctx->buffers[1].ot, OT_LENGTH);
+
+	PutDispEnv(&(ctx->buffers[0].disp_env));
+	PutDrawEnv(&(ctx->buffers[0].draw_env));
 
 	// Turn on the video output.
 	SetDispMask(1);
@@ -83,19 +87,18 @@ void flip_buffers(RenderContext *ctx) {
 	DrawSync(0);
 	VSync(0);
 
-	RenderBuffer *draw_buffer = &(ctx->buffers[ctx->active_buffer]);
-	RenderBuffer *disp_buffer = &(ctx->buffers[ctx->active_buffer ^ 1]);
+	RenderBuffer *buffer = &(ctx->buffers[ctx->active_buffer]);
 
-	// Display the framebuffer the GPU has just finished drawing and start
-	// rendering the display list that was filled up in the main loop.
-	PutDispEnv(&(disp_buffer->disp_env));
-	DrawOTagEnv(&(draw_buffer->ot[OT_LENGTH - 1]), &(draw_buffer->draw_env));
+	// Show the framebuffer that has just been drawn.
+	PutDispEnv(&(buffer->disp_env));
+	DrawOTagEnv(&(buffer->ot[OT_LENGTH - 1]), &(buffer->draw_env));
 
-	// Switch over to the next buffer, clear it and reset the packet allocation
-	// pointer.
+	// Switch to the other buffer for the next frame.
 	ctx->active_buffer ^= 1;
-	ctx->next_packet    = disp_buffer->buffer;
-	ClearOTagR(disp_buffer->ot, OT_LENGTH);
+	RenderBuffer *next = &(ctx->buffers[ctx->active_buffer]);
+
+	ctx->next_packet = next->buffer;
+	ClearOTagR(next->ot, OT_LENGTH);
 }
 
 void *new_primitive(RenderContext *ctx, int z, size_t size) {
@@ -135,13 +138,16 @@ int main(int argc, const char **argv) {
 	(void) argc;
 	(void) argv;
 
+	// Use static storage to avoid large stack usage for packet/OT buffers.
+	static RenderContext ctx;
+
 	// Initialize the GPU and load the default font texture provided by
 	// PSn00bSDK at (960, 0) in VRAM.
 	ResetGraph(0);
 	FntLoad(960, 0);
+	FntOpen(0, 0, SCREEN_XRES, SCREEN_YRES, 0, 512);
 
 	// Set up our rendering context.
-	RenderContext ctx;
 	setup_context(&ctx, SCREEN_XRES, SCREEN_YRES, 63, 0, 127);
 
 	int x  = 0, y  = 0;
