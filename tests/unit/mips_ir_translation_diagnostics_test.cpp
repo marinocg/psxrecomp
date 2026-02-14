@@ -32,7 +32,6 @@ int main()
     unsupportedInDelay.isInDelaySlot = true;
     unsupportedInDelay.delaySlotOwner = 0x80013C64;
 
-
     Instruction breakInstr{};
     breakInstr.address = 0x80014044;
     breakInstr.encoding = 0x0007000D;
@@ -42,7 +41,8 @@ int main()
     MipsIrBuildOptions options;
     options.emitUnknownAsNop = true;
 
-    auto result = psxrecomp::ir::buildIrFromMips({unsupported, breakInstr, jumpWithDelay, unsupportedInDelay}, options);
+    auto result = psxrecomp::ir::buildIrFromMips(
+        {unsupported, breakInstr, jumpWithDelay, unsupportedInDelay}, options);
 
     assert(result.warnings.size() == 3);
     assert(result.warnings[0].find("Unsupported opcode:") != std::string::npos);
@@ -56,7 +56,6 @@ int main()
 
     assert(result.warnings[1].find("BREAK lowered to TRAP") != std::string::npos);
     assert(result.warnings[1].find("@ 0x80014044") != std::string::npos);
-
 
     return 0;
 }

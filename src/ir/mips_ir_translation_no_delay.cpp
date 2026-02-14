@@ -17,9 +17,9 @@ std::string formatUnsupportedOpcodeMessage(const disasm::Instruction& instr)
     std::ostringstream stream;
     const u32 primaryOpcode = (instr.encoding >> 26) & 0x3Fu;
     const u32 functionCode = instr.encoding & 0x3Fu;
-    stream << "Unsupported opcode: " << instr.toString() << " (word=0x" << std::hex
-           << std::setw(8) << std::setfill('0') << instr.encoding << ", op=0x" << std::setw(2)
-           << primaryOpcode << ", funct=0x" << std::setw(2) << functionCode;
+    stream << "Unsupported opcode: " << instr.toString() << " (word=0x" << std::hex << std::setw(8)
+           << std::setfill('0') << instr.encoding << ", op=0x" << std::setw(2) << primaryOpcode
+           << ", funct=0x" << std::setw(2) << functionCode;
     if (instr.isInDelaySlot)
     {
         stream << ", in_delay_slot";

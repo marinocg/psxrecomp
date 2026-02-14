@@ -328,7 +328,8 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         break;
     case ir::Opcode::TRAP:
     {
-        std::string code = instruction.inputs.empty() ? "0" : valueToExpr(instruction.inputs.front(), context);
+        std::string code =
+            instruction.inputs.empty() ? "0" : valueToExpr(instruction.inputs.front(), context);
         std::string sourcePc = "0";
         if (instruction.sourceAddress.has_value())
         {

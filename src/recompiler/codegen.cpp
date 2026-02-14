@@ -156,14 +156,16 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("[[noreturn]] inline void failUnsupportedCall(Address target, Address pc)");
     emitter.openBlock("");
     emitter.writeLine("std::ostringstream stream;");
-    emitter.writeLine("stream << \"Unsupported CALL target 0x\" << std::hex << target << \" at PC 0x\" << pc;");
+    emitter.writeLine(
+        "stream << \"Unsupported CALL target 0x\" << std::hex << target << \" at PC 0x\" << pc;");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("[[noreturn]] inline void triggerTrap(u32 code, Address pc)");
     emitter.openBlock("");
     emitter.writeLine("std::ostringstream stream;");
-    emitter.writeLine("stream << \"BREAK/TRAP reached (code=0x\" << std::hex << code << \") at PC 0x\" << pc;");
+    emitter.writeLine(
+        "stream << \"BREAK/TRAP reached (code=0x\" << std::hex << code << \") at PC 0x\" << pc;");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
