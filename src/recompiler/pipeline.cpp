@@ -312,9 +312,18 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     {
         boundaries.push_back({entryAddress, disassembled.back().address, false, false});
     }
-    std::sort(boundaries.begin(), boundaries.end(),
-              [](const disasm::FunctionBoundary& lhs, const disasm::FunctionBoundary& rhs)
-              { return lhs.start < rhs.start; });
+    std::sort(
+        boundaries.begin(), boundaries.end(),
+        [entryAddress](const disasm::FunctionBoundary& lhs, const disasm::FunctionBoundary& rhs)
+        {
+            const bool lhsIsEntry = lhs.start == entryAddress;
+            const bool rhsIsEntry = rhs.start == entryAddress;
+            if (lhsIsEntry != rhsIsEntry)
+            {
+                return lhsIsEntry;
+            }
+            return lhs.start < rhs.start;
+        });
 
     ir::Program program;
     for (const auto& boundary : boundaries)
