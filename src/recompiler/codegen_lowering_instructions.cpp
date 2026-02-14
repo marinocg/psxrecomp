@@ -327,7 +327,9 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 sourcePc = sourceStream.str();
             }
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
+            emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
+            emitter.closeBlock();
             emitter.closeBlock();
         }
         else

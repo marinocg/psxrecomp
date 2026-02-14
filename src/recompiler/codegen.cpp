@@ -56,6 +56,7 @@ std::string CodeGenerator::generateHeader(const ir::Program& program, const std:
     emitter.writeBlank();
     emitter.openBlock("namespace psxrecomp");
     emitter.openBlock("namespace recompiler");
+
     emitter.writeLine("struct RecompilerContext;");
     emitter.openBlock("struct RecompiledModule");
     emitter.writeLine("static void configure(runtime::PsxSystem& system);");
@@ -71,6 +72,14 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
                                           const ModuleMetadata& metadata)
 {
     CppEmitter emitter;
+    std::vector<std::pair<Address, std::string>> functionSymbols;
+    functionSymbols.reserve(program.functions.size());
+    std::unordered_set<std::string> usedFunctionNames;
+    for (const auto& function : program.functions)
+    {
+        functionSymbols.emplace_back(function.entryAddress,
+                                     uniquifyIdentifier(function.name, usedFunctionNames));
+    }
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
     emitter.writeLine("#include <array>");
@@ -209,6 +218,38 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     }
     emitter.writeBlank();
 
+    emitter.writeLine(
+        "inline bool callRecompiledFunction(RecompilerContext& context, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("Address physical = address & 0x1FFFFFFF;");
+    emitter.writeLine("switch (physical)");
+    emitter.openBlock("");
+    {
+        std::unordered_set<Address> emittedEntries;
+        for (const auto& entry : functionSymbols)
+        {
+            const Address normalizedEntry = entry.first & 0x1FFFFFFFu;
+            if (!emittedEntries.insert(normalizedEntry).second)
+            {
+                continue;
+            }
+            std::ostringstream caseLine;
+            caseLine << "case 0x" << std::hex << normalizedEntry << ":";
+            emitter.writeLine(caseLine.str());
+            emitter.openBlock("");
+            emitter.writeLine(entry.second + "(context);");
+            emitter.writeLine("return true;");
+            emitter.closeBlock();
+        }
+    }
+    emitter.writeLine("default:");
+    emitter.openBlock("");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+
     emitter.writeLine("void RecompiledModule::configure(runtime::PsxSystem& system)");
     emitter.openBlock("");
     emitter.writeLine("runtime::PsxSystem::DiscSwapInfo info;");
@@ -251,7 +292,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("RecompilerContext context{system, {}};");
     if (!program.functions.empty())
     {
-        emitter.writeLine(toIdentifier(program.functions.front().name) + "(context);");
+        emitter.writeLine(functionSymbols.front().second + "(context);");
     }
     emitter.closeBlock();
     emitter.writeBlank();

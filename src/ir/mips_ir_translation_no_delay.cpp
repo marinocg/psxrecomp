@@ -364,7 +364,6 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
             }
             else
             {
-                addWarning(instr, "Direct JAL lowered to CALL with link-register semantics");
                 emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
             }
         }

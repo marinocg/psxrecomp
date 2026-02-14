@@ -50,6 +50,7 @@ int main()
                                                   makeDelayNop(0x80010014, 0x80010010)});
 
     assert(result.errors.empty());
+    assert(result.warnings.empty());
 
     const auto hasInstruction =
         [&](psxrecomp::ir::Opcode opcode, psxrecomp::ir::Value input, psxrecomp::ir::Value output)
