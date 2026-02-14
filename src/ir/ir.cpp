@@ -73,6 +73,8 @@ std::string opcodeToString(Opcode opcode)
         return "call";
     case Opcode::SYSCALL:
         return "syscall";
+    case Opcode::TRAP:
+        return "trap";
     case Opcode::RETURN:
         return "return";
     }

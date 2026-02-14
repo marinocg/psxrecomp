@@ -48,6 +48,7 @@ enum class Opcode
     JUMP,
     CALL,
     SYSCALL,
+    TRAP,
     RETURN
 };
 

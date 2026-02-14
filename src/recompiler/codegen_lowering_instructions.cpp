@@ -319,6 +319,14 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             emitter.writeLine("callSyscall(context.system, " + code + ", context.regs);");
         }
         break;
+    case ir::Opcode::TRAP:
+        if (!instruction.inputs.empty())
+        {
+            std::string code = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine("(void)" + code + ";");
+        }
+        emitter.writeLine("std::abort();");
+        break;
     case ir::Opcode::RETURN:
         emitter.writeLine("return;");
         break;

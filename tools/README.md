@@ -18,8 +18,9 @@ See: `tools/iso_fixture_generator.md`.
 
 Aggregates `recompile-demos` JSON logs and generates unsupported-opcode tracking reports:
 - Input: directory containing `*.result.json` emitted by `psxrecomp --json`.
-- Output JSON: warning counts, per-demo warning lists, unsupported opcode address frequency.
-- Output Markdown: checkbox backlog for unsupported opcode addresses + warning frequency table.
+- Output JSON: warning counts, per-demo warning lists, unsupported opcode address frequency, and triage classifications.
+- Output Markdown: splits unsupported hits into actionable instruction gaps (e.g. BREAK), likely code-vs-data false positives (ASCII/fill patterns), and unresolved triage items.
+- Supports both legacy warning format (`Unsupported opcode @ ...`) and enriched format (`Unsupported opcode: ... (word/op/funct) @ ...`).
 
 Usage:
 ```bash

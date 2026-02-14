@@ -396,6 +396,13 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         addWarning(instr, "Indirect JALR unsupported");
         emit(Opcode::CALL, {Value::makeRegister(instr.rs)}, {});
         break;
+    case disasm::Opcode::BREAK:
+    {
+        const u32 breakCode = (instr.encoding >> 6) & 0xFFFFF;
+        addWarning(instr, "BREAK lowered to TRAP");
+        emit(Opcode::TRAP, {Value::makeImmediate(static_cast<s32>(breakCode))}, {});
+        break;
+    }
     case disasm::Opcode::SYSCALL:
     {
         const u32 syscallCode = (instr.encoding >> 6) & 0xFFFFF;

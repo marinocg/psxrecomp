@@ -108,6 +108,8 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "call";
     case ir::Opcode::SYSCALL:
         return "syscall";
+    case ir::Opcode::TRAP:
+        return "trap";
     case ir::Opcode::RETURN:
         return "return";
     }
