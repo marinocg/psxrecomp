@@ -15,7 +15,7 @@ highlights dependencies between workstreams.
 - [x] Disassembler ([mips_r3000_disassembler_roadmap.md](mips_r3000_disassembler_roadmap.md))
 - [x] IR pipeline ([ir_roadmap.md](ir_roadmap.md))
 - [x] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
-- [ ] Opcode coverage tracking ([opcode_coverage_roadmap.md](opcode_coverage_roadmap.md))
+- [x] Opcode coverage tracking ([opcode_coverage_roadmap.md](opcode_coverage_roadmap.md))
 - [x] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
 - [ ] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
 - [ ] SPU emulation ([spu_emulation_roadmap.md](spu_emulation_roadmap.md))

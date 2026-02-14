@@ -9,6 +9,14 @@ namespace ir
 namespace detail
 {
 
+namespace
+{
+Address linkAddressForJump(const disasm::Instruction& instruction)
+{
+    return instruction.address + 8;
+}
+} // namespace
+
 MipsIrTranslator::MipsIrTranslator(Builder& builder, MipsIrBuildResult& result,
                                    const MipsIrBuildOptions& options)
     : m_builder(builder), m_result(result), m_options(options)
@@ -60,6 +68,11 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
 {
     auto emit = [&](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs)
     { emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address); };
+    auto emitLinkRegister = [&](Register linkRegister)
+    {
+        emit(Opcode::MOVE, {Value::makeImmediate(static_cast<s32>(linkAddressForJump(instr)))},
+             {Value::makeRegister(linkRegister)});
+    };
 
     switch (instr.opcode)
     {
@@ -202,6 +215,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
     }
     case disasm::Opcode::JAL:
     {
+        emitLinkRegister(Registers::RA);
         if (delaySlot != nullptr)
         {
             translateNoDelay(*delaySlot);
@@ -216,8 +230,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
             }
             else
             {
-                addWarning(instr,
-                           "Direct JAL lowered to CALL; non-intrinsic calls may be unsupported");
+                addWarning(instr, "Direct JAL lowered to CALL with link-register semantics");
                 emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
             }
         }
@@ -241,8 +254,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         auto target = instr.getBranchTarget();
         if (target.has_value())
         {
-            addWarning(instr, "Conditional link branch lowered to BRANCH; link-register semantics "
-                              "are not modeled yet");
+            emitLinkRegister(Registers::RA);
             emit(Opcode::BRANCH, {condTemp, Value::makeAddress(*target)}, {});
         }
         else
@@ -262,8 +274,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         }
         else
         {
-            addWarning(instr, "Indirect JR unsupported");
-            emit(Opcode::RETURN, {}, {});
+            emit(Opcode::JUMP, {Value::makeRegister(instr.rs)}, {});
         }
         return;
     case disasm::Opcode::JALR:
@@ -271,7 +282,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         {
             translateNoDelay(*delaySlot);
         }
-        addWarning(instr, "Indirect JALR unsupported");
+        emitLinkRegister(instr.rd == Registers::ZERO ? Registers::RA : instr.rd);
         emit(Opcode::CALL, {Value::makeRegister(instr.rs)}, {});
         return;
     default:

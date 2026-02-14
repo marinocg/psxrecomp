@@ -219,6 +219,14 @@ if(BUILD_TESTS)
     target_include_directories(mips_ir_translation_diagnostics_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME mips_ir_translation_diagnostics_test COMMAND mips_ir_translation_diagnostics_test)
 
+    add_executable(mips_ir_control_flow_test
+        tests/unit/mips_ir_control_flow_test.cpp
+        ${IR_SOURCES}
+        ${DISASM_SOURCES}
+    )
+    target_include_directories(mips_ir_control_flow_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME mips_ir_control_flow_test COMMAND mips_ir_control_flow_test)
+
     add_executable(gpu_test
         tests/unit/gpu_test.cpp
         src/runtime/gpu.cpp

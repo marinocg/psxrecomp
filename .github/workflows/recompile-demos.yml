@@ -217,7 +217,9 @@ jobs:
             "${PYTHON_BIN}" tools/report_unsupported_opcodes.py \
               --log-dir recompile-artifacts/logs \
               --output-json recompile-artifacts/logs/unsupported-opcode-report.json \
-              --output-md recompile-artifacts/logs/unsupported-opcode-report.md || failed=1
+              --output-md recompile-artifacts/logs/unsupported-opcode-report.md \
+              --output-trend-json recompile-artifacts/logs/unsupported-opcode-trend.json \
+              --output-trend-md recompile-artifacts/logs/unsupported-opcode-trend.md || failed=1
           fi
 
           echo "failed=${failed}" >> "${GITHUB_OUTPUT}"

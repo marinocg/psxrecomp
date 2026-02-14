@@ -69,7 +69,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - IR data structures, CFG builder, SSA conversion, and verification utilities.
 - Function boundary detection and call graph discovery in the pipeline.
 - MIPS→IR lowering for arithmetic/logical ops, shifts, mult/div, HI/LO moves, branches, jumps,
-  calls, returns, syscalls, and MMIO intrinsics with non-nop delay slots.
+  calls, returns, syscalls, and MMIO intrinsics with non-nop delay slots, including link-register semantics for `JAL`/`JALR` and register-target `JR` lowering.
 - Optimization passes (constant folding, DCE, CSE, LICM) integrated into the pipeline.
 
 **Missing**
@@ -81,7 +81,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
 - Peephole optimizations, logging hooks, and debug metadata in generated output.
 - End-to-end pipeline validation and compile-and-run checks in unit tests.
-- Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs.
+- Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs, including per-run trend snapshots and top-family prioritization.
 
 **Missing**
 - Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.

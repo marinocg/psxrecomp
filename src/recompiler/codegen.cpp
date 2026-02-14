@@ -161,6 +161,14 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
+    emitter.writeLine("[[noreturn]] inline void failUnsupportedJump(Address target, Address pc)");
+    emitter.openBlock("");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine("stream << \"Unsupported JR/JUMP target 0x\" << std::hex << target << \" at "
+                      "PC 0x\" << pc;");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.closeBlock();
+    emitter.writeBlank();
     emitter.writeLine("[[noreturn]] inline void triggerTrap(u32 code, Address pc)");
     emitter.openBlock("");
     emitter.writeLine("std::ostringstream stream;");
