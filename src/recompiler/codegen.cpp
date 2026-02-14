@@ -352,6 +352,19 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "target_link_libraries(" << projectName << "_runner PRIVATE " << projectName << ")\n";
     stream << "set_target_properties(" << projectName << "_runner PROPERTIES OUTPUT_NAME \""
            << projectName << "\")\n\n";
+    stream << "option(PSXRECOMP_ENABLE_SDL_PRESENTER \"Enable SDL2 framebuffer presenter\" ON)\n";
+    stream << "set(PSXRECOMP_HAS_SDL2 0)\n";
+    stream << "if(PSXRECOMP_ENABLE_SDL_PRESENTER)\n";
+    stream << "    find_package(SDL2 QUIET)\n";
+    stream << "    if(SDL2_FOUND)\n";
+    stream << "        set(PSXRECOMP_HAS_SDL2 1)\n";
+    stream << "        target_link_libraries(" << projectName << "_runner PRIVATE SDL2::SDL2)\n";
+    stream << "    else()\n";
+    stream << "        message(STATUS \"SDL2 not found; runner will use headless mode only.\")\n";
+    stream << "    endif()\n";
+    stream << "endif()\n";
+    stream << "target_compile_definitions(" << projectName
+           << "_runner PRIVATE PSXRECOMP_HAS_SDL2=${PSXRECOMP_HAS_SDL2})\n\n";
     stream << "if(EXISTS ${PSXRECOMP_RESOURCE_DIR})\n";
     stream << "    add_custom_command(TARGET " << projectName << "_runner POST_BUILD\n";
     stream << "        COMMAND ${CMAKE_COMMAND} -E copy_directory\n";
@@ -374,6 +387,10 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("#include <fstream>");
     emitter.writeLine("#include <iostream>");
     emitter.writeLine("#include <string>");
+    emitter.writeLine("#include <vector>");
+    emitter.writeLine("#if PSXRECOMP_HAS_SDL2");
+    emitter.writeLine("#include <SDL2/SDL.h>");
+    emitter.writeLine("#endif");
     emitter.writeBlank();
     emitter.writeLine("namespace");
     emitter.openBlock("");
@@ -407,6 +424,102 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("return out.good();");
     emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "bool presentFramebufferWithSdl(const std::vector<psxrecomp::u16>& framebuffer)");
+    emitter.openBlock("");
+    emitter.writeLine("#if !PSXRECOMP_HAS_SDL2");
+    emitter.writeLine("(void)framebuffer;");
+    emitter.writeLine("return false;");
+    emitter.writeLine("#else");
+    emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("if (framebuffer.size() < width * height)");
+    emitter.openBlock("");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeLine("if (SDL_Init(SDL_INIT_VIDEO) != 0)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][warn] SDL init failed: \" << SDL_GetError() << \"\\n\";");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "SDL_Window* window = SDL_CreateWindow(\"PSXRecomp Output\", SDL_WINDOWPOS_CENTERED,");
+    emitter.writeLine("                                    SDL_WINDOWPOS_CENTERED, 1024, 512, 0);");
+    emitter.writeLine("if (window == nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] SDL window creation failed: \" << "
+                      "SDL_GetError() << \"\\n\";");
+    emitter.writeLine("SDL_Quit();");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);");
+    emitter.writeLine("if (renderer == nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine("renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);");
+    emitter.closeBlock();
+    emitter.writeLine("if (renderer == nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] SDL renderer creation failed: \" << "
+                      "SDL_GetError() << \"\\n\";");
+    emitter.writeLine("SDL_DestroyWindow(window);");
+    emitter.writeLine("SDL_Quit();");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeLine("SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24,");
+    emitter.writeLine(
+        "                                        SDL_TEXTUREACCESS_STREAMING, 1024, 512);");
+    emitter.writeLine("if (texture == nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] SDL texture creation failed: \" << "
+                      "SDL_GetError() << \"\\n\";");
+    emitter.writeLine("SDL_DestroyRenderer(renderer);");
+    emitter.writeLine("SDL_DestroyWindow(window);");
+    emitter.writeLine("SDL_Quit();");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeLine("std::vector<psxrecomp::u8> rgb(width * height * 3, 0);");
+    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.openBlock("");
+    emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
+    emitter.writeLine(
+        "rgb[i * 3 + 0] = static_cast<psxrecomp::u8>(((pixel >> 0) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "rgb[i * 3 + 1] = static_cast<psxrecomp::u8>(((pixel >> 5) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "rgb[i * 3 + 2] = static_cast<psxrecomp::u8>(((pixel >> 10) & 0x1F) * 255 / 31);");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "SDL_UpdateTexture(texture, nullptr, rgb.data(), static_cast<int>(width * 3));");
+    emitter.writeLine("bool running = true;");
+    emitter.writeLine("while (running)");
+    emitter.openBlock("");
+    emitter.writeLine("SDL_Event event;");
+    emitter.writeLine("while (SDL_PollEvent(&event))");
+    emitter.openBlock("");
+    emitter.writeLine("if (event.type == SDL_QUIT)");
+    emitter.openBlock("");
+    emitter.writeLine("running = false;");
+    emitter.closeBlock();
+    emitter.writeLine("if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)");
+    emitter.openBlock("");
+    emitter.writeLine("running = false;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("SDL_RenderClear(renderer);");
+    emitter.writeLine("SDL_RenderCopy(renderer, texture, nullptr, nullptr);");
+    emitter.writeLine("SDL_RenderPresent(renderer);");
+    emitter.writeLine("SDL_Delay(16);");
+    emitter.closeBlock();
+    emitter.writeLine("SDL_DestroyTexture(texture);");
+    emitter.writeLine("SDL_DestroyRenderer(renderer);");
+    emitter.writeLine("SDL_DestroyWindow(window);");
+    emitter.writeLine("SDL_Quit();");
+    emitter.writeLine("return true;");
+    emitter.writeLine("#endif");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("int main(int argc, char** argv)");
@@ -443,6 +556,24 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::run(system);");
+    emitter.writeLine(
+        "if (const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\"))");
+    emitter.openBlock("");
+    emitter.writeLine("const bool enabled = presentEnv[0] == '\0' || presentEnv[0] == '1';");
+    emitter.writeLine("if (enabled)");
+    emitter.openBlock("");
+    emitter.writeLine("if (presentFramebufferWithSdl(system.gpu().frameBuffer()))");
+    emitter.openBlock("");
+    emitter.writeLine("std::cout << \"[psxrecomp] SDL presenter window closed.\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][warn] SDL presenter unavailable; install SDL2 or disable "
+        "PSXRECOMP_PRESENT_FRAMEBUFFER.\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.writeLine("if (const char* dumpPathEnv = std::getenv(\"PSXRECOMP_DUMP_FRAMEBUFFER\"))");
     emitter.openBlock("");
     emitter.writeLine("std::filesystem::path dumpPath = dumpPathEnv[0] != '\\0' ? dumpPathEnv : "
@@ -463,8 +594,8 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
         "std::cout << \"[psxrecomp] If nothing appears, the game may still be blocked by "
         "unimplemented hardware paths (GPU/SPU/CDROM/timing).\" << \"\\n\";");
     emitter.writeLine(
-        "std::cout << \"[psxrecomp] Tip: set PSXRECOMP_DUMP_FRAMEBUFFER=/path/frame.ppm to capture "
-        "a framebuffer dump.\" << \"\\n\";");
+        "std::cout << \"[psxrecomp] Tip: set PSXRECOMP_PRESENT_FRAMEBUFFER=1 for an SDL window, "
+        "or PSXRECOMP_DUMP_FRAMEBUFFER=/path/frame.ppm for a dump.\" << \"\\n\";");
     emitter.writeLine("return 0;");
     emitter.closeBlock();
     emitter.writeLine("catch (const std::exception& ex)");

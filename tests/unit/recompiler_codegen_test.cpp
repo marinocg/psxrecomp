@@ -96,8 +96,12 @@ int main()
     assert(buildFile.find("_runner.cpp") != std::string::npos);
     assert(buildFile.find("if(WIN32 AND NOT MSVC)") != std::string::npos);
     assert(buildFile.find("-static -static-libgcc -static-libstdc++") != std::string::npos);
+    assert(buildFile.find("PSXRECOMP_ENABLE_SDL_PRESENTER") != std::string::npos);
+    assert(buildFile.find("PSXRECOMP_HAS_SDL2") != std::string::npos);
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
+    assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
+    assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
