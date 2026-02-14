@@ -303,8 +303,15 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (!instruction.inputs.empty())
         {
             std::string target = valueToExpr(instruction.inputs.front(), context);
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
-            emitter.writeLine("std::abort();");
+            emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
         }
         else
@@ -320,13 +327,18 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         }
         break;
     case ir::Opcode::TRAP:
-        if (!instruction.inputs.empty())
+    {
+        std::string code = instruction.inputs.empty() ? "0" : valueToExpr(instruction.inputs.front(), context);
+        std::string sourcePc = "0";
+        if (instruction.sourceAddress.has_value())
         {
-            std::string code = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine("(void)" + code + ";");
+            std::ostringstream sourceStream;
+            sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+            sourcePc = sourceStream.str();
         }
-        emitter.writeLine("std::abort();");
+        emitter.writeLine("triggerTrap(" + code + ", " + sourcePc + ");");
         break;
+    }
     case ir::Opcode::RETURN:
         emitter.writeLine("return;");
         break;
