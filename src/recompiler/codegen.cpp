@@ -559,7 +559,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine(
         "if (const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\"))");
     emitter.openBlock("");
-    emitter.writeLine("const bool enabled = presentEnv[0] == '\0' || presentEnv[0] == '1';");
+    emitter.writeLine("const bool enabled = presentEnv[0] == '\\0' || presentEnv[0] == '1';");
     emitter.writeLine("if (enabled)");
     emitter.openBlock("");
     emitter.writeLine("if (presentFramebufferWithSdl(system.gpu().frameBuffer()))");

@@ -102,6 +102,7 @@ int main()
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
     assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
+    assert(runner.find("presentEnv[0] == '\\0'") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
