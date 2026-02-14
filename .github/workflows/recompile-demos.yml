@@ -204,6 +204,22 @@ jobs:
             fi
           done
 
+          if command -v python3 >/dev/null 2>&1; then
+            PYTHON_BIN="$(command -v python3)"
+          elif command -v python >/dev/null 2>&1; then
+            PYTHON_BIN="$(command -v python)"
+          else
+            echo "Python is required to generate unsupported opcode reports." >&2
+            failed=1
+          fi
+
+          if [[ -n "${PYTHON_BIN:-}" ]]; then
+            "${PYTHON_BIN}" tools/report_unsupported_opcodes.py \
+              --log-dir recompile-artifacts/logs \
+              --output-json recompile-artifacts/logs/unsupported-opcode-report.json \
+              --output-md recompile-artifacts/logs/unsupported-opcode-report.md || failed=1
+          fi
+
           echo "failed=${failed}" >> "${GITHUB_OUTPUT}"
 
       - name: Upload recompile artifact bundle

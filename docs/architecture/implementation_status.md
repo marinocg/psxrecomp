@@ -81,6 +81,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
 - Peephole optimizations, logging hooks, and debug metadata in generated output.
 - End-to-end pipeline validation and compile-and-run checks in unit tests.
+- Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs.
 
 **Missing**
 - Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.
