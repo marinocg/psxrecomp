@@ -291,7 +291,8 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         }
         break;
     case ir::Opcode::JUMP:
-        if (!instruction.inputs.empty())
+        if (!instruction.inputs.empty() &&
+            instruction.inputs.front().kind == ir::ValueKind::REGISTER)
         {
             std::string target = valueToExpr(instruction.inputs.front(), context);
             std::string sourcePc = "0";
