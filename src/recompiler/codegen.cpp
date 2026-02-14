@@ -266,6 +266,9 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "target_include_directories(psxrecomp_runtime PUBLIC "
               "${PSXRECOMP_RUNTIME_INCLUDE_DIR})\n\n";
     stream << "project(" << projectName << " LANGUAGES CXX)\n";
+    stream << "if(WIN32 AND NOT MSVC)\n";
+    stream << "    add_link_options(-static-libgcc -static-libstdc++)\n";
+    stream << "endif()\n\n";
     stream << "add_library(" << projectName << " " << projectName << ".cpp)\n";
     stream << "target_compile_definitions(" << projectName << " PUBLIC\n";
     stream << "    PSXRECOMP_ENABLE_LOGGING=$<BOOL:${PSXRECOMP_ENABLE_LOGGING}>\n";
