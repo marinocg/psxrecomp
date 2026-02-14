@@ -14,6 +14,25 @@ Generates deterministic ISO fixtures for debugging and validation:
 
 See: `tools/iso_fixture_generator.md`.
 
+### `report_unsupported_opcodes.py` (implemented)
+
+Aggregates `recompile-demos` JSON logs and generates unsupported-opcode tracking reports:
+- Input: directory containing `*.result.json` emitted by `psxrecomp --json`.
+- Output JSON: warning counts, per-demo warning lists, unsupported opcode address frequency, and triage classifications.
+- Output Markdown: splits unsupported hits into actionable instruction gaps (e.g. BREAK), likely code-vs-data false positives (ASCII/fill patterns), and unresolved triage items.
+- Supports both legacy warning format (`Unsupported opcode @ ...`) and enriched format (`Unsupported opcode: ... (word/op/funct) @ ...`).
+
+Usage:
+```bash
+python3 tools/report_unsupported_opcodes.py \
+  --log-dir recompile-artifacts/logs \
+  --output-json recompile-artifacts/logs/unsupported-opcode-report.json \
+  --output-md recompile-artifacts/logs/unsupported-opcode-report.md
+```
+
+Workflow integration:
+- `.github/workflows/recompile-demos.yml` runs this script after demo recompilation and includes the generated reports in uploaded artifacts.
+
 ### Planned Tools
 
 1. **iso_dump** - Extract and analyze PSX ISO files

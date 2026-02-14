@@ -148,17 +148,20 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             std::string rhs = valueToExpr(instruction.inputs[1], context);
             if (instruction.opcode == ir::Opcode::MUL)
             {
-                emitter.writeLine("const s64 product = static_cast<s64>(static_cast<s32>(" + lhs +
-                                  ")) * static_cast<s64>(static_cast<s32>(" + rhs + "));");
-                emitter.writeLine(lo + " = static_cast<u32>(product);");
-                emitter.writeLine(hi + " = static_cast<u32>(static_cast<u64>(product) >> 32);");
+                const std::string productExpr = "(static_cast<s64>(static_cast<s32>(" + lhs +
+                                                ")) * "
+                                                "static_cast<s64>(static_cast<s32>(" +
+                                                rhs + ")))";
+                emitter.writeLine(lo + " = static_cast<u32>(" + productExpr + ");");
+                emitter.writeLine(hi + " = static_cast<u32>(static_cast<u64>(" + productExpr +
+                                  ") >> 32);");
             }
             else
             {
-                emitter.writeLine("const u64 product = static_cast<u64>(" + lhs +
-                                  ") * static_cast<u64>(" + rhs + ");");
-                emitter.writeLine(lo + " = static_cast<u32>(product);");
-                emitter.writeLine(hi + " = static_cast<u32>(product >> 32);");
+                const std::string productExpr =
+                    "(static_cast<u64>(" + lhs + ") * static_cast<u64>(" + rhs + "))";
+                emitter.writeLine(lo + " = static_cast<u32>(" + productExpr + ");");
+                emitter.writeLine(hi + " = static_cast<u32>(" + productExpr + " >> 32);");
             }
         }
         break;
@@ -177,17 +180,17 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             emitter.openBlock("else");
             if (instruction.opcode == ir::Opcode::DIV)
             {
-                emitter.writeLine("const s32 dividend = static_cast<s32>(" + lhs + ");");
-                emitter.writeLine("const s32 divisor = static_cast<s32>(" + rhs + ");");
-                emitter.writeLine(lo + " = static_cast<u32>(dividend / divisor);");
-                emitter.writeLine(hi + " = static_cast<u32>(dividend % divisor);");
+                emitter.writeLine(lo + " = static_cast<u32>(static_cast<s32>(" + lhs +
+                                  ") / static_cast<s32>(" + rhs + "));");
+                emitter.writeLine(hi + " = static_cast<u32>(static_cast<s32>(" + lhs +
+                                  ") % static_cast<s32>(" + rhs + "));");
             }
             else
             {
-                emitter.writeLine("const u32 dividend = static_cast<u32>(" + lhs + ");");
-                emitter.writeLine("const u32 divisor = static_cast<u32>(" + rhs + ");");
-                emitter.writeLine(lo + " = dividend / divisor;");
-                emitter.writeLine(hi + " = dividend % divisor;");
+                emitter.writeLine(lo + " = static_cast<u32>(" + lhs + ") / static_cast<u32>(" +
+                                  rhs + ");");
+                emitter.writeLine(hi + " = static_cast<u32>(" + lhs + ") % static_cast<u32>(" +
+                                  rhs + ");");
             }
             emitter.closeBlock();
         }
@@ -300,8 +303,15 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (!instruction.inputs.empty())
         {
             std::string target = valueToExpr(instruction.inputs.front(), context);
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
-            emitter.writeLine("std::abort();");
+            emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
         }
         else
@@ -316,6 +326,20 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             emitter.writeLine("callSyscall(context.system, " + code + ", context.regs);");
         }
         break;
+    case ir::Opcode::TRAP:
+    {
+        std::string code =
+            instruction.inputs.empty() ? "0" : valueToExpr(instruction.inputs.front(), context);
+        std::string sourcePc = "0";
+        if (instruction.sourceAddress.has_value())
+        {
+            std::ostringstream sourceStream;
+            sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+            sourcePc = sourceStream.str();
+        }
+        emitter.writeLine("triggerTrap(" + code + ", " + sourcePc + ");");
+        break;
+    }
     case ir::Opcode::RETURN:
         emitter.writeLine("return;");
         break;

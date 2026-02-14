@@ -110,6 +110,7 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p recompile-artifacts/source recompile-artifacts/logs recompile-artifacts/inputs
+          mkdir -p recompile-artifacts/runnable
 
           if [[ "${RUNNER_OS}" == "Windows" ]]; then
             BIN="$(pwd)/build/psxrecomp.exe"
@@ -119,7 +120,19 @@ jobs:
 
           cp "${BIN}" recompile-artifacts/
 
-          mapfile -t isos < <(find input-demos -type f -name '*.iso' | sort)
+          if command -v cmake >/dev/null 2>&1; then
+            CMAKE_BIN="$(command -v cmake)"
+          elif [[ -x "/Applications/CMake.app/Contents/bin/cmake" ]]; then
+            CMAKE_BIN="/Applications/CMake.app/Contents/bin/cmake"
+          else
+            echo "Unable to locate cmake in PATH." >&2
+            exit 1
+          fi
+
+          isos=()
+          while IFS= read -r iso; do
+            isos+=("${iso}")
+          done < <(find input-demos -type f -name '*.iso' | sort)
           if [[ ${#isos[@]} -eq 0 ]]; then
             echo "No ISO files found in downloaded demo artifact" >&2
             exit 1
@@ -139,10 +152,73 @@ jobs:
             echo "Running recompiler for ${iso}"
             if "${BIN}" --json -o "${out_dir}" "${iso}" >"${stdout_log}" 2>"${stderr_log}"; then
               cp "${stdout_log}" "${json_log}"
+
+              generated_cmake_files=()
+              while IFS= read -r cmake_file; do
+                generated_cmake_files+=("${cmake_file}")
+              done < <(find "${out_dir}" -type f -name 'CMakeLists.txt' | sort)
+              if [[ ${#generated_cmake_files[@]} -eq 0 ]]; then
+                echo "Generated output for ${base} is missing CMakeLists.txt" >&2
+                failed=1
+                continue
+              fi
+
+              source_root="$(dirname "${generated_cmake_files[0]}")"
+              if [[ ${#generated_cmake_files[@]} -gt 1 ]]; then
+                echo "Multiple CMakeLists.txt files found for ${base}; using ${source_root}" >&2
+              fi
+
+              generated_build_dir="${out_dir}/build-generated"
+              if "${CMAKE_BIN}" -S "${source_root}" -B "${generated_build_dir}" -G Ninja >"recompile-artifacts/logs/${base}.cmake.configure.log" 2>&1 && \
+                 "${CMAKE_BIN}" --build "${generated_build_dir}" >"recompile-artifacts/logs/${base}.cmake.build.log" 2>&1; then
+                demo_runnable_dir="recompile-artifacts/runnable/${base}"
+                mkdir -p "${demo_runnable_dir}/bin"
+
+                while IFS= read -r -d '' exe; do
+                  cp "${exe}" "${demo_runnable_dir}/bin/"
+
+                  exe_dir="$(dirname "${exe}")"
+                  if [[ "${RUNNER_OS}" == "Windows" ]]; then
+                    while IFS= read -r -d '' dll; do
+                      cp "${dll}" "${demo_runnable_dir}/bin/"
+                    done < <(find "${exe_dir}" -maxdepth 1 -type f -name '*.dll' -print0)
+                  fi
+
+                  if [[ -d "${exe_dir}/resources" ]]; then
+                    cp -R "${exe_dir}/resources" "${demo_runnable_dir}/bin/"
+                  fi
+                done < <(find "${generated_build_dir}" -type f \( -name '*.exe' -o -perm -u+x \) -print0)
+
+                for resource_dir_name in resources assets data; do
+                  if [[ -d "${source_root}/${resource_dir_name}" ]]; then
+                    cp -R "${source_root}/${resource_dir_name}" "${demo_runnable_dir}/bin/"
+                  elif [[ -d "${out_dir}/${resource_dir_name}" ]]; then
+                    cp -R "${out_dir}/${resource_dir_name}" "${demo_runnable_dir}/bin/"
+                  fi
+                done
+              else
+                failed=1
+              fi
             else
               failed=1
             fi
           done
+
+          if command -v python3 >/dev/null 2>&1; then
+            PYTHON_BIN="$(command -v python3)"
+          elif command -v python >/dev/null 2>&1; then
+            PYTHON_BIN="$(command -v python)"
+          else
+            echo "Python is required to generate unsupported opcode reports." >&2
+            failed=1
+          fi
+
+          if [[ -n "${PYTHON_BIN:-}" ]]; then
+            "${PYTHON_BIN}" tools/report_unsupported_opcodes.py \
+              --log-dir recompile-artifacts/logs \
+              --output-json recompile-artifacts/logs/unsupported-opcode-report.json \
+              --output-md recompile-artifacts/logs/unsupported-opcode-report.md || failed=1
+          fi
 
           echo "failed=${failed}" >> "${GITHUB_OUTPUT}"
 

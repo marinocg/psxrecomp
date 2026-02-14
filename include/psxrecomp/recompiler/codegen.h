@@ -73,6 +73,13 @@ class CodeGenerator
      */
     std::string generateBuildFile(const std::string& projectName);
 
+    /**
+     * @brief Generate standalone runner source for emitted module
+     * @param moduleName Name of module to invoke
+     * @return Generated runner source content
+     */
+    std::string generateRunnerSource(const std::string& moduleName);
+
   private:
     CodeGenOptions m_options;
 

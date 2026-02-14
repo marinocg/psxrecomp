@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <vector>
 
 using iso_test::createCueImage;
@@ -15,6 +16,38 @@ using iso_test::createMultiSessionCue;
 using iso_test::createTestIso;
 using iso_test::createTestIsoWithLabel;
 using iso_test::kSectorSize;
+
+std::filesystem::path createRawIsoFromPlain(const std::filesystem::path& plainIsoPath,
+                                            uint32_t rawSectorSize, uint32_t userDataOffset,
+                                            uint8_t modeByte)
+{
+    std::ifstream in(plainIsoPath, std::ios::binary);
+    std::vector<uint8_t> plain((std::istreambuf_iterator<char>(in)),
+                               std::istreambuf_iterator<char>());
+    assert(!plain.empty());
+    assert(plain.size() % kSectorSize == 0);
+    size_t totalSectors = plain.size() / kSectorSize;
+    std::vector<uint8_t> raw(totalSectors * rawSectorSize, 0);
+
+    for (size_t sector = 0; sector < totalSectors; ++sector)
+    {
+        size_t rawBase = sector * rawSectorSize;
+        if (modeByte != 0 && rawSectorSize >= 16)
+        {
+            raw[rawBase + 15] = modeByte;
+        }
+        std::memcpy(raw.data() + rawBase + userDataOffset, plain.data() + sector * kSectorSize,
+                    kSectorSize);
+    }
+
+    auto path = std::filesystem::temp_directory_path() /
+                ("psxrecomp_raw_" + std::to_string(rawSectorSize) + "_" +
+                 std::to_string(iso_test::generateUniqueSuffix()) + ".bin");
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
+    out.close();
+    return path;
+}
 
 std::filesystem::path createPlainIsoWithXaExtension()
 {
@@ -150,6 +183,33 @@ int main()
     assert(plainXaResources.size() == 1);
     assert(plainXaResources.front() == "AUDIO.XA");
     std::filesystem::remove(plainXaIso);
+
+    auto plainForRaw2352Mode1 = createTestIso();
+    auto raw2352Mode1 = createRawIsoFromPlain(plainForRaw2352Mode1, 2352, 16, 1);
+    psxrecomp::iso::IsoParser rawMode1Parser(raw2352Mode1.string());
+    assert(rawMode1Parser.open());
+    assert(rawMode1Parser.isValid());
+    assert(rawMode1Parser.findExecutable() == "DATA/GAME.EXE");
+    std::filesystem::remove(raw2352Mode1);
+    std::filesystem::remove(plainForRaw2352Mode1);
+
+    auto plainForRaw2352Mode2 = createTestIso();
+    auto raw2352Mode2 = createRawIsoFromPlain(plainForRaw2352Mode2, 2352, 24, 2);
+    psxrecomp::iso::IsoParser rawMode2Parser(raw2352Mode2.string());
+    assert(rawMode2Parser.open());
+    assert(rawMode2Parser.isValid());
+    assert(rawMode2Parser.findExecutable() == "DATA/GAME.EXE");
+    std::filesystem::remove(raw2352Mode2);
+    std::filesystem::remove(plainForRaw2352Mode2);
+
+    auto plainForRaw2336 = createTestIso();
+    auto raw2336 = createRawIsoFromPlain(plainForRaw2336, 2336, 0, 0);
+    psxrecomp::iso::IsoParser raw2336Parser(raw2336.string());
+    assert(raw2336Parser.open());
+    assert(raw2336Parser.isValid());
+    assert(raw2336Parser.findExecutable() == "DATA/GAME.EXE");
+    std::filesystem::remove(raw2336);
+    std::filesystem::remove(plainForRaw2336);
 
     auto exportDir = std::filesystem::temp_directory_path() /
                      ("psxrecomp_exports_" + std::to_string(iso_test::generateUniqueSuffix()));

@@ -31,13 +31,28 @@ int main()
     Value temp0 = builder.createTemporary();
     Value temp1 = builder.createTemporary();
     Value temp2 = builder.createTemporary();
+    Value mulHi0 = builder.createTemporary();
+    Value mulLo0 = builder.createTemporary();
+    Value mulHi1 = builder.createTemporary();
+    Value mulLo1 = builder.createTemporary();
+    Value divHi0 = builder.createTemporary();
+    Value divLo0 = builder.createTemporary();
     Value regA0 = Value::makeRegister(static_cast<Register>(4));
 
     entry.instructions.push_back(
         builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(1)}, {temp0}, 0x80010000));
     entry.instructions.push_back(builder.makeInstruction(
         Opcode::ADD, {temp0, Value::makeImmediate(4)}, {temp1}, 0x80010004));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::BRANCH, {temp1}, {}, 0x80010008));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::MUL, {Value::makeImmediate(7), Value::makeImmediate(3)},
+                                {mulHi0, mulLo0}, 0x80010006));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::MULU, {Value::makeImmediate(5), Value::makeImmediate(2)},
+                                {mulHi1, mulLo1}, 0x80010007));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::DIV, {Value::makeImmediate(21), Value::makeImmediate(4)},
+                                {divHi0, divLo0}, 0x80010008));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::BRANCH, {temp1}, {}, 0x8001000C));
     entry.successors = {"then", "else"};
 
     thenBlock.instructions.push_back(
@@ -49,6 +64,17 @@ int main()
     elseBlock.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {regA0}, {temp2}));
     elseBlock.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}));
 
+    auto& duplicateNameFunction = builder.createFunction("duplicate_block_names", 0x80012000);
+    auto& duplicateEntry = builder.createBlock(duplicateNameFunction, "loop");
+    auto& duplicateLoop = builder.createBlock(duplicateNameFunction, "loop");
+
+    duplicateEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80012000));
+    duplicateEntry.successors = {"loop"};
+
+    duplicateLoop.instructions.push_back(
+        builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80012004));
+
     CodeGenerator generator;
     std::string header = generator.generateHeader(program, "module");
     std::string source = generator.generateSource(program, "module");
@@ -59,8 +85,15 @@ int main()
     assert(source.find("writeMemory32") != std::string::npos);
     assert(source.find("table_data") != std::string::npos);
     assert(source.find("switch (block)") != std::string::npos);
+    assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("if (") != std::string::npos);
+    assert(source.find("failUnsupportedCall") != std::string::npos);
+    assert(source.find("triggerTrap") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
+    assert(buildFile.find("add_executable") != std::string::npos);
+    assert(buildFile.find("_runner.cpp") != std::string::npos);
+    assert(buildFile.find("if(WIN32 AND NOT MSVC)") != std::string::npos);
+    assert(buildFile.find("-static -static-libgcc -static-libstdc++") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";

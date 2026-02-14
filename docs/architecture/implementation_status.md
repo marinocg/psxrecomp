@@ -37,9 +37,9 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 ### ISO/BIN Parsing (~85%)
 **Present**
-- ISO 9660 parsing, track handling, file extraction, and path table lookups.
+- ISO 9660 parsing, track handling, resilient sector-layout detection (2048/2336/2352/2448), file extraction, and path table lookups.
 - PSX EXE discovery heuristics, resource export helpers, and sector caching.
-- XA Mode 2 validation plus improved CUE parsing (sessions/pregaps).
+- XA Mode 2 validation, robust raw-sector PVD probing (Mode 1 + Mode 2 offsets), plus improved CUE parsing (sessions/pregaps).
 - XA resource discovery fallback for 2048-byte ISO images (extent-based when raw subheaders are unavailable).
 
 **Missing**
@@ -81,6 +81,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
 - Peephole optimizations, logging hooks, and debug metadata in generated output.
 - End-to-end pipeline validation and compile-and-run checks in unit tests.
+- Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs.
 
 **Missing**
 - Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.

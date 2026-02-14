@@ -7,6 +7,8 @@
 #include <array>
 #include <cstring>
 #include <filesystem>
+#include <optional>
+#include <vector>
 
 namespace psxrecomp
 {
@@ -18,6 +20,68 @@ namespace
 
 constexpr u32 kUserDataSize = detail::kUserDataSize;
 constexpr u32 kRawSectorSize = detail::kRawSectorSize;
+constexpr u32 kRawUserDataSectorSize = 2336;
+constexpr u32 kRawSubchannelSectorSize = 2448;
+
+struct LayoutProbe
+{
+    u32 sectorSize = 0;
+    u32 userDataOffset = 0;
+};
+
+bool hasPvdSignature(const std::array<u8, kUserDataSize>& sector)
+{
+    return sector[0] == 1 && std::memcmp(sector.data() + 1, "CD001", 5) == 0 && sector[6] == 1;
+}
+
+std::vector<LayoutProbe> buildLayoutProbes(u64 fileSize, u32 preferredSectorSize)
+{
+    std::vector<LayoutProbe> probes;
+
+    auto addProbeIfMissing = [&probes](u32 sectorSize, u32 userDataOffset)
+    {
+        for (const auto& candidate : probes)
+        {
+            if (candidate.sectorSize == sectorSize && candidate.userDataOffset == userDataOffset)
+            {
+                return;
+            }
+        }
+        probes.push_back({sectorSize, userDataOffset});
+    };
+
+    if (preferredSectorSize != 0)
+    {
+        addProbeIfMissing(preferredSectorSize, 0);
+    }
+
+    addProbeIfMissing(kUserDataSize, 0);
+
+    if (fileSize % kRawSectorSize == 0)
+    {
+        addProbeIfMissing(kRawSectorSize, 16);
+        addProbeIfMissing(kRawSectorSize, 24);
+    }
+    if (fileSize % kRawUserDataSectorSize == 0)
+    {
+        addProbeIfMissing(kRawUserDataSectorSize, 0);
+        addProbeIfMissing(kRawUserDataSectorSize, 8);
+    }
+    if (fileSize % kRawSubchannelSectorSize == 0)
+    {
+        addProbeIfMissing(kRawSubchannelSectorSize, 16);
+        addProbeIfMissing(kRawSubchannelSectorSize, 24);
+    }
+
+    addProbeIfMissing(kRawSectorSize, 16);
+    addProbeIfMissing(kRawSectorSize, 24);
+    addProbeIfMissing(kRawUserDataSectorSize, 0);
+    addProbeIfMissing(kRawUserDataSectorSize, 8);
+    addProbeIfMissing(kRawSubchannelSectorSize, 16);
+    addProbeIfMissing(kRawSubchannelSectorSize, 24);
+
+    return probes;
+}
 
 } // namespace
 
@@ -29,6 +93,14 @@ bool IsoParser::readPVD()
     std::optional<std::pair<u32, u32>> jolietRoot;
 
     m_useJoliet = false;
+
+    std::error_code fileError;
+    const auto fileSize = std::filesystem::file_size(m_filename, fileError);
+    if (fileError)
+    {
+        addError("Failed to determine image file size.");
+        return false;
+    }
 
     std::vector<u32> candidateTrackStarts;
     if (!m_tracks.empty())
@@ -50,20 +122,38 @@ bool IsoParser::readPVD()
         std::unique(candidateTrackStarts.begin(), candidateTrackStarts.end()),
         candidateTrackStarts.end());
 
-    std::array<u32, 2> layoutSizes = {m_rawSectorSize == 0 ? kUserDataSize : m_rawSectorSize,
-                                      (m_rawSectorSize == kUserDataSize) ? kRawSectorSize
-                                                                         : kUserDataSize};
+    const auto layoutProbes = buildLayoutProbes(fileSize, m_rawSectorSize);
 
     for (u32 trackStart : candidateTrackStarts)
     {
-        for (u32 layoutSize : layoutSizes)
+        for (const auto& layout : layoutProbes)
         {
-            m_rawSectorSize = layoutSize;
-            m_dataTrackStartLba = trackStart;
-            if (!readSectorInto(16, sector.data(), sector.size()))
+            const u64 pvdOffset =
+                (static_cast<u64>(trackStart) + 16ULL) * static_cast<u64>(layout.sectorSize) +
+                static_cast<u64>(layout.userDataOffset);
+            if (layout.sectorSize == 0 || pvdOffset + kUserDataSize > fileSize)
             {
                 continue;
             }
+
+            m_stream.clear();
+            m_stream.seekg(static_cast<std::streamoff>(pvdOffset), std::ios::beg);
+            if (!m_stream.good())
+            {
+                continue;
+            }
+            m_stream.read(reinterpret_cast<char*>(sector.data()),
+                          static_cast<std::streamsize>(sector.size()));
+            if (m_stream.gcount() != static_cast<std::streamsize>(sector.size()) ||
+                !hasPvdSignature(sector))
+            {
+                continue;
+            }
+
+            clearSectorCache();
+            m_rawSectorSize = layout.sectorSize;
+            m_userDataOffset = layout.userDataOffset;
+            m_dataTrackStartLba = trackStart;
 
             pvd.reset();
             pvdRoot.reset();
@@ -127,22 +217,10 @@ bool IsoParser::readPVD()
 
             m_pvd = *pvd;
             m_logicalBlockSize = m_pvd.logicalBlockSize;
-            if (m_totalSectors == 0 && m_rawSectorSize != 0)
+            m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
+            if (fileSize % m_rawSectorSize != 0)
             {
-                std::error_code error;
-                auto fileSize = std::filesystem::file_size(m_filename, error);
-                if (error)
-                {
-                    addError("Failed to determine image file size.");
-                }
-                else
-                {
-                    m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
-                    if (fileSize % m_rawSectorSize != 0)
-                    {
-                        addError("Image file size is not aligned to sector size.");
-                    }
-                }
+                addError("Image file size is not aligned to sector size.");
             }
             if (m_totalSectors != 0 && m_pvd.volumeSpaceSize > m_totalSectors)
             {

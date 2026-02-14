@@ -41,7 +41,17 @@ std::vector<u8> IsoParser::readSector(u32 sector)
         return raw;
     }
     auto view = detail::decodeSectorLayout(raw);
-    if (view.size == 0 || view.offset + view.size > raw.size())
+    if (view.size == 0)
+    {
+        if (m_userDataOffset + kUserDataSize > raw.size())
+        {
+            addError("Unsupported sector layout.");
+            return {};
+        }
+        view.offset = m_userDataOffset;
+        view.size = kUserDataSize;
+    }
+    if (view.offset + view.size > raw.size())
     {
         addError("Unsupported sector layout.");
         return {};
@@ -114,6 +124,16 @@ bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
         return false;
     }
     auto view = detail::decodeSectorLayout(m_rawSectorScratch);
+    if (view.size == 0)
+    {
+        if (m_userDataOffset + size > m_rawSectorScratch.size())
+        {
+            addError("Invalid sector view.");
+            return false;
+        }
+        view.offset = m_userDataOffset;
+        view.size = kUserDataSize;
+    }
     if (view.size < size || view.offset + size > m_rawSectorScratch.size())
     {
         addError("Invalid sector view.");
@@ -166,12 +186,14 @@ bool IsoParser::openStream()
         std::filesystem::path binPath = inputPath.parent_path() / dataTrack->file;
         m_filename = binPath.string();
         m_rawSectorSize = dataTrack->sectorSize != 0 ? dataTrack->sectorSize : kRawSectorSize;
+        m_userDataOffset = 0;
         m_dataTrackStartLba = dataTrack->startLba;
     }
     else
     {
         m_dataTrackStartLba = 0;
         m_rawSectorSize = kUserDataSize;
+        m_userDataOffset = 0;
         TrackInfo track{};
         track.trackNumber = 1;
         track.type = TrackType::Data;

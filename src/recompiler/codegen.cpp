@@ -78,6 +78,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#include <cstdint>");
     emitter.writeLine("#include <cstring>");
     emitter.writeLine("#include <iostream>");
+    emitter.writeLine("#include <sstream>");
+    emitter.writeLine("#include <stdexcept>");
     emitter.writeLine("#include <string>");
     emitter.writeLine("#include <vector>");
     emitter.writeBlank();
@@ -149,6 +151,22 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("return true;");
     emitter.closeBlock();
     emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("[[noreturn]] inline void failUnsupportedCall(Address target, Address pc)");
+    emitter.openBlock("");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine(
+        "stream << \"Unsupported CALL target 0x\" << std::hex << target << \" at PC 0x\" << pc;");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("[[noreturn]] inline void triggerTrap(u32 code, Address pc)");
+    emitter.openBlock("");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine(
+        "stream << \"BREAK/TRAP reached (code=0x\" << std::hex << code << \") at PC 0x\" << pc;");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void logWarning(const char* message)");
@@ -266,6 +284,9 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "target_include_directories(psxrecomp_runtime PUBLIC "
               "${PSXRECOMP_RUNTIME_INCLUDE_DIR})\n\n";
     stream << "project(" << projectName << " LANGUAGES CXX)\n";
+    stream << "if(WIN32 AND NOT MSVC)\n";
+    stream << "    add_link_options(-static -static-libgcc -static-libstdc++)\n";
+    stream << "endif()\n\n";
     stream << "add_library(" << projectName << " " << projectName << ".cpp)\n";
     stream << "target_compile_definitions(" << projectName << " PUBLIC\n";
     stream << "    PSXRECOMP_ENABLE_LOGGING=$<BOOL:${PSXRECOMP_ENABLE_LOGGING}>\n";
@@ -278,13 +299,84 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "    ${CMAKE_CURRENT_LIST_DIR}\n";
     stream << ")\n";
     stream << "target_link_libraries(" << projectName << " PUBLIC psxrecomp_runtime)\n\n";
+    stream << "add_executable(" << projectName << "_runner " << projectName << "_runner.cpp)\n";
+    stream << "target_link_libraries(" << projectName << "_runner PRIVATE " << projectName << ")\n";
+    stream << "set_target_properties(" << projectName << "_runner PROPERTIES OUTPUT_NAME \""
+           << projectName << "\")\n\n";
     stream << "if(EXISTS ${PSXRECOMP_RESOURCE_DIR})\n";
-    stream << "    add_custom_command(TARGET " << projectName << " POST_BUILD\n";
+    stream << "    add_custom_command(TARGET " << projectName << "_runner POST_BUILD\n";
     stream << "        COMMAND ${CMAKE_COMMAND} -E copy_directory\n";
     stream << "            ${PSXRECOMP_RESOURCE_DIR}\n";
-    stream << "            $<TARGET_FILE_DIR:" << projectName << ">/resources)\n";
+    stream << "            $<TARGET_FILE_DIR:" << projectName << "_runner>/resources)\n";
     stream << "endif()\n";
     return stream.str();
+}
+
+std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
+{
+    CppEmitter emitter;
+    emitter.writeLine("#include \"" + moduleName + ".h\"");
+    emitter.writeBlank();
+    emitter.writeLine("#include \"psxrecomp/types.h\"");
+    emitter.writeLine("#include <exception>");
+    emitter.writeLine("#include <filesystem>");
+    emitter.writeLine("#include <iostream>");
+    emitter.writeLine("#include <string>");
+    emitter.writeBlank();
+    emitter.writeLine("int main(int argc, char** argv)");
+    emitter.openBlock("");
+    emitter.writeLine("(void)argc;");
+    emitter.writeLine("std::cout << \"[psxrecomp] Starting module: " + moduleName + "\\n\";");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] Runtime checks: \" << PSXRECOMP_ENABLE_CHECKS << \"\\n\";");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] Logging enabled: \" << PSXRECOMP_ENABLE_LOGGING << \"\\n\";");
+    emitter.writeBlank();
+    emitter.writeLine("if (argv != nullptr && argv[0] != nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::filesystem::path exeDir = std::filesystem::path(argv[0]).parent_path();");
+    emitter.writeLine("std::filesystem::path resourcesDir = exeDir / \"resources\";");
+    emitter.writeLine("if (!std::filesystem::exists(resourcesDir))");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] resources directory not found near "
+                      "executable: \" << resourcesDir.string() << \"\\n\";");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Missing assets can result in a black "
+                      "screen or silent startup.\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("try");
+    emitter.openBlock("");
+    emitter.writeLine("psxrecomp::runtime::PsxSystem system;");
+    emitter.writeLine("if (!system.initialize())");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][error] Failed to initialize runtime system.\" << \"\\n\";");
+    emitter.writeLine("return 1;");
+    emitter.closeBlock();
+    emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
+    emitter.writeLine("psxrecomp::recompiler::RecompiledModule::run(system);");
+    emitter.writeLine("std::cout << \"[psxrecomp] Module execution returned.\" << \"\\n\";");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] If nothing appears, the game may still be blocked by "
+        "unimplemented hardware paths (GPU/SPU/CDROM/timing).\" << \"\\n\";");
+    emitter.writeLine("return 0;");
+    emitter.closeBlock();
+    emitter.writeLine("catch (const std::exception& ex)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][error] Unhandled exception: \" << ex.what() << \"\\n\";");
+    emitter.writeLine("return 1;");
+    emitter.closeBlock();
+    emitter.writeLine("catch (...)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][error] Unknown failure during module execution.\" << \"\\n\";");
+    emitter.writeLine("return 1;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    return emitter.str();
 }
 std::string CodeGenerator::generateGlobals(const ir::Program& program) const
 {

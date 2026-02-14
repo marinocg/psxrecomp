@@ -181,6 +181,7 @@ class IsoParser
     bool m_isOpen;
     bool m_isValid;
     u32 m_rawSectorSize;
+    u32 m_userDataOffset;
     u32 m_dataTrackStartLba;
     u32 m_logicalBlockSize;
     bool m_useJoliet;
