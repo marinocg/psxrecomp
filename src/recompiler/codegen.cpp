@@ -366,11 +366,48 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     CppEmitter emitter;
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
+    emitter.writeLine("#include \"psxrecomp/runtime/gpu_renderer.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
+    emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <exception>");
     emitter.writeLine("#include <filesystem>");
+    emitter.writeLine("#include <fstream>");
     emitter.writeLine("#include <iostream>");
     emitter.writeLine("#include <string>");
+    emitter.writeBlank();
+    emitter.writeLine("namespace");
+    emitter.openBlock("");
+    emitter.writeLine("bool dumpFramebufferToPpm(const std::filesystem::path& outputPath,");
+    emitter.writeLine("                          const std::vector<psxrecomp::u16>& framebuffer)");
+    emitter.openBlock("");
+    emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("if (framebuffer.size() < width * height)");
+    emitter.openBlock("");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeLine("std::ofstream out(outputPath, std::ios::binary);");
+    emitter.writeLine("if (!out)");
+    emitter.openBlock("");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
+    emitter.writeLine("out << \"P6\\n\" << width << \" \" << height << \"\\n255\\n\";");
+    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.openBlock("");
+    emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
+    emitter.writeLine(
+        "psxrecomp::u8 r = static_cast<psxrecomp::u8>(((pixel >> 0) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "psxrecomp::u8 g = static_cast<psxrecomp::u8>(((pixel >> 5) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "psxrecomp::u8 b = static_cast<psxrecomp::u8>(((pixel >> 10) & 0x1F) * 255 / 31);");
+    emitter.writeLine("out.put(static_cast<char>(r));");
+    emitter.writeLine("out.put(static_cast<char>(g));");
+    emitter.writeLine("out.put(static_cast<char>(b));");
+    emitter.closeBlock();
+    emitter.writeLine("return out.good();");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("int main(int argc, char** argv)");
     emitter.openBlock("");
@@ -406,10 +443,28 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::run(system);");
+    emitter.writeLine("if (const char* dumpPathEnv = std::getenv(\"PSXRECOMP_DUMP_FRAMEBUFFER\"))");
+    emitter.openBlock("");
+    emitter.writeLine("std::filesystem::path dumpPath = dumpPathEnv[0] != '\\0' ? dumpPathEnv : "
+                      "\"framebuffer.ppm\";");
+    emitter.writeLine("if (dumpFramebufferToPpm(dumpPath, system.gpu().frameBuffer()))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] Framebuffer dumped to: \" << dumpPath.string() << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Failed to dump framebuffer to: \" << "
+                      "dumpPath.string() << \"\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.writeLine("std::cout << \"[psxrecomp] Module execution returned.\" << \"\\n\";");
     emitter.writeLine(
         "std::cout << \"[psxrecomp] If nothing appears, the game may still be blocked by "
         "unimplemented hardware paths (GPU/SPU/CDROM/timing).\" << \"\\n\";");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] Tip: set PSXRECOMP_DUMP_FRAMEBUFFER=/path/frame.ppm to capture "
+        "a framebuffer dump.\" << \"\\n\";");
     emitter.writeLine("return 0;");
     emitter.closeBlock();
     emitter.writeLine("catch (const std::exception& ex)");

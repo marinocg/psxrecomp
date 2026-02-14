@@ -79,6 +79,7 @@ int main()
     std::string header = generator.generateHeader(program, "module");
     std::string source = generator.generateSource(program, "module");
     std::string buildFile = generator.generateBuildFile("module");
+    std::string runner = generator.generateRunnerSource("module");
 
     assert(header.find("RecompiledModule") != std::string::npos);
     assert(source.find("readMemory32") != std::string::npos);
@@ -95,6 +96,8 @@ int main()
     assert(buildFile.find("_runner.cpp") != std::string::npos);
     assert(buildFile.find("if(WIN32 AND NOT MSVC)") != std::string::npos);
     assert(buildFile.find("-static -static-libgcc -static-libstdc++") != std::string::npos);
+    assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
+    assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
