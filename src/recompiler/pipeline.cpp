@@ -294,10 +294,40 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     }
 
     const Address entryAddress = detail::resolveEntryAddress(exeImage);
-    auto boundaries = disasm::findFunctionBoundaries(disassembled);
+    const auto jumpTables = disasm::findJumpTables(disassembled);
+    const auto segmentation = disasm::segmentCodeAndData(disassembled, {entryAddress}, jumpTables);
+
+    auto isInCodeRange = [&](Address address)
+    {
+        for (const auto& range : segmentation.codeRanges)
+        {
+            if (address >= range.start && address <= range.end)
+            {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    std::vector<disasm::Instruction> codeInstructions;
+    codeInstructions.reserve(disassembled.size());
+    for (const auto& instruction : disassembled)
+    {
+        if (isInCodeRange(instruction.address))
+        {
+            codeInstructions.push_back(instruction);
+        }
+    }
+
+    if (codeInstructions.empty())
+    {
+        return fail("No reachable code instructions were identified from entrypoint traversal.");
+    }
+
+    auto boundaries = disasm::findFunctionBoundaries(codeInstructions);
     if (boundaries.empty())
     {
-        boundaries.push_back({entryAddress, disassembled.back().address, false, false});
+        boundaries.push_back({entryAddress, codeInstructions.back().address, false, false});
     }
     bool entryFound = false;
     for (const auto& boundary : boundaries)
@@ -310,7 +340,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     }
     if (!entryFound)
     {
-        boundaries.push_back({entryAddress, disassembled.back().address, false, false});
+        boundaries.push_back({entryAddress, codeInstructions.back().address, false, false});
     }
     std::sort(
         boundaries.begin(), boundaries.end(),
@@ -325,15 +355,26 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             return lhs.start < rhs.start;
         });
 
+    if (!segmentation.dataRanges.empty())
+    {
+        PipelineDiagnostic segmentationNote;
+        segmentationNote.code = "CodeDataSegmentation";
+        segmentationNote.severity = "info";
+        segmentationNote.message =
+            "Code/data segmentation excluded non-reachable regions from instruction lowering.";
+        segmentationNote.context.file = activeDiscPath;
+        diagnostics.push_back(std::move(segmentationNote));
+    }
+
     ir::Program program;
     for (const auto& boundary : boundaries)
     {
         std::vector<disasm::Instruction> functionInstructions;
         auto rangeBegin =
-            std::lower_bound(disassembled.begin(), disassembled.end(), boundary.start,
+            std::lower_bound(codeInstructions.begin(), codeInstructions.end(), boundary.start,
                              [](const disasm::Instruction& instruction, Address target)
                              { return instruction.address < target; });
-        auto rangeEnd = std::upper_bound(rangeBegin, disassembled.end(), boundary.end,
+        auto rangeEnd = std::upper_bound(rangeBegin, codeInstructions.end(), boundary.end,
                                          [](Address target, const disasm::Instruction& instruction)
                                          { return target < instruction.address; });
         functionInstructions.insert(functionInstructions.end(), rangeBegin, rangeEnd);
