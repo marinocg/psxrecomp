@@ -1,11 +1,37 @@
 #include "mips_ir_translation.h"
 
+#include <iomanip>
+#include <sstream>
+
 namespace psxrecomp
 {
 namespace ir
 {
 namespace detail
 {
+
+namespace
+{
+std::string formatUnsupportedOpcodeMessage(const disasm::Instruction& instr)
+{
+    std::ostringstream stream;
+    const u32 primaryOpcode = (instr.encoding >> 26) & 0x3Fu;
+    const u32 functionCode = instr.encoding & 0x3Fu;
+    stream << "Unsupported opcode: " << instr.toString() << " (word=0x" << std::hex
+           << std::setw(8) << std::setfill('0') << instr.encoding << ", op=0x" << std::setw(2)
+           << primaryOpcode << ", funct=0x" << std::setw(2) << functionCode;
+    if (instr.isInDelaySlot)
+    {
+        stream << ", in_delay_slot";
+        if (instr.delaySlotOwner.has_value())
+        {
+            stream << ", owner=0x" << std::setw(8) << instr.delaySlotOwner.value();
+        }
+    }
+    stream << ")";
+    return stream.str();
+}
+} // namespace
 
 void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
 {
@@ -377,7 +403,7 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         break;
     }
     default:
-        addWarning(instr, "Unsupported opcode");
+        addWarning(instr, formatUnsupportedOpcodeMessage(instr));
         if (m_options.emitUnknownAsNop)
         {
             emit(Opcode::NOP, {}, {});
