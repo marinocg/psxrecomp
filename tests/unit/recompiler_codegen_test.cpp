@@ -91,7 +91,7 @@ int main()
     assert(buildFile.find("add_executable") != std::string::npos);
     assert(buildFile.find("_runner.cpp") != std::string::npos);
     assert(buildFile.find("if(WIN32 AND NOT MSVC)") != std::string::npos);
-    assert(buildFile.find("-static-libgcc -static-libstdc++") != std::string::npos);
+    assert(buildFile.find("-static -static-libgcc -static-libstdc++") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
