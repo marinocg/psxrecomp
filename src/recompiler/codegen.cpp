@@ -634,6 +634,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("return 1;");
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
+    emitter.writeLine("system.setAutoFrameProgressOnInterruptPoll(true);");
     emitter.writeLine("auto runStart = std::chrono::steady_clock::now();");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::run(system);");
     emitter.writeLine("auto runEnd = std::chrono::steady_clock::now();");

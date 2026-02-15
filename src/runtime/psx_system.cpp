@@ -110,8 +110,54 @@ void PsxSystem::runFrame()
         m_debugOverlay.incrementInterruptsRaised();
     }
     m_scheduler.tick(CYCLES_PER_FRAME);
+    m_interrupts.raise(InterruptLine::VBlank);
+    m_debugOverlay.incrementInterruptsRaised();
     m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
     m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
+}
+
+void PsxSystem::callGpuIntrinsic(Address address)
+{
+    m_logger.log(
+        LogLevel::Debug, "intrinsic",
+        "GPU intrinsic call at 0x" +
+            [&]()
+            {
+                std::ostringstream stream;
+                stream << std::hex << address;
+                return stream.str();
+            }());
+}
+
+void PsxSystem::callSpuIntrinsic(Address address)
+{
+    m_logger.log(
+        LogLevel::Debug, "intrinsic",
+        "SPU intrinsic call at 0x" +
+            [&]()
+            {
+                std::ostringstream stream;
+                stream << std::hex << address;
+                return stream.str();
+            }());
+}
+
+void PsxSystem::callCdromIntrinsic(Address address)
+{
+    m_logger.log(
+        LogLevel::Debug, "intrinsic",
+        "CDROM intrinsic call at 0x" +
+            [&]()
+            {
+                std::ostringstream stream;
+                stream << std::hex << address;
+                return stream.str();
+            }());
+}
+
+void PsxSystem::setAutoFrameProgressOnInterruptPoll(bool enabled)
+{
+    m_autoFrameProgressOnInterruptPoll = enabled;
 }
 
 u8* PsxSystem::getRam()

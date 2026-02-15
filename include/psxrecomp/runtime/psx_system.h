@@ -161,18 +161,11 @@ class PsxSystem
     bool deserializeState(const std::vector<u8>& state);
     uint64_t stateChecksum() const;
 
-    void callGpuIntrinsic(Address /*address*/)
-    {
-        std::abort();
-    }
-    void callSpuIntrinsic(Address /*address*/)
-    {
-        std::abort();
-    }
-    void callCdromIntrinsic(Address /*address*/)
-    {
-        std::abort();
-    }
+    void callGpuIntrinsic(Address address);
+    void callSpuIntrinsic(Address address);
+    void callCdromIntrinsic(Address address);
+
+    void setAutoFrameProgressOnInterruptPoll(bool enabled);
 
     template <typename T> T readMmioExplicit(Address address)
     {
@@ -204,6 +197,7 @@ class PsxSystem
     RuntimeDebugOverlay m_debugOverlay;
     TimerController m_timers;
     DiscSwapInfo m_discSwapInfo;
+    bool m_autoFrameProgressOnInterruptPoll = false;
 
     static Address normalizeAddress(Address address)
     {
