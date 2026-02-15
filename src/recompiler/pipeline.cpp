@@ -495,7 +495,9 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         ModuleMetadata::DiscEntry entry;
         entry.index = disc.discIndex;
         entry.label = disc.volumeLabel;
-        entry.path = disc.path;
+        std::filesystem::path discPath(disc.path);
+        const std::string discFileName = discPath.filename().string();
+        entry.path = discFileName.empty() ? disc.path : discFileName;
         metadata.discs.push_back(std::move(entry));
     }
 
