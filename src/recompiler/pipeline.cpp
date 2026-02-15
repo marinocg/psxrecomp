@@ -489,6 +489,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     ModuleMetadata metadata;
     metadata.discSetName = result.discSet.setName;
     metadata.activeDiscIndex = result.discSet.activeDiscIndex;
+    metadata.entryAddress = entryAddress;
     metadata.warnings = warnings;
     for (const auto& disc : result.discSet.discs)
     {

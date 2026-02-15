@@ -90,6 +90,9 @@ int main()
     assert(source.find("if (") != std::string::npos);
     assert(source.find("callRecompiledFunction") != std::string::npos);
     assert(source.find("failUnsupportedCall") != std::string::npos);
+    assert(source.find("kModuleEntryAddress") != std::string::npos);
+    assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
+           std::string::npos);
     assert(source.find("triggerTrap") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
     assert(buildFile.find("add_executable") != std::string::npos);
@@ -104,6 +107,7 @@ int main()
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
     assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
     assert(runner.find("#if defined(_WIN32)") != std::string::npos);
+    assert(runner.find("Debug overlay") != std::string::npos);
     assert(runner.find("presentEnv[0] == '\\0'") != std::string::npos);
 
 #if defined(_MSC_VER)

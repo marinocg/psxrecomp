@@ -80,6 +80,12 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         functionSymbols.emplace_back(function.entryAddress,
                                      uniquifyIdentifier(function.name, usedFunctionNames));
     }
+
+    Address moduleEntryAddress = metadata.entryAddress;
+    if (moduleEntryAddress == 0 && !functionSymbols.empty())
+    {
+        moduleEntryAddress = functionSymbols.front().first;
+    }
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
     emitter.writeLine("#include <array>");
@@ -291,10 +297,19 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("void RecompiledModule::run(runtime::PsxSystem& system)");
     emitter.openBlock("");
     emitter.writeLine("RecompilerContext context{system, {}};");
-    if (!program.functions.empty())
     {
-        emitter.writeLine(functionSymbols.front().second + "(context);");
+        std::ostringstream entryLiteral;
+        entryLiteral << "constexpr Address kModuleEntryAddress = 0x" << std::hex
+                     << (moduleEntryAddress & 0x1FFFFFFFu) << ";";
+        emitter.writeLine(entryLiteral.str());
     }
+    emitter.writeLine("if (!callRecompiledFunction(context, kModuleEntryAddress))");
+    emitter.openBlock("");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine("stream << \"Module entry function not emitted for address 0x\" << std::hex");
+    emitter.writeLine("       << kModuleEntryAddress << \".\";");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
 
@@ -667,6 +682,15 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
         "std::cout << \"[psxrecomp] GPU command count: \" << system.gpu().commandTrace().size()"
         " << \", non-zero display pixels: \" << nonZeroDisplay"
         " << (usedVramFallback ? \" (using VRAM fallback)\" : \"\") << \"\\n\";");
+    emitter.writeLine("std::cout << \"[psxrecomp] Debug overlay: \" << "
+                      "system.debugOverlay().renderText() << \"\\n\";");
+    emitter.writeLine("if (runMs == 0 && system.gpu().commandTrace().empty())");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][warn] Module returned immediately with no GPU commands. \";");
+    emitter.writeLine("          << \"Entrypoint may have returned or execution never reached "
+                      "rendering code.\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
