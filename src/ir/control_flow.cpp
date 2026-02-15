@@ -109,6 +109,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     }
 
     BasicBlock* currentBlock = nullptr;
+    std::unordered_set<Address> openedBlockStarts;
     for (size_t index = 0; index < instructions.size(); ++index)
     {
         const auto& instruction = instructions[index];
@@ -117,11 +118,12 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             continue;
         }
         Address address = *instruction.sourceAddress;
-        if (blockStarts.count(address) > 0)
+        if (blockStarts.count(address) > 0 && openedBlockStarts.count(address) == 0)
         {
             result.function.blocks.push_back(BasicBlock{formatBlockName(address), {}, {}, {}});
             currentBlock = &result.function.blocks.back();
             result.addressToBlockName[address] = currentBlock->name;
+            openedBlockStarts.insert(address);
         }
 
         if (currentBlock == nullptr)
