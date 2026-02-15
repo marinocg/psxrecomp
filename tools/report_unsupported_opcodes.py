@@ -29,15 +29,21 @@ OWNER_DEFAULT = "unassigned"
 MILESTONE_DEFAULT = "M4-opcode-closure"
 
 
-def load_warnings(result_json_path: Path) -> list[str]:
+def load_result(result_json_path: Path) -> dict[str, Any] | None:
     try:
         data = json.loads(result_json_path.read_text(encoding="utf-8"))
     except Exception:
-        return []
-    warnings = data.get("warnings", [])
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data
+
+
+def extract_warnings(result: dict[str, Any]) -> list[str]:
+    warnings = result.get("warnings", [])
     if not isinstance(warnings, list):
         return []
-    return [w for w in warnings if isinstance(w, str)]
+    return [warning for warning in warnings if isinstance(warning, str)]
 
 
 def detect_python_like_sort_key(addr: str) -> int:
@@ -174,15 +180,26 @@ def parse_unsupported_warning(warning: str) -> dict[str, Any] | None:
     }
 
 
-def build_report(log_dir: Path) -> dict[str, Any]:
+def build_report(log_dir: Path, include_failed: bool = False) -> dict[str, Any]:
     result_files = sorted(log_dir.glob("*.result.json"))
     warning_counter: Counter[str] = Counter()
     warnings_by_demo: dict[str, list[str]] = {}
     unsupported_hits: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    parsed_result_files: list[str] = []
+    skipped_failed_results: list[str] = []
 
     for result_file in result_files:
+        result = load_result(result_file)
+        if result is None:
+            continue
+
+        if not include_failed and result.get("success") is False:
+            skipped_failed_results.append(result_file.name)
+            continue
+
         demo = result_file.name.replace(".result.json", "")
-        warnings = load_warnings(result_file)
+        parsed_result_files.append(result_file.name)
+        warnings = extract_warnings(result)
         warnings_by_demo[demo] = warnings
         for warning in warnings:
             warning_counter[warning] += 1
@@ -230,6 +247,8 @@ def build_report(log_dir: Path) -> dict[str, Any]:
         "generatedAtUtc": datetime.now(timezone.utc).isoformat(),
         "logDir": str(log_dir),
         "resultFiles": [f.name for f in result_files],
+        "parsedResultFiles": parsed_result_files,
+        "skippedFailedResultFiles": skipped_failed_results,
         "warningCounts": dict(warning_counter.most_common()),
         "warningsByDemo": warnings_by_demo,
         "unsupportedSummary": dict(classification_counter.most_common()),
@@ -277,7 +296,11 @@ def write_markdown(report: dict[str, Any], output_md: Path) -> None:
     lines.append("")
     lines.append(f"- Generated at (UTC): `{report['generatedAtUtc']}`")
     lines.append(f"- Log directory: `{report['logDir']}`")
-    lines.append(f"- Parsed result files: {len(report['resultFiles'])}")
+    lines.append(f"- Found result files: {len(report['resultFiles'])}")
+    lines.append(f"- Parsed result files: {len(report.get('parsedResultFiles', []))}")
+    skipped_failed = report.get("skippedFailedResultFiles", [])
+    if skipped_failed:
+        lines.append(f"- Skipped failed result files: {len(skipped_failed)}")
     lines.append("")
 
     unsupported = report["unsupportedOpcodes"]
@@ -392,6 +415,11 @@ def main() -> int:
     parser.add_argument("--output-json", required=True, help="Output JSON report path")
     parser.add_argument("--output-md", required=True, help="Output markdown report path")
     parser.add_argument(
+        "--include-failed",
+        action="store_true",
+        help="Include warnings from result files where success=false",
+    )
+    parser.add_argument(
         "--baseline-json",
         help="Optional previous JSON report used to generate trend snapshots",
     )
@@ -403,7 +431,7 @@ def main() -> int:
     output_json = Path(args.output_json)
     output_md = Path(args.output_md)
 
-    report = build_report(log_dir)
+    report = build_report(log_dir, include_failed=args.include_failed)
     output_json.parent.mkdir(parents=True, exist_ok=True)
     output_md.parent.mkdir(parents=True, exist_ok=True)
 

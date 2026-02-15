@@ -18,6 +18,7 @@ See: `tools/iso_fixture_generator.md`.
 
 Aggregates `recompile-demos` JSON logs and generates unsupported-opcode tracking reports:
 - Input: directory containing `*.result.json` emitted by `psxrecomp --json`.
+- By default, failed results (`success: false`) are skipped to keep reports aligned with successful artifact outputs; pass `--include-failed` to include them.
 - Output JSON: warning counts, per-demo warning lists, unsupported opcode address frequency, triage classifications, mnemonic/family grouping, addressing mode tags, and gap-kind tagging.
 - Output Markdown: includes top opcode-family ranking, per-address ownership/milestone fields, and inventory checklists for actionable triage.
 - Supports both legacy warning format (`Unsupported opcode @ ...`) and enriched format (`Unsupported opcode: ... (word/op/funct) @ ...`).
@@ -30,6 +31,7 @@ python3 tools/report_unsupported_opcodes.py \
   --output-md recompile-artifacts/logs/unsupported-opcode-report.md \
   --output-trend-json recompile-artifacts/logs/unsupported-opcode-trend.json \
   --output-trend-md recompile-artifacts/logs/unsupported-opcode-trend.md
+  # optional: --include-failed
 ```
 
 Workflow integration:
