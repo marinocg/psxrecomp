@@ -98,10 +98,12 @@ int main()
     assert(buildFile.find("-static -static-libgcc -static-libstdc++") != std::string::npos);
     assert(buildFile.find("PSXRECOMP_ENABLE_SDL_PRESENTER") != std::string::npos);
     assert(buildFile.find("PSXRECOMP_HAS_SDL2") != std::string::npos);
+    assert(buildFile.find("user32 gdi32") != std::string::npos);
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
     assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
+    assert(runner.find("#if defined(_WIN32)") != std::string::npos);
     assert(runner.find("presentEnv[0] == '\\0'") != std::string::npos);
 
 #if defined(_MSC_VER)
