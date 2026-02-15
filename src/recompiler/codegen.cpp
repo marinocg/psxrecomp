@@ -83,6 +83,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
     emitter.writeLine("#include <array>");
+    emitter.writeLine("#include <chrono>");
     emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <cstdint>");
     emitter.writeLine("#include <cstring>");
@@ -384,6 +385,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeBlank();
     emitter.writeLine("#include \"psxrecomp/runtime/gpu_renderer.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
+    emitter.writeLine("#include <chrono>");
     emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <exception>");
     emitter.writeLine("#include <filesystem>");
@@ -612,7 +614,59 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("return 1;");
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
+    emitter.writeLine("auto runStart = std::chrono::steady_clock::now();");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::run(system);");
+    emitter.writeLine("auto runEnd = std::chrono::steady_clock::now();");
+    emitter.writeLine(
+        "auto runMs = std::chrono::duration_cast<std::chrono::milliseconds>(runEnd - runStart)"
+        ".count();");
+    emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("const auto& framePixels = system.gpu().frameBuffer();");
+    emitter.writeLine(
+        "std::vector<psxrecomp::u16> displayPixels(framePixels.begin(), framePixels.end());");
+    emitter.writeLine("if (displayPixels.size() < width * height)");
+    emitter.openBlock("");
+    emitter.writeLine("displayPixels.resize(width * height, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("size_t nonZeroDisplay = 0;");
+    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.openBlock("");
+    emitter.writeLine("if (displayPixels[i] != 0)");
+    emitter.openBlock("");
+    emitter.writeLine("++nonZeroDisplay;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("bool usedVramFallback = false;");
+    emitter.writeLine("if (nonZeroDisplay == 0)");
+    emitter.openBlock("");
+    emitter.writeLine("const auto& vramWords = system.gpu().vramWords();");
+    emitter.writeLine("if (!vramWords.empty())");
+    emitter.openBlock("");
+    emitter.writeLine("nonZeroDisplay = 0;");
+    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.openBlock("");
+    emitter.writeLine("const psxrecomp::u32 word = vramWords[i / 2];");
+    emitter.writeLine("const psxrecomp::u16 pixel = static_cast<psxrecomp::u16>((i % 2 == 0) ? "
+                      "(word & 0xFFFF) : ((word >> 16) & 0xFFFF));");
+    emitter.writeLine("displayPixels[i] = pixel;");
+    emitter.writeLine("if (pixel != 0)");
+    emitter.openBlock("");
+    emitter.writeLine("++nonZeroDisplay;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("if (nonZeroDisplay > 0)");
+    emitter.openBlock("");
+    emitter.writeLine("usedVramFallback = true;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] Module execution returned in \" << runMs << \" ms.\\n\";");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] GPU command count: \" << system.gpu().commandTrace().size()"
+        " << \", non-zero display pixels: \" << nonZeroDisplay"
+        " << (usedVramFallback ? \" (using VRAM fallback)\" : \"\") << \"\\n\";");
     emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
@@ -623,7 +677,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("    (presentEnv[0] == '\\0' || presentEnv[0] == '1');");
     emitter.writeLine("if (enabledPresent)");
     emitter.openBlock("");
-    emitter.writeLine("if (presentFramebufferWithSdl(system.gpu().frameBuffer()))");
+    emitter.writeLine("if (presentFramebufferWithSdl(displayPixels))");
     emitter.openBlock("");
     emitter.writeLine("std::cout << \"[psxrecomp] SDL presenter window closed.\\n\";");
     emitter.closeBlock();
@@ -638,7 +692,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.openBlock("");
     emitter.writeLine("std::filesystem::path dumpPath = dumpPathEnv[0] != '\\0' ? dumpPathEnv : "
                       "\"framebuffer.ppm\";");
-    emitter.writeLine("if (dumpFramebufferToPpm(dumpPath, system.gpu().frameBuffer()))");
+    emitter.writeLine("if (dumpFramebufferToPpm(dumpPath, displayPixels))");
     emitter.openBlock("");
     emitter.writeLine(
         "std::cout << \"[psxrecomp] Framebuffer dumped to: \" << dumpPath.string() << \"\\n\";");
