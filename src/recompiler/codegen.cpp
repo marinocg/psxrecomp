@@ -697,6 +697,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine(
         "std::cerr << \"[psxrecomp][warn] Module returned immediately with no GPU commands. \""
         " << \"Entrypoint may have returned or execution never reached rendering code.\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
