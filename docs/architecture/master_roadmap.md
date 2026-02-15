@@ -17,6 +17,7 @@ highlights dependencies between workstreams.
 - [x] Recompiler/codegen ([recompiler_roadmap.md](recompiler_roadmap.md))
 - [x] Opcode coverage tracking ([opcode_coverage_roadmap.md](opcode_coverage_roadmap.md))
 - [x] Runtime library ([runtime_library_roadmap.md](runtime_library_roadmap.md))
+- [x] BIOS function coverage ([bios_functions_roadmap.md](bios_functions_roadmap.md))
 - [ ] GPU emulation ([gpu_emulation_roadmap.md](gpu_emulation_roadmap.md))
 - [ ] SPU emulation ([spu_emulation_roadmap.md](spu_emulation_roadmap.md))
 - [ ] CD-ROM emulation ([cdrom_emulation_roadmap.md](cdrom_emulation_roadmap.md))
@@ -74,6 +75,11 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 - [x] GPU command packet ingestion and minimal rasterization.
 - [x] SPU voice synthesis scaffolding, ADSR/mixing core, and backend audio hooks (simplified reference path).
 - [x] Debug tooling: runtime logs, memory dumps, and performance overlays.
+- [x] BIOS vector framework with 48 implemented functions across A0/B0/C0 tables.
+- [x] Block-external continuation dispatch and self-loop prevention in codegen.
+- [x] Initial register state emission (SP, GP, FP, RA) and RAM init image in generated runners.
+- [x] Debug environment variables (`PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`, `PSXRECOMP_TRACE_BIOS`).
+- [x] Codegen and runtime refactoring into focused modules (codegen_build, codegen_runner, psx_system_bios).
 
 **Dependencies (complete these roadmaps)**
 - [x] Runtime library roadmap (`runtime_library_roadmap.md`)
@@ -83,12 +89,13 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 
 Status note: M3 dependency gates for runtime, GPU, SPU, and CD-ROM are now satisfied; remaining hardware-accuracy work tracks in M5+ roadmaps.
 
-### M4: Recompiled Demo Title (Planned)
+### M4: Recompiled Demo Title (In progress)
 Goal: run a controlled demo binary end-to-end with deterministic output.
 
 **Deliverables**
 - [ ] Known-good demo ROM/EXE pipeline build.
-- [ ] Recompiled output builds and runs in CI.
+- [x] CI recompile-demos workflow builds generated artifacts with SDL2 display support on all platforms.
+- [ ] Recompiled output runs to completion in CI.
 - [ ] Test harness for frame/time-based validation.
 
 **Dependencies (complete these roadmaps)**

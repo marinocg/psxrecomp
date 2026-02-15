@@ -160,6 +160,7 @@ int main()
     runtimeHeader << "#pragma once\n";
     runtimeHeader << "#include \"psxrecomp/types.h\"\n";
     runtimeHeader << "#include <cstddef>\n";
+    runtimeHeader << "#include <cstring>\n";
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
@@ -188,6 +189,7 @@ int main()
     runtimeHeader << "    template <typename T> T readMmioExplicit(Address) { return {}; }\n";
     runtimeHeader << "    template <typename T> void writeMmioExplicit(Address, T) {}\n";
     runtimeHeader << "    void callBiosSyscall(u32, const u32*, std::size_t) {}\n";
+    runtimeHeader << "    void callBiosVector(u32, u32*, std::size_t) {}\n";
     runtimeHeader << "    void callGpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
@@ -207,6 +209,7 @@ int main()
     harnessFile << "int main() {\n";
     harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
     harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
+    harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
     harnessFile << "  return 0;\n";
     harnessFile << "}\n";

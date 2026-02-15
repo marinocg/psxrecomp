@@ -165,6 +165,14 @@ class PsxSystem
     void callSpuIntrinsic(Address address);
     void callCdromIntrinsic(Address address);
 
+    /**
+     * @brief Handle a BIOS vector call (A0h/B0h/C0h).
+     * @param vector The BIOS vector address (0xA0, 0xB0, or 0xC0).
+     * @param regs Pointer to the register file (32 registers).
+     * @param regCount Number of registers in the array.
+     */
+    void callBiosVector(u32 vector, u32* regs, size_t regCount);
+
     void setAutoFrameProgressOnInterruptPoll(bool enabled);
 
     template <typename T> T readMmioExplicit(Address address)

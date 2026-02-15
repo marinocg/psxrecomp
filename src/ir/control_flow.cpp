@@ -140,6 +140,11 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     }
 
     bool needsExternalBlock = false;
+    // Track continuations: predecessor block name → continuation block name.
+    // When a block jumps to an external address (outside this function),
+    // the continuation is the block at the next sequential address.
+    std::unordered_map<std::string, std::string> externalContinuations;
+
     for (auto& block : result.function.blocks)
     {
         if (block.instructions.empty())
@@ -169,6 +174,16 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                               ExternalBlockName) == block.successors.end())
                 {
                     block.successors.push_back(ExternalBlockName);
+                }
+                // Record the continuation for this block: resume at the next
+                // sequential address after the external jump/call.
+                if (nextAddress.has_value())
+                {
+                    auto continuationIt = result.addressToBlockName.find(*nextAddress);
+                    if (continuationIt != result.addressToBlockName.end())
+                    {
+                        externalContinuations[block.name] = continuationIt->second;
+                    }
                 }
                 return;
             }
@@ -213,6 +228,15 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                 {
                     block.successors.push_back(ExternalBlockName);
                 }
+                // For indirect jumps, record continuation at next sequential address.
+                if (nextAddress.has_value())
+                {
+                    auto continuationIt = result.addressToBlockName.find(*nextAddress);
+                    if (continuationIt != result.addressToBlockName.end())
+                    {
+                        externalContinuations[block.name] = continuationIt->second;
+                    }
+                }
             }
             break;
         }
@@ -234,7 +258,24 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                         [](const BasicBlock& block) { return block.name == ExternalBlockName; });
         if (!hasExternalBlock)
         {
-            result.function.blocks.push_back(BasicBlock{ExternalBlockName, {}, {}});
+            BasicBlock externalBlock{ExternalBlockName, {}, {}};
+            externalBlock.continuations = std::move(externalContinuations);
+            result.function.blocks.push_back(std::move(externalBlock));
+        }
+        else
+        {
+            // Merge continuations into existing external block.
+            for (auto& block : result.function.blocks)
+            {
+                if (block.name == ExternalBlockName)
+                {
+                    for (auto& entry : externalContinuations)
+                    {
+                        block.continuations[entry.first] = entry.second;
+                    }
+                    break;
+                }
+            }
         }
     }
 

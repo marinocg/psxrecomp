@@ -490,6 +490,12 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     metadata.discSetName = result.discSet.setName;
     metadata.activeDiscIndex = result.discSet.activeDiscIndex;
     metadata.entryAddress = entryAddress;
+    metadata.initialGp = exeImage.entryPoint.gp;
+    metadata.stackAddress = exeImage.header.stackAddress;
+    metadata.stackSize = exeImage.header.stackSize;
+    metadata.loadAddress = exeImage.header.loadAddress;
+    metadata.loadSize = exeImage.header.loadSize;
+    metadata.programData = exeImage.programData;
     metadata.warnings = warnings;
     for (const auto& disc : result.discSet.discs)
     {
@@ -510,96 +516,16 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     std::filesystem::path outputDir =
         detail::buildOutputDirectory(std::filesystem::path(m_options.outputDirectory), inputStem,
                                      result.discSet.setName, exeTag);
-    std::error_code dirError;
-    std::filesystem::create_directories(outputDir, dirError);
-    if (dirError)
-    {
-        return fail("Failed to create output directory: " + outputDir.string());
-    }
-
-    PipelineArtifacts artifacts;
-    artifacts.moduleName = moduleName;
-    artifacts.headerPath = (outputDir / (moduleName + ".h")).string();
-    artifacts.sourcePath = (outputDir / (moduleName + ".cpp")).string();
-    const std::string runnerPath = (outputDir / (moduleName + "_runner.cpp")).string();
-    artifacts.buildPath = (outputDir / "CMakeLists.txt").string();
-    artifacts.manifestPath = (outputDir / "manifest.json").string();
-
-    artifacts.resourcesPath = (outputDir / "resources").string();
-    artifacts.runtimeIncludePath = (outputDir / "runtime" / "include").string();
-    artifacts.runtimeSourcePath = (outputDir / "runtime" / "src").string();
 
     std::string writeError;
-    if (!detail::writeFile(artifacts.headerPath, header, writeError) ||
-        !detail::writeFile(artifacts.sourcePath, source, writeError) ||
-        !detail::writeFile(runnerPath, runnerSource, writeError) ||
-        !detail::writeFile(artifacts.buildPath, buildFile, writeError))
+    if (!detail::writeOutputArtifacts(result, outputDir, moduleName, header, source, runnerSource,
+                                      buildFile, activeDiscPath, inputFsPath, warnings,
+                                      diagnostics, m_options.manifestTimestamp,
+                                      m_options.pipelineVersion, writeError))
     {
         return fail(writeError);
     }
 
-    std::filesystem::path repoRoot =
-        detail::repositoryRootFromSourcePath(std::filesystem::path(__FILE__));
-    if (!detail::copyDirectoryRecursive(
-            repoRoot / "include" / "psxrecomp",
-            std::filesystem::path(artifacts.runtimeIncludePath) / "psxrecomp", writeError) ||
-        !detail::copyDirectoryRecursive(repoRoot / "src" / "runtime", artifacts.runtimeSourcePath,
-                                        writeError))
-    {
-        return fail(writeError);
-    }
-
-    if (detail::isIsoLikePath(inputFsPath))
-    {
-        iso::IsoParser parser(activeDiscPath);
-        if (parser.open() && parser.isValid())
-        {
-            std::filesystem::create_directories(artifacts.resourcesPath, dirError);
-            if (dirError)
-            {
-                return fail("Failed to create resources directory: " + artifacts.resourcesPath);
-            }
-            std::vector<std::pair<iso::ResourceType, std::string>> resourceTypes = {
-                {iso::ResourceType::TimTexture, "TIM"},
-                {iso::ResourceType::StrVideo, "STR"},
-                {iso::ResourceType::XaAudio, "XA"},
-            };
-            for (const auto& [type, label] : resourceTypes)
-            {
-                auto listed = parser.listResources(type);
-                for (const auto& resourcePath : listed)
-                {
-                    artifacts.exportedResources.push_back(resourcePath);
-                }
-                if (!parser.exportResources(type, artifacts.resourcesPath))
-                {
-                    warnings.push_back("Resource export reported errors for " + label + ".");
-                }
-            }
-            std::sort(artifacts.exportedResources.begin(), artifacts.exportedResources.end());
-            artifacts.exportedResources.erase(
-                std::unique(artifacts.exportedResources.begin(), artifacts.exportedResources.end()),
-                artifacts.exportedResources.end());
-        }
-        else
-        {
-            appendIsoParserErrors(parser, "Resource export skipped");
-            warnings.push_back("Resource export skipped due to parser errors.");
-        }
-    }
-
-    result.success = true;
-    result.artifacts = artifacts;
-    result.warnings = warnings;
-    result.diagnostics = diagnostics;
-
-    const std::string timestamp = detail::buildTimestamp(m_options.manifestTimestamp);
-    const std::string manifest = detail::serializeManifest(
-        result, activeDiscPath, outputDir.string(), timestamp, m_options.pipelineVersion);
-    if (!detail::writeFile(artifacts.manifestPath, manifest, writeError))
-    {
-        return fail(writeError);
-    }
     return result;
 }
 

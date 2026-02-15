@@ -35,3 +35,19 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Implement BIOS/syscall layer for common kernel services.
 - [x] Add save-state serialization and determinism checks.
 - [x] Add resource pack loader for non-code assets (textures, audio, movies).
+
+## Phase 6: BIOS Coverage Expansion
+- [x] Implement BIOS vector dispatch framework (`callBiosVector` for A0/B0/C0).
+- [x] Implement functional string/memory BIOS functions (strcmp, strcpy, memcpy, memset, bzero).
+- [x] Implement GPU BIOS helpers (GPU_cw, GPU_cwp).
+- [x] Implement event management stubs (OpenEvent, CloseEvent, WaitEvent, TestEvent, EnableEvent, DisableEvent).
+- [x] Implement pad/controller/memory-card init stubs.
+- [x] Implement system initialization C0 stubs.
+- [x] Add BIOS trace support (`PSXRECOMP_TRACE_BIOS` env var).
+- [x] Refactor BIOS code into dedicated `psx_system_bios.cpp` module.
+- [ ] Implement `printf` (A0:0x3F) with format string support.
+- [ ] Implement threading functions (OpenThread, CloseThread, ChangeThread).
+- [ ] Implement timer functions (init_timer, get_timer, enable/disable_timer_irq).
+- [ ] Implement CD-ROM BIOS functions (CdInit, CdRemove).
+- [ ] Implement memory card sector read/write.
+- [ ] See full checklist: [BIOS Functions Roadmap](bios_functions_roadmap.md)

@@ -4,36 +4,37 @@ This report estimates current implementation coverage across major subsystems an
 what is present vs. missing. Percentages are coarse estimates intended for planning.
 
 ## Overall completion (estimate)
-- **Project-wide completion:** ~52%
-- **End-to-end playable pipeline:** ~40%
+- **Project-wide completion:** ~57%
+- **End-to-end playable pipeline:** ~48%
 
 ## Subsystem status (estimate)
 
 ## Subsystem scorecard (estimate)
 | Area | Estimated completion |
 |---|---:|
-| Pipeline & Tooling | ~55% |
+| Pipeline & Tooling | ~62% |
 | ISO/BIN Parsing | ~85% |
 | PSX-EXE Loader | ~90% |
 | Disassembler | ~75% |
 | IR Pipeline | ~85% |
-| Recompiler / Codegen | ~75% |
-| Runtime Library | ~68% |
+| Recompiler / Codegen | ~80% |
+| Runtime Library | ~75% |
 | GPU Emulation | ~74% |
 | SPU Emulation | ~45% |
 | CD-ROM | ~42% |
 
-### Pipeline & Tooling (~55%)
+### Pipeline & Tooling (~62%)
 **Present**
 - Deterministic pipeline output layout with manifest emission.
 - Stable EXE candidate selection with structured diagnostics.
 - Multi-disc metadata surfaced in pipeline output and runtime hooks.
 - Bundle output includes resources plus runtime source/include copies for standalone CMake builds.
 - Fixture generator + validation scripts exist for malformed/good/rich ISO scenarios.
+- CI recompile-demos workflow builds generated C++ artifacts with SDL2 presenter support on Linux, macOS, and Windows.
 
 **Missing**
 - Automated build/run of emitted C++ artifacts from the main CLI path.
-- CI automation around compiling generated output from representative fixture sets.
+- End-to-end deterministic golden-output comparison in CI.
 
 ### ISO/BIN Parsing (~85%)
 **Present**
@@ -75,18 +76,24 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 **Missing**
 - Coprocessor-specific IR modeling and richer memory width semantics in backend lowering (byte/halfword/unaligned currently map to generic LOAD/STORE IR ops).
 
-### Recompiler / Codegen (~75%)
+### Recompiler / Codegen (~80%)
 **Present**
 - Structured C++ emission for core IR ops with control flow and phi-node lowering.
 - Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
 - Peephole optimizations, logging hooks, and debug metadata in generated output.
 - End-to-end pipeline validation and compile-and-run checks in unit tests.
 - Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs, including per-run trend snapshots and top-family prioritization.
+- Block-external continuation dispatch ensuring cross-block control flow terminates correctly.
+- Self-loop prevention in split-block lowering to avoid infinite loops in generated runners.
+- Initial register state emission (SP, GP, FP, RA) in generated runner `main()`.
+- RAM init image emission so recompiled code starts with the correct memory contents.
+- Debug environment variables (`PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`) for runtime introspection.
+- Refactored codegen into focused modules: `codegen.cpp`, `codegen_build.cpp`, `codegen_runner.cpp`.
 
 **Missing**
 - Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.
 
-### Runtime Library (~68%)
+### Runtime Library (~75%)
 **Present**
 - Core PSX system scaffolding (memory, basic subsystems).
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
@@ -94,10 +101,18 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Debug overlay counters for frame timing, DMA transfers, and interrupt activity.
 - Diagnostic memory dump support for RAM, VRAM, and SPU RAM plus save-state serialization/checksum.
 - Resource pack loader for runtime assets (textures/audio/movie payload containers).
+- BIOS vector framework (`callBiosVector`) handling A0/B0/C0 vectors with 48 implemented functions (14 A0, 23 B0, 11 C0).
+- Functional string/memory BIOS functions (strcmp, strcpy, memcpy, memset, bzero).
+- GPU BIOS helpers (GPU_cw, GPU_cwp) forwarding GP0 commands.
+- Event management stubs (OpenEvent, CloseEvent, WaitEvent, TestEvent, EnableEvent, DisableEvent, DeliverEvent).
+- Pad/controller initialization stubs (InitPad, StartPad, InitCard, StartCard).
+- System initialization stubs for C0 vector (EnqueueTimerAndVblankIrqs, SysEnqIntRP, InstallExceptionHandlers, etc.).
+- BIOS trace support via `PSXRECOMP_TRACE_BIOS` environment variable.
+- Refactored runtime into focused modules: `psx_system.cpp` and `psx_system_bios.cpp`.
 
 **Missing**
 - Cycle-exact timer edge behavior still needs hardware-trace validation.
-- Broader BIOS function coverage and return-value semantics.
+- Remaining BIOS function coverage (~170 functions still unimplemented); see [BIOS Functions Roadmap](bios_functions_roadmap.md).
 
 ### GPU Emulation (~74%)
 **Present**

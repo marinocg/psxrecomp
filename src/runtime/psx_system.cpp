@@ -381,5 +381,6 @@ void PsxSystem::callBiosSyscall(u32 code, const u32* regs, size_t regCount)
         return;
     }
 }
+
 } // namespace runtime
 } // namespace psxrecomp

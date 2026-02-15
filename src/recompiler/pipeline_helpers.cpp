@@ -520,6 +520,117 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
     return stream.str();
 }
 
+bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& outputDir,
+                          const std::string& moduleName, const std::string& header,
+                          const std::string& source, const std::string& runnerSource,
+                          const std::string& buildFile, const std::string& activeDiscPath,
+                          const std::filesystem::path& inputFsPath,
+                          std::vector<std::string>& warnings,
+                          std::vector<PipelineDiagnostic>& diagnostics,
+                          const std::string& manifestTimestamp,
+                          const std::string& pipelineVersion, std::string& outError)
+{
+    std::error_code dirError;
+    std::filesystem::create_directories(outputDir, dirError);
+    if (dirError)
+    {
+        outError = "Failed to create output directory: " + outputDir.string();
+        return false;
+    }
+
+    PipelineArtifacts artifacts;
+    artifacts.moduleName = moduleName;
+    artifacts.headerPath = (outputDir / (moduleName + ".h")).string();
+    artifacts.sourcePath = (outputDir / (moduleName + ".cpp")).string();
+    const std::string runnerPath = (outputDir / (moduleName + "_runner.cpp")).string();
+    artifacts.buildPath = (outputDir / "CMakeLists.txt").string();
+    artifacts.manifestPath = (outputDir / "manifest.json").string();
+    artifacts.resourcesPath = (outputDir / "resources").string();
+    artifacts.runtimeIncludePath = (outputDir / "runtime" / "include").string();
+    artifacts.runtimeSourcePath = (outputDir / "runtime" / "src").string();
+
+    if (!writeFile(artifacts.headerPath, header, outError) ||
+        !writeFile(artifacts.sourcePath, source, outError) ||
+        !writeFile(runnerPath, runnerSource, outError) ||
+        !writeFile(artifacts.buildPath, buildFile, outError))
+    {
+        return false;
+    }
+
+    std::filesystem::path repoRoot =
+        repositoryRootFromSourcePath(std::filesystem::path(__FILE__));
+    if (!copyDirectoryRecursive(
+            repoRoot / "include" / "psxrecomp",
+            std::filesystem::path(artifacts.runtimeIncludePath) / "psxrecomp", outError) ||
+        !copyDirectoryRecursive(repoRoot / "src" / "runtime", artifacts.runtimeSourcePath,
+                                outError))
+    {
+        return false;
+    }
+
+    if (isIsoLikePath(inputFsPath))
+    {
+        iso::IsoParser parser(activeDiscPath);
+        if (parser.open() && parser.isValid())
+        {
+            std::filesystem::create_directories(artifacts.resourcesPath, dirError);
+            if (dirError)
+            {
+                outError = "Failed to create resources directory: " + artifacts.resourcesPath;
+                return false;
+            }
+            std::vector<std::pair<iso::ResourceType, std::string>> resourceTypes = {
+                {iso::ResourceType::TimTexture, "TIM"},
+                {iso::ResourceType::StrVideo, "STR"},
+                {iso::ResourceType::XaAudio, "XA"},
+            };
+            for (const auto& [type, label] : resourceTypes)
+            {
+                auto listed = parser.listResources(type);
+                for (const auto& resourcePath : listed)
+                {
+                    artifacts.exportedResources.push_back(resourcePath);
+                }
+                if (!parser.exportResources(type, artifacts.resourcesPath))
+                {
+                    warnings.push_back("Resource export reported errors for " + label + ".");
+                }
+            }
+            std::sort(artifacts.exportedResources.begin(), artifacts.exportedResources.end());
+            artifacts.exportedResources.erase(
+                std::unique(artifacts.exportedResources.begin(), artifacts.exportedResources.end()),
+                artifacts.exportedResources.end());
+        }
+        else
+        {
+            for (const auto& error : parser.getErrors())
+            {
+                PipelineDiagnostic entry;
+                entry.code = "IsoParserError";
+                entry.severity = "error";
+                entry.message = "Resource export skipped: " + error;
+                entry.context.file = activeDiscPath;
+                diagnostics.push_back(entry);
+            }
+            warnings.push_back("Resource export skipped due to parser errors.");
+        }
+    }
+
+    result.success = true;
+    result.artifacts = artifacts;
+    result.warnings = warnings;
+    result.diagnostics = diagnostics;
+
+    const std::string timestamp = buildTimestamp(manifestTimestamp);
+    const std::string manifest = serializeManifest(result, activeDiscPath, outputDir.string(),
+                                                   timestamp, pipelineVersion);
+    if (!writeFile(artifacts.manifestPath, manifest, outError))
+    {
+        return false;
+    }
+    return true;
+}
+
 } // namespace detail
 } // namespace recompiler
 } // namespace psxrecomp

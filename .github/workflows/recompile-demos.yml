@@ -68,17 +68,17 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.ref }}
 
-      - name: Install Ninja (Linux)
+      - name: Install build dependencies (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libsdl2-dev
 
-      - name: Install Ninja (macOS)
+      - name: Install build dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install ninja
+        run: brew install ninja sdl2
 
-      - name: Install Ninja (Windows)
+      - name: Install build dependencies (Windows)
         if: runner.os == 'Windows'
-        run: choco install ninja
+        run: choco install ninja && vcpkg install sdl2:x64-windows
 
       - name: Build recompiler executable
         run: make build
@@ -169,7 +169,14 @@ jobs:
               fi
 
               generated_build_dir="${out_dir}/build-generated"
+
+              cmake_extra_args=()
+              if [[ "${RUNNER_OS}" == "Windows" && -n "${VCPKG_INSTALLATION_ROOT:-}" ]]; then
+                cmake_extra_args+=("-DCMAKE_TOOLCHAIN_FILE=${VCPKG_INSTALLATION_ROOT}/scripts/buildsystems/vcpkg.cmake")
+              fi
+
               if "${CMAKE_BIN}" -S "${source_root}" -B "${generated_build_dir}" -G Ninja \
+                 "${cmake_extra_args[@]}" \
                  -DPSXRECOMP_ENABLE_LOGGING=ON \
                  -DPSXRECOMP_LOG_LEVEL=2 >"recompile-artifacts/logs/${base}.cmake.configure.log" 2>&1 && \
                  "${CMAKE_BIN}" --build "${generated_build_dir}" >"recompile-artifacts/logs/${base}.cmake.build.log" 2>&1; then
