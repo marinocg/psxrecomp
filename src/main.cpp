@@ -1,4 +1,5 @@
 #include <cstdlib>
+#include <filesystem>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -8,6 +9,18 @@
 
 // Placeholder for command-line interface
 // This will be implemented as the project develops
+
+std::string summarizePath(const std::string& value)
+{
+    if (value.empty())
+    {
+        return value;
+    }
+
+    std::filesystem::path path(value);
+    const std::string filename = path.filename().string();
+    return filename.empty() ? value : filename;
+}
 
 std::string escapeJson(const std::string& value)
 {
@@ -52,7 +65,7 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
 
     std::cout << "{\n";
     std::cout << "  \"success\": " << (result.success ? "true" : "false") << ",\n";
-    std::cout << "  \"input\": \"" << escapeJson(inputFile) << "\",\n";
+    std::cout << "  \"input\": \"" << escapeJson(summarizePath(inputFile)) << "\",\n";
     std::cout << "  \"outputDir\": \"" << escapeJson(outputDir) << "\",\n";
     if (!result.errorMessage.empty())
     {
@@ -61,8 +74,8 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
     std::cout << "  \"selection\": {\n";
     std::cout << "    \"rule\": \"" << escapeJson(result.selectionInfo.rule) << "\",\n";
     std::cout << "    \"reason\": \"" << escapeJson(result.selectionInfo.reason) << "\",\n";
-    std::cout << "    \"selectedPath\": \"" << escapeJson(result.selectionInfo.selectedPath)
-              << "\"\n";
+    std::cout << "    \"selectedPath\": \""
+              << escapeJson(summarizePath(result.selectionInfo.selectedPath)) << "\"\n";
     std::cout << "  },\n";
     if (result.success)
     {
@@ -100,7 +113,8 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
         std::cout << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
         std::cout << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
         std::cout << "      \"context\": {\n";
-        std::cout << "        \"file\": \"" << escapeJson(diag.context.file) << "\",\n";
+        std::cout << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file))
+                  << "\",\n";
         std::cout << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
         if (diag.context.offset.has_value())
         {
@@ -124,7 +138,7 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
     {
         const auto& candidate = result.exeCandidates[index];
         std::cout << "    {\n";
-        std::cout << "      \"path\": \"" << escapeJson(candidate.path) << "\",\n";
+        std::cout << "      \"path\": \"" << escapeJson(summarizePath(candidate.path)) << "\",\n";
         std::cout << "      \"loadAddress\": \"" << toHex(candidate.loadAddress) << "\",\n";
         std::cout << "      \"loadSize\": " << candidate.loadSize << ",\n";
         std::cout << "      \"entryPoint\": \"" << toHex(candidate.entryPoint) << "\",\n";

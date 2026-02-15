@@ -169,7 +169,9 @@ jobs:
               fi
 
               generated_build_dir="${out_dir}/build-generated"
-              if "${CMAKE_BIN}" -S "${source_root}" -B "${generated_build_dir}" -G Ninja >"recompile-artifacts/logs/${base}.cmake.configure.log" 2>&1 && \
+              if "${CMAKE_BIN}" -S "${source_root}" -B "${generated_build_dir}" -G Ninja \
+                 -DPSXRECOMP_ENABLE_LOGGING=ON \
+                 -DPSXRECOMP_LOG_LEVEL=2 >"recompile-artifacts/logs/${base}.cmake.configure.log" 2>&1 && \
                  "${CMAKE_BIN}" --build "${generated_build_dir}" >"recompile-artifacts/logs/${base}.cmake.build.log" 2>&1; then
                 demo_runnable_dir="recompile-artifacts/runnable/${base}"
                 mkdir -p "${demo_runnable_dir}/bin"
@@ -217,7 +219,9 @@ jobs:
             "${PYTHON_BIN}" tools/report_unsupported_opcodes.py \
               --log-dir recompile-artifacts/logs \
               --output-json recompile-artifacts/logs/unsupported-opcode-report.json \
-              --output-md recompile-artifacts/logs/unsupported-opcode-report.md || failed=1
+              --output-md recompile-artifacts/logs/unsupported-opcode-report.md \
+              --output-trend-json recompile-artifacts/logs/unsupported-opcode-trend.json \
+              --output-trend-md recompile-artifacts/logs/unsupported-opcode-trend.md || failed=1
           fi
 
           echo "failed=${failed}" >> "${GITHUB_OUTPUT}"

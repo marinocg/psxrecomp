@@ -17,6 +17,14 @@ u32 PsxSystem::readMmio32(Address address)
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
+        if (m_autoFrameProgressOnInterruptPoll)
+        {
+            const u32 statusBefore = m_interrupts.readStatus();
+            if ((statusBefore & static_cast<u32>(InterruptLine::VBlank)) == 0)
+            {
+                runFrame();
+            }
+        }
         return m_interrupts.readStatus();
     }
     if (address == Mmio::INTERRUPT_MASK)

@@ -291,7 +291,23 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         }
         break;
     case ir::Opcode::JUMP:
-        if (!block.successors.empty())
+        if (!instruction.inputs.empty() &&
+            instruction.inputs.front().kind == ir::ValueKind::REGISTER)
+        {
+            std::string target = valueToExpr(instruction.inputs.front(), context);
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
+            emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
+            emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
+            emitter.closeBlock();
+            emitter.writeLine("return;");
+        }
+        else if (!block.successors.empty())
         {
             emitter.writeLine("previousBlock = block;");
             emitter.writeLine("block = " + resolveBlockId(block.successors.front(), blockNames) +
@@ -311,7 +327,9 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 sourcePc = sourceStream.str();
             }
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
+            emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
+            emitter.closeBlock();
             emitter.closeBlock();
         }
         else

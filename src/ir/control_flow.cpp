@@ -92,7 +92,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             {
                 blockStarts.insert(*target);
             }
-            else
+            else if (instruction.opcode == Opcode::BRANCH)
             {
                 result.errors.push_back("Control-flow instruction missing target address.");
             }
@@ -207,7 +207,12 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             }
             else
             {
-                result.errors.push_back("Jump missing target address.");
+                needsExternalBlock = true;
+                if (std::find(block.successors.begin(), block.successors.end(),
+                              ExternalBlockName) == block.successors.end())
+                {
+                    block.successors.push_back(ExternalBlockName);
+                }
             }
             break;
         }

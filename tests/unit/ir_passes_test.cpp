@@ -146,6 +146,31 @@ int main()
     assert(foundExternalBlock);
     assert(foundJumpBlock);
 
+    std::vector<Instruction> indirectJumpInstructions;
+    indirectJumpInstructions.push_back(
+        makeInstruction(Opcode::JUMP, {Value::makeRegister(r1)}, {}, 0x9100));
+    indirectJumpInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x9104));
+    ControlFlowBuildResult indirectJumpCfg =
+        psxrecomp::ir::buildControlFlowFunction("indirect_jump", 0x9100, indirectJumpInstructions);
+    assert(indirectJumpCfg.errors.empty());
+    bool foundIndirectExternal = false;
+    bool foundIndirectJumpBlock = false;
+    for (const auto& block : indirectJumpCfg.function.blocks)
+    {
+        if (block.name == "block_external")
+        {
+            foundIndirectExternal = true;
+        }
+        if (block.name == "block_0x9100")
+        {
+            foundIndirectJumpBlock = true;
+            assert(block.successors.size() == 1);
+            assert(block.successors[0] == "block_external");
+        }
+    }
+    assert(foundIndirectExternal);
+    assert(foundIndirectJumpBlock);
+
     using psxrecomp::ir::Function;
 
     Function phiMismatch{"phi_mismatch", 0x3000, {}};

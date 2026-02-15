@@ -3,6 +3,7 @@
 #include "codegen_helpers.h"
 #include "codegen_lowering_helpers.h"
 
+#include <sstream>
 #include <unordered_set>
 
 namespace psxrecomp
@@ -82,6 +83,13 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 if (instruction.opcode == ir::Opcode::PHI)
                 {
                     continue;
+                }
+                if (instruction.sourceAddress.has_value())
+                {
+                    std::ostringstream pcLine;
+                    pcLine << "setProgramCounter(context, 0x" << std::hex
+                           << ((*instruction.sourceAddress) & 0x1FFFFFFFu) << ");";
+                    emitter.writeLine(pcLine.str());
                 }
                 emitInstruction(instruction, block, blockNames, context, emitter);
             }

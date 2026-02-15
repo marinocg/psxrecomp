@@ -60,6 +60,19 @@ std::string sanitizeModuleName(const std::string& name)
 
 namespace
 {
+
+std::string summarizePath(const std::string& value)
+{
+    if (value.empty())
+    {
+        return value;
+    }
+
+    std::filesystem::path path(value);
+    const std::string filename = path.filename().string();
+    return filename.empty() ? value : filename;
+}
+
 std::string escapeJson(const std::string& value)
 {
     std::string escaped;
@@ -371,12 +384,13 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
     stream << "  \"pipelineVersion\": \"" << escapeJson(pipelineVersion) << "\",\n";
     stream << "  \"timestamp\": \"" << escapeJson(timestamp) << "\",\n";
     stream << "  \"input\": {\n";
-    stream << "    \"path\": \"" << escapeJson(inputPath) << "\"\n";
+    stream << "    \"path\": \"" << escapeJson(summarizePath(inputPath)) << "\"\n";
     stream << "  },\n";
     stream << "  \"selection\": {\n";
     stream << "    \"rule\": \"" << escapeJson(result.selectionInfo.rule) << "\",\n";
     stream << "    \"reason\": \"" << escapeJson(result.selectionInfo.reason) << "\",\n";
-    stream << "    \"selectedPath\": \"" << escapeJson(result.selectionInfo.selectedPath) << "\"\n";
+    stream << "    \"selectedPath\": \""
+           << escapeJson(summarizePath(result.selectionInfo.selectedPath)) << "\"\n";
     stream << "  },\n";
     stream << "  \"output\": {\n";
     stream << "    \"directory\": \"" << escapeJson(outputDir) << "\",\n";
@@ -412,7 +426,7 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
         const auto& disc = result.discSet.discs[i];
         stream << "      {\n";
         stream << "        \"index\": " << disc.discIndex << ",\n";
-        stream << "        \"path\": \"" << escapeJson(disc.path) << "\",\n";
+        stream << "        \"path\": \"" << escapeJson(summarizePath(disc.path)) << "\",\n";
         stream << "        \"volumeLabel\": \"" << escapeJson(disc.volumeLabel) << "\"\n";
         stream << "      }";
         if (i + 1 < result.discSet.discs.size())
@@ -428,7 +442,7 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
     {
         const auto& candidate = result.exeCandidates[i];
         stream << "    {\n";
-        stream << "      \"path\": \"" << escapeJson(candidate.path) << "\",\n";
+        stream << "      \"path\": \"" << escapeJson(summarizePath(candidate.path)) << "\",\n";
         stream << "      \"loadAddress\": \"0x" << formatHex(candidate.loadAddress, 8) << "\",\n";
         stream << "      \"loadSize\": " << candidate.loadSize << ",\n";
         stream << "      \"entryPoint\": \"0x" << formatHex(candidate.entryPoint, 8) << "\",\n";
@@ -483,7 +497,7 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
         stream << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
         stream << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
         stream << "      \"context\": {\n";
-        stream << "        \"file\": \"" << escapeJson(diag.context.file) << "\",\n";
+        stream << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file)) << "\",\n";
         stream << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
         if (diag.context.offset.has_value())
         {

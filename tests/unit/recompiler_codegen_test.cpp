@@ -79,6 +79,7 @@ int main()
     std::string header = generator.generateHeader(program, "module");
     std::string source = generator.generateSource(program, "module");
     std::string buildFile = generator.generateBuildFile("module");
+    std::string runner = generator.generateRunnerSource("module");
 
     assert(header.find("RecompiledModule") != std::string::npos);
     assert(source.find("readMemory32") != std::string::npos);
@@ -87,13 +88,28 @@ int main()
     assert(source.find("switch (block)") != std::string::npos);
     assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("if (") != std::string::npos);
+    assert(source.find("callRecompiledFunction") != std::string::npos);
     assert(source.find("failUnsupportedCall") != std::string::npos);
+    assert(source.find("kModuleEntryAddress") != std::string::npos);
+    assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
+           std::string::npos);
     assert(source.find("triggerTrap") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
     assert(buildFile.find("add_executable") != std::string::npos);
     assert(buildFile.find("_runner.cpp") != std::string::npos);
     assert(buildFile.find("if(WIN32 AND NOT MSVC)") != std::string::npos);
     assert(buildFile.find("-static -static-libgcc -static-libstdc++") != std::string::npos);
+    assert(buildFile.find("PSXRECOMP_ENABLE_SDL_PRESENTER") != std::string::npos);
+    assert(buildFile.find("PSXRECOMP_HAS_SDL2") != std::string::npos);
+    assert(buildFile.find("user32 gdi32") != std::string::npos);
+    assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
+    assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
+    assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
+    assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
+    assert(runner.find("#if defined(_WIN32)") != std::string::npos);
+    assert(runner.find("Debug overlay") != std::string::npos);
+    assert(runner.find("Last PC") != std::string::npos);
+    assert(runner.find("presentEnv[0] == '\\0'") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
@@ -147,6 +163,12 @@ int main()
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
+    runtimeHeader << "class RuntimeDebugOverlay {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    void setLastProgramCounter(u32) {}\n";
+    runtimeHeader << "    u32 lastProgramCounter() const { return 0; }\n";
+    runtimeHeader << "    std::string renderText() const { return {}; }\n";
+    runtimeHeader << "};\n";
     runtimeHeader << "class PsxSystem {\n";
     runtimeHeader << "  public:\n";
     runtimeHeader << "    struct DiscSwapInfo {\n";
@@ -170,8 +192,11 @@ int main()
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
     runtimeHeader << "    void setDiscSwapInfo(const DiscSwapInfo&) {}\n";
+    runtimeHeader << "    void setAutoFrameProgressOnInterruptPoll(bool) {}\n";
+    runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
+    runtimeHeader << "    RuntimeDebugOverlay m_overlay;\n";
     runtimeHeader << "};\n";
     runtimeHeader << "} }\n";
     runtimeHeader.close();

@@ -20,7 +20,9 @@ class RuntimeDebugOverlay
     uint64_t interruptsRaised() const;
     uint64_t frameCounter() const;
     uint64_t lastFrameCycles() const;
+    uint32_t lastProgramCounter() const;
 
+    void setLastProgramCounter(uint32_t pc);
     std::string renderText() const;
 
   private:
@@ -28,6 +30,7 @@ class RuntimeDebugOverlay
     uint64_t m_lastFrameCycles = 0;
     uint64_t m_dmaTransfers = 0;
     uint64_t m_interruptsRaised = 0;
+    uint32_t m_lastProgramCounter = 0;
 };
 
 } // namespace runtime

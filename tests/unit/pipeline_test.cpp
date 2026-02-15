@@ -37,6 +37,27 @@ std::vector<psxrecomp::u8> buildMinimalExe(psxrecomp::u32 loadSize)
 
     return buffer;
 }
+
+std::vector<psxrecomp::u8> buildExeWithCodeAndAsciiData()
+{
+    constexpr psxrecomp::u32 loadSize = 64;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0, 0x08004000);  // j 0x80010000
+    writeLe32(buffer, codeOffset + 4, 0x00000000);  // nop delay slot
+    writeLe32(buffer, codeOffset + 8, 0x6C6C6548);  // 'Hell' (data)
+    writeLe32(buffer, codeOffset + 12, 0x6F77206F); // 'o wo' (data)
+    writeLe32(buffer, codeOffset + 16, 0xDDDDDDDD); // fill pattern (data)
+
+    return buffer;
+}
+
 } // namespace
 
 int main()
@@ -123,6 +144,22 @@ int main()
     assert(manifestContentA.find("\"output\"") != std::string::npos);
     assert(manifestContentA.find("\"runtimeInclude\"") != std::string::npos);
     assert(manifestContentA.find("\"runtimeSource\"") != std::string::npos);
+
+    std::filesystem::path mixedExePath = tempDir / ("psxrecomp_pipeline_mixed_" + suffix + ".psx");
+    guard.exe = mixedExePath;
+    auto mixedBuffer = buildExeWithCodeAndAsciiData();
+    std::ofstream mixedFile(mixedExePath, std::ios::binary);
+    mixedFile.write(reinterpret_cast<const char*>(mixedBuffer.data()),
+                    static_cast<std::streamsize>(mixedBuffer.size()));
+    mixedFile.close();
+    auto mixedResult = pipeline.run(mixedExePath.string());
+    assert(mixedResult.success);
+    for (const auto& warning : mixedResult.warnings)
+    {
+        assert(warning.find("0x6c6c6548") == std::string::npos);
+        assert(warning.find("0x6f77206f") == std::string::npos);
+        assert(warning.find("0xdddddddd") == std::string::npos);
+    }
 
     {
         std::ofstream ecmFile(ecmPath, std::ios::binary);
