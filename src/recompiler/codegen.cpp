@@ -148,6 +148,11 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("system.callBiosSyscall(code, regs.data(), regs.size());");
     emitter.closeBlock();
     emitter.writeBlank();
+    emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");
+    emitter.openBlock("");
+    emitter.writeLine("context.system.debugOverlay().setLastProgramCounter(pc);");
+    emitter.closeBlock();
+    emitter.writeBlank();
     emitter.writeLine("inline bool callIntrinsic(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
     emitter.writeLine("Address physical = address & 0x1FFFFFFF;");
@@ -684,6 +689,8 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
         " << (usedVramFallback ? \" (using VRAM fallback)\" : \"\") << \"\\n\";");
     emitter.writeLine("std::cout << \"[psxrecomp] Debug overlay: \" << "
                       "system.debugOverlay().renderText() << \"\\n\";");
+    emitter.writeLine("std::cout << \"[psxrecomp] Last PC: 0x\" << std::hex << std::uppercase"
+                      " << system.debugOverlay().lastProgramCounter() << std::dec << \"\\n\";");
     emitter.writeLine("if (runMs == 0 && system.gpu().commandTrace().empty())");
     emitter.openBlock("");
     emitter.writeLine(

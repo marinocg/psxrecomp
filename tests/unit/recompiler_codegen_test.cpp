@@ -108,6 +108,7 @@ int main()
     assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
     assert(runner.find("#if defined(_WIN32)") != std::string::npos);
     assert(runner.find("Debug overlay") != std::string::npos);
+    assert(runner.find("Last PC") != std::string::npos);
     assert(runner.find("presentEnv[0] == '\\0'") != std::string::npos);
 
 #if defined(_MSC_VER)
@@ -162,6 +163,12 @@ int main()
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
+    runtimeHeader << "class RuntimeDebugOverlay {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    void setLastProgramCounter(u32) {}\n";
+    runtimeHeader << "    u32 lastProgramCounter() const { return 0; }\n";
+    runtimeHeader << "    std::string renderText() const { return {}; }\n";
+    runtimeHeader << "};\n";
     runtimeHeader << "class PsxSystem {\n";
     runtimeHeader << "  public:\n";
     runtimeHeader << "    struct DiscSwapInfo {\n";
@@ -185,8 +192,10 @@ int main()
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
     runtimeHeader << "    void setDiscSwapInfo(const DiscSwapInfo&) {}\n";
+    runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
+    runtimeHeader << "    RuntimeDebugOverlay m_overlay;\n";
     runtimeHeader << "};\n";
     runtimeHeader << "} }\n";
     runtimeHeader.close();
