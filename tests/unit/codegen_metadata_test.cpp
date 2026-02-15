@@ -19,8 +19,8 @@ int main()
     using psxrecomp::ir::Opcode;
     using psxrecomp::ir::Program;
     using psxrecomp::ir::Value;
-    using psxrecomp::recompiler::CodeGenOptions;
     using psxrecomp::recompiler::CodeGenerator;
+    using psxrecomp::recompiler::CodeGenOptions;
     using psxrecomp::recompiler::ModuleMetadata;
 
     // Helper: create a minimal program with one function that returns.
@@ -30,8 +30,7 @@ int main()
         Builder builder(program);
         auto& function = builder.createFunction("main_func", 0x80010000);
         auto& entry = builder.createBlock(function, "entry");
-        entry.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010000));
         return program;
     };
 

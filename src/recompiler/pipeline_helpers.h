@@ -68,8 +68,8 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
                           const std::filesystem::path& inputFsPath,
                           std::vector<std::string>& warnings,
                           std::vector<PipelineDiagnostic>& diagnostics,
-                          const std::string& manifestTimestamp,
-                          const std::string& pipelineVersion, std::string& outError);
+                          const std::string& manifestTimestamp, const std::string& pipelineVersion,
+                          std::string& outError);
 
 } // namespace detail
 } // namespace recompiler

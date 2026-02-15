@@ -65,13 +65,13 @@ int main()
         std::strcpy(reinterpret_cast<char*>(ram + 0x3000), "world");
 
         u32 regs[32] = {};
-        regs[9] = 0x17;     // $t1 = function id (strcmp)
-        regs[4] = 0x1000;   // $a0 = address of "hello"
-        regs[5] = 0x2000;   // $a1 = address of "hello"
+        regs[9] = 0x17;   // $t1 = function id (strcmp)
+        regs[4] = 0x1000; // $a0 = address of "hello"
+        regs[5] = 0x2000; // $a1 = address of "hello"
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] == 0); // equal strings
 
-        regs[5] = 0x3000;   // $a1 = address of "world"
+        regs[5] = 0x3000; // $a1 = address of "world"
         system.callBiosVector(0xA0, regs, 32);
         assert(static_cast<int>(regs[2]) != 0); // different strings
 
@@ -92,9 +92,9 @@ int main()
         std::memset(ram + 0x6000, 0xFF, 20);
 
         u32 regs[32] = {};
-        regs[9] = 0x19;      // strcpy
-        regs[4] = 0x6000;    // $a0 = dst
-        regs[5] = 0x5000;    // $a1 = src
+        regs[9] = 0x19;   // strcpy
+        regs[4] = 0x6000; // $a0 = dst
+        regs[5] = 0x5000; // $a1 = src
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] == 0x6000); // returns dst
         assert(std::strcmp(reinterpret_cast<const char*>(ram + 0x6000), "psxrecomp") == 0);
@@ -115,9 +115,9 @@ int main()
         std::memset(ram + 0x7000, 0xAA, 16);
 
         u32 regs[32] = {};
-        regs[9] = 0x28;    // bzero
-        regs[4] = 0x7000;  // $a0 = address
-        regs[5] = 16;      // $a1 = length
+        regs[9] = 0x28;   // bzero
+        regs[4] = 0x7000; // $a0 = address
+        regs[5] = 16;     // $a1 = length
         system.callBiosVector(0xA0, regs, 32);
 
         for (int i = 0; i < 16; ++i)
@@ -144,10 +144,10 @@ int main()
         ram[0x8003] = 0x44;
 
         u32 regs[32] = {};
-        regs[9] = 0x2A;     // memcpy
-        regs[4] = 0x9000;   // $a0 = dst
-        regs[5] = 0x8000;   // $a1 = src
-        regs[6] = 4;        // $a2 = size
+        regs[9] = 0x2A;   // memcpy
+        regs[4] = 0x9000; // $a0 = dst
+        regs[5] = 0x8000; // $a1 = src
+        regs[6] = 4;      // $a2 = size
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] == 0x9000); // returns dst
         assert(ram[0x9000] == 0x11);
@@ -171,10 +171,10 @@ int main()
         std::memset(ram + 0xA000, 0x00, 8);
 
         u32 regs[32] = {};
-        regs[9] = 0x2B;     // memset
-        regs[4] = 0xA000;   // $a0 = dst
-        regs[5] = 0x55;     // $a1 = value
-        regs[6] = 8;        // $a2 = size
+        regs[9] = 0x2B;   // memset
+        regs[4] = 0xA000; // $a0 = dst
+        regs[5] = 0x55;   // $a1 = value
+        regs[6] = 8;      // $a2 = size
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] == 0xA000);
         for (int i = 0; i < 8; ++i)
@@ -195,8 +195,8 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x33;    // malloc
-        regs[4] = 256;     // $a0 = size
+        regs[9] = 0x33; // malloc
+        regs[4] = 256;  // $a0 = size
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] != 0); // should allocate
         u32 firstAlloc = regs[2];
@@ -233,8 +233,8 @@ int main()
             });
 
         u32 regs[32] = {};
-        regs[9] = 0x3C;     // putchar
-        regs[4] = 'X';      // $a0 = character
+        regs[9] = 0x3C; // putchar
+        regs[4] = 'X';  // $a0 = character
         system.callBiosVector(0xA0, regs, 32);
         assert(logged);
 
@@ -266,8 +266,8 @@ int main()
             });
 
         u32 regs[32] = {};
-        regs[9] = 0x3E;      // puts
-        regs[4] = 0xB000;    // $a0 = string address
+        regs[9] = 0x3E;   // puts
+        regs[4] = 0xB000; // $a0 = string address
         system.callBiosVector(0xA0, regs, 32);
         assert(logged);
 
@@ -284,7 +284,7 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x44;    // FlushCache
+        regs[9] = 0x44; // FlushCache
         system.callBiosVector(0xA0, regs, 32);
         // If we get here, it didn't crash
 
@@ -301,7 +301,7 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x08;     // OpenEvent
+        regs[9] = 0x08; // OpenEvent
         system.callBiosVector(0xB0, regs, 32);
         assert(regs[2] == 0x10); // fake handle
 
@@ -318,7 +318,7 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x0B;     // TestEvent
+        regs[9] = 0x0B; // TestEvent
         system.callBiosVector(0xB0, regs, 32);
         assert(regs[2] == 1);
 
@@ -335,9 +335,8 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        const u32 stubFunctions[] = {0x07, 0x09, 0x0A, 0x0C, 0x0D,
-                                     0x12, 0x13, 0x17, 0x18, 0x19,
-                                     0x20, 0x4A, 0x4B, 0x5B};
+        const u32 stubFunctions[] = {0x07, 0x09, 0x0A, 0x0C, 0x0D, 0x12, 0x13,
+                                     0x17, 0x18, 0x19, 0x20, 0x4A, 0x4B, 0x5B};
         for (u32 func : stubFunctions)
         {
             regs[9] = func;
@@ -357,8 +356,8 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        const u32 c0Functions[] = {0x00, 0x01, 0x02, 0x03, 0x07,
-                                   0x08, 0x09, 0x0A, 0x0C, 0x12, 0x1C};
+        const u32 c0Functions[] = {0x00, 0x01, 0x02, 0x03, 0x07, 0x08,
+                                   0x09, 0x0A, 0x0C, 0x12, 0x1C};
         for (u32 func : c0Functions)
         {
             regs[9] = func;
@@ -390,7 +389,7 @@ int main()
             });
 
         u32 regs[32] = {};
-        regs[9] = 0xFF;     // unlikely to be implemented
+        regs[9] = 0xFF; // unlikely to be implemented
         system.callBiosVector(0xA0, regs, 32);
         assert(warningLogged);
 
@@ -407,8 +406,8 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x13;    // setjmp
-        regs[2] = 0xDEAD;  // pre-set $v0
+        regs[9] = 0x13;   // setjmp
+        regs[2] = 0xDEAD; // pre-set $v0
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] == 0); // setjmp returns 0
 
@@ -443,8 +442,8 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x00;   // alloc_kernel_memory
-        regs[4] = 64;     // size
+        regs[9] = 0x00; // alloc_kernel_memory
+        regs[4] = 64;   // size
         system.callBiosVector(0xB0, regs, 32);
         assert(regs[2] != 0);
 
@@ -461,7 +460,7 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x34;    // free
+        regs[9] = 0x34; // free
         regs[4] = 0x80100000;
         system.callBiosVector(0xA0, regs, 32);
 

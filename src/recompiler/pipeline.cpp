@@ -519,9 +519,9 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
     std::string writeError;
     if (!detail::writeOutputArtifacts(result, outputDir, moduleName, header, source, runnerSource,
-                                      buildFile, activeDiscPath, inputFsPath, warnings,
-                                      diagnostics, m_options.manifestTimestamp,
-                                      m_options.pipelineVersion, writeError))
+                                      buildFile, activeDiscPath, inputFsPath, warnings, diagnostics,
+                                      m_options.manifestTimestamp, m_options.pipelineVersion,
+                                      writeError))
     {
         return fail(writeError);
     }

@@ -39,13 +39,11 @@ int main()
         auto& resumeB = builder.createBlock(function, "resume_b");
 
         // entry jumps to caller
-        entry.instructions.push_back(
-            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80020000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80020000));
         entry.successors = {"caller"};
 
         // caller jumps to barrier
-        caller.instructions.push_back(
-            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80020004));
+        caller.instructions.push_back(builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80020004));
         caller.successors = {"block_external"};
 
         // barrier uses continuations to dispatch
@@ -54,10 +52,8 @@ int main()
         barrier.continuations["caller"] = "resume_b";
 
         // resume blocks return
-        resumeA.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80020008));
-        resumeB.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x8002000C));
+        resumeA.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80020008));
+        resumeB.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x8002000C));
 
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "cont_module");
@@ -97,28 +93,22 @@ int main()
         auto& targetY = builder.createBlock(function, "target_y");
         auto& targetZ = builder.createBlock(function, "target_z");
 
-        blockA.instructions.push_back(
-            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80030000));
+        blockA.instructions.push_back(builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80030000));
         blockA.successors = {"barrier"};
 
-        blockB.instructions.push_back(
-            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80030004));
+        blockB.instructions.push_back(builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80030004));
         blockB.successors = {"barrier"};
 
-        blockC.instructions.push_back(
-            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80030008));
+        blockC.instructions.push_back(builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80030008));
         blockC.successors = {"barrier"};
 
         barrier.continuations["block_a"] = "target_x";
         barrier.continuations["block_b"] = "target_y";
         barrier.continuations["block_c"] = "target_z";
 
-        targetX.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x8003000C));
-        targetY.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030010));
-        targetZ.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030014));
+        targetX.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x8003000C));
+        targetY.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030010));
+        targetZ.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030014));
 
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "multi_cont_module");
@@ -149,8 +139,7 @@ int main()
         auto& nextBlock = builder.createBlock(function, "after_loop");
 
         // loopBlock has itself as sole successor
-        loopBlock.instructions.push_back(
-            builder.makeInstruction(Opcode::NOP, {}, {}, 0x80040000));
+        loopBlock.instructions.push_back(builder.makeInstruction(Opcode::NOP, {}, {}, 0x80040000));
         loopBlock.successors = {"self_loop"};
 
         nextBlock.instructions.push_back(
@@ -187,12 +176,10 @@ int main()
         auto& first = builder.createBlock(function, "first");
         auto& second = builder.createBlock(function, "second");
 
-        first.instructions.push_back(
-            builder.makeInstruction(Opcode::NOP, {}, {}, 0x80050000));
+        first.instructions.push_back(builder.makeInstruction(Opcode::NOP, {}, {}, 0x80050000));
         first.successors = {"second"};
 
-        second.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80050004));
+        second.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80050004));
 
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "normal_succ_module");
@@ -220,15 +207,13 @@ int main()
         auto& entry = builder.createBlock(function, "entry");
         auto& barrier = builder.createBlock(function, "empty_barrier");
 
-        entry.instructions.push_back(
-            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80060000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80060000));
         entry.successors = {"empty_barrier"};
 
         // barrier has empty continuations - should not crash
         // (empty continuations map means the block is treated normally)
 
-        barrier.instructions.push_back(
-            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80060004));
+        barrier.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80060004));
 
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "empty_barrier_module");

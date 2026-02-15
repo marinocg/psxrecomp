@@ -12,8 +12,7 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
 {
     if (regs == nullptr || regCount < 32)
     {
-        m_logger.log(LogLevel::Warn, "bios",
-                     "BIOS vector call with insufficient register file");
+        m_logger.log(LogLevel::Warn, "bios", "BIOS vector call with insufficient register file");
         return;
     }
 
@@ -44,8 +43,8 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
         if (traceBios[0] == '1')
         {
             std::ostringstream trace;
-            trace << "BIOS " << vectorName << "(0x" << std::hex << functionId << ")"
-                  << " a0=0x" << a0 << " a1=0x" << a1 << " a2=0x" << a2;
+            trace << "BIOS " << vectorName << "(0x" << std::hex << functionId << ")" << " a0=0x"
+                  << a0 << " a1=0x" << a1 << " a2=0x" << a2;
             m_logger.log(LogLevel::Info, "bios_trace", trace.str());
         }
     }
@@ -55,7 +54,7 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
     {
         switch (functionId)
         {
-        case 0x13: // setjmp - store context, return 0
+        case 0x13:       // setjmp - store context, return 0
             regs[2] = 0; // $v0 = 0
             return;
         case 0x17: // strcmp
@@ -192,14 +191,14 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
         }
         case 0x07: // DeliverEvent
             return;
-        case 0x08: // OpenEvent
+        case 0x08:          // OpenEvent
             regs[2] = 0x10; // return fake event handle
             return;
         case 0x09: // CloseEvent
             return;
         case 0x0A: // WaitEvent - stub: return immediately
             return;
-        case 0x0B: // TestEvent
+        case 0x0B:       // TestEvent
             regs[2] = 1; // event already occurred
             return;
         case 0x0C: // EnableEvent
@@ -218,7 +217,7 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
             return;
         case 0x20: // UnDeliverEvent
             return;
-        case 0x32: // FileOpen - stub
+        case 0x32:       // FileOpen - stub
             regs[2] = 0; // fail
             return;
         case 0x3D: // putchar

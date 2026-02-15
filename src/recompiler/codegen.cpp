@@ -316,8 +316,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("if (traceCalls)");
     emitter.openBlock("");
     emitter.writeLine("std::cerr << \"[call] target=0x\" << std::hex << physical");
-    emitter.writeLine(
-        "         << \" ra=0x\" << context.regs[Registers::RA] << \"\\n\";");
+    emitter.writeLine("         << \" ra=0x\" << context.regs[Registers::RA] << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("switch (physical)");
     emitter.openBlock("");

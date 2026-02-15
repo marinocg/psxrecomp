@@ -302,8 +302,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                 sourcePc = sourceStream.str();
             }
-            emitter.openBlock("if (!callIntrinsic(context.system, " + target +
-                              ", context.regs))");
+            emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.writeLine("return;");
@@ -327,8 +326,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                 sourcePc = sourceStream.str();
             }
-            emitter.openBlock("if (!callIntrinsic(context.system, " + target +
-                              ", context.regs))");
+            emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();

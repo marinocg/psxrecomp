@@ -527,8 +527,8 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
                           const std::filesystem::path& inputFsPath,
                           std::vector<std::string>& warnings,
                           std::vector<PipelineDiagnostic>& diagnostics,
-                          const std::string& manifestTimestamp,
-                          const std::string& pipelineVersion, std::string& outError)
+                          const std::string& manifestTimestamp, const std::string& pipelineVersion,
+                          std::string& outError)
 {
     std::error_code dirError;
     std::filesystem::create_directories(outputDir, dirError);
@@ -557,11 +557,10 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
         return false;
     }
 
-    std::filesystem::path repoRoot =
-        repositoryRootFromSourcePath(std::filesystem::path(__FILE__));
-    if (!copyDirectoryRecursive(
-            repoRoot / "include" / "psxrecomp",
-            std::filesystem::path(artifacts.runtimeIncludePath) / "psxrecomp", outError) ||
+    std::filesystem::path repoRoot = repositoryRootFromSourcePath(std::filesystem::path(__FILE__));
+    if (!copyDirectoryRecursive(repoRoot / "include" / "psxrecomp",
+                                std::filesystem::path(artifacts.runtimeIncludePath) / "psxrecomp",
+                                outError) ||
         !copyDirectoryRecursive(repoRoot / "src" / "runtime", artifacts.runtimeSourcePath,
                                 outError))
     {
@@ -622,8 +621,8 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
     result.diagnostics = diagnostics;
 
     const std::string timestamp = buildTimestamp(manifestTimestamp);
-    const std::string manifest = serializeManifest(result, activeDiscPath, outputDir.string(),
-                                                   timestamp, pipelineVersion);
+    const std::string manifest =
+        serializeManifest(result, activeDiscPath, outputDir.string(), timestamp, pipelineVersion);
     if (!writeFile(artifacts.manifestPath, manifest, outError))
     {
         return false;

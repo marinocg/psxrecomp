@@ -67,7 +67,13 @@ std::string CodeGenerator::generateBuildFile(const std::string& projectName)
     stream << "    find_package(SDL2 QUIET)\n";
     stream << "    if(SDL2_FOUND)\n";
     stream << "        set(PSXRECOMP_HAS_SDL2 1)\n";
+    stream << "        target_compile_definitions(" << projectName
+           << "_runner PRIVATE SDL_MAIN_HANDLED)\n";
     stream << "        target_link_libraries(" << projectName << "_runner PRIVATE SDL2::SDL2)\n";
+    stream << "        if(TARGET SDL2::SDL2main)\n";
+    stream << "            target_link_libraries(" << projectName
+           << "_runner PRIVATE SDL2::SDL2main)\n";
+    stream << "        endif()\n";
     stream << "    else()\n";
     stream << "        message(STATUS \"SDL2 not found; runner will use headless mode only.\")\n";
     stream << "    endif()\n";

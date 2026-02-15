@@ -27,8 +27,7 @@ int main()
     Builder builder(program);
     auto& function = builder.createFunction("main_func", 0x80010000);
     auto& entry = builder.createBlock(function, "entry");
-    entry.instructions.push_back(
-        builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010000));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010000));
 
     ModuleMetadata metadata;
     metadata.entryAddress = 0x80010000;
@@ -165,8 +164,7 @@ int main()
         disc.path = "disc1.bin";
         discMeta.discs.push_back(disc);
 
-        std::string discSource =
-            generator.generateSource(program, "disc_module", discMeta);
+        std::string discSource = generator.generateSource(program, "disc_module", discMeta);
         assert(discSource.find("TestDisc") != std::string::npos);
         assert(discSource.find("DISC_1") != std::string::npos);
         assert(discSource.find("disc1.bin") != std::string::npos);
