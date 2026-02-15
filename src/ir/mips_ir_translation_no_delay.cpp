@@ -359,8 +359,8 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
         {
             if (isBiosStubAddress(*target))
             {
-                addWarning(instr, "JAL to BIOS stub lowered to SYSCALL intrinsic");
-                emit(Opcode::SYSCALL, {Value::makeImmediate(static_cast<s32>(*target))}, {});
+                addWarning(instr, "JAL to BIOS vector lowered to CALL intrinsic");
+                emit(Opcode::CALL, {Value::makeAddress(*target)}, {});
             }
             else
             {

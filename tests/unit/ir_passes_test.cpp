@@ -174,9 +174,9 @@ int main()
     using psxrecomp::ir::Function;
 
     Function phiMismatch{"phi_mismatch", 0x3000, {}};
-    phiMismatch.blocks.push_back(BasicBlock{"entry", {}, {"join"}});
-    phiMismatch.blocks.push_back(BasicBlock{"other", {}, {"join"}});
-    phiMismatch.blocks.push_back(BasicBlock{"join", {}, {}});
+    phiMismatch.blocks.push_back(BasicBlock{"entry", {}, {"join"}, {}});
+    phiMismatch.blocks.push_back(BasicBlock{"other", {}, {"join"}, {}});
+    phiMismatch.blocks.push_back(BasicBlock{"join", {}, {}, {}});
     phiMismatch.blocks[2].instructions.push_back(Instruction{
         Opcode::PHI, {Value::makeTemporary(1)}, {Value::makeTemporary(2)}, std::nullopt});
 
@@ -184,9 +184,9 @@ int main()
     assert(!phiVerify.success());
 
     Function undefinedPhi{"undefined_phi", 0x4000, {}};
-    undefinedPhi.blocks.push_back(BasicBlock{"entry", {}, {"join"}});
-    undefinedPhi.blocks.push_back(BasicBlock{"other", {}, {"join"}});
-    undefinedPhi.blocks.push_back(BasicBlock{"join", {}, {}});
+    undefinedPhi.blocks.push_back(BasicBlock{"entry", {}, {"join"}, {}});
+    undefinedPhi.blocks.push_back(BasicBlock{"other", {}, {"join"}, {}});
+    undefinedPhi.blocks.push_back(BasicBlock{"join", {}, {}, {}});
     undefinedPhi.blocks[2].instructions.push_back(
         Instruction{Opcode::PHI,
                     {Value::makeTemporary(99), Value::makeTemporary(98)},
@@ -197,7 +197,7 @@ int main()
     assert(!undefinedVerify.success());
 
     Function useBeforeDef{"use_before_def", 0x5000, {}};
-    useBeforeDef.blocks.push_back(BasicBlock{"entry", {}, {}});
+    useBeforeDef.blocks.push_back(BasicBlock{"entry", {}, {}, {}});
     useBeforeDef.blocks[0].instructions.push_back(
         Instruction{Opcode::ADD, {Value::makeTemporary(7)}, {Value::makeTemporary(1)}, 0x5000});
     useBeforeDef.blocks[0].instructions.push_back(
@@ -207,7 +207,7 @@ int main()
     assert(!useBeforeVerify.success());
 
     Function optimizations{"optimizations", 0x6000, {}};
-    optimizations.blocks.push_back(BasicBlock{"entry", {}, {}});
+    optimizations.blocks.push_back(BasicBlock{"entry", {}, {}, {}});
     optimizations.blocks[0].instructions.push_back(
         Instruction{Opcode::ADD,
                     {Value::makeImmediate(1), Value::makeImmediate(2)},
@@ -241,8 +241,8 @@ int main()
     assert(foundFolded);
 
     Function crossBlockDce{"cross_block_dce", 0x7000, {}};
-    crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}});
-    crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}});
+    crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}, {}});
+    crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}, {}});
     crossBlockDce.blocks[0].instructions.push_back(
         Instruction{Opcode::ADD,
                     {Value::makeImmediate(10), Value::makeImmediate(20)},

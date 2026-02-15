@@ -345,8 +345,13 @@ int main()
     writePacket(gpu, {0x22000020u, 0x00050005u, 0x00060005u, 0x00050006u});
     const auto blended = readFramePixel(gpu, 5, 5);
     assert((blended & 0x8000u) != 0);
+    // Per PSX-SPX: "Rectangle filling is not affected by the GP0(E6h) mask
+    // setting, acting as if GP0(E6h).0 and GP0(E6h).1 are both zero."
+    // So the fill rect SHOULD overwrite the masked pixel.
     writePacket(gpu, {0x02000000u, 0x00050005u, 0x00010001u});
-    assert(readFramePixel(gpu, 5, 5) == blended);
+    const auto afterFill = readFramePixel(gpu, 5, 5);
+    assert(afterFill != blended);
+    assert((afterFill & 0x8000u) == 0);
 
     // Blend mode selection should influence semi-transparent output.
     gpu.reset();
@@ -382,6 +387,45 @@ int main()
     const auto ditherLeft = readFramePixel(gpu, 40, 40);
     const auto ditherRight = readFramePixel(gpu, 41, 40);
     assert(ditherLeft != ditherRight);
+
+    // --- Fill rect correctness tests (PSX-SPX GP0(02h) behavior) ---
+
+    // Fill rect should NOT apply draw offset.
+    gpu.reset();
+    writePacket(gpu, {0xE5000A0Au});                           // draw offset = (10,10)
+    writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00010001u}); // fill (0,0) 1x1 blue
+    // If draw offset were applied, pixel would be at (10,10); it should be at (0,0).
+    assert(readFramePixel(gpu, 0, 0) != 0);
+    assert(readFramePixel(gpu, 10, 10) == 0);
+
+    // Fill rect should NOT be clipped by draw area bounds.
+    gpu.reset();
+    writePacket(gpu, {0xE3000000u}); // draw area top-left = (0,0)
+    writePacket(gpu, {0xE4000401u}); // draw area bottom-right = (1,1) — only 2x2 area
+    writePacket(gpu, {0x020000FFu, 0x00050005u, 0x00010001u}); // fill (5,5) 1x1
+    // Pixel at (5,5) is outside draw area but fill rect should ignore draw area.
+    assert(readFramePixel(gpu, 5, 5) != 0);
+
+    // Fill rect should NOT be affected by mask bit setting.
+    gpu.reset();
+    // Write a pixel via fill rect, then set force-mask + check-mask via a
+    // triangle, then try to overwrite with another fill rect.
+    writePacket(gpu, {0x020000FFu, 0x000A000Au, 0x00010001u}); // fill (10,10) blue
+    writePacket(gpu, {0xE6000003u});                           // force mask + check mask
+    // Draw a triangle that covers (10,10) — this sets mask bit on the pixel.
+    writePacket(gpu, {0x22000020u, 0x000A000Au, 0x000B000Au, 0x000A000Bu});
+    const auto maskedPixel = readFramePixel(gpu, 10, 10);
+    assert((maskedPixel & 0x8000u) != 0); // mask bit set by triangle
+    // Fill rect should overwrite even though mask is set.
+    writePacket(gpu, {0x0200FF00u, 0x000A000Au, 0x00010001u}); // fill green
+    const auto afterFillMask = readFramePixel(gpu, 10, 10);
+    assert(afterFillMask != maskedPixel);
+    assert((afterFillMask & 0x8000u) == 0); // mask bit NOT forced for fill rect
+
+    // Fill rect with zero size should be a no-op.
+    gpu.reset();
+    writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00000000u}); // 0x0 fill
+    assert(readFramePixel(gpu, 0, 0) == 0);
 
     return 0;
 }

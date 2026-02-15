@@ -119,14 +119,14 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
         Address address = *instruction.sourceAddress;
         if (blockStarts.count(address) > 0)
         {
-            result.function.blocks.push_back(BasicBlock{formatBlockName(address), {}, {}});
+            result.function.blocks.push_back(BasicBlock{formatBlockName(address), {}, {}, {}});
             currentBlock = &result.function.blocks.back();
             result.addressToBlockName[address] = currentBlock->name;
         }
 
         if (currentBlock == nullptr)
         {
-            result.function.blocks.push_back(BasicBlock{"block_orphan", {}, {}});
+            result.function.blocks.push_back(BasicBlock{"block_orphan", {}, {}, {}});
             currentBlock = &result.function.blocks.back();
         }
 
@@ -258,7 +258,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                         [](const BasicBlock& block) { return block.name == ExternalBlockName; });
         if (!hasExternalBlock)
         {
-            BasicBlock externalBlock{ExternalBlockName, {}, {}};
+            BasicBlock externalBlock{ExternalBlockName, {}, {}, {}};
             externalBlock.continuations = std::move(externalContinuations);
             result.function.blocks.push_back(std::move(externalBlock));
         }

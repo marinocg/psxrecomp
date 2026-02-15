@@ -23,7 +23,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("#include <string>");
     emitter.writeLine("#include <vector>");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2");
-    emitter.writeLine("#include <SDL2/SDL.h>");
+    emitter.writeLine("#include <SDL.h>");
     emitter.writeLine("#endif");
     emitter.writeLine("#if defined(_WIN32)");
     emitter.writeLine("#include <windows.h>");
@@ -233,9 +233,9 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
+    emitter.writeLine("psxrecomp::runtime::PsxSystem system;");
     emitter.writeLine("try");
     emitter.openBlock("");
-    emitter.writeLine("psxrecomp::runtime::PsxSystem system;");
     emitter.writeLine("if (!system.initialize())");
     emitter.openBlock("");
     emitter.writeLine(
@@ -357,6 +357,43 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.openBlock("");
     emitter.writeLine(
         "std::cerr << \"[psxrecomp][error] Unhandled exception: \" << ex.what() << \"\\n\";");
+    emitter.writeLine("std::cerr << \"[psxrecomp] GPU command count: \""
+                      " << system.gpu().commandTrace().size() << \"\\n\";");
+    emitter.writeLine("const auto& exFbCheck = system.gpu().frameBuffer();");
+    emitter.writeLine("size_t exFbNonZero = 0;");
+    emitter.writeLine(
+        "for (size_t i = 0; i < exFbCheck.size(); ++i) { if (exFbCheck[i] != 0) ++exFbNonZero; }");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp] Non-zero framebuffer pixels: \" << exFbNonZero << \"\\n\";");
+    emitter.writeLine("const auto& exVram = system.gpu().vramWords();");
+    emitter.writeLine("size_t exNonZero = 0;");
+    emitter.writeLine(
+        "for (size_t i = 0; i < exVram.size(); ++i) { if (exVram[i] != 0) ++exNonZero; }");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp] Non-zero VRAM words: \" << exNonZero << \"\\n\";");
+    emitter.writeLine(
+        "for (size_t ci = 0; ci < system.gpu().commandTrace().size() && ci < 40; ++ci)");
+    emitter.openBlock("");
+    emitter.writeLine("const auto& cmd = system.gpu().commandTrace()[ci];");
+    emitter.writeLine(
+        "std::cerr << \"[gpu-trace] #\" << ci << \" kind=\" << static_cast<int>(cmd.kind)"
+        " << \" gp1=\" << cmd.fromGp1 << \" words=[\";");
+    emitter.writeLine(
+        "for (size_t wi = 0; wi < cmd.words.size(); ++wi)"
+        " { std::cerr << (wi ? \",\" : \"\") << \"0x\" << std::hex << cmd.words[wi]; }");
+    emitter.writeLine("std::cerr << std::dec << \"]\" << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("if (const char* exDump = std::getenv(\"PSXRECOMP_DUMP_FRAMEBUFFER\"))");
+    emitter.openBlock("");
+    emitter.writeLine("constexpr size_t w = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine("constexpr size_t h = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("const auto& exFb = system.gpu().frameBuffer();");
+    emitter.writeLine("std::vector<psxrecomp::u16> exPixels(exFb.begin(), exFb.end());");
+    emitter.writeLine("if (exPixels.size() < w * h) exPixels.resize(w * h, 0);");
+    emitter.writeLine("dumpFramebufferToPpm(exDump[0] != '\\0' ? exDump : "
+                      "\"framebuffer.ppm\", exPixels);");
+    emitter.writeLine("std::cerr << \"[psxrecomp] Framebuffer dumped (exception path).\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("return 1;");
     emitter.closeBlock();
     emitter.writeLine("catch (...)");

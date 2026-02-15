@@ -57,7 +57,10 @@ void SoftwareGpuRenderer::reset()
     m_oddField = false;
     m_texturePage = 0;
     m_clut = 0;
-    m_drawBounds = {};
+    // Restore draw bounds to full VRAM area (default-constructed values).
+    // Using {} would zero-initialize the struct instead of using the
+    // member default values (right=1023, bottom=511).
+    m_drawBounds = DrawBounds{};
     m_drawOffset = {};
     m_textureWindow = {};
     m_forceMaskBit = false;
@@ -81,11 +84,38 @@ void SoftwareGpuRenderer::submit(const GpuCommand& command)
         {
             return;
         }
-        const auto pos = applyDrawOffset(decodeVertex(command.words[1]));
+        // GP0(02h) Quick Rectangle Fill.
+        // Per PSX-SPX:
+        //  - Uses raw VRAM coordinates (no draw offset, no draw area clipping).
+        //  - Not affected by GP0(E6h) mask setting.
+        //  - The color is converted from 24-bit RGB to 15-bit RGB with mask
+        //    bit (bit 15) forced to 0.
+        // NOTE: Real hardware rounds Xpos/Xsiz to 16-pixel boundaries and
+        // wraps coordinates within VRAM. Those details are omitted here for
+        // simplicity; add them when hardware-accurate fill rounding matters.
+        const auto pos = decodeVertex(command.words[1]);
         const auto size = decodeVertex(command.words[2]);
-        fillRect(pos.x, pos.y, static_cast<u16>(std::max<s16>(0, size.x)),
-                 static_cast<u16>(std::max<s16>(0, size.y)), toColor15(command.words[0], false),
-                 false, false);
+        const u16 fw = static_cast<u16>(std::max<s16>(0, size.x));
+        const u16 fh = static_cast<u16>(std::max<s16>(0, size.y));
+        if (fw == 0 || fh == 0)
+        {
+            break;
+        }
+        const u16 color = toColor15(command.words[0], false);
+        for (u16 row = 0; row < fh; ++row)
+        {
+            for (u16 col = 0; col < fw; ++col)
+            {
+                const s16 px = static_cast<s16>(pos.x + col);
+                const s16 py = static_cast<s16>(pos.y + row);
+                if (px >= 0 && px < static_cast<s16>(Width) && py >= 0 &&
+                    py < static_cast<s16>(Height))
+                {
+                    const size_t index = static_cast<size_t>(py) * Width + static_cast<size_t>(px);
+                    m_frameBuffer[index] = color;
+                }
+            }
+        }
         break;
     }
     case GpuCommandKind::DrawTriangle:

@@ -99,3 +99,5 @@ docs/latex/
 
 # Misc
 .cache/
+
+__pycache__/

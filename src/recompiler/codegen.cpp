@@ -427,7 +427,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
 
     emitter.writeLine("void RecompiledModule::initMemory(runtime::PsxSystem& system)");
     emitter.openBlock("");
-    emitter.writeLine("if (kRamInitData != nullptr && kRamInitLoadSize > 0)");
+    emitter.writeLine("if (kRamInitLoadSize > 0)");
     emitter.openBlock("");
     emitter.writeLine("const Address offset = kRamInitLoadAddress & 0x1FFFFF;");
     emitter.writeLine("if (offset + kRamInitLoadSize <= psxrecomp::MemoryMap::RAM_SIZE)");

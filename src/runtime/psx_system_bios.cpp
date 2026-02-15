@@ -173,6 +173,15 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
             }
             return;
         }
+        case 0x70: // GPU_init - reset GPU to default state
+        {
+            // Send GP1(00h) = Reset GPU.
+            m_gpu.writeStatus(0x00000000u);
+            // Send GP1(08h) = Display Mode (320x240, NTSC).
+            m_gpu.writeStatus(0x08000001u);
+            m_logger.log(LogLevel::Debug, "bios", "GPU_init (A0 0x70)");
+            return;
+        }
         default:
             break;
         }
@@ -239,6 +248,14 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
             }
             msg << "\"";
             m_logger.log(LogLevel::Info, "bios", msg.str());
+            return;
+        }
+        case 0x46: // GPU_sync - wait for GPU to finish drawing
+        {
+            // In recompiled code the GPU is software-rendered and always
+            // finishes immediately, so return 0 (idle).
+            regs[2] = 0; // $v0 = 0 (GPU idle)
+            m_logger.log(LogLevel::Debug, "bios", "GPU_sync (B0 0x46)");
             return;
         }
         case 0x47: // AddDevice

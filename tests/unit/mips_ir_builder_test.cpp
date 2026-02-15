@@ -109,10 +109,9 @@ int main()
         {
             foundLoadStore = true;
         }
-        if (instruction.opcode == Opcode::SYSCALL && !instruction.inputs.empty() &&
-            instruction.inputs.front().kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
-            (static_cast<psxrecomp::u32>(instruction.inputs.front().immediate) & 0x1FFFFFFFu) ==
-                0xA0u)
+        if (instruction.opcode == Opcode::CALL && !instruction.inputs.empty() &&
+            instruction.inputs.front().kind == psxrecomp::ir::ValueKind::ADDRESS &&
+            (instruction.inputs.front().address & 0x1FFFFFFFu) == 0xA0u)
         {
             foundBiosSyscall = true;
         }

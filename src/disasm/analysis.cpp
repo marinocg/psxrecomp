@@ -50,7 +50,8 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
     }
 
     std::unordered_set<Address> startAddresses;
-    startAddresses.insert(instructions.front().address);
+    const Address entryAddress = instructions.front().address;
+    startAddresses.insert(entryAddress);
 
     for (size_t i = 0; i < instructions.size(); ++i)
     {
@@ -68,10 +69,51 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
         }
     }
 
+    // Detect whether the entry point falls through into the next detected
+    // function start (e.g. an _start stub that sets SP then falls into the
+    // real ADDIU SP,-16 prologue).  When the entry point contains no control
+    // flow terminator (JR/J/branch) before the next start address, the two
+    // regions must be merged so the entry function is not truncated.
+    auto indexMap = detail::buildInstructionIndex(instructions);
+    {
+        std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
+        std::sort(tempStarts.begin(), tempStarts.end());
+
+        // Find entryAddress in the sorted list and check what follows.
+        auto entryPos = std::lower_bound(tempStarts.begin(), tempStarts.end(), entryAddress);
+        if (entryPos != tempStarts.end() && *entryPos == entryAddress)
+        {
+            auto nextPos = std::next(entryPos);
+            if (nextPos != tempStarts.end())
+            {
+                auto entryIt = indexMap.find(entryAddress);
+                auto nextIt = indexMap.find(*nextPos);
+                if (entryIt != indexMap.end() && nextIt != indexMap.end())
+                {
+                    bool hasTerminator = false;
+                    for (size_t i = entryIt->second; i < nextIt->second; ++i)
+                    {
+                        if (instructions[i].isReturn() || instructions[i].isJump() ||
+                            instructions[i].isBranch())
+                        {
+                            hasTerminator = true;
+                            break;
+                        }
+                    }
+                    if (!hasTerminator)
+                    {
+                        // Entry point falls through — merge by removing the
+                        // spurious function start that follows it.
+                        startAddresses.erase(*nextPos);
+                    }
+                }
+            }
+        }
+    }
+
     std::vector<Address> sortedStarts(startAddresses.begin(), startAddresses.end());
     std::sort(sortedStarts.begin(), sortedStarts.end());
 
-    auto indexMap = detail::buildInstructionIndex(instructions);
     for (size_t startIndex = 0; startIndex < sortedStarts.size(); ++startIndex)
     {
         const Address start = sortedStarts[startIndex];

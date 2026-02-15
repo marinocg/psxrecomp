@@ -198,7 +198,7 @@ std::string BasicBlock::toString() const
 
 BasicBlock& Function::addBlock(std::string_view blockName)
 {
-    blocks.push_back(BasicBlock{std::string(blockName), {}, {}});
+    blocks.push_back(BasicBlock{std::string(blockName), {}, {}, {}});
     return blocks.back();
 }
 
