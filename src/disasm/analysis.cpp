@@ -80,52 +80,18 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
         }
     }
 
-    // Detect whether the entry point falls through into the next detected
-    // function start (e.g. an _start stub that sets SP then falls into the
-    // real ADDIU SP,-16 prologue).  When the entry point contains no control
-    // flow terminator (JR/J/branch) before the next start address, the two
-    // regions must be merged so the entry function is not truncated.
-    {
-        std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
-        std::sort(tempStarts.begin(), tempStarts.end());
-
-        // Find entryAddress in the sorted list and check what follows.
-        auto entryPos = std::lower_bound(tempStarts.begin(), tempStarts.end(), entryAddress);
-        if (entryPos != tempStarts.end() && *entryPos == entryAddress)
-        {
-            auto nextPos = std::next(entryPos);
-            if (nextPos != tempStarts.end())
-            {
-                auto entryIt = indexMap.find(entryAddress);
-                auto nextIt = indexMap.find(*nextPos);
-                if (entryIt != indexMap.end() && nextIt != indexMap.end())
-                {
-                    bool hasTerminator = false;
-                    for (size_t i = entryIt->second; i < nextIt->second; ++i)
-                    {
-                        if (instructions[i].isReturn() || instructions[i].isJump() ||
-                            instructions[i].isBranch())
-                        {
-                            hasTerminator = true;
-                            break;
-                        }
-                    }
-                    if (!hasTerminator)
-                    {
-                        // Entry point falls through — merge by removing the
-                        // spurious function start that follows it.
-                        startAddresses.erase(*nextPos);
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Merge functions where an internal branch crosses into the next
-    //    function.  When a BEQ/BNE/etc. within function A targets code in
-    //    function B (the next sequential function), A and B are really one
-    //    function that was incorrectly split by a premature prologue/JAL-
-    //    target heuristic.  We fix this by removing B's start from the set.
+    // ── Merge consecutive functions where the first falls through (no
+    //    terminator) or has a branch that crosses into the next function.
+    //
+    //    Fall-through: PSn00bSDK wrapper stubs commonly set up arguments
+    //    then fall through to the next function (no JR/J/branch between
+    //    the two).  The prologue heuristic incorrectly splits them.
+    //
+    //    Cross-branch: a BEQ/BNE/etc. within function A targets code in
+    //    function B (the next sequential function), meaning A and B are
+    //    really one function that was incorrectly split.
+    //
+    //    In both cases we remove the spurious start address to merge.
     {
         std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
         std::sort(tempStarts.begin(), tempStarts.end());
@@ -149,29 +115,43 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
                 const size_t startIdx = startIt->second;
                 const size_t limitIdx = nextIt->second;
 
-                // Scan instructions in [funcStart, nextFuncStart) for branch
-                // targets that land in [nextFuncStart, nextNextFuncStart).
-                const Address nextNextFuncStart =
-                    (si + 2 < tempStarts.size()) ? tempStarts[si + 2]
-                                                 : instructions.back().address + 4;
-
-                bool hasCrossBranch = false;
+                // Check 1: fall-through — no terminator in [funcStart, nextFuncStart).
+                bool hasTerminator = false;
                 for (size_t i = startIdx; i < limitIdx; ++i)
                 {
-                    if (instructions[i].isBranch())
+                    if (instructions[i].isReturn() || instructions[i].isJump() ||
+                        instructions[i].isBranch())
                     {
-                        if (auto target = instructions[i].getBranchTarget())
+                        hasTerminator = true;
+                        break;
+                    }
+                }
+
+                // Check 2: cross-branch — a branch in funcA targets code in funcB.
+                bool hasCrossBranch = false;
+                if (hasTerminator)
+                {
+                    const Address nextNextFuncStart =
+                        (si + 2 < tempStarts.size()) ? tempStarts[si + 2]
+                                                     : instructions.back().address + 4;
+
+                    for (size_t i = startIdx; i < limitIdx; ++i)
+                    {
+                        if (instructions[i].isBranch())
                         {
-                            if (*target >= nextFuncStart && *target < nextNextFuncStart)
+                            if (auto target = instructions[i].getBranchTarget())
                             {
-                                hasCrossBranch = true;
-                                break;
+                                if (*target >= nextFuncStart && *target < nextNextFuncStart)
+                                {
+                                    hasCrossBranch = true;
+                                    break;
+                                }
                             }
                         }
                     }
                 }
 
-                if (hasCrossBranch)
+                if (!hasTerminator || hasCrossBranch)
                 {
                     startAddresses.erase(nextFuncStart);
                     tempStarts.erase(tempStarts.begin() +
@@ -244,6 +224,14 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
             }
         }
 
+        // If branches within the function target code past the last return
+        // but before the next function (out-of-line blocks like height
+        // clamps that branch back), extend the function end to cover them.
+        if (end < maxBranchTarget && maxBranchTarget < instructions[limitIndex - 1].address + 4)
+        {
+            end = instructions[limitIndex - 1].address;
+        }
+
         boundaries.push_back({start, end,
                               detail::hasProloguePattern(instructions, startInstructionIndex),
                               hasEpilogue});
@@ -304,43 +292,8 @@ findFunctionBoundaries(const std::vector<Instruction>& instructions,
         }
     }
 
-    // Detect whether the entry point falls through into the next detected
-    // function start.
-    {
-        std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
-        std::sort(tempStarts.begin(), tempStarts.end());
-
-        auto entryPos = std::lower_bound(tempStarts.begin(), tempStarts.end(), entryAddress);
-        if (entryPos != tempStarts.end() && *entryPos == entryAddress)
-        {
-            auto nextPos = std::next(entryPos);
-            if (nextPos != tempStarts.end())
-            {
-                auto entryIt = indexMap.find(entryAddress);
-                auto nextIt = indexMap.find(*nextPos);
-                if (entryIt != indexMap.end() && nextIt != indexMap.end())
-                {
-                    bool hasTerminator = false;
-                    for (size_t i = entryIt->second; i < nextIt->second; ++i)
-                    {
-                        if (instructions[i].isReturn() || instructions[i].isJump() ||
-                            instructions[i].isBranch())
-                        {
-                            hasTerminator = true;
-                            break;
-                        }
-                    }
-                    if (!hasTerminator)
-                    {
-                        startAddresses.erase(*nextPos);
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Merge functions where an internal branch crosses into the next
-    //    function (same logic as the single-arg overload).
+    // ── Merge consecutive functions where the first falls through or has
+    //    a cross-branch (same unified logic as the single-arg overload).
     {
         std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
         std::sort(tempStarts.begin(), tempStarts.end());
@@ -364,33 +317,49 @@ findFunctionBoundaries(const std::vector<Instruction>& instructions,
                 const size_t startIdx = startIt->second;
                 const size_t limitIdx = nextIt->second;
 
-                const Address nextNextFuncStart =
-                    (si + 2 < tempStarts.size()) ? tempStarts[si + 2]
-                                                 : instructions.back().address + 4;
-
-                bool hasCrossBranch = false;
+                // Check 1: fall-through — no terminator in [funcStart, nextFuncStart).
+                bool hasTerminator = false;
                 for (size_t i = startIdx; i < limitIdx; ++i)
                 {
-                    if (instructions[i].isBranch())
+                    if (instructions[i].isReturn() || instructions[i].isJump() ||
+                        instructions[i].isBranch())
                     {
-                        if (auto target = instructions[i].getBranchTarget())
+                        hasTerminator = true;
+                        break;
+                    }
+                }
+
+                // Check 2: cross-branch — a branch in funcA targets code in funcB.
+                bool hasCrossBranch = false;
+                if (hasTerminator)
+                {
+                    const Address nextNextFuncStart =
+                        (si + 2 < tempStarts.size()) ? tempStarts[si + 2]
+                                                     : instructions.back().address + 4;
+
+                    for (size_t i = startIdx; i < limitIdx; ++i)
+                    {
+                        if (instructions[i].isBranch())
                         {
-                            if (*target >= nextFuncStart && *target < nextNextFuncStart)
+                            if (auto target = instructions[i].getBranchTarget())
                             {
-                                hasCrossBranch = true;
-                                break;
+                                if (*target >= nextFuncStart && *target < nextNextFuncStart)
+                                {
+                                    hasCrossBranch = true;
+                                    break;
+                                }
                             }
                         }
                     }
                 }
 
-                if (hasCrossBranch)
+                if (!hasTerminator || hasCrossBranch)
                 {
                     startAddresses.erase(nextFuncStart);
                     tempStarts.erase(tempStarts.begin() +
                                      static_cast<std::ptrdiff_t>(si + 1));
                     merged = true;
-                    break;
+                    break; // restart outer loop
                 }
             }
         }
@@ -453,6 +422,14 @@ findFunctionBoundaries(const std::vector<Instruction>& instructions,
                     break;
                 }
             }
+        }
+
+        // If branches within the function target code past the last return
+        // but before the next function (out-of-line blocks like height
+        // clamps that branch back), extend the function end to cover them.
+        if (end < maxBranchTarget && maxBranchTarget < instructions[limitIndex - 1].address + 4)
+        {
+            end = instructions[limitIndex - 1].address;
         }
 
         boundaries.push_back({start, end,

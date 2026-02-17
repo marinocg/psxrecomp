@@ -101,3 +101,5 @@ docs/latex/
 .cache/
 
 __pycache__/
+docker-results/
+

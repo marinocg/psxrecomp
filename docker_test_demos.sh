@@ -124,7 +124,7 @@ if unsupported:
   export PSXRECOMP_DUMP_FRAMEBUFFER="${framebuffer_dump}"
   # Limit execution to 10M steps so demos have enough time to render.
   # PSX demos loop forever, so we need a step budget to terminate.
-  export PSXRECOMP_MAX_STEPS=100000000
+  export PSXRECOMP_MAX_STEPS=10000000
 
   if timeout 30 "${runner}" >"${run_log}" 2>&1; then
     echo "[${base}] ✓ Execution OK (clean exit)"

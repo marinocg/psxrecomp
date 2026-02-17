@@ -86,6 +86,45 @@ class PsxSystem
         Address physical = normalizeAddress(address);
         if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
+            // If a VSync counter address has been registered and this is a
+            // 32-bit read of that counter, detect spin-wait polling and
+            // advance the frame so the counter increments.
+            // PSn00bSDK VSync() pattern:
+            //   u32 old = *counter;
+            //   while (*counter == old) { /* spin */ }
+            // We count consecutive reads that see the same counter value.
+            // After VSYNC_POLL_THRESHOLD reads, we know the game is
+            // polling and we trigger frame advancement.
+            if constexpr (sizeof(T) == 4)
+            {
+                if (m_vsyncCounterAddress != 0 && !m_inVsyncCounterRead &&
+                    physical == normalizeAddress(m_vsyncCounterAddress))
+                {
+                    // Read current counter value from RAM
+                    Address cOff = physical - MemoryMap::RAM_BASE;
+                    u32 currentCounter = 0;
+                    if (cOff + 4 <= MemoryMap::RAM_SIZE)
+                    {
+                        std::memcpy(&currentCounter, m_ram.data() + cOff, sizeof(u32));
+                    }
+                    if (currentCounter == m_lastVsyncCounterValue)
+                    {
+                        ++m_vsyncPollCount;
+                        if (m_vsyncPollCount >= VSYNC_POLL_THRESHOLD)
+                        {
+                            onVsyncCounterRead();
+                            m_vsyncPollCount = 0;
+                        }
+                    }
+                    else
+                    {
+                        // Counter changed (frame was advanced via another path
+                        // such as GPUSTAT read).  Reset poll detector.
+                        m_lastVsyncCounterValue = currentCounter;
+                        m_vsyncPollCount = 0;
+                    }
+                }
+            }
             return readFromRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE,
                                      MemoryMap::RAM_SIZE);
         }
@@ -240,6 +279,26 @@ class PsxSystem
     u32 m_gpuStatReadCount = 0; ///< Consecutive GPUSTAT reads within same VBlank phase
     Address m_vsyncCounterAddress = 0; ///< RAM address of PSn00bSDK vsync_counter (0 = disabled)
     Address m_drawSyncBusyAddress = 0; ///< RAM address of PSn00bSDK GPU busy byte (0 = disabled)
+    u32 m_lastVsyncCounterValue = 0;        ///< Counter value at last frame progression
+    u32 m_vsyncPollCount = 0;               ///< Consecutive reads seeing the same counter value
+    bool m_inVsyncCounterRead = false;      ///< Re-entrancy guard for onVsyncCounterRead()
+    static constexpr u32 VSYNC_POLL_THRESHOLD = 5000; ///< Reads before triggering frame advancement
+
+    /**
+     * @brief Clear PSn00bSDK's DrawSync busy byte if its address is registered.
+     *
+     * Called after GPU BIOS calls (GPU_cw, GPU_cwp, send_gpu_linked_list)
+     * to signal that the GPU operation completed synchronously.
+     */
+    void clearDrawSyncBusy();
+
+    /**
+     * @brief Called when the VSync counter RAM address is read.
+     *
+     * Advances the display phase so the counter increments, preventing
+     * VSync polling loops from spinning forever.
+     */
+    void onVsyncCounterRead();
 
     static Address normalizeAddress(Address address)
     {

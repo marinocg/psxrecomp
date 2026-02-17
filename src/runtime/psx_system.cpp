@@ -205,6 +205,63 @@ void PsxSystem::setDrawSyncBusyAddress(Address address)
                      }());
 }
 
+void PsxSystem::clearDrawSyncBusy()
+{
+    if (m_drawSyncBusyAddress != 0)
+    {
+        const Address offset = m_drawSyncBusyAddress & 0x1FFFFF;
+        if (offset < MemoryMap::RAM_SIZE)
+        {
+            m_ram[offset] = 0;
+        }
+    }
+}
+
+void PsxSystem::onVsyncCounterRead()
+{
+    // Re-entrancy guard: runFrame() may trigger reads that hit this again.
+    m_inVsyncCounterRead = true;
+
+    // Lightweight frame progression for VSync counter polling:
+    // Only increment the counter and toggle the GPU display phase.
+    // We do NOT call the full runFrame() here because it ticks SPU,
+    // CDROM, timers, scheduler etc. and is too expensive to call on
+    // every VSync poll iteration.
+    if (m_gpu.inActiveDisplay())
+    {
+        // Transition through VBlank phases so the counter increments
+        m_gpu.tickDisplayLine(); // ActiveDisplay → VBlankStart
+        m_gpu.tickDisplayLine(); // VBlankStart → VBlankEnd
+        m_gpu.tickDisplayLine(); // VBlankEnd → ActiveDisplay
+
+        // Increment the counter in RAM
+        if (m_vsyncCounterAddress != 0)
+        {
+            const Address offset = (m_vsyncCounterAddress & 0x1FFFFF);
+            if (offset + 4 <= MemoryMap::RAM_SIZE)
+            {
+                u32 counter = 0;
+                std::memcpy(&counter, m_ram.data() + offset, sizeof(u32));
+                ++counter;
+                std::memcpy(m_ram.data() + offset, &counter, sizeof(u32));
+            }
+        }
+        ++m_frameCount;
+    }
+    else
+    {
+        // Already in VBlank — step through phases
+        m_gpuStatReadCount++;
+        if (m_gpuStatReadCount >= 2)
+        {
+            m_gpu.tickDisplayLine();
+            m_gpuStatReadCount = 0;
+        }
+    }
+
+    m_inVsyncCounterRead = false;
+}
+
 u32 PsxSystem::frameCount() const
 {
     return m_frameCount;

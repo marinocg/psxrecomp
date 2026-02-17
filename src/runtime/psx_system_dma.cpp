@@ -43,6 +43,12 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     const auto& channel = m_dma.channel(port);
     const bool fromRam = (channel.channelControl & DMA_DIRECTION_FROM_RAM) != 0;
 
+    m_logger.log(LogLevel::Info, "dma",
+                 "DMA transfer triggered: port=" + std::to_string(static_cast<int>(port)) +
+                 " fromRam=" + std::to_string(fromRam) +
+                 " base=0x" + ([&]{ std::ostringstream s; s << std::hex << channel.baseAddress; return s.str(); })() +
+                 " ctrl=0x" + ([&]{ std::ostringstream s; s << std::hex << channel.channelControl; return s.str(); })());
+
     u32 transferredWords = 0;
     if (!fromRam)
     {
@@ -99,16 +105,38 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         if (port == DmaPort::Gpu && syncMode == DMA_LINKED_LIST_MODE)
         {
             Address nodeAddress = channel.baseAddress & 0x1FFFFC;
+            u32 nodeTotal = 0;
             for (u32 nodeCount = 0; nodeCount < 0x2000; ++nodeCount)
             {
                 const u32 header = read<u32>(nodeAddress);
                 const u32 commandCount = (header >> 24) & 0xFF;
+                // Debug: dump each node's words
+                if (commandCount > 0)
+                {
+                    std::string wordsStr;
+                    for (u32 i = 0; i < commandCount; ++i)
+                    {
+                        const Address commandAddress = (nodeAddress + (i + 1) * sizeof(u32)) & 0x1FFFFC;
+                        const u32 word = read<u32>(commandAddress);
+                        char buf[20];
+                        std::snprintf(buf, sizeof(buf), "0x%08x", word);
+                        if (!wordsStr.empty()) wordsStr += ",";
+                        wordsStr += buf;
+                    }
+                    char nodeBuf[64];
+                    std::snprintf(nodeBuf, sizeof(nodeBuf), "0x%06x", nodeAddress);
+                    m_logger.log(LogLevel::Info, "dma",
+                                 std::string("DMA node@") + nodeBuf + " hdr=0x" +
+                                 ([&]{ char h[12]; std::snprintf(h, sizeof(h), "%08x", header); return std::string(h); })() +
+                                 " cmds=" + std::to_string(commandCount) + " [" + wordsStr + "]");
+                }
                 for (u32 i = 0; i < commandCount; ++i)
                 {
                     const Address commandAddress = (nodeAddress + (i + 1) * sizeof(u32)) & 0x1FFFFC;
                     m_gpu.writeDma(read<u32>(commandAddress));
                 }
                 transferredWords += commandCount;
+                ++nodeTotal;
 
                 const u32 nextAddress = header & DMA_LIST_END_MARKER;
                 if (nextAddress == DMA_LIST_END_MARKER)
@@ -117,6 +145,9 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 }
                 nodeAddress = nextAddress & 0x1FFFFC;
             }
+            m_logger.log(LogLevel::Info, "dma",
+                         "GPU linked-list: nodes=" + std::to_string(nodeTotal) +
+                         " words=" + std::to_string(transferredWords));
         }
         else
         {
@@ -166,6 +197,15 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     m_interrupts.raise(InterruptLine::Dma);
     m_debugOverlay.incrementDmaTransfers();
     m_debugOverlay.incrementInterruptsRaised();
+
+    // GPU DMA transfers complete synchronously in our runtime.
+    // Clear PSn00bSDK's DrawSync busy byte so DrawSync(0) doesn't
+    // spin for its full 1M-iteration timeout waiting for the DMA
+    // completion interrupt handler that we never dispatch.
+    if (port == DmaPort::Gpu)
+    {
+        clearDrawSyncBusy();
+    }
 
     std::ostringstream message;
     message << "DMA transfer on port " << static_cast<int>(port) << " words=" << transferredWords;
