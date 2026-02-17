@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <mutex>
 #include <string>
 
 namespace psxrecomp
@@ -41,8 +42,11 @@ void Gpu::reset()
     m_packet = {};
     m_malformedPacketCount = 0;
     selectBackend(m_backend);
-    m_referenceRenderer.reset();
-    updateRendererState();
+    {
+        std::lock_guard<std::mutex> lock(m_rendererMutex);
+        m_referenceRenderer.reset();
+        updateRendererState();
+    }
     updateStatusBits();
 }
 
@@ -135,6 +139,12 @@ const std::vector<u16>& Gpu::frameBuffer() const
     return m_renderer->frameBuffer();
 }
 
+std::vector<u16> Gpu::frameBufferSnapshot() const
+{
+    std::lock_guard<std::mutex> lock(m_rendererMutex);
+    return m_renderer->frameBuffer();
+}
+
 const std::vector<GpuCommand>& Gpu::commandTrace() const
 {
     return m_commandTrace;
@@ -147,11 +157,13 @@ size_t Gpu::malformedPacketCount() const
 
 FrameComparison Gpu::compareCurrentFrameWithReference() const
 {
+    std::lock_guard<std::mutex> lock(m_rendererMutex);
     return compareFrames(m_renderer->frameBuffer(), m_referenceRenderer.frameBuffer());
 }
 
 void Gpu::selectBackend(Backend backend)
 {
+    std::lock_guard<std::mutex> lock(m_rendererMutex);
     m_backend = backend;
     if (backend == Backend::Software)
     {
@@ -221,7 +233,10 @@ void Gpu::tickDisplayLine()
         m_displayPhase = DisplayPhase::ActiveDisplay;
         break;
     }
-    updateRendererState();
+    {
+        std::lock_guard<std::mutex> lock(m_rendererMutex);
+        updateRendererState();
+    }
     updateStatusBits();
 }
 
@@ -311,9 +326,12 @@ void Gpu::processPacket(const PacketState& packet)
         }
     }
 
-    updateRendererState();
-    m_renderer->submit(command);
-    m_referenceRenderer.submit(command);
+    {
+        std::lock_guard<std::mutex> lock(m_rendererMutex);
+        updateRendererState();
+        m_renderer->submit(command);
+        m_referenceRenderer.submit(command);
+    }
     trimCommandTrace(m_commandTrace, MAX_COMMAND_TRACE);
     m_commandTrace.push_back(command);
     updateStatusBits();

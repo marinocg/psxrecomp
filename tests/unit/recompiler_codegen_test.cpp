@@ -105,7 +105,8 @@ int main()
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
-    assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
+    assert(runner.find("presentFramebufferLive") != std::string::npos);
+    assert(runner.find("std::thread presenterThread") != std::string::npos);
     assert(runner.find("#if defined(_WIN32)") != std::string::npos);
     assert(runner.find("Debug overlay") != std::string::npos);
     assert(runner.find("Last PC") != std::string::npos);

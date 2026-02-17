@@ -5,6 +5,7 @@
 
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -39,6 +40,7 @@ class Gpu
 
     const std::vector<u32>& vramWords() const;
     const std::vector<u16>& frameBuffer() const;
+    std::vector<u16> frameBufferSnapshot() const;
     const std::vector<GpuCommand>& commandTrace() const;
     size_t malformedPacketCount() const;
 
@@ -164,6 +166,7 @@ class Gpu
 
     std::vector<GpuCommand> m_commandTrace;
     size_t m_malformedPacketCount = 0;
+    mutable std::mutex m_rendererMutex;
 
     Backend m_backend = Backend::Software;
     std::unique_ptr<GpuRenderer> m_renderer = std::make_unique<SoftwareGpuRenderer>();

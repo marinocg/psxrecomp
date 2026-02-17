@@ -14,6 +14,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeBlank();
     emitter.writeLine("#include \"psxrecomp/runtime/gpu_renderer.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
+    emitter.writeLine("#include <atomic>");
     emitter.writeLine("#include <chrono>");
     emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <exception>");
@@ -21,6 +22,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("#include <fstream>");
     emitter.writeLine("#include <iostream>");
     emitter.writeLine("#include <string>");
+    emitter.writeLine("#include <thread>");
     emitter.writeLine("#include <vector>");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2");
     emitter.writeLine("#include <SDL.h>");
@@ -63,26 +65,12 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine(
-        "bool presentFramebufferWithSdl(const std::vector<psxrecomp::u16>& framebuffer)");
+    emitter.writeLine("bool presentFramebufferLive(psxrecomp::runtime::PsxSystem& system,");
+    emitter.writeLine("                          const std::atomic<bool>& stopRequested)");
     emitter.openBlock("");
     emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
     emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
-    emitter.writeLine("if (framebuffer.size() < width * height)");
-    emitter.openBlock("");
-    emitter.writeLine("return false;");
-    emitter.closeBlock();
     emitter.writeLine("std::vector<psxrecomp::u8> rgb(width * height * 3, 0);");
-    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
-    emitter.openBlock("");
-    emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
-    emitter.writeLine(
-        "rgb[i * 3 + 0] = static_cast<psxrecomp::u8>(((pixel >> 0) & 0x1F) * 255 / 31);");
-    emitter.writeLine(
-        "rgb[i * 3 + 1] = static_cast<psxrecomp::u8>(((pixel >> 5) & 0x1F) * 255 / 31);");
-    emitter.writeLine(
-        "rgb[i * 3 + 2] = static_cast<psxrecomp::u8>(((pixel >> 10) & 0x1F) * 255 / 31);");
-    emitter.closeBlock();
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2");
     emitter.writeLine("if (SDL_Init(SDL_INIT_VIDEO) != 0)");
     emitter.openBlock("");
@@ -126,11 +114,26 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("SDL_Quit();");
     emitter.writeLine("return false;");
     emitter.closeBlock();
+    emitter.writeLine("bool running = true;");
+    emitter.writeLine("while (running && !stopRequested.load(std::memory_order_relaxed))");
+    emitter.openBlock("");
+    emitter.writeLine("auto framebuffer = system.gpu().frameBufferSnapshot();");
+    emitter.writeLine("if (framebuffer.size() < width * height)");
+    emitter.openBlock("");
+    emitter.writeLine("framebuffer.resize(width * height, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.openBlock("");
+    emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
+    emitter.writeLine(
+        "rgb[i * 3 + 0] = static_cast<psxrecomp::u8>(((pixel >> 0) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "rgb[i * 3 + 1] = static_cast<psxrecomp::u8>(((pixel >> 5) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "rgb[i * 3 + 2] = static_cast<psxrecomp::u8>(((pixel >> 10) & 0x1F) * 255 / 31);");
+    emitter.closeBlock();
     emitter.writeLine(
         "SDL_UpdateTexture(texture, nullptr, rgb.data(), static_cast<int>(width * 3));");
-    emitter.writeLine("bool running = true;");
-    emitter.writeLine("while (running)");
-    emitter.openBlock("");
     emitter.writeLine("SDL_Event event;");
     emitter.writeLine("while (SDL_PollEvent(&event))");
     emitter.openBlock("");
@@ -173,7 +176,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("UpdateWindow(window);");
     emitter.writeLine("MSG msg{};");
     emitter.writeLine("bool running = true;");
-    emitter.writeLine("while (running)");
+    emitter.writeLine("while (running && !stopRequested.load(std::memory_order_relaxed))");
     emitter.openBlock("");
     emitter.writeLine("while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE))");
     emitter.openBlock("");
@@ -183,6 +186,21 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("TranslateMessage(&msg);");
     emitter.writeLine("DispatchMessageW(&msg);");
+    emitter.closeBlock();
+    emitter.writeLine("auto framebuffer = system.gpu().frameBufferSnapshot();");
+    emitter.writeLine("if (framebuffer.size() < width * height)");
+    emitter.openBlock("");
+    emitter.writeLine("framebuffer.resize(width * height, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.openBlock("");
+    emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
+    emitter.writeLine(
+        "rgb[i * 3 + 0] = static_cast<psxrecomp::u8>(((pixel >> 0) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "rgb[i * 3 + 1] = static_cast<psxrecomp::u8>(((pixel >> 5) & 0x1F) * 255 / 31);");
+    emitter.writeLine(
+        "rgb[i * 3 + 2] = static_cast<psxrecomp::u8>(((pixel >> 10) & 0x1F) * 255 / 31);");
     emitter.closeBlock();
     emitter.writeLine("HDC hdc = GetDC(window);");
     emitter.writeLine("BITMAPINFO bmi{};");
@@ -205,6 +223,8 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("UnregisterClassW(className, wc.hInstance);");
     emitter.writeLine("return true;");
     emitter.writeLine("#else");
+    emitter.writeLine("(void)system;");
+    emitter.writeLine("(void)stopRequested;");
     emitter.writeLine("(void)rgb;");
     emitter.writeLine("return false;");
     emitter.writeLine("#endif");
@@ -213,6 +233,8 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("int main(int argc, char** argv)");
     emitter.openBlock("");
     emitter.writeLine("(void)argc;");
+    emitter.writeLine("std::cout << std::unitbuf;");
+    emitter.writeLine("std::cerr << std::unitbuf;");
     emitter.writeLine("std::cout << \"[psxrecomp] Starting module: " + moduleName + "\\n\";");
     emitter.writeLine(
         "std::cout << \"[psxrecomp] Runtime checks: \" << PSXRECOMP_ENABLE_CHECKS << \"\\n\";");
@@ -234,6 +256,8 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("psxrecomp::runtime::PsxSystem system;");
+    emitter.writeLine("std::atomic<bool> stopPresenter{false};");
+    emitter.writeLine("std::thread presenterThread;");
     emitter.writeLine("try");
     emitter.openBlock("");
     emitter.writeLine("if (!system.initialize())");
@@ -245,9 +269,34 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::initMemory(system);");
     emitter.writeLine("system.setAutoFrameProgressOnInterruptPoll(true);");
+    emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
+    emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
+    emitter.writeLine("const bool defaultPresent = true;");
+    emitter.writeLine("#else");
+    emitter.writeLine("const bool defaultPresent = false;");
+    emitter.writeLine("#endif");
+    emitter.writeLine("const bool enabledPresent = presentEnv == nullptr ? defaultPresent :");
+    emitter.writeLine("    (presentEnv[0] == '\\0' || presentEnv[0] == '1');");
+    emitter.writeLine("if (enabledPresent)");
+    emitter.openBlock("");
+    emitter.writeLine("presenterThread = std::thread([&]()");
+    emitter.openBlock("");
+    emitter.writeLine("if (!presentFramebufferLive(system, stopPresenter))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][warn] Live framebuffer presenter unavailable; install SDL2 "
+        "or disable PSXRECOMP_PRESENT_FRAMEBUFFER.\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock(");");
+    emitter.closeBlock();
     emitter.writeLine("auto runStart = std::chrono::steady_clock::now();");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::run(system);");
     emitter.writeLine("auto runEnd = std::chrono::steady_clock::now();");
+    emitter.writeLine("stopPresenter.store(true, std::memory_order_relaxed);");
+    emitter.writeLine("if (presenterThread.joinable())");
+    emitter.openBlock("");
+    emitter.writeLine("presenterThread.join();");
+    emitter.closeBlock();
     emitter.writeLine(
         "auto runMs = std::chrono::duration_cast<std::chrono::milliseconds>(runEnd - runStart)"
         ".count();");
@@ -308,27 +357,6 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
         "std::cerr << \"[psxrecomp][warn] Module returned immediately with no GPU commands. \""
         " << \"Entrypoint may have returned or execution never reached rendering code.\\n\";");
     emitter.closeBlock();
-    emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
-    emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
-    emitter.writeLine("const bool defaultPresent = true;");
-    emitter.writeLine("#else");
-    emitter.writeLine("const bool defaultPresent = false;");
-    emitter.writeLine("#endif");
-    emitter.writeLine("const bool enabledPresent = presentEnv == nullptr ? defaultPresent : ");
-    emitter.writeLine("    (presentEnv[0] == '\\0' || presentEnv[0] == '1');");
-    emitter.writeLine("if (enabledPresent)");
-    emitter.openBlock("");
-    emitter.writeLine("if (presentFramebufferWithSdl(displayPixels))");
-    emitter.openBlock("");
-    emitter.writeLine("std::cout << \"[psxrecomp] SDL presenter window closed.\\n\";");
-    emitter.closeBlock();
-    emitter.writeLine("else");
-    emitter.openBlock("");
-    emitter.writeLine(
-        "std::cerr << \"[psxrecomp][warn] SDL presenter unavailable; install SDL2 or disable "
-        "PSXRECOMP_PRESENT_FRAMEBUFFER.\\n\";");
-    emitter.closeBlock();
-    emitter.closeBlock();
     emitter.writeLine("if (const char* dumpPathEnv = std::getenv(\"PSXRECOMP_DUMP_FRAMEBUFFER\"))");
     emitter.openBlock("");
     emitter.writeLine("std::filesystem::path dumpPath = dumpPathEnv[0] != '\\0' ? dumpPathEnv : "
@@ -355,6 +383,11 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("catch (const std::exception& ex)");
     emitter.openBlock("");
+    emitter.writeLine("stopPresenter.store(true, std::memory_order_relaxed);");
+    emitter.writeLine("if (presenterThread.joinable())");
+    emitter.openBlock("");
+    emitter.writeLine("presenterThread.join();");
+    emitter.closeBlock();
     emitter.writeLine(
         "std::cerr << \"[psxrecomp][error] Unhandled exception: \" << ex.what() << \"\\n\";");
     emitter.writeLine("std::cerr << \"[psxrecomp] GPU command count: \""
@@ -389,8 +422,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.openBlock("");
     emitter.writeLine("constexpr size_t w = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
     emitter.writeLine("constexpr size_t h = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
-    emitter.writeLine("const auto& exFb = system.gpu().frameBuffer();");
-    emitter.writeLine("std::vector<psxrecomp::u16> exPixels(exFb.begin(), exFb.end());");
+    emitter.writeLine("std::vector<psxrecomp::u16> exPixels = system.gpu().frameBufferSnapshot();");
     emitter.writeLine("if (exPixels.size() < w * h) exPixels.resize(w * h, 0);");
     emitter.writeLine("dumpFramebufferToPpm(exDump[0] != '\\0' ? exDump : "
                       "\"framebuffer.ppm\", exPixels);");
@@ -400,6 +432,11 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("catch (...)");
     emitter.openBlock("");
+    emitter.writeLine("stopPresenter.store(true, std::memory_order_relaxed);");
+    emitter.writeLine("if (presenterThread.joinable())");
+    emitter.openBlock("");
+    emitter.writeLine("presenterThread.join();");
+    emitter.closeBlock();
     emitter.writeLine(
         "std::cerr << \"[psxrecomp][error] Unknown failure during module execution.\" << \"\\n\";");
     emitter.writeLine("return 1;");
