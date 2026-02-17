@@ -51,15 +51,14 @@ master roadmap.
 
 - MMIO coverage and runtime scaffolding improved, but many device-accurate edge cases are still missing.
 - DMA/interrupt routing is present; cycle-accurate timing remains incomplete.
-- BIOS vector framework implemented with 48 functions across A0/B0/C0 tables (~22% of known BIOS surface). Functional implementations exist for string/memory ops, GPU helpers, events, and system init stubs. See [BIOS Functions Roadmap](bios_functions_roadmap.md) for the full checklist.
+- BIOS vector framework now covers 50 functions (16 A0, 23 B0, 11 C0; ~23% of known BIOS surface), including GPU_init (A0:70h), GPU_sync (B0:46h), and `send_gpu_linked_list` (A0:4Bh) support.
 - BIOS trace support via `PSXRECOMP_TRACE_BIOS` env var aids debugging.
-- BIOS vector framework now covers 50 functions (16 A0, 23 B0, 11 C0), including new GPU_init (A0:70h) and GPU_sync (B0:46h) stubs.
 - Remaining gap: ~168 BIOS functions still unimplemented (printf, threading, CD-ROM init, memory card I/O).
 
-## GPU / SPU / CD-ROM (GPU ~74% / SPU ~5% / CD-ROM ~42%)
+## GPU / SPU / CD-ROM (GPU ~76% / SPU ~45% / CD-ROM ~42%)
 
 - GPU: Phase 3 reference rasterization is now feature-complete (triangle/quad/line/sprite rules, clipping/offset/texture-window state, texture sampling, CLUT, blending, mask bits, and dithering paths). GP0(02h) Fill Rectangle now conforms to PSX-SPX: raw VRAM coordinates, no draw-area clipping, no mask-bit interaction. Timing/display synchronization and cross-emulator capture parity remain open.
-- SPU: voice synthesis, envelopes, and full audio path are still missing.
+- SPU: Phase 1-2 core path is implemented (voices, ADSR, decode, mixing, backend hookup), but timing/IRQ, XA decode handoff, and hardware-parity validation remain open.
 - CD-ROM: runtime command/data FIFOs, DMA transfer path, and baseline XA ReadN/ReadS streaming are implemented; timing fidelity, validation, and XA decode remain open.
 
 ## Testing & Validation (~42%)

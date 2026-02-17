@@ -14,10 +14,10 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 | Vector  | Implemented | Total known | Coverage |
 | ------- | ----------: | ----------: | -------: |
-| A0      |          14 |        ~100 |     ~14% |
+| A0      |          16 |        ~100 |     ~16% |
 | B0      |          23 |         ~90 |     ~26% |
 | C0      |          11 |         ~30 |     ~37% |
-| **All** |      **48** |    **~220** | **~22%** |
+| **All** |      **50** |    **~220** | **~23%** |
 
 ---
 
@@ -118,7 +118,7 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 - [ ] `0x48` — `SendGP1Command(gp1cmd)`
 - [x] `0x49` — `GPU_cw(gp0cmd)` — _Functional: forwards to GPU writeCommand_
 - [x] `0x4A` — `GPU_cwp(src, num)` — _Functional: sends GP0 command list_
-- [ ] `0x4B` — `send_gpu_linked_list(src)`
+- [x] `0x4B` — `send_gpu_linked_list(src)` — _Functional: traverses ordering-table linked list and forwards GP0 commands_
 - [ ] `0x4C` — `gpu_abort_dma()`
 - [ ] `0x4D` — `GetGPUStatus()`
 - [ ] `0x4E` — `gpu_sync()`
@@ -137,9 +137,9 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 ###Ings / Math / Exception (0x70+)
 
-- [ ] `0x70` — `_bu_init()` _(internal)_
+- [x] `0x70` — `GPU_init()` — _Stub: sends GPU reset + default display mode_
 - [ ] `0x71` — `CdInit()` _(internal)_
-- [ ] `0x72` — `CdRemove()` _(internal)_
+- [x] `0x72` — `_96_init()` _(internal CD-ROM init stub)_
 - [ ] `0x78` — `CdAsyncSeekL(src)`
 - [ ] `0x7C` — `CdAsyncGetStatus(dst)`
 - [ ] `0x7E` — `CdAsyncReadSector(count, dst, mode)`
@@ -255,7 +255,7 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 - [ ] `0x43` — `nextfile(direntry)`
 - [ ] `0x44` — `FileRename(old_filename, new_filename)`
 - [ ] `0x45` — `FileDelete(filename)`
-- [ ] `0x46` — `FileUndelete(filename)`
+- [x] `0x46` — `GPU_sync(mode)` — _Stub: returns idle (0)_
 - [x] `0x47` — `AddDevice(device_info)` — _Stub: returns 1_
 - [ ] `0x48` — `RemoveDevice(device_name)`
 - [ ] `0x49` — `PrintInstalledDevices()`
@@ -338,7 +338,7 @@ implemented early.
 | A0     | `0x1B` | `strlen`               | ❌     |
 | A0     | `0x2C` | `memmove`              | ❌     |
 | A0     | `0x48` | `SendGP1Command`       | ❌     |
-| A0     | `0x4B` | `send_gpu_linked_list` | ❌     |
+| A0     | `0x4B` | `send_gpu_linked_list` | ✅     |
 | A0     | `0x4D` | `GetGPUStatus`         | ❌     |
 | A0     | `0x4E` | `gpu_sync`             | ❌     |
 | B0     | `0x14` | `StopPad`              | ❌     |

@@ -182,27 +182,29 @@ void PsxSystem::setAutoFrameProgressOnInterruptPoll(bool enabled)
 void PsxSystem::setVsyncCounterAddress(Address address)
 {
     m_vsyncCounterAddress = address;
-    m_logger.log(LogLevel::Info, "system",
-                 "VSync counter registered at 0x" +
-                     [&]()
-                     {
-                         std::ostringstream s;
-                         s << std::hex << address;
-                         return s.str();
-                     }());
+    m_logger.log(
+        LogLevel::Info, "system",
+        "VSync counter registered at 0x" +
+            [&]()
+            {
+                std::ostringstream s;
+                s << std::hex << address;
+                return s.str();
+            }());
 }
 
 void PsxSystem::setDrawSyncBusyAddress(Address address)
 {
     m_drawSyncBusyAddress = address;
-    m_logger.log(LogLevel::Info, "system",
-                 "DrawSync busy byte registered at 0x" +
-                     [&]()
-                     {
-                         std::ostringstream s;
-                         s << std::hex << address;
-                         return s.str();
-                     }());
+    m_logger.log(
+        LogLevel::Info, "system",
+        "DrawSync busy byte registered at 0x" +
+            [&]()
+            {
+                std::ostringstream s;
+                s << std::hex << address;
+                return s.str();
+            }());
 }
 
 void PsxSystem::clearDrawSyncBusy()

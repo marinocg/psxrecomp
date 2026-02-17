@@ -282,9 +282,9 @@ int main()
         std::vector<Instruction> dupAddrInstructions;
         // Block entry at 0x9FF0: compare + branch to 0xA000 (creating a
         // block start at 0xA000).
-        dupAddrInstructions.push_back(makeInstruction(
-            Opcode::COMPARE_EQ, {Value::makeRegister(r1), Value::makeImmediate(0)},
-            {Value::makeTemporary(50)}, 0x9FF0));
+        dupAddrInstructions.push_back(
+            makeInstruction(Opcode::COMPARE_EQ, {Value::makeRegister(r1), Value::makeImmediate(0)},
+                            {Value::makeTemporary(50)}, 0x9FF0));
         dupAddrInstructions.push_back(makeInstruction(
             Opcode::BRANCH, {Value::makeTemporary(50), Value::makeAddress(0xA000)}, {}, 0x9FF4));
         // Fallthrough block at 0x9FF8 just returns.
@@ -292,13 +292,11 @@ int main()
         // Block at 0xA000 with TWO instructions at the same address
         // (like LW translation: ADD then LOAD), followed by RETURN at
         // a different address that forces a new block boundary.
-        dupAddrInstructions.push_back(makeInstruction(
-            Opcode::ADD,
-            {Value::makeRegister(r1), Value::makeImmediate(100)},
-            {Value::makeTemporary(51)}, 0xA000));
-        dupAddrInstructions.push_back(makeInstruction(
-            Opcode::LOAD, {Value::makeTemporary(51)},
-            {Value::makeRegister(r2)}, 0xA000));
+        dupAddrInstructions.push_back(
+            makeInstruction(Opcode::ADD, {Value::makeRegister(r1), Value::makeImmediate(100)},
+                            {Value::makeTemporary(51)}, 0xA000));
+        dupAddrInstructions.push_back(makeInstruction(Opcode::LOAD, {Value::makeTemporary(51)},
+                                                      {Value::makeRegister(r2)}, 0xA000));
         dupAddrInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0xA004));
 
         ControlFlowBuildResult dupAddrCfg =

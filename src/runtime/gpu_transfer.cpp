@@ -97,9 +97,11 @@ void Gpu::beginCpuToVramTransfer(const PacketState& packet)
 
     if (const char* env = std::getenv("PSXRECOMP_GPU_TRACE"); env && std::string(env) == "1")
     {
-        std::fprintf(stderr, "[GPU] CpuToVram: pos=(%u,%u) size=(%u,%u) raw=[0x%08X, 0x%08X, 0x%08X] remainingWords=%zu\n",
-                      x, y, width, height, packet.words[0], packet.words[1], packet.words[2],
-                      transferWordCount(width, height));
+        std::fprintf(stderr,
+                     "[GPU] CpuToVram: pos=(%u,%u) size=(%u,%u) raw=[0x%08X, 0x%08X, 0x%08X] "
+                     "remainingWords=%zu\n",
+                     x, y, width, height, packet.words[0], packet.words[1], packet.words[2],
+                     transferWordCount(width, height));
     }
 
     m_transferState = {

@@ -55,7 +55,7 @@ Goal: reliably go from ISO/EXE input to generated C++ artifacts without manual s
 - [x] PSX-EXE loader robustness (`psx_exe_roadmap.md`)
 - [x] Disassembler analysis helpers (`mips_r3000_disassembler_roadmap.md`)
 
-### M2: Functional MIPS→IR Coverage (In progress)
+### M2: Functional MIPS→IR Coverage (Dependency Gate Complete)
 
 Goal: translate common game code paths into IR with correct control flow.
 
@@ -72,9 +72,9 @@ Goal: translate common game code paths into IR with correct control flow.
 - [x] IR pipeline expansion (`ir_roadmap.md`)
 - [x] Recompiler baseline codegen (`recompiler_roadmap.md`)
 
-Status note: IR and recompiler dependency roadmaps are now complete for M2.
+Status note: M2 dependency gate is complete. Remaining instruction/coprocessor edge-case coverage is tracked under M5 compatibility hardening.
 
-### M3: Correct Runtime Semantics (In progress)
+### M3: Correct Runtime Semantics (Dependency Gate Complete; Accuracy Ongoing)
 
 Goal: make generated code interact with a faithful runtime model of PSX hardware.
 
@@ -86,7 +86,7 @@ Goal: make generated code interact with a faithful runtime model of PSX hardware
 - [x] GPU command packet ingestion and minimal rasterization.
 - [x] SPU voice synthesis scaffolding, ADSR/mixing core, and backend audio hooks (simplified reference path).
 - [x] Debug tooling: runtime logs, memory dumps, and performance overlays.
-- [x] BIOS vector framework with 48 implemented functions across A0/B0/C0 tables.
+- [x] BIOS vector framework with 50 implemented functions across A0/B0/C0 tables.
 - [x] Block-external continuation dispatch and self-loop prevention in codegen.
 - [x] Initial register state emission (SP, GP, FP, RA) and RAM init image in generated runners.
 - [x] Debug environment variables (`PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`, `PSXRECOMP_TRACE_BIOS`).
@@ -114,8 +114,8 @@ Goal: run a controlled demo binary end-to-end with deterministic output.
 
 **Dependencies (complete these roadmaps)**
 
-- [ ] M2 functional IR coverage (this milestone)
-- [ ] M3 runtime semantics (this milestone)
+- [x] M2 functional IR coverage dependency gate.
+- [x] M3 runtime semantics dependency gate.
 - [ ] Demo roadmap (`demo_roadmap.md`)
 
 ### M5: Early Game Compatibility (Planned)
@@ -159,7 +159,7 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 
 ## Risk and dependency highlights
 
-- **Instruction coverage gaps** directly block M2 and downstream milestones.
+- **Instruction coverage edge cases** remain a key risk for M4+ stability and M5 compatibility.
 - **MMIO accuracy** is critical for GPU/SPU/CD-ROM correctness in M3+.
 - **Function boundary discovery** impacts CFG building and codegen quality.
 - **Testing infrastructure** must scale before M5 to prevent regressions.

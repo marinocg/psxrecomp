@@ -42,86 +42,9 @@ std::string escapeStringLiteral(const std::string& value)
     }
     return escaped;
 }
-} // namespace
 
-CodeGenerator::CodeGenerator(const CodeGenOptions& options) : m_options(options) {}
-std::string CodeGenerator::generateHeader(const ir::Program& program, const std::string& moduleName)
+void emitRuntimeSupportHelpers(CppEmitter& emitter)
 {
-    (void)moduleName;
-    CppEmitter emitter;
-    emitter.writeLine("#pragma once");
-    emitter.writeBlank();
-    emitter.writeLine("#include \"psxrecomp/runtime/psx_system.h\"");
-    emitter.writeLine("#include \"psxrecomp/types.h\"");
-    emitter.writeBlank();
-    emitter.openBlock("namespace psxrecomp");
-    emitter.openBlock("namespace recompiler");
-
-    emitter.writeLine("struct RecompilerContext;");
-    emitter.openBlock("struct RecompiledModule");
-    emitter.writeLine("static void configure(runtime::PsxSystem& system);");
-    emitter.writeLine("static void initMemory(runtime::PsxSystem& system);");
-    emitter.writeLine("static void run(runtime::PsxSystem& system);");
-    emitter.closeBlock(";");
-    emitter.writeBlank();
-    emitter.writeLines(generateFunctionDeclarations(program));
-    emitter.closeBlock();
-    emitter.closeBlock();
-    return emitter.str();
-}
-std::string CodeGenerator::generateSource(const ir::Program& program, const std::string& moduleName,
-                                          const ModuleMetadata& metadata)
-{
-    CppEmitter emitter;
-    std::vector<std::pair<Address, std::string>> functionSymbols;
-    functionSymbols.reserve(program.functions.size());
-    std::unordered_set<std::string> usedFunctionNames;
-    for (const auto& function : program.functions)
-    {
-        functionSymbols.emplace_back(function.entryAddress,
-                                     uniquifyIdentifier(function.name, usedFunctionNames));
-    }
-
-    Address moduleEntryAddress = metadata.entryAddress;
-    if (moduleEntryAddress == 0 && !functionSymbols.empty())
-    {
-        moduleEntryAddress = functionSymbols.front().first;
-    }
-    emitter.writeLine("#include \"" + moduleName + ".h\"");
-    emitter.writeBlank();
-    emitter.writeLine("#include <array>");
-    emitter.writeLine("#include <chrono>");
-    emitter.writeLine("#include <cstdlib>");
-    emitter.writeLine("#include <cstdint>");
-    emitter.writeLine("#include <cstring>");
-    emitter.writeLine("#include <iostream>");
-    emitter.writeLine("#include <sstream>");
-    emitter.writeLine("#include <stdexcept>");
-    emitter.writeLine("#include <string>");
-    emitter.writeLine("#include <unordered_set>");
-    emitter.writeLine("#include <vector>");
-    emitter.writeBlank();
-    emitter.writeLine("#ifndef PSXRECOMP_ENABLE_LOGGING");
-    emitter.writeLine("#define PSXRECOMP_ENABLE_LOGGING 0");
-    emitter.writeLine("#endif");
-    emitter.writeLine("#ifndef PSXRECOMP_LOG_LEVEL");
-    emitter.writeLine("#define PSXRECOMP_LOG_LEVEL 1");
-    emitter.writeLine("#endif");
-    emitter.writeLine("#ifndef PSXRECOMP_ENABLE_CHECKS");
-    emitter.writeLine("#define PSXRECOMP_ENABLE_CHECKS 1");
-    emitter.writeLine("#endif");
-    emitter.writeBlank();
-    emitter.openBlock("namespace psxrecomp");
-    emitter.openBlock("namespace recompiler");
-    emitter.openBlock("struct RecompilerContext");
-    emitter.writeLine("runtime::PsxSystem& system;");
-    emitter.writeLine("std::array<u32, Registers::NUM_REGISTERS> regs{};");
-    emitter.writeLine("u32 hi = 0;");
-    emitter.writeLine("u32 lo = 0;");
-    emitter.closeBlock(";");
-    emitter.writeBlank();
-    emitter.openBlock("namespace");
-
     // readMemory32 — straightforward RAM read.
     emitter.writeLine("inline u32 readMemory32(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
@@ -145,7 +68,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     // readMemory8s — signed byte read (sign-extend to 32 bits).
     emitter.writeLine("inline u32 readMemory8s(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
-    emitter.writeLine("return static_cast<u32>(static_cast<s32>(static_cast<s8>(system.read<u8>(address))));");
+    emitter.writeLine(
+        "return static_cast<u32>(static_cast<s32>(static_cast<s8>(system.read<u8>(address))));");
     emitter.closeBlock();
     emitter.writeBlank();
 
@@ -159,19 +83,22 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     // readMemory16s — signed halfword read (sign-extend to 32 bits).
     emitter.writeLine("inline u32 readMemory16s(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
-    emitter.writeLine("return static_cast<u32>(static_cast<s32>(static_cast<s16>(system.read<u16>(address))));");
+    emitter.writeLine(
+        "return static_cast<u32>(static_cast<s32>(static_cast<s16>(system.read<u16>(address))));");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // writeMemory8 — byte store.
-    emitter.writeLine("inline void writeMemory8(runtime::PsxSystem& system, Address address, u32 value)");
+    emitter.writeLine(
+        "inline void writeMemory8(runtime::PsxSystem& system, Address address, u32 value)");
     emitter.openBlock("");
     emitter.writeLine("system.write<u8>(address, static_cast<u8>(value & 0xFF));");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // writeMemory16 — halfword store.
-    emitter.writeLine("inline void writeMemory16(runtime::PsxSystem& system, Address address, u32 value)");
+    emitter.writeLine(
+        "inline void writeMemory16(runtime::PsxSystem& system, Address address, u32 value)");
     emitter.openBlock("");
     emitter.writeLine("system.write<u16>(address, static_cast<u16>(value & 0xFFFF));");
     emitter.closeBlock();
@@ -323,6 +250,87 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("std::cerr << message << \"\\n\";");
     emitter.closeBlock();
     emitter.closeBlock();
+}
+} // namespace
+
+CodeGenerator::CodeGenerator(const CodeGenOptions& options) : m_options(options) {}
+std::string CodeGenerator::generateHeader(const ir::Program& program, const std::string& moduleName)
+{
+    (void)moduleName;
+    CppEmitter emitter;
+    emitter.writeLine("#pragma once");
+    emitter.writeBlank();
+    emitter.writeLine("#include \"psxrecomp/runtime/psx_system.h\"");
+    emitter.writeLine("#include \"psxrecomp/types.h\"");
+    emitter.writeBlank();
+    emitter.openBlock("namespace psxrecomp");
+    emitter.openBlock("namespace recompiler");
+
+    emitter.writeLine("struct RecompilerContext;");
+    emitter.openBlock("struct RecompiledModule");
+    emitter.writeLine("static void configure(runtime::PsxSystem& system);");
+    emitter.writeLine("static void initMemory(runtime::PsxSystem& system);");
+    emitter.writeLine("static void run(runtime::PsxSystem& system);");
+    emitter.closeBlock(";");
+    emitter.writeBlank();
+    emitter.writeLines(generateFunctionDeclarations(program));
+    emitter.closeBlock();
+    emitter.closeBlock();
+    return emitter.str();
+}
+std::string CodeGenerator::generateSource(const ir::Program& program, const std::string& moduleName,
+                                          const ModuleMetadata& metadata)
+{
+    CppEmitter emitter;
+    std::vector<std::pair<Address, std::string>> functionSymbols;
+    functionSymbols.reserve(program.functions.size());
+    std::unordered_set<std::string> usedFunctionNames;
+    for (const auto& function : program.functions)
+    {
+        functionSymbols.emplace_back(function.entryAddress,
+                                     uniquifyIdentifier(function.name, usedFunctionNames));
+    }
+
+    Address moduleEntryAddress = metadata.entryAddress;
+    if (moduleEntryAddress == 0 && !functionSymbols.empty())
+    {
+        moduleEntryAddress = functionSymbols.front().first;
+    }
+    emitter.writeLine("#include \"" + moduleName + ".h\"");
+    emitter.writeBlank();
+    emitter.writeLine("#include <array>");
+    emitter.writeLine("#include <chrono>");
+    emitter.writeLine("#include <cstdlib>");
+    emitter.writeLine("#include <cstdint>");
+    emitter.writeLine("#include <cstring>");
+    emitter.writeLine("#include <iostream>");
+    emitter.writeLine("#include <sstream>");
+    emitter.writeLine("#include <stdexcept>");
+    emitter.writeLine("#include <string>");
+    emitter.writeLine("#include <unordered_set>");
+    emitter.writeLine("#include <vector>");
+    emitter.writeBlank();
+    emitter.writeLine("#ifndef PSXRECOMP_ENABLE_LOGGING");
+    emitter.writeLine("#define PSXRECOMP_ENABLE_LOGGING 0");
+    emitter.writeLine("#endif");
+    emitter.writeLine("#ifndef PSXRECOMP_LOG_LEVEL");
+    emitter.writeLine("#define PSXRECOMP_LOG_LEVEL 1");
+    emitter.writeLine("#endif");
+    emitter.writeLine("#ifndef PSXRECOMP_ENABLE_CHECKS");
+    emitter.writeLine("#define PSXRECOMP_ENABLE_CHECKS 1");
+    emitter.writeLine("#endif");
+    emitter.writeBlank();
+    emitter.openBlock("namespace psxrecomp");
+    emitter.openBlock("namespace recompiler");
+    emitter.openBlock("struct RecompilerContext");
+    emitter.writeLine("runtime::PsxSystem& system;");
+    emitter.writeLine("std::array<u32, Registers::NUM_REGISTERS> regs{};");
+    emitter.writeLine("u32 hi = 0;");
+    emitter.writeLine("u32 lo = 0;");
+    emitter.closeBlock(";");
+    emitter.writeBlank();
+    emitter.openBlock("namespace");
+    emitRuntimeSupportHelpers(emitter);
     emitter.closeBlock();
     emitter.writeBlank();
 
@@ -410,8 +418,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
                             emitter.writeLine(caseLine.str());
                             emitter.openBlock("");
                             std::ostringstream callLine;
-                            callLine << funcName << "(context, 0x" << std::hex
-                                     << blockAddr << ");";
+                            callLine << funcName << "(context, 0x" << std::hex << blockAddr << ");";
                             emitter.writeLine(callLine.str());
                             emitter.writeLine("return true;");
                             emitter.closeBlock();
@@ -575,9 +582,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("const u32 sw = word(i + swIdx);");
     emitter.writeLine("if (sw != (0xac620000u | lo)) continue;");
     // Build full address
-    emitter.writeLine(
-        "const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
-        "static_cast<s32>(lo);");
+    emitter.writeLine("const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
+                      "static_cast<s32>(lo);");
     emitter.writeLine("const Address addr = (hi << 16) + static_cast<u32>(slo);");
     emitter.writeLine("return addr;");
     emitter.closeBlock();
@@ -626,9 +632,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     // LBU = opcode 100000 (0x20), rs=$a0=4, rt=$v0=2 → 0x90820000 + offset
     emitter.writeLine("if ((lbu & 0xFFFF0000u) != 0x90820000u) continue;");
     emitter.writeLine("const u32 lo = lbu & 0xFFFF;");
-    emitter.writeLine(
-        "const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
-        "static_cast<s32>(lo);");
+    emitter.writeLine("const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
+                      "static_cast<s32>(lo);");
     emitter.writeLine("const Address addr = (baseHi << 16) + static_cast<u32>(slo);");
     emitter.writeLine("return addr;");
     emitter.closeBlock();

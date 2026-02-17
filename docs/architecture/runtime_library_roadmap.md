@@ -46,7 +46,7 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 
 - [x] Implement BIOS vector dispatch framework (`callBiosVector` for A0/B0/C0).
 - [x] Implement functional string/memory BIOS functions (strcmp, strcpy, memcpy, memset, bzero).
-- [x] Implement GPU BIOS helpers (GPU_cw, GPU_cwp).
+- [x] Implement GPU BIOS helpers (GPU_cw, GPU_cwp, send_gpu_linked_list, GPU_init, GPU_sync).
 - [x] Implement event management stubs (OpenEvent, CloseEvent, WaitEvent, TestEvent, EnableEvent, DisableEvent).
 - [x] Implement pad/controller/memory-card init stubs.
 - [x] Implement system initialization C0 stubs.

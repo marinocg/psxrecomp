@@ -202,14 +202,12 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 ## Recommended implementation order
 
-1. **Expand MIPS→IR coverage** (ALU, shifts, mult/div, load/store variants, branches).
-2. **Function boundary detection + call graph** to stabilize CFG generation.
-3. **Delay-slot semantics and control-flow accuracy** across IR and codegen.
-4. **Runtime MMIO correctness** (DMA, interrupts, timers, CD-ROM basics).
-5. **GPU command ingestion and minimal rasterization path**.
-6. **SPU voice + XA audio support** to unblock audio-heavy titles.
-7. **Recompiler optimizations and tooling** (profiling, inlining, caching).
-8. **End-to-end demo validation** with deterministic regression tests.
+1. **End-to-end demo execution** from generated runner (hang-free completion + CI run step).
+2. **GPU timing/display synchronization** (scanline cadence, throughput limits, IRQ timing).
+3. **SPU accuracy hardening** (timing/IRQ behavior and XA/CD-ROM decode handoff).
+4. **CD-ROM fidelity** (command timing windows, retries, sector/subheader validation).
+5. **BIOS coverage expansion** for frequently used runtime services (`printf`, thread/timer APIs, CD/memory-card ops).
+6. **Automated parity validation** with capture replay and golden-output gates in CI.
 
 ## References
 

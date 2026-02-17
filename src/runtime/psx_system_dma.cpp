@@ -116,11 +116,13 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                     std::string wordsStr;
                     for (u32 i = 0; i < commandCount; ++i)
                     {
-                        const Address commandAddress = (nodeAddress + (i + 1) * sizeof(u32)) & 0x1FFFFC;
+                        const Address commandAddress =
+                            (nodeAddress + (i + 1) * sizeof(u32)) & 0x1FFFFC;
                         const u32 word = read<u32>(commandAddress);
                         char buf[20];
                         std::snprintf(buf, sizeof(buf), "0x%08x", word);
-                        if (!wordsStr.empty()) wordsStr += ",";
+                        if (!wordsStr.empty())
+                            wordsStr += ",";
                         wordsStr += buf;
                     }
                     char nodeBuf[64];
@@ -147,7 +149,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             }
             m_logger.log(LogLevel::Info, "dma",
                          "GPU linked-list: nodes=" + std::to_string(nodeTotal) +
-                         " words=" + std::to_string(transferredWords));
+                             " words=" + std::to_string(transferredWords));
         }
         else
         {

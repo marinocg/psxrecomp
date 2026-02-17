@@ -38,6 +38,83 @@ PipelineResult buildPipelineError(const std::string& message,
     result.exeCandidates = candidates;
     return result;
 }
+
+std::vector<std::string> deduplicatePathsCaseInsensitive(const std::vector<std::string>& paths)
+{
+    std::vector<std::string> normalized;
+    std::vector<std::string> uniquePaths;
+    for (const auto& path : paths)
+    {
+        std::string key = detail::toLower(path);
+        if (std::find(normalized.begin(), normalized.end(), key) == normalized.end())
+        {
+            normalized.push_back(std::move(key));
+            uniquePaths.push_back(path);
+        }
+    }
+    return uniquePaths;
+}
+
+bool exeCandidateLess(const ExeCandidateInfo& lhs, const ExeCandidateInfo& rhs)
+{
+    const std::string lhsKey = detail::toLower(lhs.path);
+    const std::string rhsKey = detail::toLower(rhs.path);
+    if (lhsKey != rhsKey)
+    {
+        return lhsKey < rhsKey;
+    }
+    if (lhs.loadAddress != rhs.loadAddress)
+    {
+        return lhs.loadAddress < rhs.loadAddress;
+    }
+    if (lhs.loadSize != rhs.loadSize)
+    {
+        return lhs.loadSize < rhs.loadSize;
+    }
+    if (lhs.entryPoint != rhs.entryPoint)
+    {
+        return lhs.entryPoint < rhs.entryPoint;
+    }
+    if (lhs.hash != rhs.hash)
+    {
+        return lhs.hash < rhs.hash;
+    }
+    if (lhs.valid != rhs.valid)
+    {
+        return lhs.valid;
+    }
+    return lhs.path < rhs.path;
+}
+
+std::optional<size_t> selectExeCandidateIndex(const std::vector<ExeCandidateInfo>& candidates,
+                                              const std::string& bootPath,
+                                              std::string& selectionReason)
+{
+    if (!bootPath.empty())
+    {
+        const std::string loweredBootPath = detail::toLower(bootPath);
+        for (size_t index = 0; index < candidates.size(); ++index)
+        {
+            const auto& candidate = candidates[index];
+            if (candidate.valid && detail::toLower(candidate.path) == loweredBootPath)
+            {
+                selectionReason = "Selected SYSTEM.CNF BOOT candidate.";
+                return index;
+            }
+        }
+    }
+
+    for (size_t index = 0; index < candidates.size(); ++index)
+    {
+        if (candidates[index].valid)
+        {
+            selectionReason = "Selected first valid candidate after sorting.";
+            return index;
+        }
+    }
+
+    return std::nullopt;
+}
 } // namespace
 
 RecompilationPipeline::RecompilationPipeline(PipelineOptions options)
@@ -118,17 +195,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         {
             candidatePaths.push_back(bootPath);
         }
-        std::vector<std::string> normalized;
-        std::vector<std::string> uniquePaths;
-        for (const auto& path : candidatePaths)
-        {
-            std::string key = detail::toLower(path);
-            if (std::find(normalized.begin(), normalized.end(), key) == normalized.end())
-            {
-                normalized.push_back(key);
-                uniquePaths.push_back(path);
-            }
-        }
+        const std::vector<std::string> uniquePaths =
+            deduplicatePathsCaseInsensitive(candidatePaths);
 
         if (uniquePaths.empty())
         {
@@ -180,64 +248,9 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             result.exeCandidates.push_back(candidate);
         }
 
-        auto candidateLess = [&](const ExeCandidateInfo& lhs, const ExeCandidateInfo& rhs)
-        {
-            const std::string lhsKey = detail::toLower(lhs.path);
-            const std::string rhsKey = detail::toLower(rhs.path);
-            if (lhsKey != rhsKey)
-            {
-                return lhsKey < rhsKey;
-            }
-            if (lhs.loadAddress != rhs.loadAddress)
-            {
-                return lhs.loadAddress < rhs.loadAddress;
-            }
-            if (lhs.loadSize != rhs.loadSize)
-            {
-                return lhs.loadSize < rhs.loadSize;
-            }
-            if (lhs.entryPoint != rhs.entryPoint)
-            {
-                return lhs.entryPoint < rhs.entryPoint;
-            }
-            if (lhs.hash != rhs.hash)
-            {
-                return lhs.hash < rhs.hash;
-            }
-            if (lhs.valid != rhs.valid)
-            {
-                return lhs.valid;
-            }
-            return lhs.path < rhs.path;
-        };
-        std::sort(result.exeCandidates.begin(), result.exeCandidates.end(), candidateLess);
-
-        std::optional<size_t> selectedIndex;
-        if (!bootPath.empty())
-        {
-            for (size_t index = 0; index < result.exeCandidates.size(); ++index)
-            {
-                const auto& candidate = result.exeCandidates[index];
-                if (candidate.valid && detail::toLower(candidate.path) == detail::toLower(bootPath))
-                {
-                    selectedIndex = index;
-                    result.selectionInfo.reason = "Selected SYSTEM.CNF BOOT candidate.";
-                    break;
-                }
-            }
-        }
-        if (!selectedIndex.has_value())
-        {
-            for (size_t index = 0; index < result.exeCandidates.size(); ++index)
-            {
-                if (result.exeCandidates[index].valid)
-                {
-                    selectedIndex = index;
-                    result.selectionInfo.reason = "Selected first valid candidate after sorting.";
-                    break;
-                }
-            }
-        }
+        std::sort(result.exeCandidates.begin(), result.exeCandidates.end(), exeCandidateLess);
+        std::optional<size_t> selectedIndex =
+            selectExeCandidateIndex(result.exeCandidates, bootPath, result.selectionInfo.reason);
         if (!selectedIndex.has_value())
         {
             return fail("No valid PSX executable candidate found.");
@@ -391,7 +404,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             {
                 continue;
             }
-            const u8 luiReg = inst.rt;            // destination register
+            const u8 luiReg = inst.rt;                  // destination register
             const u32 hiImm = inst.immediate & 0xFFFFu; // upper 16-bit immediate
 
             // Scan the next 6 instructions for a matching ADDIU or ORI.
@@ -401,13 +414,11 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             {
                 const auto& next = disassembled[i + j];
                 // ADDIU: rt == rs == luiReg
-                if (next.opcode == disasm::Opcode::ADDIU && next.rs == luiReg &&
-                    next.rt == luiReg)
+                if (next.opcode == disasm::Opcode::ADDIU && next.rs == luiReg && next.rt == luiReg)
                 {
                     const u32 lo = next.immediate & 0xFFFFu;
-                    const s32 slo = (lo & 0x8000u)
-                                        ? static_cast<s32>(lo | 0xFFFF0000u)
-                                        : static_cast<s32>(lo);
+                    const s32 slo =
+                        (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : static_cast<s32>(lo);
                     const Address addr =
                         static_cast<Address>((hiImm << 16) + static_cast<u32>(slo));
                     if (addr >= baseAddress && addr < endAddress && (addr % 4) == 0 &&
@@ -420,8 +431,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
                     break;
                 }
                 // ORI: rt == rs == luiReg
-                if (next.opcode == disasm::Opcode::ORI && next.rs == luiReg &&
-                    next.rt == luiReg)
+                if (next.opcode == disasm::Opcode::ORI && next.rs == luiReg && next.rt == luiReg)
                 {
                     const u32 lo = next.immediate & 0xFFFFu;
                     const Address addr = static_cast<Address>((hiImm << 16) | lo);
@@ -620,8 +630,8 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             return fail(stream.str());
         }
 
-        auto flowResult =
-            ir::buildControlFlowFunction(functionName, adjustedBoundary.start, irBuild.instructions);
+        auto flowResult = ir::buildControlFlowFunction(functionName, adjustedBoundary.start,
+                                                       irBuild.instructions);
         if (!flowResult.errors.empty())
         {
             std::ostringstream stream;

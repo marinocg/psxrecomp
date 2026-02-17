@@ -318,9 +318,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             // through to the next sequential block (the "else" target or the
             // block that follows in the enum).
             auto isSelfLoop = [&](const std::string& successorName) -> bool
-            {
-                return successorName == block.name;
-            };
+            { return successorName == block.name; };
 
             if (block.successors.size() >= 2)
             {
@@ -340,14 +338,14 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                     // regular loops handled by the outer while(true)/switch).
                     emitter.openBlock("if (" + cond + ")");
                     emitter.writeLine("previousBlock = block;");
-                    emitter.writeLine("block = " +
-                                      resolveBlockId(block.successors[0], blockNames) + ";");
+                    emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
+                                      ";");
                     emitter.writeLine("continue;");
                     emitter.closeBlock();
                     emitter.openBlock("else");
                     emitter.writeLine("previousBlock = block;");
-                    emitter.writeLine("block = " +
-                                      resolveBlockId(block.successors[1], blockNames) + ";");
+                    emitter.writeLine("block = " + resolveBlockId(block.successors[1], blockNames) +
+                                      ";");
                     emitter.writeLine("continue;");
                     emitter.closeBlock();
                 }
@@ -363,8 +361,8 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 {
                     emitter.openBlock("if (" + cond + ")");
                     emitter.writeLine("previousBlock = block;");
-                    emitter.writeLine("block = " +
-                                      resolveBlockId(block.successors[0], blockNames) + ";");
+                    emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
+                                      ";");
                     emitter.writeLine("continue;");
                     emitter.closeBlock();
                     emitter.openBlock("else");
@@ -410,10 +408,9 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                     sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                     sourcePc = sourceStream.str();
                 }
-                emitter.openBlock(
-                    "if (!callIntrinsic(context.system, " + target + ", context.regs))");
-                emitter.openBlock(
-                    "if (!callRecompiledFunction(context, " + target + "))");
+                emitter.openBlock("if (!callIntrinsic(context.system, " + target +
+                                  ", context.regs))");
+                emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
                 emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
                 emitter.closeBlock();
                 emitter.closeBlock();

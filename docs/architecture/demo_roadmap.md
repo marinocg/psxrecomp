@@ -26,7 +26,7 @@ This roadmap tracks the milestones needed to ship a first end-to-end recompiled 
 ## Phase 2: Runtime Bring-up (~55%)
 
 - [x] Provide minimal runtime stubs for required MMIO accesses.
-- [x] Implement BIOS vector framework with 48 stub/functional functions.
+- [x] Implement BIOS vector framework with 50 stub/functional functions.
 - [x] Add logging to validate control flow and memory access (debug env vars: `PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`, `PSXRECOMP_TRACE_BIOS`).
 - [ ] Document build/run steps for the demo.
 

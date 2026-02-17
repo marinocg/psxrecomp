@@ -276,12 +276,12 @@ class PsxSystem
     DiscSwapInfo m_discSwapInfo;
     bool m_autoFrameProgressOnInterruptPoll = false;
     u32 m_frameCount = 0;
-    u32 m_gpuStatReadCount = 0; ///< Consecutive GPUSTAT reads within same VBlank phase
+    u32 m_gpuStatReadCount = 0;        ///< Consecutive GPUSTAT reads within same VBlank phase
     Address m_vsyncCounterAddress = 0; ///< RAM address of PSn00bSDK vsync_counter (0 = disabled)
     Address m_drawSyncBusyAddress = 0; ///< RAM address of PSn00bSDK GPU busy byte (0 = disabled)
-    u32 m_lastVsyncCounterValue = 0;        ///< Counter value at last frame progression
-    u32 m_vsyncPollCount = 0;               ///< Consecutive reads seeing the same counter value
-    bool m_inVsyncCounterRead = false;      ///< Re-entrancy guard for onVsyncCounterRead()
+    u32 m_lastVsyncCounterValue = 0;   ///< Counter value at last frame progression
+    u32 m_vsyncPollCount = 0;          ///< Consecutive reads seeing the same counter value
+    bool m_inVsyncCounterRead = false; ///< Re-entrancy guard for onVsyncCounterRead()
     static constexpr u32 VSYNC_POLL_THRESHOLD = 5000; ///< Reads before triggering frame advancement
 
     /**

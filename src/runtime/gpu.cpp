@@ -275,7 +275,9 @@ void Gpu::processPacket(const PacketState& packet)
         const u8 r = static_cast<u8>(colorWord & 0xFF);
         const u8 g = static_cast<u8>((colorWord >> 8) & 0xFF);
         const u8 b = static_cast<u8>((colorWord >> 16) & 0xFF);
-        std::fprintf(stderr, "[GPU] FillRectangle: color=(%u,%u,%u) pos=(%d,%d) size=(%d,%d) raw=[0x%08x,0x%08x,0x%08x]\n",
+        std::fprintf(stderr,
+                     "[GPU] FillRectangle: color=(%u,%u,%u) pos=(%d,%d) size=(%d,%d) "
+                     "raw=[0x%08x,0x%08x,0x%08x]\n",
                      r, g, b, x, y, w, h, colorWord, posWord, sizeWord);
     }
 
@@ -391,8 +393,7 @@ void Gpu::updateStatusBits()
 
     // Bit 22 indicates that the display is currently in VBlank.
     // PSn00bSDK VSync Phase 1 polls this bit to know when VBlank starts.
-    if (m_displayPhase == DisplayPhase::VBlankStart ||
-        m_displayPhase == DisplayPhase::VBlankEnd)
+    if (m_displayPhase == DisplayPhase::VBlankStart || m_displayPhase == DisplayPhase::VBlankEnd)
     {
         m_status |= statusDrawingEvenOdd;
     }

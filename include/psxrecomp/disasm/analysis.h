@@ -62,9 +62,8 @@ struct CallGraph
 
 std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instruction>& instructions);
 
-std::vector<FunctionBoundary>
-findFunctionBoundaries(const std::vector<Instruction>& instructions,
-                       const std::vector<Address>& additionalStarts);
+std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instruction>& instructions,
+                                                     const std::vector<Address>& additionalStarts);
 
 std::vector<IndirectBranchTarget>
 findIndirectBranchTargets(const std::vector<Instruction>& instructions);

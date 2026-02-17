@@ -247,15 +247,14 @@ int main()
         auto cmpInstr = builder.makeInstruction(
             Opcode::COMPARE_EQ,
             {Value::makeRegister(0), Value::makeRegister(0)}, // inputs: reg0 vs reg0
-            {Value::makeRegister(1)}, // output: temp result
+            {Value::makeRegister(1)},                         // output: temp result
             0x80070000);
         spinBlock.instructions.push_back(cmpInstr);
 
         // BRANCH that targets self on BOTH paths (unconditional spin-wait)
         auto branchInstr = builder.makeInstruction(
-            Opcode::BRANCH,
-            {Value::makeRegister(1)}, // input: condition from CMP result
-            {}, // no outputs
+            Opcode::BRANCH, {Value::makeRegister(1)}, // input: condition from CMP result
+            {},                                       // no outputs
             0x80070004);
         spinBlock.instructions.push_back(branchInstr);
         spinBlock.successors = {"spin_block", "spin_block"}; // both paths = self
@@ -288,18 +287,13 @@ int main()
         auto& loopBlock = builder.createBlock(function, "loop_block");
         auto& exitBlock = builder.createBlock(function, "exit_block");
 
-        auto cmpInstr = builder.makeInstruction(
-            Opcode::COMPARE_NE,
-            {Value::makeRegister(2), Value::makeRegister(3)},
-            {Value::makeRegister(1)},
-            0x80080000);
+        auto cmpInstr = builder.makeInstruction(Opcode::COMPARE_NE,
+                                                {Value::makeRegister(2), Value::makeRegister(3)},
+                                                {Value::makeRegister(1)}, 0x80080000);
         loopBlock.instructions.push_back(cmpInstr);
 
-        auto branchInstr = builder.makeInstruction(
-            Opcode::BRANCH,
-            {Value::makeRegister(1)},
-            {},
-            0x80080004);
+        auto branchInstr =
+            builder.makeInstruction(Opcode::BRANCH, {Value::makeRegister(1)}, {}, 0x80080004);
         loopBlock.instructions.push_back(branchInstr);
         // taken=self (loop back), fallthrough=exit (loop done)
         loopBlock.successors = {"loop_block", "exit_block"};

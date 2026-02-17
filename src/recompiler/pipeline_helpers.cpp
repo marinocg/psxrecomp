@@ -113,6 +113,74 @@ std::string formatHex(u64 value, size_t width)
     return stream.str();
 }
 
+void appendManifestFunctions(std::ostringstream& stream, const PipelineResult& result)
+{
+    stream << "  \"functions\": [\n";
+    for (size_t i = 0; i < result.functions.size(); ++i)
+    {
+        const auto& functionInfo = result.functions[i];
+        stream << "    {\n";
+        stream << "      \"name\": \"" << escapeJson(functionInfo.name) << "\",\n";
+        stream << "      \"entryAddress\": \"0x" << formatHex(functionInfo.entryAddress, 8)
+               << "\",\n";
+        stream << "      \"endAddress\": \"0x" << formatHex(functionInfo.endAddress, 8) << "\",\n";
+        stream << "      \"hasPrologue\": " << (functionInfo.hasPrologue ? "true" : "false")
+               << ",\n";
+        stream << "      \"hasEpilogue\": " << (functionInfo.hasEpilogue ? "true" : "false")
+               << ",\n";
+        stream << "      \"directCalls\": [";
+        for (size_t callIndex = 0; callIndex < functionInfo.directCalls.size(); ++callIndex)
+        {
+            stream << "\"0x" << formatHex(functionInfo.directCalls[callIndex], 8) << "\"";
+            if (callIndex + 1 < functionInfo.directCalls.size())
+            {
+                stream << ", ";
+            }
+        }
+        stream << "],\n";
+        stream << "      \"indirectCallCount\": " << functionInfo.indirectCallCount << "\n";
+        stream << "    }";
+        if (i + 1 < result.functions.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ],\n";
+}
+
+void appendManifestDiagnostics(std::ostringstream& stream, const PipelineResult& result)
+{
+    stream << "  \"diagnostics\": [\n";
+    for (size_t i = 0; i < result.diagnostics.size(); ++i)
+    {
+        const auto& diag = result.diagnostics[i];
+        stream << "    {\n";
+        stream << "      \"code\": \"" << escapeJson(diag.code) << "\",\n";
+        stream << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
+        stream << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
+        stream << "      \"context\": {\n";
+        stream << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file)) << "\",\n";
+        stream << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
+        if (diag.context.offset.has_value())
+        {
+            stream << ",\n        \"offset\": " << diag.context.offset.value() << "\n";
+        }
+        else
+        {
+            stream << "\n";
+        }
+        stream << "      }\n";
+        stream << "    }";
+        if (i + 1 < result.diagnostics.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ]\n";
+}
+
 bool writeFile(const std::filesystem::path& path, const std::string& contents,
                std::string& outError)
 {
@@ -456,66 +524,8 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
         stream << "\n";
     }
     stream << "  ],\n";
-    stream << "  \"functions\": [\n";
-    for (size_t i = 0; i < result.functions.size(); ++i)
-    {
-        const auto& functionInfo = result.functions[i];
-        stream << "    {\n";
-        stream << "      \"name\": \"" << escapeJson(functionInfo.name) << "\",\n";
-        stream << "      \"entryAddress\": \"0x" << formatHex(functionInfo.entryAddress, 8)
-               << "\",\n";
-        stream << "      \"endAddress\": \"0x" << formatHex(functionInfo.endAddress, 8) << "\",\n";
-        stream << "      \"hasPrologue\": " << (functionInfo.hasPrologue ? "true" : "false")
-               << ",\n";
-        stream << "      \"hasEpilogue\": " << (functionInfo.hasEpilogue ? "true" : "false")
-               << ",\n";
-        stream << "      \"directCalls\": [";
-        for (size_t callIndex = 0; callIndex < functionInfo.directCalls.size(); ++callIndex)
-        {
-            stream << "\"0x" << formatHex(functionInfo.directCalls[callIndex], 8) << "\"";
-            if (callIndex + 1 < functionInfo.directCalls.size())
-            {
-                stream << ", ";
-            }
-        }
-        stream << "],\n";
-        stream << "      \"indirectCallCount\": " << functionInfo.indirectCallCount << "\n";
-        stream << "    }";
-        if (i + 1 < result.functions.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
-    }
-    stream << "  ],\n";
-    stream << "  \"diagnostics\": [\n";
-    for (size_t i = 0; i < result.diagnostics.size(); ++i)
-    {
-        const auto& diag = result.diagnostics[i];
-        stream << "    {\n";
-        stream << "      \"code\": \"" << escapeJson(diag.code) << "\",\n";
-        stream << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
-        stream << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
-        stream << "      \"context\": {\n";
-        stream << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file)) << "\",\n";
-        stream << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
-        if (diag.context.offset.has_value())
-        {
-            stream << ",\n        \"offset\": " << diag.context.offset.value() << "\n";
-        }
-        else
-        {
-            stream << "\n";
-        }
-        stream << "      }\n";
-        stream << "    }";
-        if (i + 1 < result.diagnostics.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
-    }
-    stream << "  ]\n";
+    appendManifestFunctions(stream, result);
+    appendManifestDiagnostics(stream, result);
     stream << "}\n";
     return stream.str();
 }
