@@ -105,7 +105,10 @@ int main()
         {
             foundSltu = true;
         }
-        if (instruction.opcode == Opcode::LOAD || instruction.opcode == Opcode::STORE)
+        if (instruction.opcode == Opcode::LOAD || instruction.opcode == Opcode::STORE ||
+            instruction.opcode == Opcode::LOAD8 || instruction.opcode == Opcode::LOAD8U ||
+            instruction.opcode == Opcode::LOAD16 || instruction.opcode == Opcode::LOAD16U ||
+            instruction.opcode == Opcode::STORE8 || instruction.opcode == Opcode::STORE16)
         {
             foundLoadStore = true;
         }

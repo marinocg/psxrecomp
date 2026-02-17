@@ -173,6 +173,33 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
             }
             return;
         }
+        case 0x4B: // send_gpu_linked_list (GPU ordering table DMA)
+        {
+            // Traverse a GPU linked list (ordering table) in RAM.
+            // Each node: bits [31:24] = number of command words following the
+            // header, bits [23:0] = address of the next node (0xFFFFFF = end).
+            u32 nodeAddr = a0 & 0x1FFFFC;
+            for (u32 safety = 0; safety < 0x100000u; ++safety)
+            {
+                u32 header = 0;
+                std::memcpy(&header, m_ram.data() + nodeAddr, sizeof(u32));
+                const u32 commandCount = (header >> 24) & 0xFF;
+                for (u32 i = 0; i < commandCount; ++i)
+                {
+                    const u32 cmdAddr = (nodeAddr + (i + 1) * sizeof(u32)) & 0x1FFFFC;
+                    u32 word = 0;
+                    std::memcpy(&word, m_ram.data() + cmdAddr, sizeof(u32));
+                    m_gpu.writeCommand(word);
+                }
+                const u32 next = header & 0x00FFFFFF;
+                if (next == 0x00FFFFFF)
+                {
+                    break;
+                }
+                nodeAddr = next & 0x1FFFFC;
+            }
+            return;
+        }
         case 0x70: // GPU_init - reset GPU to default state
         {
             // Send GP1(00h) = Reset GPU.
@@ -180,6 +207,11 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
             // Send GP1(08h) = Display Mode (320x240, NTSC).
             m_gpu.writeStatus(0x08000001u);
             m_logger.log(LogLevel::Debug, "bios", "GPU_init (A0 0x70)");
+            return;
+        }
+        case 0x72: // _96_init - CD-ROM initialization (stub)
+        {
+            m_logger.log(LogLevel::Debug, "bios", "_96_init (A0 0x72) - stub");
             return;
         }
         default:

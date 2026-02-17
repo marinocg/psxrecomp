@@ -195,6 +195,10 @@ int main()
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
     runtimeHeader << "    void setDiscSwapInfo(const DiscSwapInfo&) {}\n";
     runtimeHeader << "    void setAutoFrameProgressOnInterruptPoll(bool) {}\n";
+    runtimeHeader << "    void setVsyncCounterAddress(Address) {}\n";
+    runtimeHeader << "    void setDrawSyncBusyAddress(Address) {}\n";
+    runtimeHeader << "    u32 frameCount() const { return 0; }\n";
+    runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";

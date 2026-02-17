@@ -77,6 +77,11 @@ class GpuRenderer
     virtual void setOddField(bool oddField) = 0;
     virtual void setTexturePage(u16 texturePage) = 0;
     virtual void setClut(u16 clut) = 0;
+
+    /// Write a single 16-bit pixel into the renderer's VRAM at the given
+    /// coordinate.  This is used by CpuToVram transfers so that texture data
+    /// uploaded via DMA is visible to the renderer's texture sampler.
+    virtual void writeVramPixel(u16 x, u16 y, u16 value) = 0;
 };
 
 class SoftwareGpuRenderer final : public GpuRenderer
@@ -92,6 +97,7 @@ class SoftwareGpuRenderer final : public GpuRenderer
     void setOddField(bool oddField) override;
     void setTexturePage(u16 texturePage) override;
     void setClut(u16 clut) override;
+    void writeVramPixel(u16 x, u16 y, u16 value) override;
 
   private:
     struct DrawBounds
@@ -160,6 +166,7 @@ class SemiAccurateGpuRenderer final : public GpuRenderer
     void setOddField(bool oddField) override;
     void setTexturePage(u16 texturePage) override;
     void setClut(u16 clut) override;
+    void writeVramPixel(u16 x, u16 y, u16 value) override;
 
   private:
     SoftwareGpuRenderer m_referenceRenderer;

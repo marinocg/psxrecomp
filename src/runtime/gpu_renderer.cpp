@@ -182,6 +182,14 @@ void SoftwareGpuRenderer::setClut(u16 clut)
     m_clut = clut;
 }
 
+void SoftwareGpuRenderer::writeVramPixel(u16 x, u16 y, u16 value)
+{
+    const u16 wrappedX = static_cast<u16>(x % Width);
+    const u16 wrappedY = static_cast<u16>(y % Height);
+    const size_t index = static_cast<size_t>(wrappedY) * Width + wrappedX;
+    m_frameBuffer[index] = value;
+}
+
 void SoftwareGpuRenderer::fillRect(s32 x, s32 y, u16 width, u16 height, u16 color, bool transparent,
                                    bool allowDither)
 {
@@ -349,6 +357,11 @@ void SemiAccurateGpuRenderer::setTexturePage(u16 texturePage)
 void SemiAccurateGpuRenderer::setClut(u16 clut)
 {
     m_referenceRenderer.setClut(clut);
+}
+
+void SemiAccurateGpuRenderer::writeVramPixel(u16 x, u16 y, u16 value)
+{
+    m_referenceRenderer.writeVramPixel(x, y, value);
 }
 
 FrameComparison compareFrames(const std::vector<u16>& lhs, const std::vector<u16>& rhs)

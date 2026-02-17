@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
 
 namespace psxrecomp
 {
@@ -28,6 +31,8 @@ void Gpu::reset()
     m_readData = 0;
     m_gpuCycles = 0;
     m_oddField = false;
+    m_displayPhase = DisplayPhase::ActiveDisplay;
+    m_phaseReadCount = 0;
     m_registers = {};
     m_fifo.clear();
     m_vram.assign(VramWordCount, 0);
@@ -191,12 +196,38 @@ void Gpu::tickGpu(u32 cycles)
 
 void Gpu::tickDisplayLine()
 {
-    if (m_registers.interlaced)
+    // Advance through a three-phase VBlank model so that PSn00bSDK
+    // VSync sees the correct bit-22 / bit-31 transitions:
+    //
+    //   ActiveDisplay  → VBlankStart  (bit 22 goes high)
+    //   VBlankStart    → VBlankEnd    (bit 31 flips — field changes)
+    //   VBlankEnd      → ActiveDisplay (bit 22 goes low, next frame)
+    //
+    // Each call to tickDisplayLine() advances one phase.  runFrame()
+    // calls this once, but we also expose it so the GPUSTAT polling
+    // path can step through the sub-frame phases.
+    switch (m_displayPhase)
     {
+    case DisplayPhase::ActiveDisplay:
+        m_displayPhase = DisplayPhase::VBlankStart;
+        break;
+    case DisplayPhase::VBlankStart:
+        // The field toggles in the middle of VBlank, which is exactly
+        // what VSync Phase 3 (BGEZ loop) waits for.
         m_oddField = !m_oddField;
-        updateRendererState();
+        m_displayPhase = DisplayPhase::VBlankEnd;
+        break;
+    case DisplayPhase::VBlankEnd:
+        m_displayPhase = DisplayPhase::ActiveDisplay;
+        break;
     }
+    updateRendererState();
     updateStatusBits();
+}
+
+bool Gpu::inActiveDisplay() const
+{
+    return m_displayPhase == DisplayPhase::ActiveDisplay;
 }
 
 void Gpu::appendPacketWord(bool fromGp1, u32 value)
@@ -278,10 +309,12 @@ void Gpu::updateStatusBits()
     constexpr u32 statusIrqRequest = 1u << 24;
     constexpr u32 statusDmaDirectionShift = 29;
     constexpr u32 statusInterlaceField = 1u << 31;
+    constexpr u32 statusDrawingEvenOdd = 1u << 22; // VBlank-in-progress flag
 
     constexpr u32 statusDynamicMask = statusReadyToReceiveCommand | statusReadyToSendToCpu |
                                       statusDmaRequest | statusDisplayDisable | statusIrqRequest |
-                                      (0x3u << statusDmaDirectionShift) | statusInterlaceField;
+                                      (0x3u << statusDmaDirectionShift) | statusInterlaceField |
+                                      statusDrawingEvenOdd;
     const u32 statusBase = STATUS_READY & ~statusDynamicMask;
 
     m_status = statusBase;
@@ -331,9 +364,20 @@ void Gpu::updateStatusBits()
         m_status |= statusDmaRequest;
     }
 
-    if (m_registers.interlaced && m_oddField)
+    // Bit 31 reflects the current odd/even field.  Always mirror
+    // m_oddField so that PSn00bSDK VSync can detect frame boundaries
+    // via XOR of consecutive GPUSTAT reads, even in progressive mode.
+    if (m_oddField)
     {
         m_status |= statusInterlaceField;
+    }
+
+    // Bit 22 indicates that the display is currently in VBlank.
+    // PSn00bSDK VSync Phase 1 polls this bit to know when VBlank starts.
+    if (m_displayPhase == DisplayPhase::VBlankStart ||
+        m_displayPhase == DisplayPhase::VBlankEnd)
+    {
+        m_status |= statusDrawingEvenOdd;
     }
 }
 

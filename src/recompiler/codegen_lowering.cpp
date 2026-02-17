@@ -22,7 +22,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         context.enableOptimizations = m_options.enableOptimizations;
 
         std::string functionName = uniquifyIdentifier(function.name, usedFunctionNames);
-        emitter.writeLine("void " + functionName + "(RecompilerContext& context)");
+        emitter.writeLine("void " + functionName +
+                          "(RecompilerContext& context, Address startAddress)");
         emitter.openBlock("");
         if (function.blocks.empty())
         {
@@ -65,6 +66,36 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         {
             emitter.writeLine("BlockId block = BlockId::" + blockIds.front() + ";");
         }
+
+        // Emit a startAddress → BlockId dispatch so that callers can enter
+        // this function at an arbitrary block (needed for JALR targets that
+        // point into the middle of a function).
+        if (function.blocks.size() > 1)
+        {
+            emitter.writeLine("if (startAddress != 0)");
+            emitter.openBlock("");
+            emitter.writeLine("Address physical = startAddress & 0x1FFFFFFF;");
+            emitter.writeLine("switch (physical)");
+            emitter.openBlock("");
+            for (size_t i = 0; i < function.blocks.size(); ++i)
+            {
+                const auto& blockName = function.blocks[i].name;
+                // Block names are formatted as "block_0x<hex_addr>"
+                if (blockName.size() > 8 && blockName.substr(0, 8) == "block_0x")
+                {
+                    const Address blockAddr =
+                        std::stoul(blockName.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+                    std::ostringstream caseLine;
+                    caseLine << "case 0x" << std::hex << blockAddr
+                             << ": block = BlockId::" << blockIds[i] << "; break;";
+                    emitter.writeLine(caseLine.str());
+                }
+            }
+            emitter.writeLine("default: break;");
+            emitter.closeBlock();
+            emitter.closeBlock();
+        }
+
         emitter.writeLine("BlockId previousBlock = block;");
         const auto indexMap = buildBlockIndex(function);
         const auto predecessors = buildPredecessors(function, indexMap);

@@ -16,6 +16,7 @@
 #include <numeric>
 #include <optional>
 #include <sstream>
+#include <unordered_set>
 
 namespace psxrecomp
 {
@@ -295,27 +296,180 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
     const Address entryAddress = detail::resolveEntryAddress(exeImage);
     const auto jumpTables = disasm::findJumpTables(disassembled);
-    const auto segmentation = disasm::segmentCodeAndData(disassembled, {entryAddress}, jumpTables);
 
-    auto isInCodeRange = [&](Address address)
-    {
-        for (const auto& range : segmentation.codeRanges)
-        {
-            if (address >= range.start && address <= range.end)
-            {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    std::vector<disasm::Instruction> codeInstructions;
-    codeInstructions.reserve(disassembled.size());
+    // Collect all JAL targets from the raw disassembly as additional entry
+    // point seeds.  This ensures that functions reachable only through
+    // indirect calls (JALR) — whose callers ARE reachable — are still
+    // marked as code even though the BFS in segmentCodeAndData cannot
+    // follow register-based targets.
+    //
+    // We filter targets to the binary's address range to avoid garbage
+    // targets from data words that happen to decode as JAL instructions.
+    const Address binaryEnd = baseAddress + static_cast<Address>(exeImage.programData.size());
+    std::vector<Address> entrySeeds = {entryAddress};
     for (const auto& instruction : disassembled)
     {
-        if (isInCodeRange(instruction.address))
+        if (instruction.opcode == disasm::Opcode::JAL ||
+            instruction.opcode == disasm::Opcode::BGEZAL ||
+            instruction.opcode == disasm::Opcode::BLTZAL)
         {
-            codeInstructions.push_back(instruction);
+            auto target = instruction.getTargetAddress();
+            if (target.has_value() && *target >= baseAddress && *target < binaryEnd &&
+                (*target % 4) == 0)
+            {
+                entrySeeds.push_back(*target);
+            }
+        }
+    }
+
+    auto segmentation = disasm::segmentCodeAndData(disassembled, entrySeeds, jumpTables);
+
+    // Harvest potential code pointers from DATA regions.  After the initial
+    // segmentation, scan every 4-byte aligned word in data regions and check
+    // whether it looks like a valid code address (i.e. falls within the
+    // binary's address range and is 4-byte aligned).  These are likely
+    // function pointer tables, vtables, or callback registrations that
+    // the BFS cannot follow because they are only used via JALR at runtime.
+    // We restrict to data regions to avoid false positives from code that
+    // happens to contain address-like immediate values.
+    std::vector<Address> harvestedPointers;
+    {
+        const Address endAddress = baseAddress + static_cast<Address>(exeImage.programData.size());
+        for (const auto& range : segmentation.dataRanges)
+        {
+            for (Address addr = range.start; addr <= range.end; addr += 4)
+            {
+                const size_t offset = addr - baseAddress;
+                if (offset + 4 <= exeImage.programData.size())
+                {
+                    const uint32_t value =
+                        static_cast<uint32_t>(exeImage.programData[offset]) |
+                        (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
+                        (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
+                        (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
+                    if (value >= baseAddress && value < endAddress && (value % 4) == 0)
+                    {
+                        harvestedPointers.push_back(value);
+                    }
+                }
+            }
+        }
+        if (!harvestedPointers.empty())
+        {
+            // Add harvested pointers as BFS entry seeds and re-run
+            // segmentation so those code regions are properly classified.
+            for (const Address ptr : harvestedPointers)
+            {
+                entrySeeds.push_back(ptr);
+            }
+            segmentation = disasm::segmentCodeAndData(disassembled, entrySeeds, jumpTables);
+        }
+    }
+
+    // Harvest code-address construction patterns (LUI + ADDIU/ORI).
+    // PSn00bSDK (and similar libraries) initialise function pointer tables
+    // at runtime via sequences such as:
+    //   LUI  $reg, HI         ; 0x3Crrxxxx
+    //   ADDIU $reg, $reg, LO  ; 0x24rrxxxx  (or ORI, 0x34rrxxxx)
+    //   SW   $reg, offset($base)
+    // The final address = (HI << 16) + sign_extend(LO) for ADDIU, or
+    //                     (HI << 16) | LO            for ORI.
+    // We scan all disassembled instructions for LUI followed by a matching
+    // ADDIU/ORI within 3 instructions (allowing an intervening NOP or
+    // other unrelated instruction), compute the resulting address, and add
+    // it as an entry seed if it falls within the binary code range.
+    {
+        const Address endAddress = baseAddress + static_cast<Address>(exeImage.programData.size());
+        std::unordered_set<Address> existingSeeds(entrySeeds.begin(), entrySeeds.end());
+        size_t harvestedFromCode = 0;
+
+        for (size_t i = 0; i < disassembled.size(); ++i)
+        {
+            const auto& inst = disassembled[i];
+            // LUI: opcode field = 001111 (0x0F), bits [31:26]
+            if (inst.opcode != disasm::Opcode::LUI)
+            {
+                continue;
+            }
+            const u8 luiReg = inst.rt;            // destination register
+            const u32 hiImm = inst.immediate & 0xFFFFu; // upper 16-bit immediate
+
+            // Scan the next 6 instructions for a matching ADDIU or ORI.
+            // PSn00bSDK patterns often have 4-5 instructions between LUI and
+            // ADDIU (e.g., delay slot of a J instruction).
+            for (size_t j = 1; j <= 6 && i + j < disassembled.size(); ++j)
+            {
+                const auto& next = disassembled[i + j];
+                // ADDIU: rt == rs == luiReg
+                if (next.opcode == disasm::Opcode::ADDIU && next.rs == luiReg &&
+                    next.rt == luiReg)
+                {
+                    const u32 lo = next.immediate & 0xFFFFu;
+                    const s32 slo = (lo & 0x8000u)
+                                        ? static_cast<s32>(lo | 0xFFFF0000u)
+                                        : static_cast<s32>(lo);
+                    const Address addr =
+                        static_cast<Address>((hiImm << 16) + static_cast<u32>(slo));
+                    if (addr >= baseAddress && addr < endAddress && (addr % 4) == 0 &&
+                        existingSeeds.find(addr) == existingSeeds.end())
+                    {
+                        entrySeeds.push_back(addr);
+                        existingSeeds.insert(addr);
+                        ++harvestedFromCode;
+                    }
+                    break;
+                }
+                // ORI: rt == rs == luiReg
+                if (next.opcode == disasm::Opcode::ORI && next.rs == luiReg &&
+                    next.rt == luiReg)
+                {
+                    const u32 lo = next.immediate & 0xFFFFu;
+                    const Address addr = static_cast<Address>((hiImm << 16) | lo);
+                    if (addr >= baseAddress && addr < endAddress && (addr % 4) == 0 &&
+                        existingSeeds.find(addr) == existingSeeds.end())
+                    {
+                        entrySeeds.push_back(addr);
+                        existingSeeds.insert(addr);
+                        ++harvestedFromCode;
+                    }
+                    break;
+                }
+                // If another LUI to the same register appears, stop scanning.
+                if (next.opcode == disasm::Opcode::LUI && next.rt == luiReg)
+                {
+                    break;
+                }
+            }
+        }
+
+        if (harvestedFromCode > 0)
+        {
+            // Re-run segmentation with the expanded seed set so newly
+            // discovered code regions are properly classified.
+            segmentation = disasm::segmentCodeAndData(disassembled, entrySeeds, jumpTables);
+        }
+    }
+
+    // Build code-only instruction set from segmentation results.
+    // This excludes data regions (string literals, padding, vtables)
+    // so that the disassembler doesn't try to decode non-instruction bytes.
+    std::vector<disasm::Instruction> codeInstructions;
+    {
+        std::unordered_set<Address> codeAddresses;
+        for (const auto& range : segmentation.codeRanges)
+        {
+            for (Address addr = range.start; addr <= range.end; addr += 4)
+            {
+                codeAddresses.insert(addr);
+            }
+        }
+        codeInstructions.reserve(codeAddresses.size());
+        for (const auto& instruction : disassembled)
+        {
+            if (codeAddresses.count(instruction.address))
+            {
+                codeInstructions.push_back(instruction);
+            }
         }
     }
 
@@ -324,7 +478,17 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         return fail("No reachable code instructions were identified from entrypoint traversal.");
     }
 
-    auto boundaries = disasm::findFunctionBoundaries(codeInstructions);
+    // Pass harvested pointers AND the EXE entry point as additional
+    // function start addresses.  The entry point often lacks a standard
+    // ADDIU SP,-N prologue (e.g. NOP + JR RA stubs) and is not a JAL
+    // target, so findFunctionBoundaries won't discover it on its own.
+    // Including it as an additional start lets the boundary finder scan
+    // for JR RA from the entry address and produce a correctly-sized
+    // boundary instead of a massive catch-all.
+    std::vector<Address> additionalStarts = harvestedPointers;
+    additionalStarts.push_back(entryAddress);
+
+    auto boundaries = disasm::findFunctionBoundaries(codeInstructions, additionalStarts);
     if (boundaries.empty())
     {
         boundaries.push_back({entryAddress, codeInstructions.back().address, false, false});
@@ -340,7 +504,11 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     }
     if (!entryFound)
     {
-        boundaries.push_back({entryAddress, codeInstructions.back().address, false, false});
+        // Entry address was not in the code instruction stream — create a
+        // minimal boundary so the runner can dispatch to it.  Use the
+        // address itself as both start and end rather than spanning the
+        // entire binary.
+        boundaries.push_back({entryAddress, entryAddress, false, false});
     }
     std::sort(
         boundaries.begin(), boundaries.end(),
@@ -354,6 +522,33 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             }
             return lhs.start < rhs.start;
         });
+
+    // Fill gaps between function boundaries with synthetic functions so that
+    // no instruction range is orphaned.  With proper code/data segmentation
+    // and code-pointer harvesting, gaps between recognized functions are
+    // genuine code regions (leaf functions called via JALR, etc.) that
+    // findFunctionBoundaries missed because they lack standard prologues.
+    {
+        std::vector<disasm::FunctionBoundary> filledBoundaries;
+        filledBoundaries.reserve(boundaries.size() * 2);
+
+        for (size_t i = 0; i < boundaries.size(); ++i)
+        {
+            filledBoundaries.push_back(boundaries[i]);
+
+            if (i + 1 < boundaries.size())
+            {
+                const Address gapStart = boundaries[i].end + 4;
+                const Address gapEnd = boundaries[i + 1].start - 4;
+                if (gapStart <= gapEnd)
+                {
+                    filledBoundaries.push_back({gapStart, gapEnd, false, false});
+                }
+            }
+        }
+
+        boundaries = std::move(filledBoundaries);
+    }
 
     if (!segmentation.dataRanges.empty())
     {
@@ -390,7 +585,18 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             continue;
         }
 
-        const std::string functionName = "func_0x" + detail::formatHex(boundary.start, 8);
+        // For gap-filled boundaries, the gap start address may fall in a
+        // data region that has no code instructions.  Adjust the boundary
+        // start to the first actual instruction address so that the
+        // control-flow builder can find its entry point.
+        disasm::FunctionBoundary adjustedBoundary = boundary;
+        if (functionInstructions.front().address != boundary.start)
+        {
+            adjustedBoundary.start = functionInstructions.front().address;
+        }
+
+        const std::string functionName = "func_0x" + detail::formatHex(adjustedBoundary.start, 8);
+
         auto irBuild = ir::buildIrFromMips(functionInstructions);
         warnings.insert(warnings.end(), irBuild.warnings.begin(), irBuild.warnings.end());
         for (const auto& warning : irBuild.warnings)
@@ -415,7 +621,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         }
 
         auto flowResult =
-            ir::buildControlFlowFunction(functionName, boundary.start, irBuild.instructions);
+            ir::buildControlFlowFunction(functionName, adjustedBoundary.start, irBuild.instructions);
         if (!flowResult.errors.empty())
         {
             std::ostringstream stream;
@@ -429,10 +635,10 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
         PipelineResult::FunctionMetadata metadataEntry;
         metadataEntry.name = functionName;
-        metadataEntry.entryAddress = boundary.start;
-        metadataEntry.endAddress = boundary.end;
-        metadataEntry.hasPrologue = boundary.hasPrologue;
-        metadataEntry.hasEpilogue = boundary.hasEpilogue;
+        metadataEntry.entryAddress = adjustedBoundary.start;
+        metadataEntry.endAddress = adjustedBoundary.end;
+        metadataEntry.hasPrologue = adjustedBoundary.hasPrologue;
+        metadataEntry.hasEpilogue = adjustedBoundary.hasEpilogue;
         for (const auto& instruction : functionInstructions)
         {
             if (instruction.opcode == disasm::Opcode::JAL)

@@ -98,6 +98,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#include <sstream>");
     emitter.writeLine("#include <stdexcept>");
     emitter.writeLine("#include <string>");
+    emitter.writeLine("#include <unordered_set>");
     emitter.writeLine("#include <vector>");
     emitter.writeBlank();
     emitter.writeLine("#ifndef PSXRECOMP_ENABLE_LOGGING");
@@ -120,6 +121,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.openBlock("namespace");
+
+    // readMemory32 — straightforward RAM read.
     emitter.writeLine("inline u32 readMemory32(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
     emitter.writeLine("return system.read<u32>(address);");
@@ -129,6 +132,48 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         "inline void writeMemory32(runtime::PsxSystem& system, Address address, u32 value)");
     emitter.openBlock("");
     emitter.writeLine("system.write<u32>(address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    // readMemory8 — unsigned byte read.
+    emitter.writeLine("inline u32 readMemory8(runtime::PsxSystem& system, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return static_cast<u32>(system.read<u8>(address));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    // readMemory8s — signed byte read (sign-extend to 32 bits).
+    emitter.writeLine("inline u32 readMemory8s(runtime::PsxSystem& system, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return static_cast<u32>(static_cast<s32>(static_cast<s8>(system.read<u8>(address))));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    // readMemory16 — unsigned halfword read.
+    emitter.writeLine("inline u32 readMemory16(runtime::PsxSystem& system, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return static_cast<u32>(system.read<u16>(address));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    // readMemory16s — signed halfword read (sign-extend to 32 bits).
+    emitter.writeLine("inline u32 readMemory16s(runtime::PsxSystem& system, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return static_cast<u32>(static_cast<s32>(static_cast<s16>(system.read<u16>(address))));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    // writeMemory8 — byte store.
+    emitter.writeLine("inline void writeMemory8(runtime::PsxSystem& system, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("system.write<u8>(address, static_cast<u8>(value & 0xFF));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    // writeMemory16 — halfword store.
+    emitter.writeLine("inline void writeMemory16(runtime::PsxSystem& system, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("system.write<u16>(address, static_cast<u16>(value & 0xFFFF));");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline u32 readMmio32(runtime::PsxSystem& system, Address address)");
@@ -215,7 +260,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("stream << \"Breakpoint hit at PC 0x\" << std::hex << pc;");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
-    emitter.closeBlock();
+    emitter.closeBlock(); // close setProgramCounter
     emitter.writeBlank();
     emitter.writeLine("inline bool callIntrinsic(runtime::PsxSystem& system, Address address, "
                       "std::array<u32, Registers::NUM_REGISTERS>& regs)");
@@ -245,12 +290,14 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("return false;");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("[[noreturn]] inline void failUnsupportedCall(Address target, Address pc)");
+    emitter.writeLine("inline void failUnsupportedCall(Address target, Address pc)");
     emitter.openBlock("");
-    emitter.writeLine("std::ostringstream stream;");
-    emitter.writeLine(
-        "stream << \"Unsupported CALL target 0x\" << std::hex << target << \" at PC 0x\" << pc;");
-    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.writeLine("static std::unordered_set<Address> warned;");
+    emitter.writeLine("if (warned.insert(target).second)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Unsupported CALL target 0x\" << std::hex "
+                      "<< target << \" at PC 0x\" << pc << \" (stubbed)\\n\";");
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("[[noreturn]] inline void failUnsupportedJump(Address target, Address pc)");
@@ -322,6 +369,9 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.openBlock("");
     {
         std::unordered_set<Address> emittedEntries;
+
+        // First: emit cases for every function entry point (called with
+        // default startAddress = 0 so execution begins at the first block).
         for (const auto& entry : functionSymbols)
         {
             const Address normalizedEntry = entry.first & 0x1FFFFFFFu;
@@ -336,6 +386,40 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
             emitter.writeLine(entry.second + "(context);");
             emitter.writeLine("return true;");
             emitter.closeBlock();
+        }
+
+        // Second: emit cases for every non-entry block address so that JALR
+        // calls targeting a mid-function address can enter at the correct
+        // block via the startAddress parameter.
+        {
+            std::unordered_set<std::string> usedNames2;
+            size_t funcIdx = 0;
+            for (const auto& function : program.functions)
+            {
+                std::string funcName = uniquifyIdentifier(function.name, usedNames2);
+                for (const auto& block : function.blocks)
+                {
+                    if (block.name.size() > 8 && block.name.substr(0, 8) == "block_0x")
+                    {
+                        const Address blockAddr =
+                            std::stoul(block.name.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+                        if (emittedEntries.insert(blockAddr).second)
+                        {
+                            std::ostringstream caseLine;
+                            caseLine << "case 0x" << std::hex << blockAddr << ":";
+                            emitter.writeLine(caseLine.str());
+                            emitter.openBlock("");
+                            std::ostringstream callLine;
+                            callLine << funcName << "(context, 0x" << std::hex
+                                     << blockAddr << ");";
+                            emitter.writeLine(callLine.str());
+                            emitter.writeLine("return true;");
+                            emitter.closeBlock();
+                        }
+                    }
+                }
+                ++funcIdx;
+            }
         }
     }
     emitter.writeLine("default:");
@@ -448,8 +532,139 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock();
     emitter.writeBlank();
 
+    // Auto-detect PSn00bSDK vsync_counter address.
+    // The VBlank IRQ handler has a distinctive pattern:
+    //   LUI r3, HI        ; 3c03xxxx
+    //   LW  r2, LO(r3)    ; 8c62yyyy
+    //   ...
+    //   ADDIU r2, r2, 1   ; 24420001
+    //   SW  r2, LO(r3)    ; ac62yyyy  (same base/offset)
+    // We scan the loaded program for this pattern and extract the
+    // full counter address (HI<<16 + sign-extended LO).
+    emitter.writeLine("static Address detectVsyncCounter(const u8* ram)");
+    emitter.openBlock("");
+    emitter.writeLine("if (kRamInitLoadSize < 32) return 0;");
+    emitter.writeLine("const Address base = kRamInitLoadAddress & 0x1FFFFF;");
+    emitter.writeLine("const u32 nWords = kRamInitLoadSize / 4;");
+    emitter.writeLine("auto word = [&](u32 idx) -> u32");
+    emitter.openBlock("");
+    emitter.writeLine("u32 v = 0;");
+    emitter.writeLine("std::memcpy(&v, ram + base + idx * 4, 4);");
+    emitter.writeLine("return v;");
+    emitter.closeBlock(";");
+    emitter.writeLine("for (u32 i = 0; i + 6 < nWords; ++i)");
+    emitter.openBlock("");
+    // Match: LUI r3, HI (opcode 0x3c03xxxx)
+    emitter.writeLine("const u32 w0 = word(i);");
+    emitter.writeLine("if ((w0 & 0xFFFF0000u) != 0x3c030000u) continue;");
+    emitter.writeLine("const u32 hi = w0 & 0xFFFF;");
+    // Match: LW r2, LO(r3) (opcode 0x8c62yyyy)
+    emitter.writeLine("const u32 w1 = word(i + 1);");
+    emitter.writeLine("if ((w1 & 0xFFFF0000u) != 0x8c620000u) continue;");
+    emitter.writeLine("const u32 lo = w1 & 0xFFFF;");
+    // Scan forward for ADDIU r2,r2,1 (0x24420001) within 6 words
+    emitter.writeLine("bool foundInc = false;");
+    emitter.writeLine("u32 swIdx = 0;");
+    emitter.writeLine("for (u32 j = 2; j < 6 && i + j < nWords; ++j)");
+    emitter.openBlock("");
+    emitter.writeLine("if (word(i + j) == 0x24420001u) { foundInc = true; swIdx = j + 1; break; "
+                      "}");
+    emitter.closeBlock();
+    emitter.writeLine("if (!foundInc || i + swIdx >= nWords) continue;");
+    // Match: SW r2, LO(r3) with same offset as LW
+    emitter.writeLine("const u32 sw = word(i + swIdx);");
+    emitter.writeLine("if (sw != (0xac620000u | lo)) continue;");
+    // Build full address
+    emitter.writeLine(
+        "const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
+        "static_cast<s32>(lo);");
+    emitter.writeLine("const Address addr = (hi << 16) + static_cast<u32>(slo);");
+    emitter.writeLine("return addr;");
+    emitter.closeBlock();
+    emitter.writeLine("return 0;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
+    // Auto-detect PSn00bSDK DrawSync "GPU busy" byte address.
+    // DrawSync(0) has a distinctive prologue:
+    //   BNEZ $a0, <alt>       ; 0x1480xxxx
+    //   LUI  $v1, 0x0010      ; 0x3C030010  (timeout = 1M)
+    //   B    <poll>            ; 0x1000xxxx
+    //   LUI  $a0, 0x80xx      ; 0x3C04xxxx  (base address hi)
+    //   ...  (2 words)
+    //   LBU  $v0, offset($a0) ; 0x9082yyyy  (the busy byte)
+    // The busy byte address = (LUI_imm << 16) + sign-extended(LBU_offset).
+    emitter.writeLine("static Address detectDrawSyncBusy(const u8* ram)");
+    emitter.openBlock("");
+    emitter.writeLine("if (kRamInitLoadSize < 32) return 0;");
+    emitter.writeLine("const Address base = kRamInitLoadAddress & 0x1FFFFF;");
+    emitter.writeLine("const u32 nWords = kRamInitLoadSize / 4;");
+    emitter.writeLine("auto word = [&](u32 idx) -> u32");
+    emitter.openBlock("");
+    emitter.writeLine("u32 v = 0;");
+    emitter.writeLine("std::memcpy(&v, ram + base + idx * 4, 4);");
+    emitter.writeLine("return v;");
+    emitter.closeBlock(";");
+    emitter.writeLine("for (u32 i = 0; i + 7 < nWords; ++i)");
+    emitter.openBlock("");
+    // Match BNEZ $a0 (BNE $a0,$zero → opcode=000101, rs=00100, rt=00000: 0x1480xxxx)
+    emitter.writeLine("const u32 w0 = word(i);");
+    emitter.writeLine("if ((w0 & 0xFFFF0000u) != 0x14800000u) continue;");
+    // Match LUI $v1, 0x0010 (exact = 0x3C030010)
+    emitter.writeLine("if (word(i + 1) != 0x3C030010u) continue;");
+    // Match B (unconditional branch, opcode 000100, rs=rt=0 → 0x1000xxxx)
+    emitter.writeLine("const u32 w2 = word(i + 2);");
+    emitter.writeLine("if ((w2 & 0xFFFF0000u) != 0x10000000u) continue;");
+    // Match LUI $a0, 0x80xx (0x3C04xxxx where imm starts with 0x80)
+    emitter.writeLine("const u32 w3 = word(i + 3);");
+    emitter.writeLine("if ((w3 & 0xFFFF0000u) != 0x3C040000u) continue;");
+    emitter.writeLine("const u32 baseHi = w3 & 0xFFFF;");
+    // Scan forward (words 4..8) for LBU $v0, offset($a0) (opcode 0x9082yyyy)
+    emitter.writeLine("for (u32 j = 4; j < 8 && i + j < nWords; ++j)");
+    emitter.openBlock("");
+    emitter.writeLine("const u32 lbu = word(i + j);");
+    // LBU = opcode 100000 (0x20), rs=$a0=4, rt=$v0=2 → 0x90820000 + offset
+    emitter.writeLine("if ((lbu & 0xFFFF0000u) != 0x90820000u) continue;");
+    emitter.writeLine("const u32 lo = lbu & 0xFFFF;");
+    emitter.writeLine(
+        "const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
+        "static_cast<s32>(lo);");
+    emitter.writeLine("const Address addr = (baseHi << 16) + static_cast<u32>(slo);");
+    emitter.writeLine("return addr;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("return 0;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
     emitter.writeLine("void RecompiledModule::run(runtime::PsxSystem& system)");
     emitter.openBlock("");
+    // Auto-detect and register vsync counter before running.
+    emitter.writeLine("// Auto-detect PSn00bSDK vsync counter location.");
+    emitter.writeLine("const Address vsyncAddr = detectVsyncCounter(system.getRam());");
+    emitter.writeLine("if (vsyncAddr != 0)");
+    emitter.openBlock("");
+    emitter.writeLine("system.setVsyncCounterAddress(vsyncAddr);");
+    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp] Auto-detected vsync counter at 0x\"");
+    emitter.writeLine("          << std::hex << vsyncAddr << \"\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+    // Auto-detect and register DrawSync GPU busy byte.
+    emitter.writeLine("// Auto-detect PSn00bSDK DrawSync busy byte location.");
+    emitter.writeLine("const Address drawSyncAddr = detectDrawSyncBusy(system.getRam());");
+    emitter.writeLine("if (drawSyncAddr != 0)");
+    emitter.openBlock("");
+    emitter.writeLine("system.setDrawSyncBusyAddress(drawSyncAddr);");
+    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp] Auto-detected DrawSync busy byte at 0x\"");
+    emitter.writeLine("          << std::hex << drawSyncAddr << \"\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
     emitter.writeLine("RecompilerContext context{system, {}};");
 
     // Set initial registers from PSX-EXE header.

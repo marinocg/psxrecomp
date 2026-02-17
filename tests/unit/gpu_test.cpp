@@ -209,6 +209,9 @@ int main()
 
     gpu.writeStatus(0x08000020u);
     const auto beforeLineTick = gpu.readStatus();
+    // Two ticks: ActiveDisplay → VBlankStart (bit 22 set, bit 31 same)
+    //            VBlankStart  → VBlankEnd    (bit 31 flips)
+    gpu.tickDisplayLine();
     gpu.tickDisplayLine();
     const auto afterLineTick = gpu.readStatus();
     assert((beforeLineTick ^ afterLineTick) & (1u << 31));

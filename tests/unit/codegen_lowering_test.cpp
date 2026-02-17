@@ -225,6 +225,110 @@ int main()
         std::cerr << "[PASS] barrier block with empty continuations\n";
     }
 
+    // ---------------------------------------------------------------
+    // Test 6: BRANCH unconditional self-loop spin-wait detection
+    //
+    // When a block's BRANCH instruction has BOTH successors pointing to
+    // itself (unconditional self-loop / spin-wait), the generated code
+    // should call advanceFrame() instead of looping forever.
+    // Conditional self-loops (only one successor pointing to self) are
+    // regular loops handled by the while(true)/switch structure.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_spin_wait", 0x80070000);
+        auto& spinBlock = builder.createBlock(function, "spin_block");
+        auto& nextBlock = builder.createBlock(function, "after_spin");
+
+        // Create a COMPARE_EQ (reg[0] == reg[0] → always true)
+        // makeInstruction signature: (opcode, inputs, outputs, address)
+        auto cmpInstr = builder.makeInstruction(
+            Opcode::COMPARE_EQ,
+            {Value::makeRegister(0), Value::makeRegister(0)}, // inputs: reg0 vs reg0
+            {Value::makeRegister(1)}, // output: temp result
+            0x80070000);
+        spinBlock.instructions.push_back(cmpInstr);
+
+        // BRANCH that targets self on BOTH paths (unconditional spin-wait)
+        auto branchInstr = builder.makeInstruction(
+            Opcode::BRANCH,
+            {Value::makeRegister(1)}, // input: condition from CMP result
+            {}, // no outputs
+            0x80070004);
+        spinBlock.instructions.push_back(branchInstr);
+        spinBlock.successors = {"spin_block", "spin_block"}; // both paths = self
+
+        nextBlock.instructions.push_back(
+            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80070008));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "spin_wait_module");
+
+        // The generated code should call advanceFrame() in the spin block
+        assert(source.find("advanceFrame()") != std::string::npos);
+
+        std::cerr << "[PASS] BRANCH unconditional self-loop spin-wait detection\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 7: Conditional self-loop is a normal branch (not advanceFrame)
+    //
+    // When a BRANCH has only ONE successor pointing to self (a regular
+    // loop like BSS clearing or memcpy), it should be treated as a
+    // normal branch.  The while(true)/switch structure naturally
+    // re-enters the same block.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_cond_loop", 0x80080000);
+        auto& loopBlock = builder.createBlock(function, "loop_block");
+        auto& exitBlock = builder.createBlock(function, "exit_block");
+
+        auto cmpInstr = builder.makeInstruction(
+            Opcode::COMPARE_NE,
+            {Value::makeRegister(2), Value::makeRegister(3)},
+            {Value::makeRegister(1)},
+            0x80080000);
+        loopBlock.instructions.push_back(cmpInstr);
+
+        auto branchInstr = builder.makeInstruction(
+            Opcode::BRANCH,
+            {Value::makeRegister(1)},
+            {},
+            0x80080004);
+        loopBlock.instructions.push_back(branchInstr);
+        // taken=self (loop back), fallthrough=exit (loop done)
+        loopBlock.successors = {"loop_block", "exit_block"};
+
+        exitBlock.instructions.push_back(
+            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80080008));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "cond_loop_module");
+
+        // Should NOT have advanceFrame — it's a real loop
+        auto loopCase = source.find("case BlockId::loop_block:");
+        assert(loopCase != std::string::npos);
+
+        // Should have normal if/else branching in the loop block
+        auto ifStmt = source.find("if (", loopCase);
+        assert(ifStmt != std::string::npos);
+        auto elseStmt = source.find("else", loopCase);
+        assert(elseStmt != std::string::npos);
+
+        // Both successors should be referenced: loop_block and exit_block
+        auto loopRef = source.find("BlockId::loop_block", loopCase);
+        assert(loopRef != std::string::npos);
+        auto exitRef = source.find("BlockId::exit_block", loopCase);
+        assert(exitRef != std::string::npos);
+
+        std::cerr << "[PASS] conditional self-loop is normal branch (not advanceFrame)\n";
+    }
+
     std::cerr << "All codegen lowering tests passed.\n";
     return 0;
 }

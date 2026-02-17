@@ -166,7 +166,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             nextAddress = nextAddressIt->second;
         }
 
-        auto addSuccessor = [&](Address target)
+        auto addSuccessor = [&](Address target, bool recordContinuation = true)
         {
             auto successorIt = result.addressToBlockName.find(target);
             if (successorIt == result.addressToBlockName.end())
@@ -179,7 +179,10 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                 }
                 // Record the continuation for this block: resume at the next
                 // sequential address after the external jump/call.
-                if (nextAddress.has_value())
+                // For BRANCH taken targets that go external, we do NOT record
+                // a continuation — the branch transfers control entirely, so
+                // block_external should just return from the function.
+                if (recordContinuation && nextAddress.has_value())
                 {
                     auto continuationIt = result.addressToBlockName.find(*nextAddress);
                     if (continuationIt != result.addressToBlockName.end())
@@ -203,7 +206,11 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             auto target = extractTargetAddress(lastInstruction);
             if (target.has_value())
             {
-                addSuccessor(*target);
+                // The taken target of a BRANCH transfers control entirely.
+                // If it goes external, do NOT record a fallthrough continuation
+                // — block_external should return from the function instead of
+                // falling into the not-taken path.
+                addSuccessor(*target, /*recordContinuation=*/false);
             }
             else
             {
@@ -211,7 +218,10 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             }
             if (nextAddress.has_value())
             {
-                addSuccessor(*nextAddress);
+                // The fallthrough of a BRANCH also transfers control
+                // entirely (it is the not-taken path).  Do not record a
+                // continuation — block_external should return.
+                addSuccessor(*nextAddress, /*recordContinuation=*/false);
             }
             break;
         }

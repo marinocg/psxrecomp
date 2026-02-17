@@ -59,8 +59,20 @@ std::string opcodeToString(Opcode opcode)
         return "cmp_ge";
     case Opcode::LOAD:
         return "load";
+    case Opcode::LOAD8:
+        return "load8";
+    case Opcode::LOAD8U:
+        return "load8u";
+    case Opcode::LOAD16:
+        return "load16";
+    case Opcode::LOAD16U:
+        return "load16u";
     case Opcode::STORE:
         return "store";
+    case Opcode::STORE8:
+        return "store8";
+    case Opcode::STORE16:
+        return "store16";
     case Opcode::MMIO_LOAD:
         return "mmio_load";
     case Opcode::MMIO_STORE:

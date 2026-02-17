@@ -217,7 +217,16 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
              {Value::makeRegister(instr.rs),
               Value::makeImmediate(static_cast<s32>(instr.immediate))},
              {addressTemp});
-        emit(Opcode::LOAD, {addressTemp}, {Value::makeRegister(instr.rt)});
+        Opcode loadOp = Opcode::LOAD;
+        if (instr.opcode == disasm::Opcode::LB)
+            loadOp = Opcode::LOAD8;
+        else if (instr.opcode == disasm::Opcode::LBU)
+            loadOp = Opcode::LOAD8U;
+        else if (instr.opcode == disasm::Opcode::LH)
+            loadOp = Opcode::LOAD16;
+        else if (instr.opcode == disasm::Opcode::LHU)
+            loadOp = Opcode::LOAD16U;
+        emit(loadOp, {addressTemp}, {Value::makeRegister(instr.rt)});
         break;
     }
     case disasm::Opcode::SB:
@@ -239,7 +248,12 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
              {Value::makeRegister(instr.rs),
               Value::makeImmediate(static_cast<s32>(instr.immediate))},
              {addressTemp});
-        emit(Opcode::STORE, {addressTemp, Value::makeRegister(instr.rt)}, {});
+        Opcode storeOp = Opcode::STORE;
+        if (instr.opcode == disasm::Opcode::SB)
+            storeOp = Opcode::STORE8;
+        else if (instr.opcode == disasm::Opcode::SH)
+            storeOp = Opcode::STORE16;
+        emit(storeOp, {addressTemp, Value::makeRegister(instr.rt)}, {});
         break;
     }
     case disasm::Opcode::BEQ:

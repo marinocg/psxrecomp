@@ -175,6 +175,36 @@ class PsxSystem
 
     void setAutoFrameProgressOnInterruptPoll(bool enabled);
 
+    /**
+     * @brief Register a RAM address containing the vsync frame counter.
+     *
+     * When set, runFrame() will auto-increment the 32-bit word at this
+     * address, simulating the VBlank IRQ handler that PSn00bSDK relies
+     * on to detect completed frames.
+     */
+    void setVsyncCounterAddress(Address address);
+
+    /**
+     * @brief Register the RAM address of PSn00bSDK's "GPU busy" byte.
+     *
+     * When set, GPU commands processed via callGpuIntrinsic() will
+     * automatically clear this byte, preventing DrawSync(0) from
+     * spinning for its full 1M-iteration timeout.
+     */
+    void setDrawSyncBusyAddress(Address address);
+
+    /**
+     * @brief Get the monotonic frame counter (incremented each runFrame()).
+     */
+    u32 frameCount() const;
+
+    /**
+     * @brief Advance one frame (calls runFrame()) and return the new frame count.
+     *
+     * Intended for use by idle-loop / RAM-polling detectors in generated code.
+     */
+    u32 advanceFrame();
+
     template <typename T> T readMmioExplicit(Address address)
     {
         Address physical = normalizeAddress(address);
@@ -206,6 +236,10 @@ class PsxSystem
     TimerController m_timers;
     DiscSwapInfo m_discSwapInfo;
     bool m_autoFrameProgressOnInterruptPoll = false;
+    u32 m_frameCount = 0;
+    u32 m_gpuStatReadCount = 0; ///< Consecutive GPUSTAT reads within same VBlank phase
+    Address m_vsyncCounterAddress = 0; ///< RAM address of PSn00bSDK vsync_counter (0 = disabled)
+    Address m_drawSyncBusyAddress = 0; ///< RAM address of PSn00bSDK GPU busy byte (0 = disabled)
 
     static Address normalizeAddress(Address address)
     {

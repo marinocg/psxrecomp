@@ -359,6 +359,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
         "std::cerr << \"[psxrecomp][error] Unhandled exception: \" << ex.what() << \"\\n\";");
     emitter.writeLine("std::cerr << \"[psxrecomp] GPU command count: \""
                       " << system.gpu().commandTrace().size() << \"\\n\";");
+    emitter.writeLine("std::cerr << \"[psxrecomp] Frame count: \" << system.frameCount() << \"\\n\";");
     emitter.writeLine("const auto& exFbCheck = system.gpu().frameBuffer();");
     emitter.writeLine("size_t exFbNonZero = 0;");
     emitter.writeLine(

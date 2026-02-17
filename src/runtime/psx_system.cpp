@@ -112,8 +112,27 @@ void PsxSystem::runFrame()
     m_scheduler.tick(CYCLES_PER_FRAME);
     m_interrupts.raise(InterruptLine::VBlank);
     m_debugOverlay.incrementInterruptsRaised();
+    // Toggle GPU interlace field (bit 31 of GPUSTAT).  PSn00bSDK VSync
+    // detects frame boundaries by XOR-ing consecutive GPUSTAT reads and
+    // checking if bit 31 changed.
+    m_gpu.tickDisplayLine();
+    // Simulate VBlank IRQ delivery: increment the vsync counter in RAM
+    // that PSn00bSDK's VBlank handler would normally update.  Without
+    // this, VSync(0) loops forever waiting for the counter to change.
+    if (m_vsyncCounterAddress != 0)
+    {
+        const Address offset = (m_vsyncCounterAddress & 0x1FFFFF);
+        if (offset + 4 <= MemoryMap::RAM_SIZE)
+        {
+            u32 counter = 0;
+            std::memcpy(&counter, m_ram.data() + offset, sizeof(u32));
+            ++counter;
+            std::memcpy(m_ram.data() + offset, &counter, sizeof(u32));
+        }
+    }
     m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
     m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
+    ++m_frameCount;
 }
 
 void PsxSystem::callGpuIntrinsic(Address address)
@@ -158,6 +177,43 @@ void PsxSystem::callCdromIntrinsic(Address address)
 void PsxSystem::setAutoFrameProgressOnInterruptPoll(bool enabled)
 {
     m_autoFrameProgressOnInterruptPoll = enabled;
+}
+
+void PsxSystem::setVsyncCounterAddress(Address address)
+{
+    m_vsyncCounterAddress = address;
+    m_logger.log(LogLevel::Info, "system",
+                 "VSync counter registered at 0x" +
+                     [&]()
+                     {
+                         std::ostringstream s;
+                         s << std::hex << address;
+                         return s.str();
+                     }());
+}
+
+void PsxSystem::setDrawSyncBusyAddress(Address address)
+{
+    m_drawSyncBusyAddress = address;
+    m_logger.log(LogLevel::Info, "system",
+                 "DrawSync busy byte registered at 0x" +
+                     [&]()
+                     {
+                         std::ostringstream s;
+                         s << std::hex << address;
+                         return s.str();
+                     }());
+}
+
+u32 PsxSystem::frameCount() const
+{
+    return m_frameCount;
+}
+
+u32 PsxSystem::advanceFrame()
+{
+    runFrame();
+    return m_frameCount;
 }
 
 u8* PsxSystem::getRam()

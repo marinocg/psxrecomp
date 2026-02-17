@@ -53,6 +53,11 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
     const Address entryAddress = instructions.front().address;
     startAddresses.insert(entryAddress);
 
+    // Build instruction index early so we can validate JAL targets against
+    // the actual instruction stream (important when code/data segmentation
+    // excludes some addresses).
+    auto indexMap = detail::buildInstructionIndex(instructions);
+
     for (size_t i = 0; i < instructions.size(); ++i)
     {
         if (detail::hasProloguePattern(instructions, i))
@@ -64,7 +69,13 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
         {
             if (auto target = detail::resolveDirectCallTarget(instructions[i]))
             {
-                startAddresses.insert(*target);
+                // Only add targets that correspond to an actual instruction
+                // in the stream.  After code/data segmentation, some JAL
+                // targets may point into data regions and must be skipped.
+                if (indexMap.count(*target))
+                {
+                    startAddresses.insert(*target);
+                }
             }
         }
     }
@@ -74,7 +85,6 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
     // real ADDIU SP,-16 prologue).  When the entry point contains no control
     // flow terminator (JR/J/branch) before the next start address, the two
     // regions must be merged so the entry function is not truncated.
-    auto indexMap = detail::buildInstructionIndex(instructions);
     {
         std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
         std::sort(tempStarts.begin(), tempStarts.end());
@@ -111,6 +121,68 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
         }
     }
 
+    // ── Merge functions where an internal branch crosses into the next
+    //    function.  When a BEQ/BNE/etc. within function A targets code in
+    //    function B (the next sequential function), A and B are really one
+    //    function that was incorrectly split by a premature prologue/JAL-
+    //    target heuristic.  We fix this by removing B's start from the set.
+    {
+        std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
+        std::sort(tempStarts.begin(), tempStarts.end());
+
+        bool merged = true;
+        while (merged)
+        {
+            merged = false;
+            for (size_t si = 0; si + 1 < tempStarts.size(); ++si)
+            {
+                const Address funcStart = tempStarts[si];
+                const Address nextFuncStart = tempStarts[si + 1];
+
+                auto startIt = indexMap.find(funcStart);
+                auto nextIt = indexMap.find(nextFuncStart);
+                if (startIt == indexMap.end() || nextIt == indexMap.end())
+                {
+                    continue;
+                }
+
+                const size_t startIdx = startIt->second;
+                const size_t limitIdx = nextIt->second;
+
+                // Scan instructions in [funcStart, nextFuncStart) for branch
+                // targets that land in [nextFuncStart, nextNextFuncStart).
+                const Address nextNextFuncStart =
+                    (si + 2 < tempStarts.size()) ? tempStarts[si + 2]
+                                                 : instructions.back().address + 4;
+
+                bool hasCrossBranch = false;
+                for (size_t i = startIdx; i < limitIdx; ++i)
+                {
+                    if (instructions[i].isBranch())
+                    {
+                        if (auto target = instructions[i].getBranchTarget())
+                        {
+                            if (*target >= nextFuncStart && *target < nextNextFuncStart)
+                            {
+                                hasCrossBranch = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (hasCrossBranch)
+                {
+                    startAddresses.erase(nextFuncStart);
+                    tempStarts.erase(tempStarts.begin() +
+                                     static_cast<std::ptrdiff_t>(si + 1));
+                    merged = true;
+                    break; // restart outer loop
+                }
+            }
+        }
+    }
+
     std::vector<Address> sortedStarts(startAddresses.begin(), startAddresses.end());
     std::sort(sortedStarts.begin(), sortedStarts.end());
 
@@ -132,6 +204,27 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
         Address end = instructions[limitIndex - 1].address;
         bool hasEpilogue = false;
 
+        // Collect all branch targets within this function's range so that
+        // we find the LAST return that's needed (not just the first).
+        Address maxBranchTarget = start;
+        for (size_t i = startInstructionIndex; i < limitIndex; ++i)
+        {
+            if (instructions[i].isBranch())
+            {
+                if (auto target = instructions[i].getBranchTarget())
+                {
+                    if (*target >= start && *target < instructions[limitIndex - 1].address + 4)
+                    {
+                        if (*target > maxBranchTarget)
+                        {
+                            maxBranchTarget = *target;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find the last return that covers all reachable code.
         for (size_t i = startInstructionIndex; i < limitIndex; ++i)
         {
             if (instructions[i].isReturn())
@@ -143,7 +236,222 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
                 }
                 end = instructions[endIndex].address;
                 hasEpilogue = detail::hasEpiloguePattern(instructions, i);
-                break;
+                // Keep scanning if there are branch targets past this return
+                if (instructions[i].address >= maxBranchTarget)
+                {
+                    break;
+                }
+            }
+        }
+
+        boundaries.push_back({start, end,
+                              detail::hasProloguePattern(instructions, startInstructionIndex),
+                              hasEpilogue});
+    }
+
+    return boundaries;
+}
+
+std::vector<FunctionBoundary>
+findFunctionBoundaries(const std::vector<Instruction>& instructions,
+                       const std::vector<Address>& additionalStarts)
+{
+    std::vector<FunctionBoundary> boundaries;
+    if (instructions.empty())
+    {
+        return boundaries;
+    }
+
+    std::unordered_set<Address> startAddresses;
+    const Address entryAddress = instructions.front().address;
+    startAddresses.insert(entryAddress);
+
+    // Build instruction index early so we can validate JAL targets against
+    // the actual instruction stream (important when code/data segmentation
+    // excludes some addresses).
+    auto indexMap = detail::buildInstructionIndex(instructions);
+
+    for (size_t i = 0; i < instructions.size(); ++i)
+    {
+        if (detail::hasProloguePattern(instructions, i))
+        {
+            startAddresses.insert(instructions[i].address);
+        }
+
+        if (detail::isDirectCall(instructions[i]))
+        {
+            if (auto target = detail::resolveDirectCallTarget(instructions[i]))
+            {
+                // Only add targets that correspond to an actual instruction
+                // in the stream.  After code/data segmentation, some JAL
+                // targets may point into data regions and must be skipped.
+                if (indexMap.count(*target))
+                {
+                    startAddresses.insert(*target);
+                }
+            }
+        }
+    }
+
+    // Add caller-supplied extra start addresses (e.g. harvested code
+    // pointers from data tables).  Only keep addresses that actually
+    // correspond to a known instruction.
+    for (const Address addr : additionalStarts)
+    {
+        if (indexMap.count(addr))
+        {
+            startAddresses.insert(addr);
+        }
+    }
+
+    // Detect whether the entry point falls through into the next detected
+    // function start.
+    {
+        std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
+        std::sort(tempStarts.begin(), tempStarts.end());
+
+        auto entryPos = std::lower_bound(tempStarts.begin(), tempStarts.end(), entryAddress);
+        if (entryPos != tempStarts.end() && *entryPos == entryAddress)
+        {
+            auto nextPos = std::next(entryPos);
+            if (nextPos != tempStarts.end())
+            {
+                auto entryIt = indexMap.find(entryAddress);
+                auto nextIt = indexMap.find(*nextPos);
+                if (entryIt != indexMap.end() && nextIt != indexMap.end())
+                {
+                    bool hasTerminator = false;
+                    for (size_t i = entryIt->second; i < nextIt->second; ++i)
+                    {
+                        if (instructions[i].isReturn() || instructions[i].isJump() ||
+                            instructions[i].isBranch())
+                        {
+                            hasTerminator = true;
+                            break;
+                        }
+                    }
+                    if (!hasTerminator)
+                    {
+                        startAddresses.erase(*nextPos);
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Merge functions where an internal branch crosses into the next
+    //    function (same logic as the single-arg overload).
+    {
+        std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
+        std::sort(tempStarts.begin(), tempStarts.end());
+
+        bool merged = true;
+        while (merged)
+        {
+            merged = false;
+            for (size_t si = 0; si + 1 < tempStarts.size(); ++si)
+            {
+                const Address funcStart = tempStarts[si];
+                const Address nextFuncStart = tempStarts[si + 1];
+
+                auto startIt = indexMap.find(funcStart);
+                auto nextIt = indexMap.find(nextFuncStart);
+                if (startIt == indexMap.end() || nextIt == indexMap.end())
+                {
+                    continue;
+                }
+
+                const size_t startIdx = startIt->second;
+                const size_t limitIdx = nextIt->second;
+
+                const Address nextNextFuncStart =
+                    (si + 2 < tempStarts.size()) ? tempStarts[si + 2]
+                                                 : instructions.back().address + 4;
+
+                bool hasCrossBranch = false;
+                for (size_t i = startIdx; i < limitIdx; ++i)
+                {
+                    if (instructions[i].isBranch())
+                    {
+                        if (auto target = instructions[i].getBranchTarget())
+                        {
+                            if (*target >= nextFuncStart && *target < nextNextFuncStart)
+                            {
+                                hasCrossBranch = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (hasCrossBranch)
+                {
+                    startAddresses.erase(nextFuncStart);
+                    tempStarts.erase(tempStarts.begin() +
+                                     static_cast<std::ptrdiff_t>(si + 1));
+                    merged = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    std::vector<Address> sortedStarts(startAddresses.begin(), startAddresses.end());
+    std::sort(sortedStarts.begin(), sortedStarts.end());
+
+    for (size_t startIndex = 0; startIndex < sortedStarts.size(); ++startIndex)
+    {
+        const Address start = sortedStarts[startIndex];
+        auto it = indexMap.find(start);
+        if (it == indexMap.end())
+        {
+            continue;
+        }
+
+        const size_t startInstructionIndex = it->second;
+        const size_t limitIndex =
+            (startIndex + 1 < sortedStarts.size() && indexMap.count(sortedStarts[startIndex + 1]))
+                ? indexMap[sortedStarts[startIndex + 1]]
+                : instructions.size();
+
+        Address end = instructions[limitIndex - 1].address;
+        bool hasEpilogue = false;
+
+        // Collect all branch targets within this function's range.
+        Address maxBranchTarget = start;
+        for (size_t i = startInstructionIndex; i < limitIndex; ++i)
+        {
+            if (instructions[i].isBranch())
+            {
+                if (auto target = instructions[i].getBranchTarget())
+                {
+                    if (*target >= start && *target < instructions[limitIndex - 1].address + 4)
+                    {
+                        if (*target > maxBranchTarget)
+                        {
+                            maxBranchTarget = *target;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find the last return that covers all reachable code.
+        for (size_t i = startInstructionIndex; i < limitIndex; ++i)
+        {
+            if (instructions[i].isReturn())
+            {
+                size_t endIndex = i;
+                if (instructions[i].hasDelaySlot() && i + 1 < instructions.size())
+                {
+                    endIndex = i + 1;
+                }
+                end = instructions[endIndex].address;
+                hasEpilogue = detail::hasEpiloguePattern(instructions, i);
+                if (instructions[i].address >= maxBranchTarget)
+                {
+                    break;
+                }
             }
         }
 

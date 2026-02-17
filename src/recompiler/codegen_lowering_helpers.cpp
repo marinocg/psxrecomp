@@ -94,8 +94,20 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "cmp_ge";
     case ir::Opcode::LOAD:
         return "load";
+    case ir::Opcode::LOAD8:
+        return "load8";
+    case ir::Opcode::LOAD8U:
+        return "load8u";
+    case ir::Opcode::LOAD16:
+        return "load16";
+    case ir::Opcode::LOAD16U:
+        return "load16u";
     case ir::Opcode::STORE:
         return "store";
+    case ir::Opcode::STORE8:
+        return "store8";
+    case ir::Opcode::STORE16:
+        return "store16";
     case ir::Opcode::MMIO_LOAD:
         return "mmio_load";
     case ir::Opcode::MMIO_STORE:
