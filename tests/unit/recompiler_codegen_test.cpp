@@ -105,7 +105,8 @@ int main()
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
-    assert(runner.find("presentFramebufferWithSdl") != std::string::npos);
+    assert(runner.find("presentFramebufferLive") != std::string::npos);
+    assert(runner.find("std::thread presenterThread") != std::string::npos);
     assert(runner.find("#if defined(_WIN32)") != std::string::npos);
     assert(runner.find("Debug overlay") != std::string::npos);
     assert(runner.find("Last PC") != std::string::npos);
@@ -160,6 +161,7 @@ int main()
     runtimeHeader << "#pragma once\n";
     runtimeHeader << "#include \"psxrecomp/types.h\"\n";
     runtimeHeader << "#include <cstddef>\n";
+    runtimeHeader << "#include <cstring>\n";
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
@@ -188,11 +190,16 @@ int main()
     runtimeHeader << "    template <typename T> T readMmioExplicit(Address) { return {}; }\n";
     runtimeHeader << "    template <typename T> void writeMmioExplicit(Address, T) {}\n";
     runtimeHeader << "    void callBiosSyscall(u32, const u32*, std::size_t) {}\n";
+    runtimeHeader << "    void callBiosVector(u32, u32*, std::size_t) {}\n";
     runtimeHeader << "    void callGpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
     runtimeHeader << "    void setDiscSwapInfo(const DiscSwapInfo&) {}\n";
     runtimeHeader << "    void setAutoFrameProgressOnInterruptPoll(bool) {}\n";
+    runtimeHeader << "    void setVsyncCounterAddress(Address) {}\n";
+    runtimeHeader << "    void setDrawSyncBusyAddress(Address) {}\n";
+    runtimeHeader << "    u32 frameCount() const { return 0; }\n";
+    runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
@@ -207,6 +214,7 @@ int main()
     harnessFile << "int main() {\n";
     harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
     harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
+    harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
     harnessFile << "  return 0;\n";
     harnessFile << "}\n";

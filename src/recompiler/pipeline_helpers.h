@@ -42,6 +42,35 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
                               const std::string& outputDir, const std::string& timestamp,
                               const std::string& pipelineVersion);
 
+/**
+ * @brief Write generated source artifacts and export ISO resources.
+ *
+ * @param result Pipeline result populated so far (artifacts are updated).
+ * @param outputDir Resolved output directory.
+ * @param moduleName Module identifier.
+ * @param header Generated header source.
+ * @param source Generated source source.
+ * @param runnerSource Generated runner source.
+ * @param buildFile Generated CMakeLists.txt content.
+ * @param activeDiscPath Path to the active disc image.
+ * @param inputFsPath Input path (used to decide whether to export resources).
+ * @param warnings Mutable warnings list.
+ * @param diagnostics Mutable diagnostics list.
+ * @param manifestTimestamp Override for manifest timestamp.
+ * @param pipelineVersion Pipeline version string.
+ * @param outError Error string on failure.
+ * @return true on success.
+ */
+bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& outputDir,
+                          const std::string& moduleName, const std::string& header,
+                          const std::string& source, const std::string& runnerSource,
+                          const std::string& buildFile, const std::string& activeDiscPath,
+                          const std::filesystem::path& inputFsPath,
+                          std::vector<std::string>& warnings,
+                          std::vector<PipelineDiagnostic>& diagnostics,
+                          const std::string& manifestTimestamp, const std::string& pipelineVersion,
+                          std::string& outError);
+
 } // namespace detail
 } // namespace recompiler
 } // namespace psxrecomp

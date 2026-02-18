@@ -22,7 +22,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         context.enableOptimizations = m_options.enableOptimizations;
 
         std::string functionName = uniquifyIdentifier(function.name, usedFunctionNames);
-        emitter.writeLine("void " + functionName + "(RecompilerContext& context)");
+        emitter.writeLine("void " + functionName +
+                          "(RecompilerContext& context, Address startAddress)");
         emitter.openBlock("");
         if (function.blocks.empty())
         {
@@ -65,6 +66,36 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         {
             emitter.writeLine("BlockId block = BlockId::" + blockIds.front() + ";");
         }
+
+        // Emit a startAddress → BlockId dispatch so that callers can enter
+        // this function at an arbitrary block (needed for JALR targets that
+        // point into the middle of a function).
+        if (function.blocks.size() > 1)
+        {
+            emitter.writeLine("if (startAddress != 0)");
+            emitter.openBlock("");
+            emitter.writeLine("Address physical = startAddress & 0x1FFFFFFF;");
+            emitter.writeLine("switch (physical)");
+            emitter.openBlock("");
+            for (size_t i = 0; i < function.blocks.size(); ++i)
+            {
+                const auto& blockName = function.blocks[i].name;
+                // Block names are formatted as "block_0x<hex_addr>"
+                if (blockName.size() > 8 && blockName.substr(0, 8) == "block_0x")
+                {
+                    const Address blockAddr =
+                        std::stoul(blockName.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+                    std::ostringstream caseLine;
+                    caseLine << "case 0x" << std::hex << blockAddr
+                             << ": block = BlockId::" << blockIds[i] << "; break;";
+                    emitter.writeLine(caseLine.str());
+                }
+            }
+            emitter.writeLine("default: break;");
+            emitter.closeBlock();
+            emitter.closeBlock();
+        }
+
         emitter.writeLine("BlockId previousBlock = block;");
         const auto indexMap = buildBlockIndex(function);
         const auto predecessors = buildPredecessors(function, indexMap);
@@ -78,6 +109,35 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             emitter.writeLine("case BlockId::" + blockIds[blockIndex] + ":");
             emitter.openBlock("");
             emitPhiAssignments(block, predecessors[blockIndex], blockNames, context, emitter);
+
+            // If this is the external barrier block, emit continuation dispatch
+            // instead of a plain return so execution resumes at the right block.
+            if (!block.continuations.empty())
+            {
+                bool first = true;
+                for (const auto& entry : block.continuations)
+                {
+                    std::string condition =
+                        "previousBlock == " + resolveBlockId(entry.first, blockNames);
+                    if (first)
+                    {
+                        emitter.openBlock("if (" + condition + ")");
+                        first = false;
+                    }
+                    else
+                    {
+                        emitter.openBlock("else if (" + condition + ")");
+                    }
+                    emitter.writeLine("block = " + resolveBlockId(entry.second, blockNames) + ";");
+                    emitter.writeLine("continue;");
+                    emitter.closeBlock();
+                }
+                // Fallback: if no continuation matches, return.
+                emitter.writeLine("return;");
+                emitter.closeBlock();
+                continue;
+            }
+
             for (const auto& instruction : block.instructions)
             {
                 if (instruction.opcode == ir::Opcode::PHI)
@@ -98,9 +158,21 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             {
                 if (!block.successors.empty())
                 {
+                    std::string resolvedSuccessor =
+                        resolveBlockId(block.successors.front(), blockNames);
+                    std::string currentBlockId = "BlockId::" + blockIds[blockIndex];
+
+                    // Detect self-loop: if the resolved successor is the current
+                    // block but a continuation block exists (next in sequence),
+                    // redirect to the continuation to prevent infinite self-loops.
+                    if (resolvedSuccessor == currentBlockId &&
+                        blockIndex + 1 < function.blocks.size())
+                    {
+                        resolvedSuccessor = "BlockId::" + blockIds[blockIndex + 1];
+                    }
+
                     emitter.writeLine("previousBlock = block;");
-                    emitter.writeLine(
-                        "block = " + resolveBlockId(block.successors.front(), blockNames) + ";");
+                    emitter.writeLine("block = " + resolvedSuccessor + ";");
                     emitter.writeLine("continue;");
                 }
                 else

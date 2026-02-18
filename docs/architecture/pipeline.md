@@ -91,7 +91,7 @@ Optional optimization passes:
 
 Generates readable C++ that preserves game behavior.
 
-Output structure:
+Output structure (illustrative pseudocode):
 ```cpp
 // Generated from GAME.EXE
 
@@ -149,11 +149,11 @@ system.write<u32>(a0 + 4, t1);
 
 Recompiled code calls into the runtime library for hardware access:
 
-- **GPU**: Graphics commands translated to OpenGL/Vulkan
-- **SPU**: Audio synthesis using modern APIs
-- **CD-ROM**: Disc I/O abstracted
-- **Controllers**: Input mapping to modern controllers
-- **Memory Cards**: Save data management
+- **GPU**: GP0/GP1 command decode and software rasterization reference path, with backend scaffolding for future API parity
+- **SPU**: Voice/decode/mix core with pluggable audio backend interface
+- **CD-ROM**: Command/data FIFO + DMA transport with baseline XA streaming controls
+- **Controllers**: Runtime input abstraction scaffolding
+- **Memory Cards**: Initialization stubs; sector I/O behavior still incomplete
 
 ## Challenges
 

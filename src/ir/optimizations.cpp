@@ -16,6 +16,8 @@ bool hasSideEffects(Opcode opcode)
     switch (opcode)
     {
     case Opcode::STORE:
+    case Opcode::STORE8:
+    case Opcode::STORE16:
     case Opcode::MMIO_STORE:
     case Opcode::CALL:
     case Opcode::SYSCALL:

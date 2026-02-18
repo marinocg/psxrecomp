@@ -233,12 +233,60 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             emitter.writeLine(dest + " = readMemory32(context.system, " + address + ");");
         }
         break;
+    case ir::Opcode::LOAD8:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty())
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string address = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine(dest + " = readMemory8s(context.system, " + address + ");");
+        }
+        break;
+    case ir::Opcode::LOAD8U:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty())
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string address = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine(dest + " = readMemory8(context.system, " + address + ");");
+        }
+        break;
+    case ir::Opcode::LOAD16:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty())
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string address = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine(dest + " = readMemory16s(context.system, " + address + ");");
+        }
+        break;
+    case ir::Opcode::LOAD16U:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty())
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string address = valueToExpr(instruction.inputs.front(), context);
+            emitter.writeLine(dest + " = readMemory16(context.system, " + address + ");");
+        }
+        break;
     case ir::Opcode::STORE:
         if (instruction.inputs.size() >= 2)
         {
             std::string address = valueToExpr(instruction.inputs[0], context);
             std::string value = valueToExpr(instruction.inputs[1], context);
             emitter.writeLine("writeMemory32(context.system, " + address + ", " + value + ");");
+        }
+        break;
+    case ir::Opcode::STORE8:
+        if (instruction.inputs.size() >= 2)
+        {
+            std::string address = valueToExpr(instruction.inputs[0], context);
+            std::string value = valueToExpr(instruction.inputs[1], context);
+            emitter.writeLine("writeMemory8(context.system, " + address + ", " + value + ");");
+        }
+        break;
+    case ir::Opcode::STORE16:
+        if (instruction.inputs.size() >= 2)
+        {
+            std::string address = valueToExpr(instruction.inputs[0], context);
+            std::string value = valueToExpr(instruction.inputs[1], context);
+            emitter.writeLine("writeMemory16(context.system, " + address + ", " + value + ");");
         }
         break;
     case ir::Opcode::MMIO_LOAD:
@@ -261,32 +309,66 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (!instruction.inputs.empty())
         {
             std::string cond = valueToExpr(instruction.inputs.front(), context);
+
+            // Detect self-loop spin-waits: on PSX, BEQ $zero,$zero,self is an
+            // IRQ-breakable spin-wait.  The IRQ handler modifies the return
+            // address so execution resumes at the next instruction.  In the
+            // recompiled code there is no real interrupt mechanism, so we
+            // replace the self-loop with an advanceFrame() call and fall
+            // through to the next sequential block (the "else" target or the
+            // block that follows in the enum).
+            auto isSelfLoop = [&](const std::string& successorName) -> bool
+            { return successorName == block.name; };
+
             if (block.successors.size() >= 2)
             {
-                emitter.openBlock("if (" + cond + ")");
-                emitter.writeLine("previousBlock = block;");
-                emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
-                                  ";");
-                emitter.writeLine("continue;");
-                emitter.closeBlock();
-                emitter.openBlock("else");
-                emitter.writeLine("previousBlock = block;");
-                emitter.writeLine("block = " + resolveBlockId(block.successors[1], blockNames) +
-                                  ";");
-                emitter.writeLine("continue;");
-                emitter.closeBlock();
+                bool takenIsSelf = isSelfLoop(block.successors[0]);
+                bool fallthroughIsSelf = isSelfLoop(block.successors[1]);
+
+                if (takenIsSelf && fallthroughIsSelf)
+                {
+                    // Both paths loop to self — unconditional spin-wait.
+                    // Emit advanceFrame() and fall through (handled by the
+                    // non-terminator successor logic in the outer loop).
+                    emitter.writeLine("context.system.advanceFrame();");
+                }
+                else
+                {
+                    // Normal branch (including conditional self-loops which are
+                    // regular loops handled by the outer while(true)/switch).
+                    emitter.openBlock("if (" + cond + ")");
+                    emitter.writeLine("previousBlock = block;");
+                    emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
+                                      ";");
+                    emitter.writeLine("continue;");
+                    emitter.closeBlock();
+                    emitter.openBlock("else");
+                    emitter.writeLine("previousBlock = block;");
+                    emitter.writeLine("block = " + resolveBlockId(block.successors[1], blockNames) +
+                                      ";");
+                    emitter.writeLine("continue;");
+                    emitter.closeBlock();
+                }
             }
             else if (block.successors.size() == 1)
             {
-                emitter.openBlock("if (" + cond + ")");
-                emitter.writeLine("previousBlock = block;");
-                emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
-                                  ";");
-                emitter.writeLine("continue;");
-                emitter.closeBlock();
-                emitter.openBlock("else");
-                emitter.writeLine("return;");
-                emitter.closeBlock();
+                if (isSelfLoop(block.successors[0]))
+                {
+                    // Single-successor self-loop — spin-wait.
+                    emitter.writeLine("context.system.advanceFrame();");
+                }
+                else
+                {
+                    emitter.openBlock("if (" + cond + ")");
+                    emitter.writeLine("previousBlock = block;");
+                    emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
+                                      ";");
+                    emitter.writeLine("continue;");
+                    emitter.closeBlock();
+                    emitter.openBlock("else");
+                    emitter.writeLine("return;");
+                    emitter.closeBlock();
+                }
             }
         }
         break;
@@ -302,17 +384,44 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                 sourcePc = sourceStream.str();
             }
-            emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
+            emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.writeLine("return;");
         }
         else if (!block.successors.empty())
         {
-            emitter.writeLine("previousBlock = block;");
-            emitter.writeLine("block = " + resolveBlockId(block.successors.front(), blockNames) +
-                              ";");
-            emitter.writeLine("continue;");
+            const std::string successor = resolveBlockId(block.successors.front(), blockNames);
+            if (successor.find("block_external") != std::string::npos &&
+                !instruction.inputs.empty() &&
+                instruction.inputs.front().kind == ir::ValueKind::ADDRESS)
+            {
+                // Tail-call: unconditional jump to an address outside this
+                // function.  Try intrinsic dispatch first (BIOS vectors,
+                // GPU/CDROM/SPU MMIO), then fall back to
+                // callRecompiledFunction.
+                std::string target = valueToExpr(instruction.inputs.front(), context);
+                std::string sourcePc = "0";
+                if (instruction.sourceAddress.has_value())
+                {
+                    std::ostringstream sourceStream;
+                    sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                    sourcePc = sourceStream.str();
+                }
+                emitter.openBlock("if (!callIntrinsic(context.system, " + target +
+                                  ", context.regs))");
+                emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
+                emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
+                emitter.closeBlock();
+                emitter.closeBlock();
+                emitter.writeLine("return;");
+            }
+            else
+            {
+                emitter.writeLine("previousBlock = block;");
+                emitter.writeLine("block = " + successor + ";");
+                emitter.writeLine("continue;");
+            }
         }
         break;
     case ir::Opcode::CALL:
@@ -326,7 +435,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                 sourcePc = sourceStream.str();
             }
-            emitter.openBlock("if (!callIntrinsic(context.system, " + target + "))");
+            emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();

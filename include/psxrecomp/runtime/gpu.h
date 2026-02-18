@@ -5,6 +5,7 @@
 
 #include <deque>
 #include <memory>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -39,6 +40,7 @@ class Gpu
 
     const std::vector<u32>& vramWords() const;
     const std::vector<u16>& frameBuffer() const;
+    std::vector<u16> frameBufferSnapshot() const;
     const std::vector<GpuCommand>& commandTrace() const;
     size_t malformedPacketCount() const;
 
@@ -49,6 +51,9 @@ class Gpu
 
     void tickGpu(u32 cycles);
     void tickDisplayLine();
+
+    /// Returns true when the GPU is in the active-display phase (not VBlank).
+    bool inActiveDisplay() const;
 
   private:
     static constexpr u32 STATUS_READY = 0x14802000;
@@ -134,10 +139,22 @@ class Gpu
     void updateStatusBits();
     void updateRendererState();
 
+    /// Display phase within a single frame.  VSync polls GPUSTAT to
+    /// detect VBlank boundaries, so we cycle through these states to
+    /// give the polling loop the transitions it expects.
+    enum class DisplayPhase : u8
+    {
+        ActiveDisplay, ///< bit 22=0, field=current
+        VBlankStart,   ///< bit 22=1, field=current  (entering VBlank)
+        VBlankEnd,     ///< bit 22=1, field=!current (field flips mid-VBlank)
+    };
+
     u32 m_status = 0;
     u32 m_readData = 0;
     u32 m_gpuCycles = 0;
     bool m_oddField = false;
+    DisplayPhase m_displayPhase = DisplayPhase::ActiveDisplay;
+    u8 m_phaseReadCount = 0; ///< GPUSTAT reads in current phase
 
     Registers m_registers;
     PacketState m_packet;
@@ -149,6 +166,7 @@ class Gpu
 
     std::vector<GpuCommand> m_commandTrace;
     size_t m_malformedPacketCount = 0;
+    mutable std::mutex m_rendererMutex;
 
     Backend m_backend = Backend::Software;
     std::unique_ptr<GpuRenderer> m_renderer = std::make_unique<SoftwareGpuRenderer>();

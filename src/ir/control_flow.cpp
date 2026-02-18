@@ -109,6 +109,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     }
 
     BasicBlock* currentBlock = nullptr;
+    std::unordered_set<Address> openedBlockStarts;
     for (size_t index = 0; index < instructions.size(); ++index)
     {
         const auto& instruction = instructions[index];
@@ -117,16 +118,17 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             continue;
         }
         Address address = *instruction.sourceAddress;
-        if (blockStarts.count(address) > 0)
+        if (blockStarts.count(address) > 0 && openedBlockStarts.count(address) == 0)
         {
-            result.function.blocks.push_back(BasicBlock{formatBlockName(address), {}, {}});
+            result.function.blocks.push_back(BasicBlock{formatBlockName(address), {}, {}, {}});
             currentBlock = &result.function.blocks.back();
             result.addressToBlockName[address] = currentBlock->name;
+            openedBlockStarts.insert(address);
         }
 
         if (currentBlock == nullptr)
         {
-            result.function.blocks.push_back(BasicBlock{"block_orphan", {}, {}});
+            result.function.blocks.push_back(BasicBlock{"block_orphan", {}, {}, {}});
             currentBlock = &result.function.blocks.back();
         }
 
@@ -140,6 +142,11 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
     }
 
     bool needsExternalBlock = false;
+    // Track continuations: predecessor block name → continuation block name.
+    // When a block jumps to an external address (outside this function),
+    // the continuation is the block at the next sequential address.
+    std::unordered_map<std::string, std::string> externalContinuations;
+
     for (auto& block : result.function.blocks)
     {
         if (block.instructions.empty())
@@ -159,7 +166,7 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             nextAddress = nextAddressIt->second;
         }
 
-        auto addSuccessor = [&](Address target)
+        auto addSuccessor = [&](Address target, bool recordContinuation = true)
         {
             auto successorIt = result.addressToBlockName.find(target);
             if (successorIt == result.addressToBlockName.end())
@@ -169,6 +176,19 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                               ExternalBlockName) == block.successors.end())
                 {
                     block.successors.push_back(ExternalBlockName);
+                }
+                // Record the continuation for this block: resume at the next
+                // sequential address after the external jump/call.
+                // For BRANCH taken targets that go external, we do NOT record
+                // a continuation — the branch transfers control entirely, so
+                // block_external should just return from the function.
+                if (recordContinuation && nextAddress.has_value())
+                {
+                    auto continuationIt = result.addressToBlockName.find(*nextAddress);
+                    if (continuationIt != result.addressToBlockName.end())
+                    {
+                        externalContinuations[block.name] = continuationIt->second;
+                    }
                 }
                 return;
             }
@@ -186,7 +206,11 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             auto target = extractTargetAddress(lastInstruction);
             if (target.has_value())
             {
-                addSuccessor(*target);
+                // The taken target of a BRANCH transfers control entirely.
+                // If it goes external, do NOT record a fallthrough continuation
+                // — block_external should return from the function instead of
+                // falling into the not-taken path.
+                addSuccessor(*target, /*recordContinuation=*/false);
             }
             else
             {
@@ -194,7 +218,10 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             }
             if (nextAddress.has_value())
             {
-                addSuccessor(*nextAddress);
+                // The fallthrough of a BRANCH also transfers control
+                // entirely (it is the not-taken path).  Do not record a
+                // continuation — block_external should return.
+                addSuccessor(*nextAddress, /*recordContinuation=*/false);
             }
             break;
         }
@@ -212,6 +239,15 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                               ExternalBlockName) == block.successors.end())
                 {
                     block.successors.push_back(ExternalBlockName);
+                }
+                // For indirect jumps, record continuation at next sequential address.
+                if (nextAddress.has_value())
+                {
+                    auto continuationIt = result.addressToBlockName.find(*nextAddress);
+                    if (continuationIt != result.addressToBlockName.end())
+                    {
+                        externalContinuations[block.name] = continuationIt->second;
+                    }
                 }
             }
             break;
@@ -234,7 +270,24 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
                         [](const BasicBlock& block) { return block.name == ExternalBlockName; });
         if (!hasExternalBlock)
         {
-            result.function.blocks.push_back(BasicBlock{ExternalBlockName, {}, {}});
+            BasicBlock externalBlock{ExternalBlockName, {}, {}, {}};
+            externalBlock.continuations = std::move(externalContinuations);
+            result.function.blocks.push_back(std::move(externalBlock));
+        }
+        else
+        {
+            // Merge continuations into existing external block.
+            for (auto& block : result.function.blocks)
+            {
+                if (block.name == ExternalBlockName)
+                {
+                    for (auto& entry : externalContinuations)
+                    {
+                        block.continuations[entry.first] = entry.second;
+                    }
+                    break;
+                }
+            }
         }
     }
 

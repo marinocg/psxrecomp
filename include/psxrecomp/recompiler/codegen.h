@@ -33,6 +33,12 @@ struct ModuleMetadata
     std::string discSetName;
     u32 activeDiscIndex = 0;
     Address entryAddress = 0;
+    u32 initialGp = 0;
+    u32 stackAddress = 0;
+    u32 stackSize = 0;
+    Address loadAddress = 0;
+    u32 loadSize = 0;
+    std::vector<u8> programData;
     std::vector<DiscEntry> discs;
     std::vector<std::string> warnings;
 };

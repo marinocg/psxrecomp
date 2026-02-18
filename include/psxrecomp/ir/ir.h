@@ -6,6 +6,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace psxrecomp
@@ -41,7 +42,13 @@ enum class Opcode
     COMPARE_GT,
     COMPARE_GE,
     LOAD,
+    LOAD8,
+    LOAD8U,
+    LOAD16,
+    LOAD16U,
     STORE,
+    STORE8,
+    STORE16,
     MMIO_LOAD,
     MMIO_STORE,
     BRANCH,
@@ -119,6 +126,12 @@ struct BasicBlock
     std::string name;
     std::vector<Instruction> instructions;
     std::vector<std::string> successors;
+
+    /// Maps predecessor block name → continuation block name.
+    /// Used by the "block_external" barrier so the code generator
+    /// knows where to resume execution after a call/jump that
+    /// leaves the current function.
+    std::unordered_map<std::string, std::string> continuations;
 
     std::string toString() const;
 };

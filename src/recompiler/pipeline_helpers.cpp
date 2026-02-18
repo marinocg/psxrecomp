@@ -113,6 +113,74 @@ std::string formatHex(u64 value, size_t width)
     return stream.str();
 }
 
+void appendManifestFunctions(std::ostringstream& stream, const PipelineResult& result)
+{
+    stream << "  \"functions\": [\n";
+    for (size_t i = 0; i < result.functions.size(); ++i)
+    {
+        const auto& functionInfo = result.functions[i];
+        stream << "    {\n";
+        stream << "      \"name\": \"" << escapeJson(functionInfo.name) << "\",\n";
+        stream << "      \"entryAddress\": \"0x" << formatHex(functionInfo.entryAddress, 8)
+               << "\",\n";
+        stream << "      \"endAddress\": \"0x" << formatHex(functionInfo.endAddress, 8) << "\",\n";
+        stream << "      \"hasPrologue\": " << (functionInfo.hasPrologue ? "true" : "false")
+               << ",\n";
+        stream << "      \"hasEpilogue\": " << (functionInfo.hasEpilogue ? "true" : "false")
+               << ",\n";
+        stream << "      \"directCalls\": [";
+        for (size_t callIndex = 0; callIndex < functionInfo.directCalls.size(); ++callIndex)
+        {
+            stream << "\"0x" << formatHex(functionInfo.directCalls[callIndex], 8) << "\"";
+            if (callIndex + 1 < functionInfo.directCalls.size())
+            {
+                stream << ", ";
+            }
+        }
+        stream << "],\n";
+        stream << "      \"indirectCallCount\": " << functionInfo.indirectCallCount << "\n";
+        stream << "    }";
+        if (i + 1 < result.functions.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ],\n";
+}
+
+void appendManifestDiagnostics(std::ostringstream& stream, const PipelineResult& result)
+{
+    stream << "  \"diagnostics\": [\n";
+    for (size_t i = 0; i < result.diagnostics.size(); ++i)
+    {
+        const auto& diag = result.diagnostics[i];
+        stream << "    {\n";
+        stream << "      \"code\": \"" << escapeJson(diag.code) << "\",\n";
+        stream << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
+        stream << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
+        stream << "      \"context\": {\n";
+        stream << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file)) << "\",\n";
+        stream << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
+        if (diag.context.offset.has_value())
+        {
+            stream << ",\n        \"offset\": " << diag.context.offset.value() << "\n";
+        }
+        else
+        {
+            stream << "\n";
+        }
+        stream << "      }\n";
+        stream << "    }";
+        if (i + 1 < result.diagnostics.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ]\n";
+}
+
 bool writeFile(const std::filesystem::path& path, const std::string& contents,
                std::string& outError)
 {
@@ -456,68 +524,120 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
         stream << "\n";
     }
     stream << "  ],\n";
-    stream << "  \"functions\": [\n";
-    for (size_t i = 0; i < result.functions.size(); ++i)
+    appendManifestFunctions(stream, result);
+    appendManifestDiagnostics(stream, result);
+    stream << "}\n";
+    return stream.str();
+}
+
+bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& outputDir,
+                          const std::string& moduleName, const std::string& header,
+                          const std::string& source, const std::string& runnerSource,
+                          const std::string& buildFile, const std::string& activeDiscPath,
+                          const std::filesystem::path& inputFsPath,
+                          std::vector<std::string>& warnings,
+                          std::vector<PipelineDiagnostic>& diagnostics,
+                          const std::string& manifestTimestamp, const std::string& pipelineVersion,
+                          std::string& outError)
+{
+    std::error_code dirError;
+    std::filesystem::create_directories(outputDir, dirError);
+    if (dirError)
     {
-        const auto& functionInfo = result.functions[i];
-        stream << "    {\n";
-        stream << "      \"name\": \"" << escapeJson(functionInfo.name) << "\",\n";
-        stream << "      \"entryAddress\": \"0x" << formatHex(functionInfo.entryAddress, 8)
-               << "\",\n";
-        stream << "      \"endAddress\": \"0x" << formatHex(functionInfo.endAddress, 8) << "\",\n";
-        stream << "      \"hasPrologue\": " << (functionInfo.hasPrologue ? "true" : "false")
-               << ",\n";
-        stream << "      \"hasEpilogue\": " << (functionInfo.hasEpilogue ? "true" : "false")
-               << ",\n";
-        stream << "      \"directCalls\": [";
-        for (size_t callIndex = 0; callIndex < functionInfo.directCalls.size(); ++callIndex)
-        {
-            stream << "\"0x" << formatHex(functionInfo.directCalls[callIndex], 8) << "\"";
-            if (callIndex + 1 < functionInfo.directCalls.size())
-            {
-                stream << ", ";
-            }
-        }
-        stream << "],\n";
-        stream << "      \"indirectCallCount\": " << functionInfo.indirectCallCount << "\n";
-        stream << "    }";
-        if (i + 1 < result.functions.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
+        outError = "Failed to create output directory: " + outputDir.string();
+        return false;
     }
-    stream << "  ],\n";
-    stream << "  \"diagnostics\": [\n";
-    for (size_t i = 0; i < result.diagnostics.size(); ++i)
+
+    PipelineArtifacts artifacts;
+    artifacts.moduleName = moduleName;
+    artifacts.headerPath = (outputDir / (moduleName + ".h")).string();
+    artifacts.sourcePath = (outputDir / (moduleName + ".cpp")).string();
+    const std::string runnerPath = (outputDir / (moduleName + "_runner.cpp")).string();
+    artifacts.buildPath = (outputDir / "CMakeLists.txt").string();
+    artifacts.manifestPath = (outputDir / "manifest.json").string();
+    artifacts.resourcesPath = (outputDir / "resources").string();
+    artifacts.runtimeIncludePath = (outputDir / "runtime" / "include").string();
+    artifacts.runtimeSourcePath = (outputDir / "runtime" / "src").string();
+
+    if (!writeFile(artifacts.headerPath, header, outError) ||
+        !writeFile(artifacts.sourcePath, source, outError) ||
+        !writeFile(runnerPath, runnerSource, outError) ||
+        !writeFile(artifacts.buildPath, buildFile, outError))
     {
-        const auto& diag = result.diagnostics[i];
-        stream << "    {\n";
-        stream << "      \"code\": \"" << escapeJson(diag.code) << "\",\n";
-        stream << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
-        stream << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
-        stream << "      \"context\": {\n";
-        stream << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file)) << "\",\n";
-        stream << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
-        if (diag.context.offset.has_value())
+        return false;
+    }
+
+    std::filesystem::path repoRoot = repositoryRootFromSourcePath(std::filesystem::path(__FILE__));
+    if (!copyDirectoryRecursive(repoRoot / "include" / "psxrecomp",
+                                std::filesystem::path(artifacts.runtimeIncludePath) / "psxrecomp",
+                                outError) ||
+        !copyDirectoryRecursive(repoRoot / "src" / "runtime", artifacts.runtimeSourcePath,
+                                outError))
+    {
+        return false;
+    }
+
+    if (isIsoLikePath(inputFsPath))
+    {
+        iso::IsoParser parser(activeDiscPath);
+        if (parser.open() && parser.isValid())
         {
-            stream << ",\n        \"offset\": " << diag.context.offset.value() << "\n";
+            std::filesystem::create_directories(artifacts.resourcesPath, dirError);
+            if (dirError)
+            {
+                outError = "Failed to create resources directory: " + artifacts.resourcesPath;
+                return false;
+            }
+            std::vector<std::pair<iso::ResourceType, std::string>> resourceTypes = {
+                {iso::ResourceType::TimTexture, "TIM"},
+                {iso::ResourceType::StrVideo, "STR"},
+                {iso::ResourceType::XaAudio, "XA"},
+            };
+            for (const auto& [type, label] : resourceTypes)
+            {
+                auto listed = parser.listResources(type);
+                for (const auto& resourcePath : listed)
+                {
+                    artifacts.exportedResources.push_back(resourcePath);
+                }
+                if (!parser.exportResources(type, artifacts.resourcesPath))
+                {
+                    warnings.push_back("Resource export reported errors for " + label + ".");
+                }
+            }
+            std::sort(artifacts.exportedResources.begin(), artifacts.exportedResources.end());
+            artifacts.exportedResources.erase(
+                std::unique(artifacts.exportedResources.begin(), artifacts.exportedResources.end()),
+                artifacts.exportedResources.end());
         }
         else
         {
-            stream << "\n";
+            for (const auto& error : parser.getErrors())
+            {
+                PipelineDiagnostic entry;
+                entry.code = "IsoParserError";
+                entry.severity = "error";
+                entry.message = "Resource export skipped: " + error;
+                entry.context.file = activeDiscPath;
+                diagnostics.push_back(entry);
+            }
+            warnings.push_back("Resource export skipped due to parser errors.");
         }
-        stream << "      }\n";
-        stream << "    }";
-        if (i + 1 < result.diagnostics.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
     }
-    stream << "  ]\n";
-    stream << "}\n";
-    return stream.str();
+
+    result.success = true;
+    result.artifacts = artifacts;
+    result.warnings = warnings;
+    result.diagnostics = diagnostics;
+
+    const std::string timestamp = buildTimestamp(manifestTimestamp);
+    const std::string manifest =
+        serializeManifest(result, activeDiscPath, outputDir.string(), timestamp, pipelineVersion);
+    if (!writeFile(artifacts.manifestPath, manifest, outError))
+    {
+        return false;
+    }
+    return true;
 }
 
 } // namespace detail

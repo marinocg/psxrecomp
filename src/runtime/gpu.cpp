@@ -2,6 +2,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <mutex>
+#include <string>
 
 namespace psxrecomp
 {
@@ -28,6 +32,8 @@ void Gpu::reset()
     m_readData = 0;
     m_gpuCycles = 0;
     m_oddField = false;
+    m_displayPhase = DisplayPhase::ActiveDisplay;
+    m_phaseReadCount = 0;
     m_registers = {};
     m_fifo.clear();
     m_vram.assign(VramWordCount, 0);
@@ -36,8 +42,11 @@ void Gpu::reset()
     m_packet = {};
     m_malformedPacketCount = 0;
     selectBackend(m_backend);
-    m_referenceRenderer.reset();
-    updateRendererState();
+    {
+        std::lock_guard<std::mutex> lock(m_rendererMutex);
+        m_referenceRenderer.reset();
+        updateRendererState();
+    }
     updateStatusBits();
 }
 
@@ -130,6 +139,12 @@ const std::vector<u16>& Gpu::frameBuffer() const
     return m_renderer->frameBuffer();
 }
 
+std::vector<u16> Gpu::frameBufferSnapshot() const
+{
+    std::lock_guard<std::mutex> lock(m_rendererMutex);
+    return m_renderer->frameBuffer();
+}
+
 const std::vector<GpuCommand>& Gpu::commandTrace() const
 {
     return m_commandTrace;
@@ -142,11 +157,13 @@ size_t Gpu::malformedPacketCount() const
 
 FrameComparison Gpu::compareCurrentFrameWithReference() const
 {
+    std::lock_guard<std::mutex> lock(m_rendererMutex);
     return compareFrames(m_renderer->frameBuffer(), m_referenceRenderer.frameBuffer());
 }
 
 void Gpu::selectBackend(Backend backend)
 {
+    std::lock_guard<std::mutex> lock(m_rendererMutex);
     m_backend = backend;
     if (backend == Backend::Software)
     {
@@ -191,12 +208,41 @@ void Gpu::tickGpu(u32 cycles)
 
 void Gpu::tickDisplayLine()
 {
-    if (m_registers.interlaced)
+    // Advance through a three-phase VBlank model so that PSn00bSDK
+    // VSync sees the correct bit-22 / bit-31 transitions:
+    //
+    //   ActiveDisplay  → VBlankStart  (bit 22 goes high)
+    //   VBlankStart    → VBlankEnd    (bit 31 flips — field changes)
+    //   VBlankEnd      → ActiveDisplay (bit 22 goes low, next frame)
+    //
+    // Each call to tickDisplayLine() advances one phase.  runFrame()
+    // calls this once, but we also expose it so the GPUSTAT polling
+    // path can step through the sub-frame phases.
+    switch (m_displayPhase)
     {
+    case DisplayPhase::ActiveDisplay:
+        m_displayPhase = DisplayPhase::VBlankStart;
+        break;
+    case DisplayPhase::VBlankStart:
+        // The field toggles in the middle of VBlank, which is exactly
+        // what VSync Phase 3 (BGEZ loop) waits for.
         m_oddField = !m_oddField;
+        m_displayPhase = DisplayPhase::VBlankEnd;
+        break;
+    case DisplayPhase::VBlankEnd:
+        m_displayPhase = DisplayPhase::ActiveDisplay;
+        break;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_rendererMutex);
         updateRendererState();
     }
     updateStatusBits();
+}
+
+bool Gpu::inActiveDisplay() const
+{
+    return m_displayPhase == DisplayPhase::ActiveDisplay;
 }
 
 void Gpu::appendPacketWord(bool fromGp1, u32 value)
@@ -231,6 +277,25 @@ void Gpu::processPacket(const PacketState& packet)
     const auto command = decodePacket(packet);
     applyRegisterEffects(command, m_registers);
 
+    // Debug: log FillRectangle commands with decoded dimensions
+    if (command.kind == GpuCommandKind::FillRectangle && command.words.size() >= 3)
+    {
+        const u32 colorWord = command.words[0];
+        const u32 posWord = command.words[1];
+        const u32 sizeWord = command.words[2];
+        const s16 x = static_cast<s16>(posWord & 0xFFFF);
+        const s16 y = static_cast<s16>((posWord >> 16) & 0xFFFF);
+        const s16 w = static_cast<s16>(sizeWord & 0xFFFF);
+        const s16 h = static_cast<s16>((sizeWord >> 16) & 0xFFFF);
+        const u8 r = static_cast<u8>(colorWord & 0xFF);
+        const u8 g = static_cast<u8>((colorWord >> 8) & 0xFF);
+        const u8 b = static_cast<u8>((colorWord >> 16) & 0xFF);
+        std::fprintf(stderr,
+                     "[GPU] FillRectangle: color=(%u,%u,%u) pos=(%d,%d) size=(%d,%d) "
+                     "raw=[0x%08x,0x%08x,0x%08x]\n",
+                     r, g, b, x, y, w, h, colorWord, posWord, sizeWord);
+    }
+
     if (!command.fromGp1)
     {
         if (command.kind == GpuCommandKind::CpuToVramSetup)
@@ -261,9 +326,12 @@ void Gpu::processPacket(const PacketState& packet)
         }
     }
 
-    updateRendererState();
-    m_renderer->submit(command);
-    m_referenceRenderer.submit(command);
+    {
+        std::lock_guard<std::mutex> lock(m_rendererMutex);
+        updateRendererState();
+        m_renderer->submit(command);
+        m_referenceRenderer.submit(command);
+    }
     trimCommandTrace(m_commandTrace, MAX_COMMAND_TRACE);
     m_commandTrace.push_back(command);
     updateStatusBits();
@@ -278,10 +346,12 @@ void Gpu::updateStatusBits()
     constexpr u32 statusIrqRequest = 1u << 24;
     constexpr u32 statusDmaDirectionShift = 29;
     constexpr u32 statusInterlaceField = 1u << 31;
+    constexpr u32 statusDrawingEvenOdd = 1u << 22; // VBlank-in-progress flag
 
     constexpr u32 statusDynamicMask = statusReadyToReceiveCommand | statusReadyToSendToCpu |
                                       statusDmaRequest | statusDisplayDisable | statusIrqRequest |
-                                      (0x3u << statusDmaDirectionShift) | statusInterlaceField;
+                                      (0x3u << statusDmaDirectionShift) | statusInterlaceField |
+                                      statusDrawingEvenOdd;
     const u32 statusBase = STATUS_READY & ~statusDynamicMask;
 
     m_status = statusBase;
@@ -331,9 +401,19 @@ void Gpu::updateStatusBits()
         m_status |= statusDmaRequest;
     }
 
-    if (m_registers.interlaced && m_oddField)
+    // Bit 31 reflects the current odd/even field.  Always mirror
+    // m_oddField so that PSn00bSDK VSync can detect frame boundaries
+    // via XOR of consecutive GPUSTAT reads, even in progressive mode.
+    if (m_oddField)
     {
         m_status |= statusInterlaceField;
+    }
+
+    // Bit 22 indicates that the display is currently in VBlank.
+    // PSn00bSDK VSync Phase 1 polls this bit to know when VBlank starts.
+    if (m_displayPhase == DisplayPhase::VBlankStart || m_displayPhase == DisplayPhase::VBlankEnd)
+    {
+        m_status |= statusDrawingEvenOdd;
     }
 }
 

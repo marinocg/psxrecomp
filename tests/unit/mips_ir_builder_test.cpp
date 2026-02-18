@@ -105,14 +105,16 @@ int main()
         {
             foundSltu = true;
         }
-        if (instruction.opcode == Opcode::LOAD || instruction.opcode == Opcode::STORE)
+        if (instruction.opcode == Opcode::LOAD || instruction.opcode == Opcode::STORE ||
+            instruction.opcode == Opcode::LOAD8 || instruction.opcode == Opcode::LOAD8U ||
+            instruction.opcode == Opcode::LOAD16 || instruction.opcode == Opcode::LOAD16U ||
+            instruction.opcode == Opcode::STORE8 || instruction.opcode == Opcode::STORE16)
         {
             foundLoadStore = true;
         }
-        if (instruction.opcode == Opcode::SYSCALL && !instruction.inputs.empty() &&
-            instruction.inputs.front().kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
-            (static_cast<psxrecomp::u32>(instruction.inputs.front().immediate) & 0x1FFFFFFFu) ==
-                0xA0u)
+        if (instruction.opcode == Opcode::CALL && !instruction.inputs.empty() &&
+            instruction.inputs.front().kind == psxrecomp::ir::ValueKind::ADDRESS &&
+            (instruction.inputs.front().address & 0x1FFFFFFFu) == 0xA0u)
         {
             foundBiosSyscall = true;
         }

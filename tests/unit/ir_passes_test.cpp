@@ -4,7 +4,9 @@
 #include "psxrecomp/ir/verify.h"
 
 #include <cassert>
+#include <iostream>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 int main()
@@ -174,9 +176,9 @@ int main()
     using psxrecomp::ir::Function;
 
     Function phiMismatch{"phi_mismatch", 0x3000, {}};
-    phiMismatch.blocks.push_back(BasicBlock{"entry", {}, {"join"}});
-    phiMismatch.blocks.push_back(BasicBlock{"other", {}, {"join"}});
-    phiMismatch.blocks.push_back(BasicBlock{"join", {}, {}});
+    phiMismatch.blocks.push_back(BasicBlock{"entry", {}, {"join"}, {}});
+    phiMismatch.blocks.push_back(BasicBlock{"other", {}, {"join"}, {}});
+    phiMismatch.blocks.push_back(BasicBlock{"join", {}, {}, {}});
     phiMismatch.blocks[2].instructions.push_back(Instruction{
         Opcode::PHI, {Value::makeTemporary(1)}, {Value::makeTemporary(2)}, std::nullopt});
 
@@ -184,9 +186,9 @@ int main()
     assert(!phiVerify.success());
 
     Function undefinedPhi{"undefined_phi", 0x4000, {}};
-    undefinedPhi.blocks.push_back(BasicBlock{"entry", {}, {"join"}});
-    undefinedPhi.blocks.push_back(BasicBlock{"other", {}, {"join"}});
-    undefinedPhi.blocks.push_back(BasicBlock{"join", {}, {}});
+    undefinedPhi.blocks.push_back(BasicBlock{"entry", {}, {"join"}, {}});
+    undefinedPhi.blocks.push_back(BasicBlock{"other", {}, {"join"}, {}});
+    undefinedPhi.blocks.push_back(BasicBlock{"join", {}, {}, {}});
     undefinedPhi.blocks[2].instructions.push_back(
         Instruction{Opcode::PHI,
                     {Value::makeTemporary(99), Value::makeTemporary(98)},
@@ -197,7 +199,7 @@ int main()
     assert(!undefinedVerify.success());
 
     Function useBeforeDef{"use_before_def", 0x5000, {}};
-    useBeforeDef.blocks.push_back(BasicBlock{"entry", {}, {}});
+    useBeforeDef.blocks.push_back(BasicBlock{"entry", {}, {}, {}});
     useBeforeDef.blocks[0].instructions.push_back(
         Instruction{Opcode::ADD, {Value::makeTemporary(7)}, {Value::makeTemporary(1)}, 0x5000});
     useBeforeDef.blocks[0].instructions.push_back(
@@ -207,7 +209,7 @@ int main()
     assert(!useBeforeVerify.success());
 
     Function optimizations{"optimizations", 0x6000, {}};
-    optimizations.blocks.push_back(BasicBlock{"entry", {}, {}});
+    optimizations.blocks.push_back(BasicBlock{"entry", {}, {}, {}});
     optimizations.blocks[0].instructions.push_back(
         Instruction{Opcode::ADD,
                     {Value::makeImmediate(1), Value::makeImmediate(2)},
@@ -241,8 +243,8 @@ int main()
     assert(foundFolded);
 
     Function crossBlockDce{"cross_block_dce", 0x7000, {}};
-    crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}});
-    crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}});
+    crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}, {}});
+    crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}, {}});
     crossBlockDce.blocks[0].instructions.push_back(
         Instruction{Opcode::ADD,
                     {Value::makeImmediate(10), Value::makeImmediate(20)},
@@ -267,6 +269,88 @@ int main()
         }
     }
     assert(producerKept);
+
+    // Test: Multiple IR instructions at the same source address that is a
+    // block start should be placed in the SAME block (not split into
+    // separate blocks with duplicate names).  This mirrors the pattern
+    // produced by LW/SW translation: the IR emits ADD (address computation)
+    // + LOAD/STORE (memory access) both at the same MIPS address.
+    {
+        // Simulate: branch target at 0xA000, with two IR instructions at that
+        // address (ADD + LOAD), followed by a RETURN at 0xA004.
+        // A preceding block ends with a BRANCH that targets 0xA000.
+        std::vector<Instruction> dupAddrInstructions;
+        // Block entry at 0x9FF0: compare + branch to 0xA000 (creating a
+        // block start at 0xA000).
+        dupAddrInstructions.push_back(
+            makeInstruction(Opcode::COMPARE_EQ, {Value::makeRegister(r1), Value::makeImmediate(0)},
+                            {Value::makeTemporary(50)}, 0x9FF0));
+        dupAddrInstructions.push_back(makeInstruction(
+            Opcode::BRANCH, {Value::makeTemporary(50), Value::makeAddress(0xA000)}, {}, 0x9FF4));
+        // Fallthrough block at 0x9FF8 just returns.
+        dupAddrInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x9FF8));
+        // Block at 0xA000 with TWO instructions at the same address
+        // (like LW translation: ADD then LOAD), followed by RETURN at
+        // a different address that forces a new block boundary.
+        dupAddrInstructions.push_back(
+            makeInstruction(Opcode::ADD, {Value::makeRegister(r1), Value::makeImmediate(100)},
+                            {Value::makeTemporary(51)}, 0xA000));
+        dupAddrInstructions.push_back(makeInstruction(Opcode::LOAD, {Value::makeTemporary(51)},
+                                                      {Value::makeRegister(r2)}, 0xA000));
+        dupAddrInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0xA004));
+
+        ControlFlowBuildResult dupAddrCfg =
+            psxrecomp::ir::buildControlFlowFunction("dup_addr", 0x9FF0, dupAddrInstructions);
+        assert(dupAddrCfg.errors.empty());
+
+        // The block at 0xA000 should contain BOTH the ADD and LOAD
+        // (not split into two blocks with the same name).
+        bool foundBlockA000 = false;
+        for (const auto& block : dupAddrCfg.function.blocks)
+        {
+            if (block.name == "block_0xa000")
+            {
+                foundBlockA000 = true;
+                // Must contain at least 2 instructions starting with ADD + LOAD.
+                assert(block.instructions.size() >= 2);
+                assert(block.instructions[0].opcode == Opcode::ADD);
+                assert(block.instructions[1].opcode == Opcode::LOAD);
+                // Successor should NOT be block_external.
+                bool hasExternalSuccessor = false;
+                for (const auto& successor : block.successors)
+                {
+                    if (successor == "block_external")
+                    {
+                        hasExternalSuccessor = true;
+                    }
+                }
+                assert(!hasExternalSuccessor);
+                break;
+            }
+        }
+        assert(foundBlockA000);
+
+        // There should be NO block_external block at all.
+        bool hasExternalBlock = false;
+        for (const auto& block : dupAddrCfg.function.blocks)
+        {
+            if (block.name == "block_external")
+            {
+                hasExternalBlock = true;
+            }
+        }
+        assert(!hasExternalBlock);
+
+        // Should not have any duplicate block names.
+        std::unordered_set<std::string> blockNamesSet;
+        for (const auto& block : dupAddrCfg.function.blocks)
+        {
+            assert(blockNamesSet.count(block.name) == 0);
+            blockNamesSet.insert(block.name);
+        }
+
+        std::cerr << "[PASS] Duplicate-address block merging\n";
+    }
 
     return 0;
 }

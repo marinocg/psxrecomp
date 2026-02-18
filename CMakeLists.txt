@@ -84,6 +84,8 @@ set(IR_SOURCES
 
 set(RECOMPILER_SOURCES
     src/recompiler/codegen.cpp
+    src/recompiler/codegen_build.cpp
+    src/recompiler/codegen_runner.cpp
     src/recompiler/codegen_lowering.cpp
     src/recompiler/codegen_lowering_helpers.cpp
     src/recompiler/codegen_lowering_instructions.cpp
@@ -105,6 +107,7 @@ set(RUNTIME_SOURCES
     src/runtime/interrupt_controller.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
+    src/runtime/psx_system_bios.cpp
     src/runtime/psx_system_mmio.cpp
     src/runtime/psx_system_dma.cpp
     src/runtime/resource_pack.cpp
@@ -272,6 +275,43 @@ if(BUILD_TESTS)
     )
     target_include_directories(pipeline_candidate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME pipeline_candidate_test COMMAND pipeline_candidate_test)
+
+    add_executable(codegen_lowering_test
+        tests/unit/codegen_lowering_test.cpp
+        ${IR_SOURCES}
+        ${DISASM_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${ISO_SOURCES}
+    )
+    target_include_directories(codegen_lowering_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME codegen_lowering_test COMMAND codegen_lowering_test)
+
+    add_executable(codegen_metadata_test
+        tests/unit/codegen_metadata_test.cpp
+        ${IR_SOURCES}
+        ${DISASM_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${ISO_SOURCES}
+    )
+    target_include_directories(codegen_metadata_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME codegen_metadata_test COMMAND codegen_metadata_test)
+
+    add_executable(bios_vector_test
+        tests/unit/bios_vector_test.cpp
+        ${RUNTIME_SOURCES}
+    )
+    target_include_directories(bios_vector_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME bios_vector_test COMMAND bios_vector_test)
+
+    add_executable(codegen_debug_test
+        tests/unit/codegen_debug_test.cpp
+        ${IR_SOURCES}
+        ${DISASM_SOURCES}
+        ${RECOMPILER_SOURCES}
+        ${ISO_SOURCES}
+    )
+    target_include_directories(codegen_debug_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME codegen_debug_test COMMAND codegen_debug_test)
 endif()
 
 # Examples

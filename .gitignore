@@ -99,3 +99,7 @@ docs/latex/
 
 # Misc
 .cache/
+
+__pycache__/
+docker-results/
+

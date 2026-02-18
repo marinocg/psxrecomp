@@ -19,10 +19,10 @@ This roadmap outlines the steps needed to implement the PSX SPU emulation layer 
 
 ## Phase 3: Timing & Accuracy
 - [ ] Model SPU timing and IRQ behavior.
-- [ ] Handle key-on/key-off and channel state transitions.
+- [x] Handle key-on/key-off and channel state transitions.
 - [ ] Validate against known SPU test ROMs.
 
 ## Phase 4: Validation & Testing
-- [ ] Add unit tests for ADPCM decoding.
+- [x] Add unit tests for ADPCM decoding.
 - [ ] Add regression tests for envelope edge cases.
 - [ ] Add audio output comparison tests.

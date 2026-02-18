@@ -1,5 +1,9 @@
 #include "psxrecomp/runtime/gpu.h"
 
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+
 namespace psxrecomp
 {
 namespace runtime
@@ -74,6 +78,11 @@ void Gpu::writeVramPixel(u16 x, u16 y, u16 value)
     }
 
     m_vram[wordIndex] = word;
+
+    // Mirror the write to both renderers so that texture data uploaded via
+    // CpuToVram is visible to the texture sampler / framebuffer dump.
+    m_renderer->writeVramPixel(wrappedX, wrappedY, writtenValue);
+    m_referenceRenderer.writeVramPixel(wrappedX, wrappedY, writtenValue);
 }
 
 void Gpu::beginCpuToVramTransfer(const PacketState& packet)
@@ -85,6 +94,15 @@ void Gpu::beginCpuToVramTransfer(const PacketState& packet)
 
     const auto [x, y] = decodeTransferPosition(packet.words[1]);
     const auto [width, height] = decodeTransferSize(packet.words[2]);
+
+    if (const char* env = std::getenv("PSXRECOMP_GPU_TRACE"); env && std::string(env) == "1")
+    {
+        std::fprintf(stderr,
+                     "[GPU] CpuToVram: pos=(%u,%u) size=(%u,%u) raw=[0x%08X, 0x%08X, 0x%08X] "
+                     "remainingWords=%zu\n",
+                     x, y, width, height, packet.words[0], packet.words[1], packet.words[2],
+                     transferWordCount(width, height));
+    }
 
     m_transferState = {
         TransferState::Mode::CpuToVram, x, y, width, height, 0, transferWordCount(width, height),
