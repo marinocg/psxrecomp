@@ -108,7 +108,14 @@ void Gpu::writeDma(u32 value)
     if (m_registers.dmaDirection == Registers::DmaDirection::CpuToGp0 ||
         m_registers.dmaDirection == Registers::DmaDirection::Fifo)
     {
-        writeCommand(value);
+        // DMA feeds can burst large linked lists. If FIFO saturates we still
+        // need to ingest command words so packet decoding stays in sync.
+        if (m_fifo.size() < MAX_FIFO_DEPTH)
+        {
+            m_fifo.push_back(value);
+        }
+        appendPacketWord(false, value);
+        updateStatusBits();
         return;
     }
 
@@ -180,9 +187,15 @@ void Gpu::selectBackend(Backend backend)
         applyRegisterEffects(command, replayRegisters);
         m_renderer->setInterlaced(replayRegisters.interlaced);
         m_renderer->setOddField(m_oddField);
-        m_renderer->setTexturePage(replayRegisters.texturePage);
-        m_renderer->setClut(replayRegisters.clut);
-        m_renderer->submit(command);
+        GpuCommand replayCommand = command;
+        replayCommand.texturePage = replayRegisters.texturePage;
+        replayCommand.clut = replayRegisters.clut;
+        if (!replayCommand.fromGp1 && replayCommand.kind == GpuCommandKind::DrawSprite &&
+            replayCommand.words.size() >= 3 && (replayCommand.opcode & 0x04u) != 0)
+        {
+            replayCommand.clut = static_cast<u16>((replayCommand.words[2] >> 16) & 0x7FFF);
+        }
+        m_renderer->submit(replayCommand);
     }
     updateRendererState();
 }
@@ -274,8 +287,15 @@ void Gpu::appendPacketWord(bool fromGp1, u32 value)
 
 void Gpu::processPacket(const PacketState& packet)
 {
-    const auto command = decodePacket(packet);
+    GpuCommand command = decodePacket(packet);
     applyRegisterEffects(command, m_registers);
+    command.texturePage = m_registers.texturePage;
+    command.clut = m_registers.clut;
+    if (!command.fromGp1 && command.kind == GpuCommandKind::DrawSprite &&
+        command.words.size() >= 3 && (command.opcode & 0x04u) != 0)
+    {
+        command.clut = static_cast<u16>((command.words[2] >> 16) & 0x7FFF);
+    }
 
     // Debug: log FillRectangle commands with decoded dimensions
     if (command.kind == GpuCommandKind::FillRectangle && command.words.size() >= 3)

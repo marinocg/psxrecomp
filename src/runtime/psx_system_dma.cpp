@@ -53,6 +53,34 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     if (!fromRam)
     {
         const u32 syncMode = (channel.channelControl >> DMA_SYNC_MODE_SHIFT) & DMA_SYNC_MODE_MASK;
+        if (port == DmaPort::Otc)
+        {
+            const u32 wordCount = normalTransferWordCount(channel, syncMode);
+            if (wordCount == 0)
+            {
+                m_dma.clearTrigger(port);
+                return;
+            }
+
+            Address current = channel.baseAddress & 0x1FFFFC;
+            for (u32 i = 0; i < wordCount; ++i)
+            {
+                const bool last = (i + 1) == wordCount;
+                const u32 next = last ? DMA_LIST_END_MARKER
+                                      : static_cast<u32>(((current - sizeof(u32)) & 0x1FFFFC) &
+                                                         DMA_LIST_END_MARKER);
+                write<u32>(current, next);
+                current = (current - sizeof(u32)) & 0x1FFFFC;
+            }
+
+            transferredWords = wordCount;
+            m_dma.clearTrigger(port);
+            m_interrupts.raise(InterruptLine::Dma);
+            m_debugOverlay.incrementDmaTransfers();
+            m_debugOverlay.incrementInterruptsRaised();
+            return;
+        }
+
         if (syncMode == DMA_LINKED_LIST_MODE)
         {
             m_dma.clearTrigger(port);

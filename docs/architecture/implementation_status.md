@@ -110,6 +110,8 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - RAM init image emission so recompiled code starts with the correct memory contents.
 - Debug environment variables (`PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`) for runtime introspection.
 - Runner catch block now emits GPU command count, framebuffer pixel count, VRAM word count, command trace, and optional PPM framebuffer dump (`PSXRECOMP_DUMP_FRAMEBUFFER`).
+- Runner supports `PSXRECOMP_RENDER_DEBUG_OVERLAY=1` to composite the debug HUD into both live presentation and framebuffer dumps.
+- Runner now applies `PSXRECOMP_LOG_LEVEL` at runtime (`debug`/`info`/`warn`/`error` or `0..3`) so logger filtering matches user configuration.
 - Refactored codegen into focused modules: `codegen.cpp`, `codegen_build.cpp`, `codegen_runner.cpp`.
 
 **Missing**
@@ -124,6 +126,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
 - Structured runtime logging with per-category events and configurable verbosity.
 - Debug overlay counters for frame timing, DMA transfers, and interrupt activity.
+- Debug overlay text now includes FPS derived from the last frame cycle count.
 - Diagnostic memory dump support for RAM, VRAM, and SPU RAM plus save-state serialization/checksum.
 - Resource pack loader for runtime assets (textures/audio/movie payload containers).
 - BIOS vector framework (`callBiosVector`) handling A0/B0/C0 vectors with 50 implemented functions (16 A0, 23 B0, 11 C0).
@@ -154,6 +157,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Pluggable GPU renderer interface with software and semi-accurate backend scaffolding.
 - Runtime backend switching and frame comparison helpers for validation workflows.
 - Software renderer now covers texture sampling modes (4/8/16-bit), CLUT lookups, texture page selection, semi-transparency modes, mask-bit behavior, dithering toggles, and color modulation paths.
+- Runtime GPU fixes now include DMA6 OTC ordering-table clear, correct GP0 packet lengths for key primitive families, sprite opcode coverage for `0x74-0x77`/`0x7C-0x7F` (SPRT_8/SPRT_16), per-command texture/clut state snapshots, and raw-VRAM-backed texture/CLUT sampling.
 - Conformance unit coverage now exercises Phase 3 primitive/effect behavior including degenerate lines, quad decomposition, clip/offset rules, texturing, blending, and mask interactions.
 - DMA direction-aware GPU ingestion plus GPU linked-list DMA path handling in runtime DMA transfers.
 - Exhaustive decoder tests now cover valid and malformed GP0/GP1 command packet streams.

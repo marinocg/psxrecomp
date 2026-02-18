@@ -121,7 +121,7 @@ int main()
             }
             else if (opcode == 0x40)
             {
-                writePacket(gpu, {0x40000000u, 0x00000000u, 0x00010001u, 0x0u});
+                writePacket(gpu, {0x40000000u, 0x00000000u, 0x00010001u});
             }
             else if (opcode == 0x58)
             {

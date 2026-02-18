@@ -53,6 +53,7 @@ s16 signExtend11(u16 value)
 void SoftwareGpuRenderer::reset()
 {
     std::fill(m_frameBuffer.begin(), m_frameBuffer.end(), 0);
+    std::fill(m_vramRaw.begin(), m_vramRaw.end(), 0);
     m_interlaced = false;
     m_oddField = false;
     m_texturePage = 0;
@@ -75,6 +76,11 @@ void SoftwareGpuRenderer::submit(const GpuCommand& command)
     {
         return;
     }
+
+    // Bind per-command snapshots so texture state cannot be affected by
+    // interleaved command streams.
+    m_texturePage = command.texturePage;
+    m_clut = command.clut;
 
     switch (command.kind)
     {
@@ -113,6 +119,7 @@ void SoftwareGpuRenderer::submit(const GpuCommand& command)
                 {
                     const size_t index = static_cast<size_t>(py) * Width + static_cast<size_t>(px);
                     m_frameBuffer[index] = color;
+                    m_vramRaw[index] = color;
                 }
             }
         }
@@ -187,7 +194,8 @@ void SoftwareGpuRenderer::writeVramPixel(u16 x, u16 y, u16 value)
     const u16 wrappedX = static_cast<u16>(x % Width);
     const u16 wrappedY = static_cast<u16>(y % Height);
     const size_t index = static_cast<size_t>(wrappedY) * Width + wrappedX;
-    m_frameBuffer[index] = value;
+    m_vramRaw[index] = value;
+    m_frameBuffer[index] = static_cast<u16>(value & 0x7FFFu);
 }
 
 void SoftwareGpuRenderer::fillRect(s32 x, s32 y, u16 width, u16 height, u16 color, bool transparent,
@@ -270,10 +278,34 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
     const bool textured = (command.opcode & 0x04) != 0;
     const bool transparent = hasSemiTransparency(command);
     const auto pos = applyDrawOffset(decodeVertex(command.words[1]));
-    const size_t sizeWordIndex = command.words.size() >= 4 ? 3u : 2u;
-    const auto size = decodeVertex(command.words[sizeWordIndex]);
-    const u16 width = static_cast<u16>(std::max<s16>(1, size.x));
-    const u16 height = static_cast<u16>(std::max<s16>(1, size.y));
+    u16 width = 1;
+    u16 height = 1;
+    if (command.opcode >= 0x74 && command.opcode <= 0x77)
+    {
+        width = 8;
+        height = 8;
+    }
+    else if (command.opcode >= 0x70 && command.opcode <= 0x73)
+    {
+        width = 8;
+        height = 8;
+    }
+    else if (command.opcode >= 0x7C && command.opcode <= 0x7F)
+    {
+        width = 16;
+        height = 16;
+    }
+    else if (command.opcode >= 0x78 && command.opcode <= 0x7B)
+    {
+        width = 16;
+        height = 16;
+    }
+    else if (command.words.size() >= 4)
+    {
+        const auto size = decodeVertex(command.words[3]);
+        width = static_cast<u16>(std::max<s16>(1, size.x));
+        height = static_cast<u16>(std::max<s16>(1, size.y));
+    }
 
     const u8 baseU = static_cast<u8>(command.words.size() > 2 ? command.words[2] & 0xFF : 0);
     const u8 baseV = static_cast<u8>(command.words.size() > 2 ? (command.words[2] >> 8) & 0xFF : 0);

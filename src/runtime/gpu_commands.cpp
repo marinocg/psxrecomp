@@ -15,57 +15,96 @@ bool isOpcodeInRange(u8 opcode, u8 low, u8 high)
 
 size_t Gpu::expectedGp0Words(u8 opcode) const
 {
+    // Command lengths per PSX-SPX / nocash PSX specs.
     if (opcode == 0x00 || opcode == 0x01 || opcode == 0x1F)
     {
         return 1;
     }
-
-    if (opcode == 0x02 || isOpcodeInRange(opcode, 0x60, 0x63))
+    if (opcode == 0x02)
     {
         return 3;
     }
 
-    if (isOpcodeInRange(opcode, 0x20, 0x23) || isOpcodeInRange(opcode, 0x40, 0x47) ||
-        isOpcodeInRange(opcode, 0x64, 0x67))
+    // Triangles
+    if (isOpcodeInRange(opcode, 0x20, 0x23))
     {
         return 4;
     }
-
-    if (opcode == 0xA0 || opcode == 0xC0 || opcode == 0x80)
+    if (isOpcodeInRange(opcode, 0x24, 0x27))
     {
-        return 3 + (opcode == 0x80 ? 1 : 0);
+        return 7;
     }
-
-    if (isOpcodeInRange(opcode, 0x28, 0x2B) || isOpcodeInRange(opcode, 0x50, 0x57))
-    {
-        return 5;
-    }
-
     if (isOpcodeInRange(opcode, 0x30, 0x33))
     {
         return 6;
     }
-
-    if (isOpcodeInRange(opcode, 0x24, 0x27) || isOpcodeInRange(opcode, 0x34, 0x37))
+    if (isOpcodeInRange(opcode, 0x34, 0x37))
     {
-        return 7;
+        return 9;
     }
 
+    // Quads
+    if (isOpcodeInRange(opcode, 0x28, 0x2B))
+    {
+        return 5;
+    }
+    if (isOpcodeInRange(opcode, 0x2C, 0x2F))
+    {
+        return 9;
+    }
     if (isOpcodeInRange(opcode, 0x38, 0x3B))
     {
         return 8;
     }
-
-    if (isOpcodeInRange(opcode, 0x2C, 0x2F) || isOpcodeInRange(opcode, 0x3C, 0x3F))
+    if (isOpcodeInRange(opcode, 0x3C, 0x3F))
     {
-        return 9;
+        return 12;
+    }
+
+    // Lines
+    if (isOpcodeInRange(opcode, 0x40, 0x47))
+    {
+        return 3;
+    }
+    if (isOpcodeInRange(opcode, 0x50, 0x57))
+    {
+        return 4;
+    }
+
+    // Sprites
+    if (isOpcodeInRange(opcode, 0x64, 0x67))
+    {
+        return 4; // SPRT
+    }
+    if (isOpcodeInRange(opcode, 0x68, 0x6B) || isOpcodeInRange(opcode, 0x70, 0x73) ||
+        isOpcodeInRange(opcode, 0x78, 0x7B))
+    {
+        return 2; // DOT / SPRT_8 / SPRT_16 (monochrome)
+    }
+    if (isOpcodeInRange(opcode, 0x6C, 0x6F))
+    {
+        return 3; // DOT (textured)
+    }
+    if (isOpcodeInRange(opcode, 0x74, 0x77) || isOpcodeInRange(opcode, 0x7C, 0x7F) ||
+        isOpcodeInRange(opcode, 0x60, 0x63))
+    {
+        return 3; // SPRT_8 / SPRT_16 / variable-size monochrome
+    }
+
+    // Transfers
+    if (opcode == 0xA0 || opcode == 0xC0)
+    {
+        return 3;
+    }
+    if (opcode == 0x80)
+    {
+        return 4;
     }
 
     if (opcode >= 0xE1 && opcode <= 0xE6)
     {
         return 1;
     }
-
     return 1;
 }
 
@@ -88,7 +127,7 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
             }
             break;
         case GpuCommandKind::DrawSprite:
-            if (command.words.size() > 3 && isOpcodeInRange(command.opcode, 0x64, 0x67))
+            if (command.words.size() >= 3 && (command.opcode & 0x04u) != 0)
             {
                 registers.clut = static_cast<u16>((command.words[2] >> 16) & 0x7FFF);
             }
@@ -256,7 +295,7 @@ GpuCommand Gpu::decodePacket(const PacketState& packet) const
     {
         command.kind = GpuCommandKind::DrawPolyline;
     }
-    else if (isOpcodeInRange(packet.opcode, 0x60, 0x67))
+    else if (isOpcodeInRange(packet.opcode, 0x60, 0x7F))
     {
         command.kind = GpuCommandKind::DrawSprite;
     }

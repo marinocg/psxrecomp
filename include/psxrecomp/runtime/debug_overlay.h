@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace psxrecomp
 {
@@ -24,6 +26,7 @@ class RuntimeDebugOverlay
 
     void setLastProgramCounter(uint32_t pc);
     std::string renderText() const;
+    void drawOnFrameBuffer(std::vector<uint16_t>& framebuffer, size_t width, size_t height) const;
 
   private:
     uint64_t m_frameCounter = 0;

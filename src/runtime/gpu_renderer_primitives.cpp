@@ -183,8 +183,8 @@ u16 SoftwareGpuRenderer::sampleTexture(u8 u, u8 v, u16 texturePage, u16 clut) co
     if (textureDepthBits == 2)
     {
         const u16 texX = static_cast<u16>(pageX + adjustedU);
-        return m_frameBuffer[static_cast<size_t>(wrapCoord(texY, Height)) * Width +
-                             wrapCoord(texX, Width)] &
+        return m_vramRaw[static_cast<size_t>(wrapCoord(texY, Height)) * Width +
+                         wrapCoord(texX, Width)] &
                0x7FFF;
     }
 
@@ -193,16 +193,16 @@ u16 SoftwareGpuRenderer::sampleTexture(u8 u, u8 v, u16 texturePage, u16 clut) co
     if (textureDepthBits == 0)
     {
         const u16 packedX = static_cast<u16>(pageX + (adjustedU >> 2));
-        packedWord = m_frameBuffer[static_cast<size_t>(wrapCoord(texY, Height)) * Width +
-                                   wrapCoord(packedX, Width)];
+        packedWord = m_vramRaw[static_cast<size_t>(wrapCoord(texY, Height)) * Width +
+                               wrapCoord(packedX, Width)];
         const u8 shift = static_cast<u8>((adjustedU & 0x3u) * 4u);
         index = static_cast<u16>((packedWord >> shift) & 0xFu);
     }
     else
     {
         const u16 packedX = static_cast<u16>(pageX + (adjustedU >> 1));
-        packedWord = m_frameBuffer[static_cast<size_t>(wrapCoord(texY, Height)) * Width +
-                                   wrapCoord(packedX, Width)];
+        packedWord = m_vramRaw[static_cast<size_t>(wrapCoord(texY, Height)) * Width +
+                               wrapCoord(packedX, Width)];
         const u8 shift = static_cast<u8>((adjustedU & 0x1u) * 8u);
         index = static_cast<u16>((packedWord >> shift) & 0xFFu);
     }
@@ -210,8 +210,8 @@ u16 SoftwareGpuRenderer::sampleTexture(u8 u, u8 v, u16 texturePage, u16 clut) co
     const u16 clutX = static_cast<u16>((clut & 0x3F) * 16);
     const u16 clutY = static_cast<u16>((clut >> 6) & 0x1FF);
     const u16 lookupX = static_cast<u16>(clutX + index);
-    return m_frameBuffer[static_cast<size_t>(wrapCoord(clutY, Height)) * Width +
-                         wrapCoord(lookupX, Width)] &
+    return m_vramRaw[static_cast<size_t>(wrapCoord(clutY, Height)) * Width +
+                     wrapCoord(lookupX, Width)] &
            0x7FFF;
 }
 
@@ -292,6 +292,7 @@ void SoftwareGpuRenderer::writePixel(s16 x, s16 y, u16 color, bool transparent, 
     }
 
     m_frameBuffer[index] = output;
+    m_vramRaw[index] = output;
 }
 
 } // namespace runtime

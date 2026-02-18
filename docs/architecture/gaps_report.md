@@ -44,6 +44,7 @@ master roadmap.
 - Generated C++ is now structured and buildable with bundled runtime code; block-external continuation dispatch, self-loop prevention, register init (SP/GP/FP/RA), and RAM init image emission are all in place.
 - Debug environment variables (`PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`) allow runtime introspection of generated binaries.
 - Runner catch block now reports GPU command count, framebuffer pixel stats, and optional PPM framebuffer dump for post-mortem analysis.
+- Frame presenter/dump path now supports `PSXRECOMP_RENDER_DEBUG_OVERLAY=1` for HUD compositing (including FPS), and runtime logger filtering honors `PSXRECOMP_LOG_LEVEL`.
 - ABI/calling-convention fidelity is still incomplete for complex binaries.
 - Inlining/regalloc-style hints and deeper code quality optimizations are limited.
 
@@ -57,7 +58,7 @@ master roadmap.
 
 ## GPU / SPU / CD-ROM (GPU ~76% / SPU ~45% / CD-ROM ~42%)
 
-- GPU: Phase 3 reference rasterization is now feature-complete (triangle/quad/line/sprite rules, clipping/offset/texture-window state, texture sampling, CLUT, blending, mask bits, and dithering paths). GP0(02h) Fill Rectangle now conforms to PSX-SPX: raw VRAM coordinates, no draw-area clipping, no mask-bit interaction. Timing/display synchronization and cross-emulator capture parity remain open.
+- GPU: Phase 3 reference rasterization is now feature-complete (triangle/quad/line/sprite rules, clipping/offset/texture-window state, texture sampling, CLUT, blending, mask bits, and dithering paths). GP0(02h) Fill Rectangle now conforms to PSX-SPX: raw VRAM coordinates, no draw-area clipping, no mask-bit interaction. Runtime command/transfer correctness now also covers DMA6 OTC ordering-table clear, fixed packet lengths for key GP0 primitive families, and deterministic per-command CLUT/TPAGE snapshots for sprite-heavy paths. Timing/display synchronization and cross-emulator capture parity remain open.
 - SPU: Phase 1-2 core path is implemented (voices, ADSR, decode, mixing, backend hookup), but timing/IRQ, XA decode handoff, and hardware-parity validation remain open.
 - CD-ROM: runtime command/data FIFOs, DMA transfer path, and baseline XA ReadN/ReadS streaming are implemented; timing fidelity, validation, and XA decode remain open.
 
