@@ -30,7 +30,7 @@ uint8_t glyphRow(char ch, int row)
     case 'B':
         return (row == 0 || row == 3 || row == 6) ? 0x1E : 0x11;
     case 'C':
-        return (row == 0 || row == 6) ? 0x0E : (row >= 1 && row <= 5) ? 0x11 : 0x00;
+        return (row == 0 || row == 6) ? 0x0E : (row >= 1 && row <= 5) ? 0x10 : 0x00;
     case 'D':
         return (row == 0 || row == 6) ? 0x1E : 0x11;
     case 'E':
@@ -39,6 +39,8 @@ uint8_t glyphRow(char ch, int row)
         return (row == 0 || row == 3) ? 0x1F : (row == 6) ? 0x10 : 0x10;
     case 'I':
         return (row == 0 || row == 6) ? 0x1F : 0x04;
+    case 'L':
+        return (row == 6) ? 0x1F : 0x10;
     case 'M':
         return (row == 0) ? 0x11 : (row == 1) ? 0x1B : (row == 2) ? 0x15 : 0x11;
     case 'P':
@@ -49,6 +51,8 @@ uint8_t glyphRow(char ch, int row)
         return (row == 0 || row == 3) ? 0x1E : (row < 3) ? 0x11 : (row == 4) ? 0x12 : 0x11;
     case 'S':
         return (row == 0 || row == 3 || row == 6) ? 0x0F : (row < 3) ? 0x10 : 0x01;
+    case 'U':
+        return (row == 6) ? 0x0E : 0x11;
     case 'X':
         return (row == 0 || row == 6)   ? 0x11
                : (row == 1 || row == 5) ? 0x0A
