@@ -58,11 +58,11 @@ int main()
 
         u8* ram = system.getRam();
         // Place "hello" at offset 0x1000
-        std::strcpy(reinterpret_cast<char*>(ram + 0x1000), "hello");
+        std::memcpy(ram + 0x1000, "hello", sizeof("hello"));
         // Place "hello" at offset 0x2000
-        std::strcpy(reinterpret_cast<char*>(ram + 0x2000), "hello");
+        std::memcpy(ram + 0x2000, "hello", sizeof("hello"));
         // Place "world" at offset 0x3000
-        std::strcpy(reinterpret_cast<char*>(ram + 0x3000), "world");
+        std::memcpy(ram + 0x3000, "world", sizeof("world"));
 
         u32 regs[32] = {};
         regs[9] = 0x17;   // $t1 = function id (strcmp)
@@ -88,7 +88,7 @@ int main()
         assert(system.initialize());
 
         u8* ram = system.getRam();
-        std::strcpy(reinterpret_cast<char*>(ram + 0x5000), "psxrecomp");
+        std::memcpy(ram + 0x5000, "psxrecomp", sizeof("psxrecomp"));
         std::memset(ram + 0x6000, 0xFF, 20);
 
         u32 regs[32] = {};
@@ -251,7 +251,7 @@ int main()
         assert(system.initialize());
 
         u8* ram = system.getRam();
-        std::strcpy(reinterpret_cast<char*>(ram + 0xB000), "Hello BIOS!");
+        std::memcpy(ram + 0xB000, "Hello BIOS!", sizeof("Hello BIOS!"));
 
         bool logged = false;
         system.logger().setMinLevel(LogLevel::Info);

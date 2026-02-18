@@ -73,7 +73,6 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 current = (current - sizeof(u32)) & 0x1FFFFC;
             }
 
-            transferredWords = wordCount;
             m_dma.clearTrigger(port);
             m_interrupts.raise(InterruptLine::Dma);
             m_debugOverlay.incrementDmaTransfers();
