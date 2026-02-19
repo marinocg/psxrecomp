@@ -280,28 +280,26 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
     const auto pos = applyDrawOffset(decodeVertex(command.words[1]));
     u16 width = 1;
     u16 height = 1;
-    if (command.opcode >= 0x74 && command.opcode <= 0x77)
+    if (command.opcode >= 0x70 && command.opcode <= 0x77)
     {
         width = 8;
         height = 8;
     }
-    else if (command.opcode >= 0x70 && command.opcode <= 0x73)
-    {
-        width = 8;
-        height = 8;
-    }
-    else if (command.opcode >= 0x7C && command.opcode <= 0x7F)
+    else if (command.opcode >= 0x78 && command.opcode <= 0x7F)
     {
         width = 16;
         height = 16;
     }
-    else if (command.opcode >= 0x78 && command.opcode <= 0x7B)
+    else if (command.opcode >= 0x60 && command.opcode <= 0x63 && command.words.size() >= 3)
     {
-        width = 16;
-        height = 16;
+        // GP0(60h-63h): variable-size monochrome rectangle, size in word 2.
+        const auto size = decodeVertex(command.words[2]);
+        width = static_cast<u16>(std::max<s16>(1, size.x));
+        height = static_cast<u16>(std::max<s16>(1, size.y));
     }
-    else if (command.words.size() >= 4)
+    else if (command.opcode >= 0x64 && command.opcode <= 0x67 && command.words.size() >= 4)
     {
+        // GP0(64h-67h): variable-size textured sprite, size in word 3.
         const auto size = decodeVertex(command.words[3]);
         width = static_cast<u16>(std::max<s16>(1, size.x));
         height = static_cast<u16>(std::max<s16>(1, size.y));
