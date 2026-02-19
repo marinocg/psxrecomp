@@ -51,6 +51,9 @@ struct GpuCommand
     GpuCommandKind kind = GpuCommandKind::Unknown;
     u8 opcode = 0;
     bool fromGp1 = false;
+    // Snapshot state needed to render this command deterministically.
+    u16 texturePage = 0;
+    u16 clut = 0;
     std::vector<u32> words;
 };
 
@@ -143,6 +146,7 @@ class SoftwareGpuRenderer final : public GpuRenderer
     void applyTextureWindow(u32 value);
 
     std::vector<u16> m_frameBuffer = std::vector<u16>(static_cast<size_t>(Width) * Height, 0);
+    std::vector<u16> m_vramRaw = std::vector<u16>(static_cast<size_t>(Width) * Height, 0);
     bool m_interlaced = false;
     bool m_oddField = false;
     u16 m_texturePage = 0;

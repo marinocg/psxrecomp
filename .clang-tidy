@@ -5,7 +5,9 @@ Checks: >
   modernize-use-nullptr,
   modernize-use-override,
   readability-identifier-naming
-WarningsAsErrors: ''
+WarningsAsErrors: >
+  clang-analyzer-security.insecureAPI.strcpy,
+  clang-analyzer-deadcode.DeadStores
 HeaderFilterRegex: '.*'
 FormatStyle: file
 CheckOptions:

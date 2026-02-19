@@ -1,5 +1,8 @@
 # Build directories
 build/
+build-ci-lint/
+build-docker-check/
+build*/
 out/
 bin/
 lib/

@@ -12,6 +12,7 @@ namespace runtime
 namespace
 {
 constexpr u32 CYCLES_PER_FRAME = 564480;
+constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
 
 void appendU32(std::vector<u8>& out, u32 value)
 {
@@ -95,6 +96,11 @@ void PsxSystem::boot()
 
 void PsxSystem::runFrame()
 {
+    // Advance GPU command consumption so GPUSTAT ready/request bits evolve over time.
+    // Drain up to one full FIFO worth of words per frame (64 words, 2 cycles/word).
+    // Without this, a saturated FIFO can remain permanently "not ready", causing
+    // DrawSync/VSync-style polling loops in game code to spin forever.
+    m_gpu.tickGpu(GPU_FIFO_DRAIN_CYCLES_PER_FRAME);
     m_spu.tick(CYCLES_PER_FRAME);
     m_cdrom.tick(CYCLES_PER_FRAME);
     m_timers.tick(CYCLES_PER_FRAME,

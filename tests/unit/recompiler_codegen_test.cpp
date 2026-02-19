@@ -110,7 +110,9 @@ int main()
     assert(runner.find("#if defined(_WIN32)") != std::string::npos);
     assert(runner.find("Debug overlay") != std::string::npos);
     assert(runner.find("Last PC") != std::string::npos);
-    assert(runner.find("presentEnv[0] == '\\0'") != std::string::npos);
+    assert(runner.find("envFlagEnabled(presentEnv, defaultPresent)") != std::string::npos);
+    assert(runner.find("PSXRECOMP_RENDER_DEBUG_OVERLAY") != std::string::npos);
+    assert(runner.find("decodeLogLevel") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";

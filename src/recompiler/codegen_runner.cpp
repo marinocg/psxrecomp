@@ -16,6 +16,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("#include \"psxrecomp/types.h\"");
     emitter.writeLine("#include <atomic>");
     emitter.writeLine("#include <chrono>");
+    emitter.writeLine("#include <cctype>");
     emitter.writeLine("#include <cstdlib>");
     emitter.writeLine("#include <exception>");
     emitter.writeLine("#include <filesystem>");
@@ -63,10 +64,74 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("return out.good();");
     emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("bool envFlagEnabled(const char* value, bool defaultValue)");
+    emitter.openBlock("");
+    emitter.writeLine("if (value == nullptr || value[0] == '\\0')");
+    emitter.openBlock("");
+    emitter.writeLine("return defaultValue;");
+    emitter.closeBlock();
+    emitter.writeLine("std::string text(value);");
+    emitter.writeLine("for (char& ch : text)");
+    emitter.openBlock("");
+    emitter.writeLine("ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "return text == \"1\" || text == \"true\" || text == \"yes\" || text == \"on\";");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "psxrecomp::runtime::LogLevel decodeLogLevel(const std::string& raw, bool* ok)");
+    emitter.openBlock("");
+    emitter.writeLine("*ok = true;");
+    emitter.writeLine("std::string text(raw);");
+    emitter.writeLine(
+        "while (!text.empty() && std::isspace(static_cast<unsigned char>(text.front())))");
+    emitter.openBlock("");
+    emitter.writeLine("text.erase(text.begin());");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))");
+    emitter.openBlock("");
+    emitter.writeLine("text.pop_back();");
+    emitter.closeBlock();
+    emitter.writeLine("for (char& ch : text)");
+    emitter.openBlock("");
+    emitter.writeLine("ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "if (text == \"0\" || text == \"debug\") return psxrecomp::runtime::LogLevel::Debug;");
+    emitter.writeLine(
+        "if (text == \"1\" || text == \"info\") return psxrecomp::runtime::LogLevel::Info;");
+    emitter.writeLine("if (text == \"2\" || text == \"warn\" || text == \"warning\") return "
+                      "psxrecomp::runtime::LogLevel::Warn;");
+    emitter.writeLine(
+        "if (text == \"3\" || text == \"error\") return psxrecomp::runtime::LogLevel::Error;");
+    emitter.writeLine("*ok = false;");
+    emitter.writeLine("return psxrecomp::runtime::LogLevel::Info;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("const char* logLevelLabel(psxrecomp::runtime::LogLevel level)");
+    emitter.openBlock("");
+    emitter.writeLine("switch (level)");
+    emitter.openBlock("");
+    emitter.writeLine("case psxrecomp::runtime::LogLevel::Debug:");
+    emitter.writeLine("return \"debug\";");
+    emitter.writeLine("case psxrecomp::runtime::LogLevel::Info:");
+    emitter.writeLine("return \"info\";");
+    emitter.writeLine("case psxrecomp::runtime::LogLevel::Warn:");
+    emitter.writeLine("return \"warn\";");
+    emitter.writeLine("case psxrecomp::runtime::LogLevel::Error:");
+    emitter.writeLine("return \"error\";");
+    emitter.writeLine("default:");
+    emitter.writeLine("return \"info\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("bool presentFramebufferLive(psxrecomp::runtime::PsxSystem& system,");
-    emitter.writeLine("                          const std::atomic<bool>& stopRequested)");
+    emitter.writeLine("                          const std::atomic<bool>& stopRequested,");
+    emitter.writeLine("                          bool renderDebugOverlay)");
     emitter.openBlock("");
     emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
     emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
@@ -121,6 +186,10 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("if (framebuffer.size() < width * height)");
     emitter.openBlock("");
     emitter.writeLine("framebuffer.resize(width * height, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("if (renderDebugOverlay)");
+    emitter.openBlock("");
+    emitter.writeLine("system.debugOverlay().drawOnFrameBuffer(framebuffer, width, height);");
     emitter.closeBlock();
     emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
     emitter.openBlock("");
@@ -192,6 +261,10 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.openBlock("");
     emitter.writeLine("framebuffer.resize(width * height, 0);");
     emitter.closeBlock();
+    emitter.writeLine("if (renderDebugOverlay)");
+    emitter.openBlock("");
+    emitter.writeLine("system.debugOverlay().drawOnFrameBuffer(framebuffer, width, height);");
+    emitter.closeBlock();
     emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
     emitter.openBlock("");
     emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
@@ -225,6 +298,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("#else");
     emitter.writeLine("(void)system;");
     emitter.writeLine("(void)stopRequested;");
+    emitter.writeLine("(void)renderDebugOverlay;");
     emitter.writeLine("(void)rgb;");
     emitter.writeLine("return false;");
     emitter.writeLine("#endif");
@@ -258,6 +332,54 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("psxrecomp::runtime::PsxSystem system;");
     emitter.writeLine("std::atomic<bool> stopPresenter{false};");
     emitter.writeLine("std::thread presenterThread;");
+    emitter.writeLine("#if PSXRECOMP_ENABLE_LOGGING");
+    emitter.writeLine("psxrecomp::runtime::LogLevel defaultLogLevel = "
+                      "psxrecomp::runtime::LogLevel::Info;");
+    emitter.writeLine("switch (PSXRECOMP_LOG_LEVEL)");
+    emitter.openBlock("");
+    emitter.writeLine("case 0:");
+    emitter.writeLine("defaultLogLevel = psxrecomp::runtime::LogLevel::Debug;");
+    emitter.writeLine("break;");
+    emitter.writeLine("case 1:");
+    emitter.writeLine("defaultLogLevel = psxrecomp::runtime::LogLevel::Info;");
+    emitter.writeLine("break;");
+    emitter.writeLine("case 2:");
+    emitter.writeLine("defaultLogLevel = psxrecomp::runtime::LogLevel::Warn;");
+    emitter.writeLine("break;");
+    emitter.writeLine("case 3:");
+    emitter.writeLine("defaultLogLevel = psxrecomp::runtime::LogLevel::Error;");
+    emitter.writeLine("break;");
+    emitter.writeLine("default:");
+    emitter.writeLine("defaultLogLevel = psxrecomp::runtime::LogLevel::Info;");
+    emitter.writeLine("break;");
+    emitter.closeBlock();
+    emitter.writeLine("#else");
+    emitter.writeLine("psxrecomp::runtime::LogLevel defaultLogLevel = "
+                      "psxrecomp::runtime::LogLevel::Error;");
+    emitter.writeLine("#endif");
+    emitter.writeLine("psxrecomp::runtime::LogLevel effectiveLogLevel = defaultLogLevel;");
+    emitter.writeLine("if (const char* logLevelEnv = std::getenv(\"PSXRECOMP_LOG_LEVEL\"))");
+    emitter.openBlock("");
+    emitter.writeLine("bool logLevelOk = false;");
+    emitter.writeLine("const auto parsed = decodeLogLevel(logLevelEnv, &logLevelOk);");
+    emitter.writeLine("if (logLevelOk)");
+    emitter.openBlock("");
+    emitter.writeLine("effectiveLogLevel = parsed;");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Invalid PSXRECOMP_LOG_LEVEL='\" "
+                      "<< logLevelEnv << \"' (expected: debug/info/warn/error or 0..3).\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("system.logger().setMinLevel(effectiveLogLevel);");
+    emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
+    emitter.writeLine("const bool renderDebugOverlay = "
+                      "envFlagEnabled(std::getenv(\"PSXRECOMP_RENDER_DEBUG_OVERLAY\"), false);");
+    emitter.writeLine("std::cout << \"[psxrecomp] Runtime log level: \" << "
+                      "logLevelLabel(effectiveLogLevel) << \"\\n\";");
+    emitter.writeLine("std::cout << \"[psxrecomp] Render debug overlay: \" << "
+                      "(renderDebugOverlay ? \"on\" : \"off\") << \"\\n\";");
     emitter.writeLine("try");
     emitter.openBlock("");
     emitter.writeLine("if (!system.initialize())");
@@ -269,19 +391,17 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::initMemory(system);");
     emitter.writeLine("system.setAutoFrameProgressOnInterruptPoll(true);");
-    emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
     emitter.writeLine("#else");
     emitter.writeLine("const bool defaultPresent = false;");
     emitter.writeLine("#endif");
-    emitter.writeLine("const bool enabledPresent = presentEnv == nullptr ? defaultPresent :");
-    emitter.writeLine("    (presentEnv[0] == '\\0' || presentEnv[0] == '1');");
+    emitter.writeLine("const bool enabledPresent = envFlagEnabled(presentEnv, defaultPresent);");
     emitter.writeLine("if (enabledPresent)");
     emitter.openBlock("");
     emitter.writeLine("presenterThread = std::thread([&]()");
     emitter.openBlock("");
-    emitter.writeLine("if (!presentFramebufferLive(system, stopPresenter))");
+    emitter.writeLine("if (!presentFramebufferLive(system, stopPresenter, renderDebugOverlay))");
     emitter.openBlock("");
     emitter.writeLine(
         "std::cerr << \"[psxrecomp][warn] Live framebuffer presenter unavailable; install SDL2 "
@@ -349,6 +469,10 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
         " << (usedVramFallback ? \" (using VRAM fallback)\" : \"\") << \"\\n\";");
     emitter.writeLine("std::cout << \"[psxrecomp] Debug overlay: \" << "
                       "system.debugOverlay().renderText() << \"\\n\";");
+    emitter.writeLine("if (renderDebugOverlay)");
+    emitter.openBlock("");
+    emitter.writeLine("system.debugOverlay().drawOnFrameBuffer(displayPixels, width, height);");
+    emitter.closeBlock();
     emitter.writeLine("std::cout << \"[psxrecomp] Last PC: 0x\" << std::hex << std::uppercase"
                       " << system.debugOverlay().lastProgramCounter() << std::dec << \"\\n\";");
     emitter.writeLine("if (runMs == 0 && system.gpu().commandTrace().empty())");
@@ -378,7 +502,9 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
         "unimplemented hardware paths (GPU/SPU/CDROM/timing).\" << \"\\n\";");
     emitter.writeLine(
         "std::cout << \"[psxrecomp] Tip: set PSXRECOMP_PRESENT_FRAMEBUFFER=1 for an SDL window, "
-        "or PSXRECOMP_DUMP_FRAMEBUFFER=/path/frame.ppm for a dump.\" << \"\\n\";");
+        "or PSXRECOMP_DUMP_FRAMEBUFFER=/path/frame.ppm for a dump. "
+        "Set PSXRECOMP_RENDER_DEBUG_OVERLAY=1 to draw overlay/fps into presented/dumped frames.\" "
+        "<< \"\\n\";");
     emitter.writeLine("return 0;");
     emitter.closeBlock();
     emitter.writeLine("catch (const std::exception& ex)");
@@ -390,6 +516,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine(
         "std::cerr << \"[psxrecomp][error] Unhandled exception: \" << ex.what() << \"\\n\";");
+    emitter.writeLine("std::cerr << std::dec;");
     emitter.writeLine("std::cerr << \"[psxrecomp] GPU command count: \""
                       " << system.gpu().commandTrace().size() << \"\\n\";");
     emitter.writeLine(
@@ -424,6 +551,8 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("constexpr size_t h = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
     emitter.writeLine("std::vector<psxrecomp::u16> exPixels = system.gpu().frameBufferSnapshot();");
     emitter.writeLine("if (exPixels.size() < w * h) exPixels.resize(w * h, 0);");
+    emitter.writeLine(
+        "if (renderDebugOverlay) system.debugOverlay().drawOnFrameBuffer(exPixels, w, h);");
     emitter.writeLine("dumpFramebufferToPpm(exDump[0] != '\\0' ? exDump : "
                       "\"framebuffer.ppm\", exPixels);");
     emitter.writeLine("std::cerr << \"[psxrecomp] Framebuffer dumped (exception path).\\n\";");

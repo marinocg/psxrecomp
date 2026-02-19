@@ -121,6 +121,19 @@ int main()
     system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000400);
     assert(system.read<psxrecomp::u32>(gpuReadDmaBase + 4) == 0xCAFEBABEu);
 
+    // runFrame() should advance GPU FIFO consumption so GPUSTAT DMA request
+    // can recover from a saturated FIFO.
+    system.gpu().reset();
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    while (system.gpu().fifoDepth() < 64)
+    {
+        system.gpu().writeDma(0x01000000u);
+    }
+    assert((system.gpu().readStatus() & (1u << 28)) == 0u);
+    system.runFrame();
+    assert(system.gpu().fifoDepth() == 0u);
+    assert((system.gpu().readStatus() & (1u << 28)) != 0u);
+
     Address spuBase =
         psxrecomp::runtime::DmaController::ChannelBase +
         psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);
