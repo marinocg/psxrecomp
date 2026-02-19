@@ -341,6 +341,13 @@ int main()
     writePacket(gpu, {0x64FFFFFFu, 0x001E001Eu, 0x00000000u, 0x00010001u});
     assert(readFramePixel(gpu, 30, 30) == tex16Color);
 
+    // Variable-size monochrome rectangle should use word 2 for width/height.
+    gpu.reset();
+    writePacket(gpu, {0x6000FFFFu, 0x00010001u, 0x00400040u}); // pos=(1,1), size=(64,64)
+    assert(readFramePixel(gpu, 1, 1) != 0);
+    assert(readFramePixel(gpu, 64, 64) != 0);
+    assert(readFramePixel(gpu, 65, 65) == 0);
+
     // Blending + mask bit behavior.
     gpu.reset();
     writePacket(gpu, {0x020000FFu, 0x00050005u, 0x00010001u});
