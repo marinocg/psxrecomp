@@ -3,6 +3,7 @@
 #include "psxrecomp/disasm/instruction.h"
 #include "psxrecomp/ir/mips_ir_builder.h"
 
+#include <unordered_set>
 #include <vector>
 
 namespace psxrecomp
@@ -21,7 +22,8 @@ class MipsIrTranslator
     void translate(const std::vector<disasm::Instruction>& instructions);
 
   private:
-    void translateNoDelay(const disasm::Instruction& instr);
+    void translateNoDelay(const disasm::Instruction& instr,
+                          std::optional<Address> sourceAddressOverride = std::nullopt);
     void translateWithDelay(const disasm::Instruction& instr, const disasm::Instruction* delaySlot);
     void emitInstruction(Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs,
                          Address sourceAddress);
@@ -35,6 +37,7 @@ class MipsIrTranslator
     Builder& m_builder;
     MipsIrBuildResult& m_result;
     MipsIrBuildOptions m_options;
+    std::unordered_set<Address> m_targetedAddresses;
 };
 
 } // namespace detail

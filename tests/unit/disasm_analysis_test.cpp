@@ -224,5 +224,73 @@ int main()
         assert(noMergeBoundaries[1].start == noMergeBase + 0x10);
     }
 
+    // ---------------------------------------------------------------
+    // Wrapper branch merge
+    //
+    // PSn00bSDK-style wrappers can begin with:
+    //   beq   a0, zero, next_function
+    //   addiu t1, zero, -1            (delay slot)
+    // and then immediately continue into the next function body at
+    // next_function regardless of branch direction.
+    //
+    // This must be treated as a single function boundary.
+    // ---------------------------------------------------------------
+    {
+        const Address wrapperBase = 0x80020000;
+        std::vector<uint8_t> wrapperBuffer;
+
+        appendLe32(wrapperBuffer, encodeI(0x04, 4, 0, 1));     // beq a0, zero, +1 (to 0x...08)
+        appendLe32(wrapperBuffer, encodeI(0x09, 0, 9, -1));    // addiu t1, zero, -1
+        appendLe32(wrapperBuffer, encodeI(0x09, 29, 29, -16)); // addiu sp, sp, -16
+        appendLe32(wrapperBuffer, encodeI(0x2B, 29, 31, 12));  // sw ra, 12(sp)
+        appendLe32(wrapperBuffer, encodeI(0x23, 29, 31, 12));  // lw ra, 12(sp)
+        appendLe32(wrapperBuffer, encodeI(0x09, 29, 29, 16));  // addiu sp, sp, 16
+        appendLe32(wrapperBuffer, encodeR(31, 0, 0, 0, 0x08)); // jr ra
+        appendLe32(wrapperBuffer, encodeR(0, 0, 0, 0, 0x00));  // nop
+
+        auto wrapperInstructions =
+            MipsDisassembler::disassemble(wrapperBuffer.data(), wrapperBuffer.size(), wrapperBase);
+        auto wrapperBoundaries = findFunctionBoundaries(wrapperInstructions);
+
+        assert(wrapperBoundaries.size() == 1);
+        assert(wrapperBoundaries[0].start == wrapperBase);
+        assert(wrapperBoundaries[0].end == wrapperBase + 0x1C);
+    }
+
+    // ---------------------------------------------------------------
+    // Wrapper branch merge with external taken target
+    //
+    // Similar wrapper shape, but the taken branch target is outside the
+    // next function's range while the not-taken path still falls through
+    // into the next function body.
+    //
+    // We should still merge the split boundary at +0x08.
+    // ---------------------------------------------------------------
+    {
+        const Address wrapperBase = 0x80021000;
+        std::vector<uint8_t> wrapperBuffer;
+
+        appendLe32(wrapperBuffer, encodeI(0x05, 4, 0, 11));    // bne a0, zero, +11 (0x...30)
+        appendLe32(wrapperBuffer, encodeI(0x09, 0, 9, -1));    // addiu t1, zero, -1
+        appendLe32(wrapperBuffer, encodeI(0x09, 29, 29, -16)); // addiu sp, sp, -16
+        appendLe32(wrapperBuffer, encodeI(0x2B, 29, 31, 12));  // sw ra, 12(sp)
+        appendLe32(wrapperBuffer, encodeI(0x23, 29, 31, 12));  // lw ra, 12(sp)
+        appendLe32(wrapperBuffer, encodeI(0x09, 29, 29, 16));  // addiu sp, sp, 16
+        appendLe32(wrapperBuffer, encodeR(31, 0, 0, 0, 0x08)); // jr ra
+        appendLe32(wrapperBuffer, encodeR(0, 0, 0, 0, 0x00));  // nop
+        appendLe32(wrapperBuffer, encodeR(0, 0, 0, 0, 0x00));  // nop (padding)
+        appendLe32(wrapperBuffer, encodeR(0, 0, 0, 0, 0x00));  // nop (padding)
+        appendLe32(wrapperBuffer, encodeR(0, 0, 0, 0, 0x00));  // nop (padding)
+        appendLe32(wrapperBuffer, encodeR(0, 0, 0, 0, 0x00));  // nop (padding)
+
+        auto wrapperInstructions =
+            MipsDisassembler::disassemble(wrapperBuffer.data(), wrapperBuffer.size(), wrapperBase);
+        auto wrapperBoundaries = findFunctionBoundaries(wrapperInstructions);
+
+        assert(wrapperBoundaries.size() == 1);
+        assert(wrapperBoundaries[0].start == wrapperBase);
+        assert(wrapperBoundaries[0].end == wrapperBase + 0x1C);
+    }
+
     return 0;
 }

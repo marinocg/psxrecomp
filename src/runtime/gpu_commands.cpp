@@ -11,6 +11,38 @@ bool isOpcodeInRange(u8 opcode, u8 low, u8 high)
 {
     return opcode >= low && opcode <= high;
 }
+
+u16 decodeDisplayWidth(u32 mode)
+{
+    const u32 hRes1 = mode & 0x3u;
+    const bool hRes2 = (mode & 0x40u) != 0;
+
+    if (hRes2)
+    {
+        return 368;
+    }
+
+    switch (hRes1)
+    {
+    case 0:
+        return 256;
+    case 1:
+        return 320;
+    case 2:
+        return 512;
+    case 3:
+        return 640;
+    default:
+        return 320;
+    }
+}
+
+u16 decodeDisplayHeight(u32 mode)
+{
+    const bool interlaced = (mode & 0x20u) != 0;
+    const bool vertical480 = (mode & 0x04u) != 0;
+    return (interlaced && vertical480) ? 480 : 240;
+}
 } // namespace
 
 size_t Gpu::expectedGp0Words(u8 opcode) const
@@ -174,7 +206,10 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
     case GpuCommandKind::DisplayMode:
         if (!command.words.empty())
         {
-            registers.interlaced = (command.words[0] & 0x20) != 0;
+            const u32 mode = command.words[0];
+            registers.interlaced = (mode & 0x20) != 0;
+            registers.displayWidth = decodeDisplayWidth(mode);
+            registers.displayHeight = decodeDisplayHeight(mode);
         }
         break;
     case GpuCommandKind::DmaDirection:

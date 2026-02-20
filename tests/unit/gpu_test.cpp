@@ -219,6 +219,34 @@ int main()
     gpu.writeStatus(0x00000000u);
     assert((gpu.readStatus() & (1u << 31)) == 0);
 
+    // Display window decoding should honor GP1 display start and mode.
+    gpu.reset();
+    auto displayWindow = gpu.displayWindow();
+    assert(displayWindow.enabled);
+    assert(displayWindow.x == 0);
+    assert(displayWindow.y == 0);
+    assert(displayWindow.width == 320);
+    assert(displayWindow.height == 240);
+
+    gpu.writeStatus(0x08000001u); // 320x240
+    gpu.writeStatus(0x0503C000u); // VRAM display start x=0, y=240
+    displayWindow = gpu.displayWindow();
+    assert(displayWindow.x == 0);
+    assert(displayWindow.y == 240);
+    assert(displayWindow.width == 320);
+    assert(displayWindow.height == 240);
+
+    gpu.writeStatus(0x08000040u); // 368x240 mode
+    gpu.writeStatus(0x0507FFFEu); // VRAM display start x=1022, y=511
+    displayWindow = gpu.displayWindow();
+    assert(displayWindow.x == 1022);
+    assert(displayWindow.y == 511);
+    assert(displayWindow.width == 2);
+    assert(displayWindow.height == 1);
+
+    gpu.writeStatus(0x03000001u); // Display disable
+    assert(!gpu.displayWindow().enabled);
+
     // CPU -> VRAM setup + payload with wrap-around and little-endian pixel packing.
     gpu.reset();
     writePacket(gpu, {0xA0000000u, 0x01FF03FFu, 0x00020002u});

@@ -152,6 +152,31 @@ std::vector<u16> Gpu::frameBufferSnapshot() const
     return m_renderer->frameBuffer();
 }
 
+Gpu::DisplayWindow Gpu::displayWindow() const
+{
+    DisplayWindow window{};
+    window.enabled = m_registers.displayEnabled;
+
+    constexpr u16 vramWidth = SoftwareGpuRenderer::Width;
+    constexpr u16 vramHeight = SoftwareGpuRenderer::Height;
+
+    window.x = static_cast<u16>(std::min<u32>(m_registers.displayXStart, vramWidth - 1));
+    window.y = static_cast<u16>(std::min<u32>(m_registers.displayYStart, vramHeight - 1));
+    window.width = std::max<u16>(1, m_registers.displayWidth);
+    window.height = std::max<u16>(1, m_registers.displayHeight);
+
+    if (window.width > vramWidth - window.x)
+    {
+        window.width = static_cast<u16>(vramWidth - window.x);
+    }
+    if (window.height > vramHeight - window.y)
+    {
+        window.height = static_cast<u16>(vramHeight - window.y);
+    }
+
+    return window;
+}
+
 const std::vector<GpuCommand>& Gpu::commandTrace() const
 {
     return m_commandTrace;

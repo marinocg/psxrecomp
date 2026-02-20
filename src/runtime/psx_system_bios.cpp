@@ -160,7 +160,6 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
             return;
         case 0x49: // GPU_cw (send GP0 command)
             m_gpu.writeCommand(a0);
-            clearDrawSyncBusy();
             return;
         case 0x4A: // GPU_cwp (send GP0 command list)
         {
@@ -172,7 +171,6 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
                 m_gpu.writeCommand(word);
                 addr += 4;
             }
-            clearDrawSyncBusy();
             return;
         }
         case 0x4B: // send_gpu_linked_list (GPU ordering table DMA)
@@ -200,7 +198,6 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
                 }
                 nodeAddr = next & 0x1FFFFC;
             }
-            clearDrawSyncBusy();
             return;
         }
         case 0x70: // GPU_init - reset GPU to default state

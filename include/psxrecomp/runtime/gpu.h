@@ -17,6 +17,15 @@ namespace runtime
 class Gpu
 {
   public:
+    struct DisplayWindow
+    {
+        u16 x = 0;
+        u16 y = 0;
+        u16 width = 320;
+        u16 height = 240;
+        bool enabled = true;
+    };
+
     enum class Backend
     {
         Software,
@@ -41,6 +50,7 @@ class Gpu
     const std::vector<u32>& vramWords() const;
     const std::vector<u16>& frameBuffer() const;
     std::vector<u16> frameBufferSnapshot() const;
+    DisplayWindow displayWindow() const;
     const std::vector<GpuCommand>& commandTrace() const;
     size_t malformedPacketCount() const;
 
@@ -89,6 +99,8 @@ class Gpu
         u16 displayXRangeEnd = 0;
         u16 displayYRangeStart = 0;
         u16 displayYRangeEnd = 0;
+        u16 displayWidth = 320;
+        u16 displayHeight = 240;
         bool displayEnabled = true;
         bool interlaced = false;
         bool irqPending = false;

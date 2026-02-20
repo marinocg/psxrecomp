@@ -41,10 +41,12 @@ std::string formatUnsupportedOpcodeMessage(const disasm::Instruction& instr)
 }
 } // namespace
 
-void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr)
+void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
+                                        std::optional<Address> sourceAddressOverride)
 {
+    const Address sourceAddress = sourceAddressOverride.value_or(instr.address);
     auto emit = [&](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs)
-    { emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address); };
+    { emitInstruction(opcode, std::move(inputs), std::move(outputs), sourceAddress); };
     auto emitLinkRegister = [&](Register linkRegister)
     {
         emit(Opcode::MOVE, {Value::makeImmediate(static_cast<s32>(linkAddressForJump(instr)))},

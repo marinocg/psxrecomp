@@ -146,17 +146,6 @@ void PsxSystem::writeMmio32(Address address, u32 value)
     if (address == Mmio::GPU_GP0)
     {
         m_gpu.writeCommand(value);
-        // GPU commands complete synchronously in our runtime.
-        // Clear PSn00bSDK's "GPU busy" byte so DrawSync(0) returns
-        // immediately instead of spinning for its 1M-iteration timeout.
-        if (m_drawSyncBusyAddress != 0)
-        {
-            const Address offset = m_drawSyncBusyAddress & 0x1FFFFF;
-            if (offset < MemoryMap::RAM_SIZE)
-            {
-                m_ram[offset] = 0;
-            }
-        }
         return;
     }
     if (address == Mmio::GPU_GP1)
