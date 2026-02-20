@@ -14,6 +14,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeBlank();
     emitter.writeLine("#include \"psxrecomp/runtime/gpu_renderer.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
+    emitter.writeLine("#include <algorithm>");
     emitter.writeLine("#include <atomic>");
     emitter.writeLine("#include <chrono>");
     emitter.writeLine("#include <cctype>");
@@ -35,10 +36,14 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("namespace");
     emitter.openBlock("");
     emitter.writeLine("bool dumpFramebufferToPpm(const std::filesystem::path& outputPath,");
-    emitter.writeLine("                          const std::vector<psxrecomp::u16>& framebuffer)");
+    emitter.writeLine("                          const std::vector<psxrecomp::u16>& framebuffer,");
+    emitter.writeLine("                          size_t width,");
+    emitter.writeLine("                          size_t height)");
     emitter.openBlock("");
-    emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
-    emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("if (width == 0 || height == 0)");
+    emitter.openBlock("");
+    emitter.writeLine("return false;");
+    emitter.closeBlock();
     emitter.writeLine("if (framebuffer.size() < width * height)");
     emitter.openBlock("");
     emitter.writeLine("return false;");
@@ -63,6 +68,87 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("out.put(static_cast<char>(b));");
     emitter.closeBlock();
     emitter.writeLine("return out.good();");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "std::vector<psxrecomp::u16> extractDisplayPixels(const std::vector<psxrecomp::u16>& "
+        "framebuffer,");
+    emitter.writeLine(
+        "                                           psxrecomp::runtime::Gpu::DisplayWindow "
+        "displayWindow,");
+    emitter.writeLine("                                           size_t* outWidth,");
+    emitter.writeLine("                                           size_t* outHeight)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "constexpr size_t fullWidth = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine(
+        "constexpr size_t fullHeight = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("if (outWidth == nullptr || outHeight == nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine("return {};");
+    emitter.closeBlock();
+    emitter.writeLine("if (displayWindow.x >= fullWidth || displayWindow.y >= fullHeight)");
+    emitter.openBlock("");
+    emitter.writeLine("*outWidth = 0;");
+    emitter.writeLine("*outHeight = 0;");
+    emitter.writeLine("return {};");
+    emitter.closeBlock();
+    emitter.writeLine("size_t width = std::max<size_t>(1, displayWindow.width);");
+    emitter.writeLine("size_t height = std::max<size_t>(1, displayWindow.height);");
+    emitter.writeLine("width = std::min(width, fullWidth - displayWindow.x);");
+    emitter.writeLine("height = std::min(height, fullHeight - displayWindow.y);");
+    emitter.writeLine("if (width == 0 || height == 0)");
+    emitter.openBlock("");
+    emitter.writeLine("*outWidth = 0;");
+    emitter.writeLine("*outHeight = 0;");
+    emitter.writeLine("return {};");
+    emitter.closeBlock();
+    emitter.writeLine("if (framebuffer.size() < fullWidth * fullHeight)");
+    emitter.openBlock("");
+    emitter.writeLine("*outWidth = width;");
+    emitter.writeLine("*outHeight = height;");
+    emitter.writeLine("return std::vector<psxrecomp::u16>(width * height, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("std::vector<psxrecomp::u16> output(width * height, 0);");
+    emitter.writeLine("for (size_t y = 0; y < height; ++y)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "const size_t srcRow = (static_cast<size_t>(displayWindow.y) + y) * fullWidth +");
+    emitter.writeLine("                      static_cast<size_t>(displayWindow.x);");
+    emitter.writeLine("const size_t dstRow = y * width;");
+    emitter.writeLine("std::copy_n(framebuffer.begin() + static_cast<std::ptrdiff_t>(srcRow),");
+    emitter.writeLine("            width,");
+    emitter.writeLine("            output.begin() + static_cast<std::ptrdiff_t>(dstRow));");
+    emitter.closeBlock();
+    emitter.writeLine("*outWidth = width;");
+    emitter.writeLine("*outHeight = height;");
+    emitter.writeLine("return output;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("size_t countNonZeroPixels(const std::vector<psxrecomp::u16>& pixels)");
+    emitter.openBlock("");
+    emitter.writeLine("size_t count = 0;");
+    emitter.writeLine("for (size_t i = 0; i < pixels.size(); ++i)");
+    emitter.openBlock("");
+    emitter.writeLine("if (pixels[i] != 0)");
+    emitter.openBlock("");
+    emitter.writeLine("++count;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("return count;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("std::filesystem::path appendSuffixBeforeExtension(");
+    emitter.writeLine("    const std::filesystem::path& path, const std::string& suffix)");
+    emitter.openBlock("");
+    emitter.writeLine("const std::filesystem::path parent = path.parent_path();");
+    emitter.writeLine("const std::string stem = path.stem().string();");
+    emitter.writeLine("const std::string ext = path.extension().string();");
+    emitter.writeLine("if (ext.empty())");
+    emitter.openBlock("");
+    emitter.writeLine("return parent / (path.filename().string() + suffix);");
+    emitter.closeBlock();
+    emitter.writeLine("return parent / (stem + suffix + ext);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("bool envFlagEnabled(const char* value, bool defaultValue)");
@@ -374,12 +460,16 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("system.logger().setMinLevel(effectiveLogLevel);");
     emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
+    emitter.writeLine("const bool autoFrameProgress = "
+                      "envFlagEnabled(std::getenv(\"PSXRECOMP_AUTO_FRAME_PROGRESS\"), true);");
     emitter.writeLine("const bool renderDebugOverlay = "
                       "envFlagEnabled(std::getenv(\"PSXRECOMP_RENDER_DEBUG_OVERLAY\"), false);");
     emitter.writeLine("std::cout << \"[psxrecomp] Runtime log level: \" << "
                       "logLevelLabel(effectiveLogLevel) << \"\\n\";");
     emitter.writeLine("std::cout << \"[psxrecomp] Render debug overlay: \" << "
                       "(renderDebugOverlay ? \"on\" : \"off\") << \"\\n\";");
+    emitter.writeLine("std::cout << \"[psxrecomp] Auto frame progress: \" << "
+                      "(autoFrameProgress ? \"on\" : \"off\") << \"\\n\";");
     emitter.writeLine("try");
     emitter.openBlock("");
     emitter.writeLine("if (!system.initialize())");
@@ -390,7 +480,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::initMemory(system);");
-    emitter.writeLine("system.setAutoFrameProgressOnInterruptPoll(true);");
+    emitter.writeLine("system.setAutoFrameProgressOnInterruptPoll(autoFrameProgress);");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
     emitter.writeLine("#else");
@@ -420,39 +510,74 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine(
         "auto runMs = std::chrono::duration_cast<std::chrono::milliseconds>(runEnd - runStart)"
         ".count();");
-    emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
-    emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
-    emitter.writeLine("const auto& framePixels = system.gpu().frameBuffer();");
+    emitter.writeLine("const auto framePixels = system.gpu().frameBufferSnapshot();");
+    emitter.writeLine("const auto displayWindow = system.gpu().displayWindow();");
+    emitter.writeLine("size_t displayWidth = 0;");
+    emitter.writeLine("size_t displayHeight = 0;");
     emitter.writeLine(
-        "std::vector<psxrecomp::u16> displayPixels(framePixels.begin(), framePixels.end());");
-    emitter.writeLine("if (displayPixels.size() < width * height)");
+        "std::vector<psxrecomp::u16> displayPixels = extractDisplayPixels(framePixels, "
+        "displayWindow, &displayWidth, &displayHeight);");
+    emitter.writeLine("size_t nonZeroDisplay = countNonZeroPixels(displayPixels);");
+    emitter.writeLine("bool usedAlternateDisplayPage = false;");
+    emitter.writeLine("if (nonZeroDisplay == 0 && displayWidth > 0 && displayHeight > 0)");
     emitter.openBlock("");
-    emitter.writeLine("displayPixels.resize(width * height, 0);");
+    emitter.writeLine("const size_t fullHeight = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("psxrecomp::runtime::Gpu::DisplayWindow altWindow = displayWindow;");
+    emitter.writeLine("bool hasAlternate = false;");
+    emitter.writeLine("if (static_cast<size_t>(displayWindow.y) + displayHeight < fullHeight)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "altWindow.y = static_cast<psxrecomp::u16>(displayWindow.y + displayHeight);");
+    emitter.writeLine("hasAlternate = true;");
     emitter.closeBlock();
-    emitter.writeLine("size_t nonZeroDisplay = 0;");
-    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.writeLine("else if (static_cast<size_t>(displayWindow.y) >= displayHeight)");
     emitter.openBlock("");
-    emitter.writeLine("if (displayPixels[i] != 0)");
+    emitter.writeLine(
+        "altWindow.y = static_cast<psxrecomp::u16>(displayWindow.y - displayHeight);");
+    emitter.writeLine("hasAlternate = true;");
+    emitter.closeBlock();
+    emitter.writeLine("if (hasAlternate)");
     emitter.openBlock("");
-    emitter.writeLine("++nonZeroDisplay;");
+    emitter.writeLine("size_t altWidth = 0;");
+    emitter.writeLine("size_t altHeight = 0;");
+    emitter.writeLine(
+        "auto altPixels = extractDisplayPixels(framePixels, altWindow, &altWidth, &altHeight);");
+    emitter.writeLine("if (altWidth == displayWidth && altHeight == displayHeight)");
+    emitter.openBlock("");
+    emitter.writeLine("const size_t altNonZero = countNonZeroPixels(altPixels);");
+    emitter.writeLine("if (altNonZero > nonZeroDisplay)");
+    emitter.openBlock("");
+    emitter.writeLine("displayPixels.swap(altPixels);");
+    emitter.writeLine("nonZeroDisplay = altNonZero;");
+    emitter.writeLine("usedAlternateDisplayPage = true;");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeLine("bool usedVramFallback = false;");
     emitter.writeLine("if (nonZeroDisplay == 0)");
     emitter.openBlock("");
     emitter.writeLine("const auto& vramWords = system.gpu().vramWords();");
-    emitter.writeLine("if (!vramWords.empty())");
+    emitter.writeLine("if (!vramWords.empty() && displayWidth > 0 && displayHeight > 0)");
     emitter.openBlock("");
+    emitter.writeLine("const size_t fullWidth = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine("displayPixels.assign(displayWidth * displayHeight, 0);");
     emitter.writeLine("nonZeroDisplay = 0;");
-    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.writeLine("for (size_t y = 0; y < displayHeight; ++y)");
     emitter.openBlock("");
-    emitter.writeLine("const psxrecomp::u32 word = vramWords[i / 2];");
-    emitter.writeLine("const psxrecomp::u16 pixel = static_cast<psxrecomp::u16>((i % 2 == 0) ? "
-                      "(word & 0xFFFF) : ((word >> 16) & 0xFFFF));");
-    emitter.writeLine("displayPixels[i] = pixel;");
+    emitter.writeLine("for (size_t x = 0; x < displayWidth; ++x)");
+    emitter.openBlock("");
+    emitter.writeLine("const size_t srcPixel =");
+    emitter.writeLine("    (static_cast<size_t>(displayWindow.y) + y) * fullWidth +");
+    emitter.writeLine("    (static_cast<size_t>(displayWindow.x) + x);");
+    emitter.writeLine("const psxrecomp::u32 word = vramWords[srcPixel / 2];");
+    emitter.writeLine("const psxrecomp::u16 pixel = static_cast<psxrecomp::u16>(");
+    emitter.writeLine("    ((srcPixel % 2) == 0) ? (word & 0xFFFF) : ((word >> 16) & 0xFFFF));");
+    emitter.writeLine("displayPixels[y * displayWidth + x] = pixel;");
     emitter.writeLine("if (pixel != 0)");
     emitter.openBlock("");
     emitter.writeLine("++nonZeroDisplay;");
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeLine("if (nonZeroDisplay > 0)");
@@ -466,12 +591,15 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine(
         "std::cout << \"[psxrecomp] GPU command count: \" << system.gpu().commandTrace().size()"
         " << \", non-zero display pixels: \" << nonZeroDisplay"
+        " << \" (\" << displayWidth << \"x\" << displayHeight << \")\""
+        " << (usedAlternateDisplayPage ? \" (using alternate display page)\" : \"\")"
         " << (usedVramFallback ? \" (using VRAM fallback)\" : \"\") << \"\\n\";");
     emitter.writeLine("std::cout << \"[psxrecomp] Debug overlay: \" << "
                       "system.debugOverlay().renderText() << \"\\n\";");
     emitter.writeLine("if (renderDebugOverlay)");
     emitter.openBlock("");
-    emitter.writeLine("system.debugOverlay().drawOnFrameBuffer(displayPixels, width, height);");
+    emitter.writeLine(
+        "system.debugOverlay().drawOnFrameBuffer(displayPixels, displayWidth, displayHeight);");
     emitter.closeBlock();
     emitter.writeLine("std::cout << \"[psxrecomp] Last PC: 0x\" << std::hex << std::uppercase"
                       " << system.debugOverlay().lastProgramCounter() << std::dec << \"\\n\";");
@@ -485,15 +613,35 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.openBlock("");
     emitter.writeLine("std::filesystem::path dumpPath = dumpPathEnv[0] != '\\0' ? dumpPathEnv : "
                       "\"framebuffer.ppm\";");
-    emitter.writeLine("if (dumpFramebufferToPpm(dumpPath, displayPixels))");
+    emitter.writeLine(
+        "const char* fullDumpPathEnv = std::getenv(\"PSXRECOMP_DUMP_FULL_FRAMEBUFFER\");");
+    emitter.writeLine("std::filesystem::path fullDumpPath =");
+    emitter.writeLine("    (fullDumpPathEnv != nullptr && fullDumpPathEnv[0] != '\\0')");
+    emitter.writeLine("        ? std::filesystem::path(fullDumpPathEnv)");
+    emitter.writeLine("        : appendSuffixBeforeExtension(dumpPath, \".full\");");
+    emitter.writeLine("if (dumpFramebufferToPpm(dumpPath, displayPixels, displayWidth, "
+                      "displayHeight))");
     emitter.openBlock("");
     emitter.writeLine(
-        "std::cout << \"[psxrecomp] Framebuffer dumped to: \" << dumpPath.string() << \"\\n\";");
+        "std::cout << \"[psxrecomp] Active display dumped to: \" << dumpPath.string() << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("else");
     emitter.openBlock("");
-    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Failed to dump framebuffer to: \" << "
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Failed to dump active display to: \" << "
                       "dumpPath.string() << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("if (dumpFramebufferToPpm(fullDumpPath, framePixels,");
+    emitter.writeLine("                         psxrecomp::runtime::SoftwareGpuRenderer::Width,");
+    emitter.writeLine("                         psxrecomp::runtime::SoftwareGpuRenderer::Height))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] Full framebuffer dumped to: \" << fullDumpPath.string() << "
+        "\"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Failed to dump full framebuffer to: \" << "
+                      "fullDumpPath.string() << \"\\n\";");
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeLine("std::cout << \"[psxrecomp] Module execution returned.\" << \"\\n\";");
@@ -503,6 +651,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine(
         "std::cout << \"[psxrecomp] Tip: set PSXRECOMP_PRESENT_FRAMEBUFFER=1 for an SDL window, "
         "or PSXRECOMP_DUMP_FRAMEBUFFER=/path/frame.ppm for a dump. "
+        "PSXRECOMP_DUMP_FULL_FRAMEBUFFER can override the full-frame dump path. "
         "Set PSXRECOMP_RENDER_DEBUG_OVERLAY=1 to draw overlay/fps into presented/dumped frames.\" "
         "<< \"\\n\";");
     emitter.writeLine("return 0;");
@@ -547,15 +696,57 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("if (const char* exDump = std::getenv(\"PSXRECOMP_DUMP_FRAMEBUFFER\"))");
     emitter.openBlock("");
-    emitter.writeLine("constexpr size_t w = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
-    emitter.writeLine("constexpr size_t h = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
-    emitter.writeLine("std::vector<psxrecomp::u16> exPixels = system.gpu().frameBufferSnapshot();");
-    emitter.writeLine("if (exPixels.size() < w * h) exPixels.resize(w * h, 0);");
+    emitter.writeLine("std::filesystem::path exDumpPath = exDump[0] != '\\0' ? exDump : "
+                      "\"framebuffer.ppm\";");
+    emitter.writeLine("const char* exFullDump = std::getenv(\"PSXRECOMP_DUMP_FULL_FRAMEBUFFER\");");
+    emitter.writeLine("std::filesystem::path exFullDumpPath =");
+    emitter.writeLine("    (exFullDump != nullptr && exFullDump[0] != '\\0')");
+    emitter.writeLine("        ? std::filesystem::path(exFullDump)");
+    emitter.writeLine("        : appendSuffixBeforeExtension(exDumpPath, \".full\");");
+    emitter.writeLine("size_t exWidth = 0;");
+    emitter.writeLine("size_t exHeight = 0;");
+    emitter.writeLine("const auto exWindow = system.gpu().displayWindow();");
+    emitter.writeLine("const auto exFrame = system.gpu().frameBufferSnapshot();");
+    emitter.writeLine("std::vector<psxrecomp::u16> exPixels = extractDisplayPixels(");
+    emitter.writeLine("    exFrame, exWindow, &exWidth, &exHeight);");
+    emitter.writeLine("if (countNonZeroPixels(exPixels) == 0 && exWidth > 0 && exHeight > 0)");
+    emitter.openBlock("");
+    emitter.writeLine("const size_t fullHeight = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
+    emitter.writeLine("psxrecomp::runtime::Gpu::DisplayWindow altWindow = exWindow;");
+    emitter.writeLine("bool hasAlternate = false;");
+    emitter.writeLine("if (static_cast<size_t>(exWindow.y) + exHeight < fullHeight)");
+    emitter.openBlock("");
+    emitter.writeLine("altWindow.y = static_cast<psxrecomp::u16>(exWindow.y + exHeight);");
+    emitter.writeLine("hasAlternate = true;");
+    emitter.closeBlock();
+    emitter.writeLine("else if (static_cast<size_t>(exWindow.y) >= exHeight)");
+    emitter.openBlock("");
+    emitter.writeLine("altWindow.y = static_cast<psxrecomp::u16>(exWindow.y - exHeight);");
+    emitter.writeLine("hasAlternate = true;");
+    emitter.closeBlock();
+    emitter.writeLine("if (hasAlternate)");
+    emitter.openBlock("");
+    emitter.writeLine("size_t altWidth = 0;");
+    emitter.writeLine("size_t altHeight = 0;");
     emitter.writeLine(
-        "if (renderDebugOverlay) system.debugOverlay().drawOnFrameBuffer(exPixels, w, h);");
-    emitter.writeLine("dumpFramebufferToPpm(exDump[0] != '\\0' ? exDump : "
-                      "\"framebuffer.ppm\", exPixels);");
-    emitter.writeLine("std::cerr << \"[psxrecomp] Framebuffer dumped (exception path).\\n\";");
+        "auto altPixels = extractDisplayPixels(exFrame, altWindow, &altWidth, &altHeight);");
+    emitter.writeLine("if (altWidth == exWidth && altHeight == exHeight && "
+                      "countNonZeroPixels(altPixels) > 0)");
+    emitter.openBlock("");
+    emitter.writeLine("exPixels.swap(altPixels);");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine(
+        "if (renderDebugOverlay) system.debugOverlay().drawOnFrameBuffer(exPixels, exWidth, "
+        "exHeight);");
+    emitter.writeLine("dumpFramebufferToPpm(exDumpPath, exPixels, exWidth, exHeight);");
+    emitter.writeLine("dumpFramebufferToPpm(exFullDumpPath, exFrame,");
+    emitter.writeLine("                     psxrecomp::runtime::SoftwareGpuRenderer::Width,");
+    emitter.writeLine("                     psxrecomp::runtime::SoftwareGpuRenderer::Height);");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp] Framebuffer dumped (exception path): active='\" << "
+        "exDumpPath.string() << \"', full='\" << exFullDumpPath.string() << \"'\\n\";");
     emitter.closeBlock();
     emitter.writeLine("return 1;");
     emitter.closeBlock();

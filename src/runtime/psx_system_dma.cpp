@@ -226,13 +226,10 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     m_interrupts.raise(InterruptLine::Dma);
     m_debugOverlay.incrementDmaTransfers();
     m_debugOverlay.incrementInterruptsRaised();
-
-    // GPU DMA transfers complete synchronously in our runtime.
-    // Clear PSn00bSDK's DrawSync busy byte so DrawSync(0) doesn't
-    // spin for its full 1M-iteration timeout waiting for the DMA
-    // completion interrupt handler that we never dispatch.
     if (port == DmaPort::Gpu)
     {
+        // GPU DMA completes synchronously in this runtime, so emulate
+        // the DrawSync completion callback by dropping the busy byte.
         clearDrawSyncBusy();
     }
 

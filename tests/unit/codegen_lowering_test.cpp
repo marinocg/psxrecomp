@@ -323,6 +323,39 @@ int main()
         std::cerr << "[PASS] conditional self-loop is normal branch (not advanceFrame)\n";
     }
 
+    // ---------------------------------------------------------------
+    // Test 8: Register JUMP fallback to recompiled dispatch
+    //
+    // For JR/JALR-like dynamic jumps, generated code should try intrinsic
+    // handling first, then attempt callRecompiledFunction before raising
+    // unsupported-jump errors.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_jump_reg_fallback", 0x80090000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(
+            builder.makeInstruction(Opcode::JUMP, {Value::makeRegister(9)}, {}, 0x80090000));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "jump_reg_fallback_module");
+
+        const std::string intrinsicProbe = "if (!callIntrinsic(context.system, context.regs[9], "
+                                           "context.regs))";
+        const std::string recompiledProbe =
+            "if (!callRecompiledFunction(context, context.regs[9]))";
+        const std::string failProbe = "failUnsupportedJump(context.regs[9], 0x80090000);";
+
+        assert(source.find(intrinsicProbe) != std::string::npos);
+        assert(source.find(recompiledProbe) != std::string::npos);
+        assert(source.find(failProbe) != std::string::npos);
+
+        std::cerr << "[PASS] register JUMP fallback to recompiled dispatch\n";
+    }
+
     std::cerr << "All codegen lowering tests passed.\n";
     return 0;
 }

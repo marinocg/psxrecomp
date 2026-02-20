@@ -103,9 +103,16 @@ int main()
     assert(buildFile.find("PSXRECOMP_HAS_SDL2") != std::string::npos);
     assert(buildFile.find("user32 gdi32") != std::string::npos);
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
+    assert(runner.find("PSXRECOMP_DUMP_FULL_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
+    assert(runner.find("PSXRECOMP_AUTO_FRAME_PROGRESS") != std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
+    assert(runner.find("extractDisplayPixels") != std::string::npos);
+    assert(runner.find("appendSuffixBeforeExtension") != std::string::npos);
+    assert(runner.find("countNonZeroPixels") != std::string::npos);
     assert(runner.find("presentFramebufferLive") != std::string::npos);
+    assert(runner.find("displayWindow()") != std::string::npos);
+    assert(runner.find("using alternate display page") != std::string::npos);
     assert(runner.find("std::thread presenterThread") != std::string::npos);
     assert(runner.find("#if defined(_WIN32)") != std::string::npos);
     assert(runner.find("Debug overlay") != std::string::npos);
@@ -191,7 +198,7 @@ int main()
     runtimeHeader << "    template <typename T> void write(Address, T) {}\n";
     runtimeHeader << "    template <typename T> T readMmioExplicit(Address) { return {}; }\n";
     runtimeHeader << "    template <typename T> void writeMmioExplicit(Address, T) {}\n";
-    runtimeHeader << "    void callBiosSyscall(u32, const u32*, std::size_t) {}\n";
+    runtimeHeader << "    void callBiosSyscall(u32, u32*, std::size_t) {}\n";
     runtimeHeader << "    void callBiosVector(u32, u32*, std::size_t) {}\n";
     runtimeHeader << "    void callGpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";

@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/psx_system.h"
 #include "psxrecomp/runtime/resource_pack.h"
 
+#include <array>
 #include <cassert>
 #include <filesystem>
 #include <fstream>
@@ -133,6 +134,66 @@ int main()
     system.runFrame();
     assert(system.gpu().fifoDepth() == 0u);
     assert((system.gpu().readStatus() & (1u << 28)) != 0u);
+
+    // VSync RAM counter polling should advance promptly during tight spin loops.
+    PsxSystem vsyncPollSystem;
+    assert(vsyncPollSystem.initialize());
+    vsyncPollSystem.setAutoFrameProgressOnInterruptPoll(true);
+    constexpr Address vsyncCounterAddress = 0x80016614u;
+    vsyncPollSystem.setVsyncCounterAddress(vsyncCounterAddress);
+    vsyncPollSystem.write<psxrecomp::u32>(vsyncCounterAddress, 0u);
+    const psxrecomp::u32 initialCounter = vsyncPollSystem.read<psxrecomp::u32>(vsyncCounterAddress);
+    const psxrecomp::u32 initialFrameCount = vsyncPollSystem.frameCount();
+    bool sawCounterAdvance = false;
+    for (int i = 0; i < 512; ++i)
+    {
+        const psxrecomp::u32 value = vsyncPollSystem.read<psxrecomp::u32>(vsyncCounterAddress);
+        if (value != initialCounter)
+        {
+            sawCounterAdvance = true;
+            break;
+        }
+    }
+    assert(sawCounterAdvance);
+    assert(vsyncPollSystem.frameCount() > initialFrameCount);
+
+    // GP0 writes must not clobber DrawSync-tracked RAM bytes.
+    PsxSystem drawSyncByteSystem;
+    assert(drawSyncByteSystem.initialize());
+    constexpr Address drawSyncByteAddress = 0x80016619u;
+    drawSyncByteSystem.setDrawSyncBusyAddress(drawSyncByteAddress);
+    drawSyncByteSystem.write<psxrecomp::u8>(drawSyncByteAddress, 0x7Bu);
+    drawSyncByteSystem.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0,
+                                                         0x01000000u);
+    assert(drawSyncByteSystem.read<psxrecomp::u8>(drawSyncByteAddress) == 0x7Bu);
+
+    const Address gpuDmaBaseForDrawSync =
+        psxrecomp::runtime::DmaController::ChannelBase +
+        psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Gpu);
+    drawSyncByteSystem.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1,
+                                                         0x04000002u);
+    drawSyncByteSystem.write<psxrecomp::u32>(0x00010100u, 0x020000FFu);
+    drawSyncByteSystem.write<psxrecomp::u8>(drawSyncByteAddress, 0x4Du);
+    drawSyncByteSystem.write<psxrecomp::u32>(gpuDmaBaseForDrawSync + 0x0, 0x00010100u);
+    drawSyncByteSystem.write<psxrecomp::u32>(gpuDmaBaseForDrawSync + 0x4, 0x00000001u);
+    drawSyncByteSystem.write<psxrecomp::u32>(gpuDmaBaseForDrawSync + 0x8, 0x01000001u);
+    assert(drawSyncByteSystem.read<psxrecomp::u8>(drawSyncByteAddress) == 0u);
+
+    // syscall(0) critical-section wrappers should return prior state in v0.
+    std::array<psxrecomp::u32, 32> syscallRegs{};
+    syscallRegs[4] = 1; // EnterCriticalSection
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    assert(syscallRegs[2] == 0u);
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    assert(syscallRegs[2] == 1u);
+
+    syscallRegs[4] = 2; // ExitCriticalSection
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    assert(syscallRegs[2] == 1u);
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    assert(syscallRegs[2] == 1u);
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    assert(syscallRegs[2] == 0u);
 
     Address spuBase =
         psxrecomp::runtime::DmaController::ChannelBase +
@@ -279,7 +340,7 @@ int main()
                 sawInfo = true;
             }
         });
-    const psxrecomp::u32 regs[32] = {'A'};
+    psxrecomp::u32 regs[32] = {'A'};
     system.callBiosSyscall(0x3F, regs, 32);
     assert(sawInfo);
 

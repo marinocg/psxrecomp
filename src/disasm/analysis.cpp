@@ -111,21 +111,28 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
             const size_t startIdx = startIt->second;
             const size_t limitIdx = nextIt->second;
 
-            // Check 1: fall-through — no terminator in [funcStart, nextFuncStart).
-            bool hasTerminator = false;
+            // Check 1: fall-through — no hard terminator in
+            // [funcStart, nextFuncStart).  Branches are excluded here because
+            // they still have a fallthrough path and are common in short
+            // PSn00bSDK wrapper stubs that should merge with the next chunk.
+            bool hasHardTerminator = false;
+            bool hasBranch = false;
             for (size_t i = startIdx; i < limitIdx; ++i)
             {
-                if (instructions[i].isReturn() || instructions[i].isJump() ||
-                    instructions[i].isBranch())
+                if (instructions[i].isReturn() || instructions[i].isJump())
                 {
-                    hasTerminator = true;
+                    hasHardTerminator = true;
                     break;
+                }
+                if (instructions[i].isBranch())
+                {
+                    hasBranch = true;
                 }
             }
 
             // Check 2: cross-branch — a branch in funcA targets code in funcB.
             bool hasCrossBranch = false;
-            if (hasTerminator)
+            if (hasBranch)
             {
                 const Address nextNextFuncStart = (si + 2 < tempStarts.size())
                                                       ? tempStarts[si + 2]
@@ -147,7 +154,7 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
                 }
             }
 
-            if (!hasTerminator || hasCrossBranch)
+            if (!hasHardTerminator || hasCrossBranch)
             {
                 startAddresses.erase(nextFuncStart);
                 tempStarts.erase(tempStarts.begin() + static_cast<std::ptrdiff_t>(si + 1));

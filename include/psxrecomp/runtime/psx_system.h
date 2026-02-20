@@ -256,7 +256,7 @@ class PsxSystem
         writeMmio<T>(physical, value);
     }
 
-    void callBiosSyscall(u32 code, const u32* regs, size_t regCount);
+    void callBiosSyscall(u32 code, u32* regs, size_t regCount);
 
   private:
     std::vector<u8> m_ram;        // 2MB main RAM
@@ -282,7 +282,10 @@ class PsxSystem
     u32 m_lastVsyncCounterValue = 0;   ///< Counter value at last frame progression
     u32 m_vsyncPollCount = 0;          ///< Consecutive reads seeing the same counter value
     bool m_inVsyncCounterRead = false; ///< Re-entrancy guard for onVsyncCounterRead()
-    static constexpr u32 VSYNC_POLL_THRESHOLD = 5000; ///< Reads before triggering frame advancement
+    u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
+    // Keep VSync spin-loop detection responsive so frame-poll waits
+    // (e.g. while (*counter == old)) don't consume most of the step budget.
+    static constexpr u32 VSYNC_POLL_THRESHOLD = 64; ///< Reads before triggering frame advancement
 
     /**
      * @brief Clear PSn00bSDK's DrawSync busy byte if its address is registered.

@@ -25,17 +25,41 @@ MipsIrTranslator::MipsIrTranslator(Builder& builder, MipsIrBuildResult& result,
 
 void MipsIrTranslator::translate(const std::vector<disasm::Instruction>& instructions)
 {
+    m_targetedAddresses.clear();
+    for (const auto& instruction : instructions)
+    {
+        if (auto target = instruction.getBranchTarget())
+        {
+            m_targetedAddresses.insert(*target);
+        }
+        if (auto target = instruction.getJumpTarget())
+        {
+            m_targetedAddresses.insert(*target);
+        }
+    }
+
     for (size_t index = 0; index < instructions.size(); ++index)
     {
         const auto& instruction = instructions[index];
         if (instruction.isInDelaySlot && instruction.delaySlotOwner.has_value())
         {
-            if (index > 0 && instructions[index - 1].hasDelaySlot() &&
-                instructions[index - 1].address == instruction.delaySlotOwner.value())
+            const bool ownedByPrevious =
+                index > 0 && instructions[index - 1].hasDelaySlot() &&
+                instructions[index - 1].address == instruction.delaySlotOwner.value();
+            if (ownedByPrevious)
             {
-                continue;
+                // Delay-slot instructions are normally emitted by their owner.
+                // Keep a second, normal-context copy only if the slot is a
+                // direct branch/jump/call target.
+                if (m_targetedAddresses.find(instruction.address) == m_targetedAddresses.end())
+                {
+                    continue;
+                }
             }
-            addWarning(instruction, "Delay-slot instruction without owner");
+            else
+            {
+                addWarning(instruction, "Delay-slot instruction without owner");
+            }
         }
 
         const disasm::Instruction* delaySlot = nullptr;
@@ -83,7 +107,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
              {condTemp});
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getBranchTarget();
         if (target.has_value())
@@ -103,7 +127,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
              {condTemp});
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getBranchTarget();
         if (target.has_value())
@@ -123,7 +147,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
              {condTemp});
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getBranchTarget();
         if (target.has_value())
@@ -143,7 +167,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
              {condTemp});
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getBranchTarget();
         if (target.has_value())
@@ -163,7 +187,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
              {condTemp});
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getBranchTarget();
         if (target.has_value())
@@ -183,7 +207,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
              {condTemp});
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getBranchTarget();
         if (target.has_value())
@@ -200,7 +224,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
     {
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getJumpTarget();
         if (target.has_value())
@@ -218,7 +242,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         emitLinkRegister(Registers::RA);
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getJumpTarget();
         if (target.has_value())
@@ -248,7 +272,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         emit(compareOp, {Value::makeRegister(instr.rs), Value::makeImmediate(0)}, {condTemp});
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         auto target = instr.getBranchTarget();
         if (target.has_value())
@@ -265,7 +289,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
     case disasm::Opcode::JR:
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         if (instr.isReturn())
         {
@@ -279,7 +303,7 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
     case disasm::Opcode::JALR:
         if (delaySlot != nullptr)
         {
-            translateNoDelay(*delaySlot);
+            translateNoDelay(*delaySlot, instr.address);
         }
         emitLinkRegister(instr.rd == Registers::ZERO ? Registers::RA : instr.rd);
         emit(Opcode::CALL, {Value::makeRegister(instr.rs)}, {});

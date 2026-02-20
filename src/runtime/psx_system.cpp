@@ -85,6 +85,7 @@ void PsxSystem::reset()
     m_scheduler.reset();
     m_debugOverlay.reset();
     m_timers.reset();
+    m_criticalSectionDepth = 0;
 
     m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
 }
@@ -463,7 +464,7 @@ uint64_t PsxSystem::stateChecksum() const
 {
     return fnv1a64(serializeState());
 }
-void PsxSystem::callBiosSyscall(u32 code, const u32* regs, size_t regCount)
+void PsxSystem::callBiosSyscall(u32 code, u32* regs, size_t regCount)
 {
     if (regs == nullptr || regCount == 0)
     {
@@ -475,12 +476,37 @@ void PsxSystem::callBiosSyscall(u32 code, const u32* regs, size_t regCount)
     switch (code)
     {
     case 0x00:
-        stream << "BIOS EnterCriticalSection";
-        m_logger.log(LogLevel::Debug, "bios", stream.str());
+    {
+        // On PS1, syscall(0) dispatches kernel critical-section helpers
+        // using a0 as a subcommand (1=enter, 2=exit).
+        const u32 subcommand = regCount > 4 ? regs[4] : 0;
+        if (subcommand == 1)
+        {
+            regs[2] = m_criticalSectionDepth > 0 ? 1u : 0u;
+            ++m_criticalSectionDepth;
+            stream << "BIOS EnterCriticalSection depth=" << m_criticalSectionDepth;
+            m_logger.log(LogLevel::Debug, "bios", stream.str());
+            return;
+        }
+        if (subcommand == 2)
+        {
+            regs[2] = m_criticalSectionDepth > 0 ? 1u : 0u;
+            if (m_criticalSectionDepth > 0)
+            {
+                --m_criticalSectionDepth;
+            }
+            stream << "BIOS ExitCriticalSection depth=" << m_criticalSectionDepth;
+            m_logger.log(LogLevel::Debug, "bios", stream.str());
+            return;
+        }
+
+        stream << "BIOS syscall(0) stub subcommand a0=0x" << std::hex << subcommand;
+        m_logger.log(LogLevel::Warn, "bios", stream.str());
         return;
+    }
     case 0x01:
-        stream << "BIOS ExitCriticalSection";
-        m_logger.log(LogLevel::Debug, "bios", stream.str());
+        stream << "BIOS syscall(1) stub";
+        m_logger.log(LogLevel::Warn, "bios", stream.str());
         return;
     case 0x3F:
         if (regCount <= 4)
