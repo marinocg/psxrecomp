@@ -34,6 +34,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             continue;
         }
 
+        emitter.writeLine("CycleScope cycleScope(context);");
+
         auto temporaries = collectTemporaries(function);
         for (u32 temporaryId : temporaries)
         {

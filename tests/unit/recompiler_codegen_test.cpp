@@ -105,7 +105,7 @@ int main()
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_DUMP_FULL_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
-    assert(runner.find("PSXRECOMP_AUTO_FRAME_PROGRESS") != std::string::npos);
+    assert(runner.find("PSXRECOMP_AUTO_FRAME_PROGRESS") == std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
     assert(runner.find("extractDisplayPixels") != std::string::npos);
     assert(runner.find("appendSuffixBeforeExtension") != std::string::npos);
@@ -171,6 +171,7 @@ int main()
     runtimeHeader << "#include \"psxrecomp/types.h\"\n";
     runtimeHeader << "#include <cstddef>\n";
     runtimeHeader << "#include <cstring>\n";
+    runtimeHeader << "#include <functional>\n";
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
@@ -207,8 +208,11 @@ int main()
     runtimeHeader << "    void setAutoFrameProgressOnInterruptPoll(bool) {}\n";
     runtimeHeader << "    void setVsyncCounterAddress(Address) {}\n";
     runtimeHeader << "    void setDrawSyncBusyAddress(Address) {}\n";
+    runtimeHeader << "    void tickCpuCycles(u32) {}\n";
     runtimeHeader << "    u32 frameCount() const { return 0; }\n";
     runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
+    runtimeHeader << "    void serviceInterrupts() {}\n";
+    runtimeHeader << "    void setCallbackInvoker(std::function<void(u32)>) {}\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";

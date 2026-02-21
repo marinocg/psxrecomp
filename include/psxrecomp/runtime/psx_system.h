@@ -6,6 +6,8 @@
 #include "psxrecomp/runtime/gpu.h"
 #include "psxrecomp/runtime/input.h"
 #include "psxrecomp/runtime/interrupt_controller.h"
+#include "psxrecomp/runtime/interrupt_dispatcher.h"
+#include "psxrecomp/runtime/kernel_events.h"
 #include "psxrecomp/runtime/logger.h"
 #include "psxrecomp/runtime/memory_map.h"
 #include "psxrecomp/runtime/scheduler.h"
@@ -14,9 +16,9 @@
 #include "psxrecomp/types.h"
 
 #include <cstddef>
-#include <cstdlib>
 #include <cstring>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -77,6 +79,19 @@ class PsxSystem
     void runFrame();
 
     /**
+     * @brief Advance emulated hardware by CPU cycles.
+     *
+     * Recompiled code should call this periodically so hardware timing is
+     * driven by executed instructions, not by MMIO polling patterns.
+     */
+    void tickCpuCycles(u32 cpuCycles);
+
+    /**
+     * @brief Total emulated CPU cycles since reset.
+     */
+    uint64_t cpuCyclesElapsed() const;
+
+    /**
      * @brief Read from PSX memory
      * @param address Memory address
      * @return Value at address
@@ -86,45 +101,6 @@ class PsxSystem
         Address physical = normalizeAddress(address);
         if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
-            // If a VSync counter address has been registered and this is a
-            // 32-bit read of that counter, detect spin-wait polling and
-            // advance the frame so the counter increments.
-            // PSn00bSDK VSync() pattern:
-            //   u32 old = *counter;
-            //   while (*counter == old) { /* spin */ }
-            // We count consecutive reads that see the same counter value.
-            // After VSYNC_POLL_THRESHOLD reads, we know the game is
-            // polling and we trigger frame advancement.
-            if constexpr (sizeof(T) == 4)
-            {
-                if (m_vsyncCounterAddress != 0 && !m_inVsyncCounterRead &&
-                    physical == normalizeAddress(m_vsyncCounterAddress))
-                {
-                    // Read current counter value from RAM
-                    Address cOff = physical - MemoryMap::RAM_BASE;
-                    u32 currentCounter = 0;
-                    if (cOff + 4 <= MemoryMap::RAM_SIZE)
-                    {
-                        std::memcpy(&currentCounter, m_ram.data() + cOff, sizeof(u32));
-                    }
-                    if (currentCounter == m_lastVsyncCounterValue)
-                    {
-                        ++m_vsyncPollCount;
-                        if (m_vsyncPollCount >= VSYNC_POLL_THRESHOLD)
-                        {
-                            onVsyncCounterRead();
-                            m_vsyncPollCount = 0;
-                        }
-                    }
-                    else
-                    {
-                        // Counter changed (frame was advanced via another path
-                        // such as GPUSTAT read).  Reset poll detector.
-                        m_lastVsyncCounterValue = currentCounter;
-                        m_vsyncPollCount = 0;
-                    }
-                }
-            }
             return readFromRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE,
                                      MemoryMap::RAM_SIZE);
         }
@@ -212,28 +188,32 @@ class PsxSystem
      */
     void callBiosVector(u32 vector, u32* regs, size_t regCount);
 
+    /**
+     * @brief Legacy compatibility switch.
+     *
+     * Kept for ABI/source compatibility with generated modules; this runtime
+     * now uses cycle-driven timing and ignores this toggle.
+     */
     void setAutoFrameProgressOnInterruptPoll(bool enabled);
 
     /**
      * @brief Register a RAM address containing the vsync frame counter.
      *
-     * When set, runFrame() will auto-increment the 32-bit word at this
-     * address, simulating the VBlank IRQ handler that PSn00bSDK relies
-     * on to detect completed frames.
+     * Legacy compatibility entry point. The runtime no longer mutates
+     * arbitrary RAM to emulate SDK-specific handlers.
      */
     void setVsyncCounterAddress(Address address);
 
     /**
      * @brief Register the RAM address of PSn00bSDK's "GPU busy" byte.
      *
-     * When set, GPU commands processed via callGpuIntrinsic() will
-     * automatically clear this byte, preventing DrawSync(0) from
-     * spinning for its full 1M-iteration timeout.
+     * Legacy compatibility entry point. The runtime no longer patches RAM
+     * for SDK-specific DrawSync behavior.
      */
     void setDrawSyncBusyAddress(Address address);
 
     /**
-     * @brief Get the monotonic frame counter (incremented each runFrame()).
+     * @brief Get the monotonic frame counter (incremented on each VBlank).
      */
     u32 frameCount() const;
 
@@ -258,7 +238,51 @@ class PsxSystem
 
     void callBiosSyscall(u32 code, u32* regs, size_t regCount);
 
+    /**
+     * @brief Access the kernel event table.
+     */
+    KernelEventTable& events();
+
+    /**
+     * @brief Access the interrupt dispatcher.
+     */
+    InterruptDispatcher& dispatcher();
+
+    /**
+     * @brief Install the callback invoker bridge.
+     *
+     * The generated module calls this during run() so that the interrupt
+     * dispatcher can invoke recompiled callback code.
+     */
+    void setCallbackInvoker(CallbackInvoker invoker);
+
+    /**
+     * @brief Service pending interrupts and dispatch kernel events.
+     *
+     * Should be called from generated code at safe points (after
+     * setProgramCounter updates) to allow interrupt-driven callbacks
+     * to execute.
+     */
+    void serviceInterrupts();
+
+    /**
+     * @brief Invoke a PSX callback at the given address.
+     *
+     * Uses the installed callback invoker to call into recompiled code.
+     * No-op if no invoker is installed.
+     */
+    void invokeCallback(u32 address);
+
+    /**
+     * @brief Current critical-section nesting depth.
+     */
+    u32 criticalSectionDepth() const;
+
   private:
+    struct ReturnFromExceptionSignal
+    {
+    };
+
     std::vector<u8> m_ram;        // 2MB main RAM
     std::vector<u8> m_scratchpad; // 1KB scratchpad
     std::vector<u8> m_bios;       // 512KB BIOS
@@ -269,39 +293,38 @@ class PsxSystem
     InputController m_input;
     DmaController m_dma;
     InterruptController m_interrupts;
+    KernelEventTable m_events;
+    InterruptDispatcher m_dispatcher;
     Scheduler m_scheduler;
+    uint64_t m_cpuCycles = 0;
+    uint64_t m_gpuDrainCarry = 0;
+    bool m_videoSchedulePrimed = false;
     RuntimeLogger m_logger;
     RuntimeDebugOverlay m_debugOverlay;
     TimerController m_timers;
     DiscSwapInfo m_discSwapInfo;
-    bool m_autoFrameProgressOnInterruptPoll = false;
     u32 m_frameCount = 0;
-    u32 m_gpuStatReadCount = 0;        ///< Consecutive GPUSTAT reads within same VBlank phase
-    Address m_vsyncCounterAddress = 0; ///< RAM address of PSn00bSDK vsync_counter (0 = disabled)
-    Address m_drawSyncBusyAddress = 0; ///< RAM address of PSn00bSDK GPU busy byte (0 = disabled)
-    u32 m_lastVsyncCounterValue = 0;   ///< Counter value at last frame progression
-    u32 m_vsyncPollCount = 0;          ///< Consecutive reads seeing the same counter value
-    bool m_inVsyncCounterRead = false; ///< Re-entrancy guard for onVsyncCounterRead()
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
-    // Keep VSync spin-loop detection responsive so frame-poll waits
-    // (e.g. while (*counter == old)) don't consume most of the step budget.
-    static constexpr u32 VSYNC_POLL_THRESHOLD = 64; ///< Reads before triggering frame advancement
+    u32 m_customExitHandler = 0;       ///< Address set by SetCustomExitFromException (B0 0x19)
+    CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
+    bool m_inCustomExitHandler = false;
+    bool m_inCallbackInvocation = false;
+    std::optional<Address> m_legacyDrawSyncDispatcher;
+    bool m_legacyDrawSyncScanDone = false;
 
     /**
-     * @brief Clear PSn00bSDK's DrawSync busy byte if its address is registered.
-     *
-     * Called after GPU BIOS calls (GPU_cw, GPU_cwp, send_gpu_linked_list)
-     * to signal that the GPU operation completed synchronously.
+     * @brief Legacy no-op compatibility hook.
      */
     void clearDrawSyncBusy();
 
     /**
-     * @brief Called when the VSync counter RAM address is read.
-     *
-     * Advances the display phase so the counter increments, preventing
-     * VSync polling loops from spinning forever.
+     * @brief Prime periodic VBlank/display events.
      */
-    void onVsyncCounterRead();
+    void primeVideoSchedule();
+
+    void handleVBlankStart();
+    void invokeCustomExitHandler();
+    u32 resolveCustomExitCallback(u32 address) const;
 
     static Address normalizeAddress(Address address)
     {
@@ -378,6 +401,11 @@ class PsxSystem
     void writeMmio8(Address address, u8 value);
 
     void handleDmaTransfer(DmaPort port);
+
+    /// Dispatch helpers for BIOS vector sub-tables.
+    bool callBiosVectorA0(u32 functionId, u32* regs);
+    bool callBiosVectorB0(u32 functionId, u32* regs);
+    bool callBiosVectorC0(u32 functionId, u32* regs);
 };
 
 } // namespace runtime

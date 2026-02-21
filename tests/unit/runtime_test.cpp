@@ -135,7 +135,26 @@ int main()
     assert(system.gpu().fifoDepth() == 0u);
     assert((system.gpu().readStatus() & (1u << 28)) != 0u);
 
-    // VSync RAM counter polling should advance promptly during tight spin loops.
+    // GPU GP0 interrupt command should propagate to the hardware IRQ line.
+    system.interrupts().restoreState(0, static_cast<psxrecomp::u32>(InterruptLine::Gpu));
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x1F000000u);
+    system.tickCpuCycles(1);
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) !=
+           0u);
+    // GP1 acknowledge + I_STAT acknowledge should clear and keep it cleared.
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x02000000u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
+                                             ~static_cast<psxrecomp::u32>(InterruptLine::Gpu));
+    system.tickCpuCycles(1);
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) ==
+           0u);
+    // GP0(01h) cache clear should not trigger GPU IRQ.
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x01000000u);
+    system.tickCpuCycles(1);
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) ==
+           0u);
+
+    // VSync RAM counter polling must not advance time on its own.
     PsxSystem vsyncPollSystem;
     assert(vsyncPollSystem.initialize());
     vsyncPollSystem.setAutoFrameProgressOnInterruptPoll(true);
@@ -154,8 +173,8 @@ int main()
             break;
         }
     }
-    assert(sawCounterAdvance);
-    assert(vsyncPollSystem.frameCount() > initialFrameCount);
+    assert(!sawCounterAdvance);
+    assert(vsyncPollSystem.frameCount() == initialFrameCount);
 
     // GP0 writes must not clobber DrawSync-tracked RAM bytes.
     PsxSystem drawSyncByteSystem;
@@ -177,15 +196,15 @@ int main()
     drawSyncByteSystem.write<psxrecomp::u32>(gpuDmaBaseForDrawSync + 0x0, 0x00010100u);
     drawSyncByteSystem.write<psxrecomp::u32>(gpuDmaBaseForDrawSync + 0x4, 0x00000001u);
     drawSyncByteSystem.write<psxrecomp::u32>(gpuDmaBaseForDrawSync + 0x8, 0x01000001u);
-    assert(drawSyncByteSystem.read<psxrecomp::u8>(drawSyncByteAddress) == 0u);
+    assert(drawSyncByteSystem.read<psxrecomp::u8>(drawSyncByteAddress) == 0x4Du);
 
     // syscall(0) critical-section wrappers should return prior state in v0.
     std::array<psxrecomp::u32, 32> syscallRegs{};
     syscallRegs[4] = 1; // EnterCriticalSection
     system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
-    assert(syscallRegs[2] == 0u);
-    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
     assert(syscallRegs[2] == 1u);
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    assert(syscallRegs[2] == 0u);
 
     syscallRegs[4] = 2; // ExitCriticalSection
     system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
@@ -210,6 +229,22 @@ int main()
            0x19);
     assert(system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1) ==
            0x00);
+
+    // 16-bit I_STAT/I_MASK accesses must behave like hardware low-halfword accesses.
+    system.interrupts().restoreState(0, 0);
+    system.interrupts().raise(InterruptLine::VBlank);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS) ==
+           static_cast<psxrecomp::u16>(InterruptLine::VBlank));
+    system.writeMmioExplicit<psxrecomp::u16>(
+        psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
+        static_cast<psxrecomp::u16>(~static_cast<psxrecomp::u16>(InterruptLine::VBlank)));
+    assert((system.interrupts().readStatus() &
+            static_cast<psxrecomp::u32>(InterruptLine::VBlank)) == 0u);
+    const auto lowMask = static_cast<psxrecomp::u16>(InterruptLine::VBlank) |
+                         static_cast<psxrecomp::u16>(InterruptLine::Dma);
+    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::INTERRUPT_MASK, lowMask);
+    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::INTERRUPT_MASK) ==
+           lowMask);
 
     // Timer0 target IRQ should fire once runFrame advances cycles.
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_MASK,
@@ -329,6 +364,37 @@ int main()
     assert(!fired);
     system.scheduler().tick(1);
     assert(fired);
+
+    // Scheduler must process events in chronological order and execute
+    // events scheduled by callbacks inside the same tick window.
+    psxrecomp::runtime::Scheduler orderedScheduler;
+    std::vector<int> order;
+    orderedScheduler.schedule(7, [&order]() { order.push_back(7); });
+    orderedScheduler.schedule(3,
+                              [&order, &orderedScheduler]()
+                              {
+                                  order.push_back(3);
+                                  orderedScheduler.schedule(2, [&order]() { order.push_back(5); });
+                              });
+    orderedScheduler.schedule(10, [&order]() { order.push_back(10); });
+    orderedScheduler.tick(10);
+    assert((order == std::vector<int>{3, 5, 7, 10}));
+    assert(orderedScheduler.now() == 10);
+
+    // MMIO polling must not advance emulated time on its own.
+    PsxSystem pollOnlySystem;
+    assert(pollOnlySystem.initialize());
+    for (int i = 0; i < 5000; ++i)
+    {
+        (void)pollOnlySystem.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1);
+        (void)pollOnlySystem.readMmioExplicit<psxrecomp::u32>(
+            psxrecomp::runtime::Mmio::INTERRUPT_STATUS);
+    }
+    assert(pollOnlySystem.frameCount() == 0);
+    assert(pollOnlySystem.cpuCyclesElapsed() == 0);
+    pollOnlySystem.tickCpuCycles(564480);
+    assert(pollOnlySystem.frameCount() == 1);
+    assert(pollOnlySystem.cpuCyclesElapsed() == 564480);
 
     bool sawInfo = false;
     system.logger().setMinLevel(LogLevel::Info);

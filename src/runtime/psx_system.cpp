@@ -1,6 +1,5 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <algorithm>
 #include <sstream>
 #include <utility>
 
@@ -13,6 +12,71 @@ namespace
 {
 constexpr u32 CYCLES_PER_FRAME = 564480;
 constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
+constexpr u32 VBLANK_CYCLES = CYCLES_PER_FRAME / 10u;
+constexpr u32 VBLANK_MID_CYCLES = VBLANK_CYCLES / 2u;
+constexpr u32 ACTIVE_CYCLES = CYCLES_PER_FRAME - VBLANK_CYCLES;
+
+std::optional<Address> findLegacyDrawSyncDispatcher(const std::vector<u8>& ram)
+{
+    // Signature for PSn00bSDK's DrawSync callback dispatcher:
+    //   addiu sp,sp,-32
+    //   sw    s1,24(sp)
+    //   lui   s1,0x8001
+    //   sw    s0,20(sp)
+    //   lbu   s0,0x55f9(s1)
+    constexpr u32 kSig0 = 0x27BDFFE0u;
+    constexpr u32 kSig1 = 0xAFB10018u;
+    constexpr u32 kSig2 = 0x3C118001u;
+    constexpr u32 kSig3 = 0xAFB00014u;
+    constexpr u32 kSig4Mask = 0xFFFF0000u;
+    constexpr u32 kSig4Value = 0x92300000u;
+
+    for (Address offset = 0; offset <= MemoryMap::RAM_SIZE - sizeof(u32) * 5; offset += 4)
+    {
+        u32 w0 = 0;
+        u32 w1 = 0;
+        u32 w2 = 0;
+        u32 w3 = 0;
+        u32 w4 = 0;
+        std::memcpy(&w0, ram.data() + offset + 0, sizeof(u32));
+        std::memcpy(&w1, ram.data() + offset + 4, sizeof(u32));
+        std::memcpy(&w2, ram.data() + offset + 8, sizeof(u32));
+        std::memcpy(&w3, ram.data() + offset + 12, sizeof(u32));
+        std::memcpy(&w4, ram.data() + offset + 16, sizeof(u32));
+        if (w0 == kSig0 && w1 == kSig1 && w2 == kSig2 && w3 == kSig3 &&
+            (w4 & kSig4Mask) == kSig4Value)
+        {
+            return 0x80000000u | offset;
+        }
+    }
+    return std::nullopt;
+}
+
+bool matchesLegacyVblankDispatcherSignature(const std::vector<u8>& ram, Address address)
+{
+    const Address offset = address & 0x1FFFFFFFu;
+    if (offset > MemoryMap::RAM_SIZE - sizeof(u32) * 4)
+    {
+        return false;
+    }
+
+    u32 w0 = 0;
+    u32 w1 = 0;
+    u32 w2 = 0;
+    u32 w3 = 0;
+    std::memcpy(&w0, ram.data() + offset + 0, sizeof(u32));
+    std::memcpy(&w1, ram.data() + offset + 4, sizeof(u32));
+    std::memcpy(&w2, ram.data() + offset + 8, sizeof(u32));
+    std::memcpy(&w3, ram.data() + offset + 12, sizeof(u32));
+
+    // PSn00bSDK VBlank dispatcher preamble:
+    //   lui v1,0x8001
+    //   lw  v0,imm(v1)
+    //   lui a0,0x8001
+    //   lw  t9,imm(a0)
+    return w0 == 0x3C038001u && (w1 & 0xFFFF0000u) == 0x8C620000u && w2 == 0x3C048001u &&
+           (w3 & 0xFFFF0000u) == 0x8C990000u;
+}
 
 void appendU32(std::vector<u8>& out, u32 value)
 {
@@ -22,28 +86,6 @@ void appendU32(std::vector<u8>& out, u32 value)
     out.push_back(static_cast<u8>((value >> 24) & 0xFF));
 }
 
-bool consumeU32(const std::vector<u8>& data, size_t& cursor, u32& out)
-{
-    if (cursor + sizeof(u32) > data.size())
-    {
-        return false;
-    }
-    out = static_cast<u32>(data[cursor]) | (static_cast<u32>(data[cursor + 1]) << 8) |
-          (static_cast<u32>(data[cursor + 2]) << 16) | (static_cast<u32>(data[cursor + 3]) << 24);
-    cursor += sizeof(u32);
-    return true;
-}
-
-uint64_t fnv1a64(const std::vector<u8>& bytes)
-{
-    uint64_t hash = 1469598103934665603ull;
-    for (u8 byte : bytes)
-    {
-        hash ^= byte;
-        hash *= 1099511628211ull;
-    }
-    return hash;
-}
 } // namespace
 
 PsxSystem::PsxSystem()
@@ -82,64 +124,117 @@ void PsxSystem::reset()
     m_input.reset();
     m_dma.reset();
     m_interrupts.reset();
+    m_events.reset();
+    m_dispatcher.reset();
     m_scheduler.reset();
     m_debugOverlay.reset();
     m_timers.reset();
     m_criticalSectionDepth = 0;
+    m_customExitHandler = 0;
+    m_callbackInvoker = CallbackInvoker{};
+    m_inCustomExitHandler = false;
+    m_inCallbackInvocation = false;
+    m_legacyDrawSyncDispatcher.reset();
+    m_legacyDrawSyncScanDone = false;
+    m_frameCount = 0;
+    m_cpuCycles = 0;
+    m_gpuDrainCarry = 0;
+    m_videoSchedulePrimed = false;
+    primeVideoSchedule();
 
     m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
 }
 
 void PsxSystem::boot()
 {
+    // Emulate the real PSX BIOS boot sequence: the kernel enables VBlank
+    // and timer interrupts in I_MASK before calling the game's entry point.
+    // Without this, serviceInterrupts() will never see pending IRQs and
+    // VSync/timer callbacks will not fire.
+    const u32 bootMask =
+        static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
+        static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2);
+    m_interrupts.writeMask(bootMask);
+
     m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
 }
 
 void PsxSystem::runFrame()
 {
-    // Advance GPU command consumption so GPUSTAT ready/request bits evolve over time.
-    // Drain up to one full FIFO worth of words per frame (64 words, 2 cycles/word).
-    // Without this, a saturated FIFO can remain permanently "not ready", causing
-    // DrawSync/VSync-style polling loops in game code to spin forever.
-    m_gpu.tickGpu(GPU_FIFO_DRAIN_CYCLES_PER_FRAME);
-    m_spu.tick(CYCLES_PER_FRAME);
-    m_cdrom.tick(CYCLES_PER_FRAME);
-    m_timers.tick(CYCLES_PER_FRAME,
+    tickCpuCycles(CYCLES_PER_FRAME);
+}
+
+void PsxSystem::tickCpuCycles(u32 cpuCycles)
+{
+    if (cpuCycles == 0)
+    {
+        return;
+    }
+
+    if (!m_videoSchedulePrimed)
+    {
+        primeVideoSchedule();
+    }
+
+    m_cpuCycles += cpuCycles;
+    m_gpuDrainCarry += static_cast<uint64_t>(cpuCycles) * GPU_FIFO_DRAIN_CYCLES_PER_FRAME;
+    const u32 gpuDrainCycles = static_cast<u32>(m_gpuDrainCarry / CYCLES_PER_FRAME);
+    m_gpuDrainCarry %= CYCLES_PER_FRAME;
+    if (gpuDrainCycles > 0)
+    {
+        m_gpu.tickGpu(gpuDrainCycles);
+    }
+
+    m_spu.tick(cpuCycles);
+    m_cdrom.tick(cpuCycles);
+    m_timers.tick(cpuCycles,
                   [this](InterruptLine line)
                   {
                       m_interrupts.raise(line);
                       m_debugOverlay.incrementInterruptsRaised();
                   });
+    if (m_gpu.irqPending() &&
+        (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Gpu)) == 0)
+    {
+        m_interrupts.raise(InterruptLine::Gpu);
+        m_debugOverlay.incrementInterruptsRaised();
+    }
     if (m_cdrom.hasIrqRequest() &&
         (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
     {
         m_interrupts.raise(InterruptLine::Cdrom);
         m_debugOverlay.incrementInterruptsRaised();
     }
-    m_scheduler.tick(CYCLES_PER_FRAME);
+    m_scheduler.tick(cpuCycles);
+}
+
+uint64_t PsxSystem::cpuCyclesElapsed() const
+{
+    return m_cpuCycles;
+}
+
+void PsxSystem::primeVideoSchedule()
+{
+    if (m_videoSchedulePrimed)
+    {
+        return;
+    }
+    m_videoSchedulePrimed = true;
+    m_scheduler.schedule(ACTIVE_CYCLES, [this]() { handleVBlankStart(); });
+}
+
+void PsxSystem::handleVBlankStart()
+{
+    m_gpu.tickDisplayLine();
     m_interrupts.raise(InterruptLine::VBlank);
     m_debugOverlay.incrementInterruptsRaised();
-    // Toggle GPU interlace field (bit 31 of GPUSTAT).  PSn00bSDK VSync
-    // detects frame boundaries by XOR-ing consecutive GPUSTAT reads and
-    // checking if bit 31 changed.
-    m_gpu.tickDisplayLine();
-    // Simulate VBlank IRQ delivery: increment the vsync counter in RAM
-    // that PSn00bSDK's VBlank handler would normally update.  Without
-    // this, VSync(0) loops forever waiting for the counter to change.
-    if (m_vsyncCounterAddress != 0)
-    {
-        const Address offset = (m_vsyncCounterAddress & 0x1FFFFF);
-        if (offset + 4 <= MemoryMap::RAM_SIZE)
-        {
-            u32 counter = 0;
-            std::memcpy(&counter, m_ram.data() + offset, sizeof(u32));
-            ++counter;
-            std::memcpy(m_ram.data() + offset, &counter, sizeof(u32));
-        }
-    }
     m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
     m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
     ++m_frameCount;
+
+    m_scheduler.schedule(VBLANK_MID_CYCLES, [this]() { m_gpu.tickDisplayLine(); });
+    m_scheduler.schedule(VBLANK_CYCLES, [this]() { m_gpu.tickDisplayLine(); });
+    m_scheduler.schedule(CYCLES_PER_FRAME, [this]() { handleVBlankStart(); });
 }
 
 void PsxSystem::callGpuIntrinsic(Address address)
@@ -183,93 +278,20 @@ void PsxSystem::callCdromIntrinsic(Address address)
 
 void PsxSystem::setAutoFrameProgressOnInterruptPoll(bool enabled)
 {
-    m_autoFrameProgressOnInterruptPoll = enabled;
+    (void)enabled;
 }
 
 void PsxSystem::setVsyncCounterAddress(Address address)
 {
-    m_vsyncCounterAddress = address;
-    m_logger.log(
-        LogLevel::Info, "system",
-        "VSync counter registered at 0x" +
-            [&]()
-            {
-                std::ostringstream s;
-                s << std::hex << address;
-                return s.str();
-            }());
+    (void)address;
 }
 
 void PsxSystem::setDrawSyncBusyAddress(Address address)
 {
-    m_drawSyncBusyAddress = address;
-    m_logger.log(
-        LogLevel::Info, "system",
-        "DrawSync busy byte registered at 0x" +
-            [&]()
-            {
-                std::ostringstream s;
-                s << std::hex << address;
-                return s.str();
-            }());
+    (void)address;
 }
 
-void PsxSystem::clearDrawSyncBusy()
-{
-    if (m_drawSyncBusyAddress != 0)
-    {
-        const Address offset = m_drawSyncBusyAddress & 0x1FFFFF;
-        if (offset < MemoryMap::RAM_SIZE)
-        {
-            m_ram[offset] = 0;
-        }
-    }
-}
-
-void PsxSystem::onVsyncCounterRead()
-{
-    // Re-entrancy guard: runFrame() may trigger reads that hit this again.
-    m_inVsyncCounterRead = true;
-
-    // Lightweight frame progression for VSync counter polling:
-    // Only increment the counter and toggle the GPU display phase.
-    // We do NOT call the full runFrame() here because it ticks SPU,
-    // CDROM, timers, scheduler etc. and is too expensive to call on
-    // every VSync poll iteration.
-    if (m_gpu.inActiveDisplay())
-    {
-        // Transition through VBlank phases so the counter increments
-        m_gpu.tickDisplayLine(); // ActiveDisplay → VBlankStart
-        m_gpu.tickDisplayLine(); // VBlankStart → VBlankEnd
-        m_gpu.tickDisplayLine(); // VBlankEnd → ActiveDisplay
-
-        // Increment the counter in RAM
-        if (m_vsyncCounterAddress != 0)
-        {
-            const Address offset = (m_vsyncCounterAddress & 0x1FFFFF);
-            if (offset + 4 <= MemoryMap::RAM_SIZE)
-            {
-                u32 counter = 0;
-                std::memcpy(&counter, m_ram.data() + offset, sizeof(u32));
-                ++counter;
-                std::memcpy(m_ram.data() + offset, &counter, sizeof(u32));
-            }
-        }
-        ++m_frameCount;
-    }
-    else
-    {
-        // Already in VBlank — step through phases
-        m_gpuStatReadCount++;
-        if (m_gpuStatReadCount >= 2)
-        {
-            m_gpu.tickDisplayLine();
-            m_gpuStatReadCount = 0;
-        }
-    }
-
-    m_inVsyncCounterRead = false;
-}
+void PsxSystem::clearDrawSyncBusy() {}
 
 u32 PsxSystem::frameCount() const
 {
@@ -278,7 +300,7 @@ u32 PsxSystem::frameCount() const
 
 u32 PsxSystem::advanceFrame()
 {
-    runFrame();
+    tickCpuCycles(CYCLES_PER_FRAME);
     return m_frameCount;
 }
 
@@ -342,6 +364,127 @@ TimerController& PsxSystem::timers()
     return m_timers;
 }
 
+KernelEventTable& PsxSystem::events()
+{
+    return m_events;
+}
+
+InterruptDispatcher& PsxSystem::dispatcher()
+{
+    return m_dispatcher;
+}
+
+void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
+{
+    m_callbackInvoker = invoker;
+    m_dispatcher.setCallbackInvoker(std::move(invoker));
+}
+
+void PsxSystem::serviceInterrupts()
+{
+    if (m_inCallbackInvocation)
+    {
+        return;
+    }
+
+    const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
+    // Transitional fallback:
+    // Some demos still rely on SDK interrupt callback trampolines that are not yet
+    // covered by the C0/B0 interrupt API model in this runtime. Until that model
+    // is complete, keep this signature-based callback path to avoid regressing
+    // DrawSync/VSync progress.
+    if (!m_legacyDrawSyncScanDone)
+    {
+        m_legacyDrawSyncDispatcher = findLegacyDrawSyncDispatcher(m_ram);
+        m_legacyDrawSyncScanDone = true;
+    }
+
+    if ((pendingMasked & static_cast<u32>(InterruptLine::VBlank)) != 0 &&
+        m_legacyDrawSyncDispatcher.has_value() && *m_legacyDrawSyncDispatcher >= 0x80000030u)
+    {
+        const Address vblankDispatcher = *m_legacyDrawSyncDispatcher - 0x30u;
+        if (matchesLegacyVblankDispatcherSignature(m_ram, vblankDispatcher))
+        {
+            invokeCallback(vblankDispatcher);
+        }
+    }
+
+    if ((pendingMasked & static_cast<u32>(InterruptLine::Dma)) != 0)
+    {
+        if (m_legacyDrawSyncDispatcher.has_value())
+        {
+            invokeCallback(*m_legacyDrawSyncDispatcher);
+        }
+    }
+
+    const u32 statusBefore = m_interrupts.readStatus();
+    if (statusBefore != 0 && m_customExitHandler != 0 && !m_inCustomExitHandler)
+    {
+        invokeCustomExitHandler();
+    }
+
+    m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth, &m_logger);
+}
+
+u32 PsxSystem::resolveCustomExitCallback(u32 address) const
+{
+    const Address physical = normalizeAddress(address);
+    if (physical > MemoryMap::RAM_SIZE - sizeof(u32))
+    {
+        return address;
+    }
+
+    const u32 tableTarget = readFromRegion<u32>(m_ram.data(), physical, MemoryMap::RAM_SIZE);
+    const Address tableTargetPhysical = normalizeAddress(tableTarget);
+    if ((tableTarget & 0xE0000000u) == 0x80000000u &&
+        tableTargetPhysical <= (MemoryMap::RAM_SIZE - sizeof(u32)) &&
+        (tableTargetPhysical & 0x3u) == 0u)
+    {
+        return tableTarget;
+    }
+    return address;
+}
+
+void PsxSystem::invokeCustomExitHandler()
+{
+    m_inCustomExitHandler = true;
+    invokeCallback(resolveCustomExitCallback(m_customExitHandler));
+    m_inCustomExitHandler = false;
+}
+
+void PsxSystem::invokeCallback(u32 address)
+{
+    if (address == 0)
+    {
+        return;
+    }
+    if (m_callbackInvoker)
+    {
+        const bool previousInCallbackInvocation = m_inCallbackInvocation;
+        m_inCallbackInvocation = true;
+        try
+        {
+            m_callbackInvoker(address);
+        }
+        catch (const ReturnFromExceptionSignal&)
+        {
+            m_inCallbackInvocation = previousInCallbackInvocation;
+            return;
+        }
+        catch (...)
+        {
+            m_inCallbackInvocation = previousInCallbackInvocation;
+            throw;
+        }
+        m_inCallbackInvocation = previousInCallbackInvocation;
+    }
+}
+
+u32 PsxSystem::criticalSectionDepth() const
+{
+    return m_criticalSectionDepth;
+}
+
 void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
 {
     m_discSwapInfo = std::move(info);
@@ -379,154 +522,6 @@ std::vector<u8> PsxSystem::dumpSpuRam() const
         appendU32(bytes, value);
     }
     return bytes;
-}
-
-std::vector<u8> PsxSystem::serializeState() const
-{
-    std::vector<u8> state;
-    state.reserve(sizeof(u32) * 7 + m_ram.size() + m_scratchpad.size() + m_bios.size());
-
-    appendU32(state, static_cast<u32>(m_ram.size()));
-    state.insert(state.end(), m_ram.begin(), m_ram.end());
-
-    appendU32(state, static_cast<u32>(m_scratchpad.size()));
-    state.insert(state.end(), m_scratchpad.begin(), m_scratchpad.end());
-
-    appendU32(state, static_cast<u32>(m_bios.size()));
-    state.insert(state.end(), m_bios.begin(), m_bios.end());
-
-    appendU32(state, m_interrupts.readStatus());
-    appendU32(state, m_interrupts.readMask());
-    appendU32(state, m_spu.cyclesElapsed());
-    appendU32(state, m_gpu.readStatus());
-    return state;
-}
-bool PsxSystem::deserializeState(const std::vector<u8>& state)
-{
-    size_t cursor = 0;
-    u32 ramSize = 0;
-    u32 scratchpadSize = 0;
-    u32 biosSize = 0;
-    u32 irqStatus = 0;
-    u32 irqMask = 0;
-    u32 spuCycles = 0;
-    u32 gpuStatus = 0;
-
-    auto readBlob = [&state, &cursor](u32 blobSize, std::vector<u8>& out)
-    {
-        if (cursor > state.size() || blobSize > (state.size() - cursor))
-        {
-            return false;
-        }
-
-        out.assign(state.begin() + static_cast<std::ptrdiff_t>(cursor),
-                   state.begin() + static_cast<std::ptrdiff_t>(cursor + blobSize));
-        cursor += blobSize;
-        return true;
-    };
-
-    std::vector<u8> ramCopy;
-    std::vector<u8> scratchpadCopy;
-    std::vector<u8> biosCopy;
-
-    if (!consumeU32(state, cursor, ramSize) || ramSize != m_ram.size() ||
-        !readBlob(ramSize, ramCopy) || !consumeU32(state, cursor, scratchpadSize) ||
-        scratchpadSize != m_scratchpad.size() || !readBlob(scratchpadSize, scratchpadCopy) ||
-        !consumeU32(state, cursor, biosSize) || biosSize != m_bios.size() ||
-        !readBlob(biosSize, biosCopy) || !consumeU32(state, cursor, irqStatus) ||
-        !consumeU32(state, cursor, irqMask) || !consumeU32(state, cursor, spuCycles) ||
-        !consumeU32(state, cursor, gpuStatus) || cursor != state.size())
-    {
-        return false;
-    }
-
-    std::copy(ramCopy.begin(), ramCopy.end(), m_ram.begin());
-    std::copy(scratchpadCopy.begin(), scratchpadCopy.end(), m_scratchpad.begin());
-    std::copy(biosCopy.begin(), biosCopy.end(), m_bios.begin());
-
-    m_interrupts.restoreState(irqStatus, irqMask);
-
-    m_spu.reset();
-    m_spu.tick(spuCycles);
-
-    m_gpu.reset();
-    m_gpu.restoreStatus(gpuStatus);
-
-    m_cdrom.reset();
-    m_input.reset();
-    m_dma.reset();
-    m_scheduler.reset();
-    m_debugOverlay.reset();
-    m_timers.reset();
-    return true;
-}
-uint64_t PsxSystem::stateChecksum() const
-{
-    return fnv1a64(serializeState());
-}
-void PsxSystem::callBiosSyscall(u32 code, u32* regs, size_t regCount)
-{
-    if (regs == nullptr || regCount == 0)
-    {
-        m_logger.log(LogLevel::Warn, "bios", "BIOS syscall called with empty register file");
-        return;
-    }
-
-    std::ostringstream stream;
-    switch (code)
-    {
-    case 0x00:
-    {
-        // On PS1, syscall(0) dispatches kernel critical-section helpers
-        // using a0 as a subcommand (1=enter, 2=exit).
-        const u32 subcommand = regCount > 4 ? regs[4] : 0;
-        if (subcommand == 1)
-        {
-            regs[2] = m_criticalSectionDepth > 0 ? 1u : 0u;
-            ++m_criticalSectionDepth;
-            stream << "BIOS EnterCriticalSection depth=" << m_criticalSectionDepth;
-            m_logger.log(LogLevel::Debug, "bios", stream.str());
-            return;
-        }
-        if (subcommand == 2)
-        {
-            regs[2] = m_criticalSectionDepth > 0 ? 1u : 0u;
-            if (m_criticalSectionDepth > 0)
-            {
-                --m_criticalSectionDepth;
-            }
-            stream << "BIOS ExitCriticalSection depth=" << m_criticalSectionDepth;
-            m_logger.log(LogLevel::Debug, "bios", stream.str());
-            return;
-        }
-
-        stream << "BIOS syscall(0) stub subcommand a0=0x" << std::hex << subcommand;
-        m_logger.log(LogLevel::Warn, "bios", stream.str());
-        return;
-    }
-    case 0x01:
-        stream << "BIOS syscall(1) stub";
-        m_logger.log(LogLevel::Warn, "bios", stream.str());
-        return;
-    case 0x3F:
-        if (regCount <= 4)
-        {
-            m_logger.log(LogLevel::Warn, "bios", "BIOS Putchar called without a0 register");
-            return;
-        }
-        stream << "BIOS Putchar: '" << static_cast<char>(regs[4] & 0xFF) << "'";
-        m_logger.log(LogLevel::Info, "bios", stream.str());
-        return;
-    default:
-        stream << "BIOS syscall stub invoked: code=0x" << std::hex << code << std::dec
-               << ", regs=" << regCount;
-        if (regCount > 4)
-        {
-            stream << ", a0=0x" << std::hex << regs[4];
-        }
-        m_logger.log(LogLevel::Warn, "bios", stream.str());
-        return;
-    }
 }
 
 } // namespace runtime

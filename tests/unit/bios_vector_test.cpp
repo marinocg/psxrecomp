@@ -17,6 +17,7 @@ int main()
     using psxrecomp::Address;
     using psxrecomp::u32;
     using psxrecomp::u8;
+    using psxrecomp::runtime::InterruptLine;
     using psxrecomp::runtime::LogLevel;
     using psxrecomp::runtime::PsxSystem;
 
@@ -294,35 +295,69 @@ int main()
     // ---------------------------------------------------------------
     // Test 11: B0 vector - OpenEvent (function 0x08)
     //
-    // Should return a fake event handle.
+    // Should return a valid event handle from the kernel event table.
     // ---------------------------------------------------------------
     {
         PsxSystem system;
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x08; // OpenEvent
+        regs[9] = 0x08;       // OpenEvent
+        regs[4] = 0xF0000001; // class = VBlank
+        regs[5] = 0x0001;     // spec = Counter
+        regs[6] = 0x2000;     // mode = NoCallback
+        regs[7] = 0;          // callback = none
         system.callBiosVector(0xB0, regs, 32);
-        assert(regs[2] == 0x10); // fake handle
+        // Should return a real handle, not the old fake 0x10
+        assert(regs[2] != 0xFFFFFFFFu);
+        assert((regs[2] & 0xFF000000u) == 0xF1000000u);
 
-        std::cerr << "[PASS] B0 OpenEvent\n";
+        std::cerr << "[PASS] B0 OpenEvent (real handle)\n";
     }
 
     // ---------------------------------------------------------------
     // Test 12: B0 vector - TestEvent (function 0x0B)
     //
-    // Should return 1 (event already occurred).
+    // Should return 0 for enabled-but-undelivered, 1 after delivery.
     // ---------------------------------------------------------------
     {
         PsxSystem system;
         assert(system.initialize());
 
+        // Open an event
         u32 regs[32] = {};
+        regs[9] = 0x08;       // OpenEvent
+        regs[4] = 0xF0000001; // class = VBlank
+        regs[5] = 0x0001;     // spec = Counter
+        regs[6] = 0x2000;     // mode = NoCallback
+        regs[7] = 0;
+        system.callBiosVector(0xB0, regs, 32);
+        u32 handle = regs[2];
+
+        // Enable it
+        regs[9] = 0x0C; // EnableEvent
+        regs[4] = handle;
+        system.callBiosVector(0xB0, regs, 32);
+
+        // Test — should be 0 (not yet delivered)
         regs[9] = 0x0B; // TestEvent
+        regs[4] = handle;
+        system.callBiosVector(0xB0, regs, 32);
+        assert(regs[2] == 0);
+
+        // Deliver it
+        regs[9] = 0x07;       // DeliverEvent
+        regs[4] = 0xF0000001; // class = VBlank
+        regs[5] = 0x0001;     // spec = Counter
+        system.callBiosVector(0xB0, regs, 32);
+
+        // Test — should be 1
+        regs[9] = 0x0B; // TestEvent
+        regs[4] = handle;
         system.callBiosVector(0xB0, regs, 32);
         assert(regs[2] == 1);
 
-        std::cerr << "[PASS] B0 TestEvent\n";
+        std::cerr << "[PASS] B0 TestEvent (real state transitions)\n";
     }
 
     // ---------------------------------------------------------------
@@ -347,7 +382,64 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 14: C0 vector stubs
+    // Test 14: B0 SetCustomExitFromException callback runs on IRQ service
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 lastCallback = 0;
+        system.setCallbackInvoker([&lastCallback](u32 address) { lastCallback = address; });
+
+        u32 regs[32] = {};
+        regs[9] = 0x19;       // SetCustomExitFromException
+        regs[4] = 0x80012340; // callback address
+        system.callBiosVector(0xB0, regs, 32);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+        assert(lastCallback == 0x80012340);
+
+        regs[9] = 0x18; // SetDefaultExitFromException
+        system.callBiosVector(0xB0, regs, 32);
+        lastCallback = 0;
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+        assert(lastCallback == 0);
+
+        std::cerr << "[PASS] B0 custom exit callback dispatches on IRQ service\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 15: B0 SetCustomExitFromException table callback resolves first entry
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 lastCallback = 0;
+        system.setCallbackInvoker([&lastCallback](u32 address) { lastCallback = address; });
+
+        constexpr u32 tableAddress = 0x80014000;
+        constexpr u32 callbackAddress = 0x80012340;
+        system.write<u32>(tableAddress, callbackAddress);
+
+        u32 regs[32] = {};
+        regs[9] = 0x19; // SetCustomExitFromException
+        regs[4] = tableAddress;
+        system.callBiosVector(0xB0, regs, 32);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+        assert(lastCallback == callbackAddress);
+
+        std::cerr << "[PASS] B0 custom exit table callback dispatches on IRQ service\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 16: C0 vector stubs
     //
     // All C0 stubs should be no-ops and not crash.
     // ---------------------------------------------------------------
@@ -368,7 +460,30 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 15: Unhandled BIOS call logs a warning
+    // Test 16b: B0 ReturnFromException exits callback invocation
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        bool reachedAfterReturnFromException = false;
+        system.setCallbackInvoker(
+            [&system, &reachedAfterReturnFromException](u32)
+            {
+                u32 regs[32] = {};
+                regs[9] = 0x17; // ReturnFromException
+                system.callBiosVector(0xB0, regs, 32);
+                reachedAfterReturnFromException = true;
+            });
+
+        system.invokeCallback(0x80012000);
+        assert(!reachedAfterReturnFromException);
+
+        std::cerr << "[PASS] B0 ReturnFromException unwinds callback invocation\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 17: Unhandled BIOS call logs a warning
     //
     // Calling an unimplemented function should log a warning.
     // ---------------------------------------------------------------
@@ -397,7 +512,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 16: A0 vector - setjmp (function 0x13)
+    // Test 18: A0 vector - setjmp (function 0x13)
     //
     // Should return 0 in $v0.
     // ---------------------------------------------------------------
@@ -415,7 +530,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 17: A0 vector - InitHeap (function 0x39)
+    // Test 18: A0 vector - InitHeap (function 0x39)
     //
     // Should acknowledge without crash.
     // ---------------------------------------------------------------
@@ -433,7 +548,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 18: B0 vector - alloc_kernel_memory (function 0x00)
+    // Test 19: B0 vector - alloc_kernel_memory (function 0x00)
     //
     // Should return a non-zero address.
     // ---------------------------------------------------------------
@@ -451,7 +566,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 19: A0 vector - free (function 0x34)
+    // Test 20: A0 vector - free (function 0x34)
     //
     // Should be a no-op stub.
     // ---------------------------------------------------------------
@@ -468,7 +583,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 20: NULL regs pointer
+    // Test 21: NULL regs pointer
     //
     // Should log a warning without crashing.
     // ---------------------------------------------------------------

@@ -105,10 +105,16 @@ set(RUNTIME_SOURCES
     src/runtime/gpu_renderer_primitives.cpp
     src/runtime/input.cpp
     src/runtime/interrupt_controller.cpp
+    src/runtime/interrupt_dispatcher.cpp
+    src/runtime/kernel_events.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
     src/runtime/psx_system_bios.cpp
+    src/runtime/psx_system_bios_a0.cpp
+    src/runtime/psx_system_bios_b0.cpp
+    src/runtime/psx_system_bios_c0.cpp
     src/runtime/psx_system_mmio.cpp
+    src/runtime/psx_system_state.cpp
     src/runtime/psx_system_dma.cpp
     src/runtime/resource_pack.cpp
     src/runtime/scheduler.cpp
@@ -302,6 +308,24 @@ if(BUILD_TESTS)
     )
     target_include_directories(bios_vector_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME bios_vector_test COMMAND bios_vector_test)
+
+    add_executable(kernel_events_test
+        tests/unit/kernel_events_test.cpp
+        src/runtime/kernel_events.cpp
+        src/runtime/interrupt_controller.cpp
+    )
+    target_include_directories(kernel_events_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME kernel_events_test COMMAND kernel_events_test)
+
+    add_executable(interrupt_dispatcher_test
+        tests/unit/interrupt_dispatcher_test.cpp
+        src/runtime/interrupt_dispatcher.cpp
+        src/runtime/kernel_events.cpp
+        src/runtime/interrupt_controller.cpp
+        src/runtime/logger.cpp
+    )
+    target_include_directories(interrupt_dispatcher_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME interrupt_dispatcher_test COMMAND interrupt_dispatcher_test)
 
     add_executable(codegen_debug_test
         tests/unit/codegen_debug_test.cpp

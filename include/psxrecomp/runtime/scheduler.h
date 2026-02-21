@@ -13,21 +13,32 @@ class Scheduler
 {
   public:
     using EventId = uint64_t;
+    using Time = uint64_t;
     using Callback = std::function<void()>;
 
-    EventId schedule(uint64_t cycles, Callback callback);
-    void tick(uint64_t cycles);
+    EventId schedule(Time cyclesFromNow, Callback callback);
+    void tick(Time cycles);
     void reset();
+    Time now() const
+    {
+        return m_now;
+    }
 
   private:
     struct Event
     {
-        EventId id;
-        uint64_t cyclesRemaining;
+        EventId id = 0;
+        Time time = 0;
         Callback callback;
     };
 
-    std::vector<Event> m_events;
+    static bool heapComp(const Event& a, const Event& b)
+    {
+        return a.time > b.time;
+    }
+
+    std::vector<Event> m_heap;
+    Time m_now = 0;
     EventId m_nextId = 1;
 };
 

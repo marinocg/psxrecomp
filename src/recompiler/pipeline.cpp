@@ -391,6 +391,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     // ADDIU/ORI within 3 instructions (allowing an intervening NOP or
     // other unrelated instruction), compute the resulting address, and add
     // it as an entry seed if it falls within the binary code range.
+    std::vector<Address> codeHarvestedPointers;
     {
         const Address endAddress = baseAddress + static_cast<Address>(exeImage.programData.size());
         std::unordered_set<Address> existingSeeds(entrySeeds.begin(), entrySeeds.end());
@@ -426,6 +427,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
                     {
                         entrySeeds.push_back(addr);
                         existingSeeds.insert(addr);
+                        codeHarvestedPointers.push_back(addr);
                         ++harvestedFromCode;
                     }
                     break;
@@ -440,6 +442,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
                     {
                         entrySeeds.push_back(addr);
                         existingSeeds.insert(addr);
+                        codeHarvestedPointers.push_back(addr);
                         ++harvestedFromCode;
                     }
                     break;
@@ -495,7 +498,13 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     // Including it as an additional start lets the boundary finder scan
     // for JR RA from the entry address and produce a correctly-sized
     // boundary instead of a massive catch-all.
+    // Also include addresses harvested from LUI+ADDIU/ORI code patterns
+    // (codeHarvestedPointers) — these are runtime-constructed function
+    // pointers (e.g. BIOS callback addresses) that are not direct JAL
+    // targets and would otherwise be missed by boundary detection.
     std::vector<Address> additionalStarts = harvestedPointers;
+    additionalStarts.insert(additionalStarts.end(), codeHarvestedPointers.begin(),
+                            codeHarvestedPointers.end());
     additionalStarts.push_back(entryAddress);
 
     auto boundaries = disasm::findFunctionBoundaries(codeInstructions, additionalStarts);
@@ -554,6 +563,21 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
                 {
                     filledBoundaries.push_back({gapStart, gapEnd, false, false});
                 }
+            }
+        }
+
+        // Also fill the trailing gap between the last recognized function
+        // and the end of the code instruction stream.  Without this,
+        // functions discovered only through LUI+ADDIU pointer harvesting
+        // (e.g. BIOS callback targets) that reside after the last
+        // statically-called function would be omitted from recompilation.
+        if (!filledBoundaries.empty() && !codeInstructions.empty())
+        {
+            const Address lastEnd = filledBoundaries.back().end;
+            const Address codeEnd = codeInstructions.back().address;
+            if (lastEnd + 4 <= codeEnd)
+            {
+                filledBoundaries.push_back({lastEnd + 4, codeEnd, false, false});
             }
         }
 

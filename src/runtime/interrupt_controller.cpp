@@ -23,7 +23,9 @@ u32 InterruptController::readMask() const
 
 void InterruptController::writeStatus(u32 value)
 {
-    m_status &= ~value;
+    // PSX I_STAT acknowledge semantics: bits written as 0 are cleared,
+    // bits written as 1 are preserved.
+    m_status &= value;
 }
 
 void InterruptController::writeMask(u32 value)

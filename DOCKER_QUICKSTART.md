@@ -9,8 +9,8 @@ docker run --rm --entrypoint bash -v "$PWD":/work -w /work psxrecomp-local -lc '
 set -euo pipefail
 ISO="/work/out/recompiled-demos-ubuntu-latest/inputs/HELLOWLD.iso"
 HOST_OUT="/work/out/validation-hellowld-iso-recompiler-v2"
-GEN_ROOT="/tmp/hellowld-regen-v2"
-BUILD_ROOT="/tmp/hellowld-regen-build-v2"
+GEN_ROOT="/work/out/validation-hellowld-iso-recompiler-v2/gen"
+BUILD_ROOT="/work/out/validation-hellowld-iso-recompiler-v2/build"
 rm -rf "$GEN_ROOT" "$BUILD_ROOT" "$HOST_OUT"
 mkdir -p "$HOST_OUT"
 /psxrecomp/build/psxrecomp --json -o "$GEN_ROOT" "$ISO" > "$HOST_OUT/recompile.result.json" 2> "$HOST_OUT/recompile.stderr.log"

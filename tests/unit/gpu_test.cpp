@@ -69,9 +69,10 @@ int main()
     writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00100010u});
     assert(gpu.compareCurrentFrameWithReference().matches());
 
-    const std::array<std::pair<psxrecomp::u32, GpuCommandKind>, 25> decodeCases = {{
+    const std::array<std::pair<psxrecomp::u32, GpuCommandKind>, 26> decodeCases = {{
         {0x00000000u, GpuCommandKind::Nop},
-        {0x01000000u, GpuCommandKind::InterruptRequest},
+        {0x01000000u, GpuCommandKind::Nop},
+        {0x1F000000u, GpuCommandKind::InterruptRequest},
         {0x20000000u, GpuCommandKind::DrawTriangle},
         {0x28000000u, GpuCommandKind::DrawQuad},
         {0x40000000u, GpuCommandKind::DrawLine},
@@ -100,7 +101,7 @@ int main()
     for (size_t i = 0; i < decodeCases.size(); ++i)
     {
         gpu.reset();
-        if (i >= 17)
+        if (i >= 18)
         {
             gpu.writeStatus(decodeCases[i].first);
         }

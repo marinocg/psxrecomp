@@ -87,7 +87,8 @@ collectFunctionStartAddresses(const std::vector<Instruction>& instructions,
 
 void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions,
                                     const InstructionIndexMap& indexMap,
-                                    std::unordered_set<Address>& startAddresses)
+                                    std::unordered_set<Address>& startAddresses,
+                                    const std::unordered_set<Address>* pinnedAddresses = nullptr)
 {
     std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
     std::sort(tempStarts.begin(), tempStarts.end());
@@ -156,6 +157,14 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
 
             if (!hasHardTerminator || hasCrossBranch)
             {
+                // Do not merge if the next function start is a pinned
+                // address (e.g. an explicitly-provided additionalStart).
+                // These are known entry points discovered through pointer
+                // harvesting that must remain as independent functions.
+                if (pinnedAddresses && pinnedAddresses->count(nextFuncStart))
+                {
+                    continue;
+                }
                 startAddresses.erase(nextFuncStart);
                 tempStarts.erase(tempStarts.begin() + static_cast<std::ptrdiff_t>(si + 1));
                 merged = true;
@@ -293,9 +302,15 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
     auto indexMap = detail::buildInstructionIndex(instructions);
     auto startAddresses = collectFunctionStartAddresses(instructions, indexMap, &additionalStarts);
 
+    // Build a set of pinned addresses from the additional starts.  These
+    // are explicitly-identified entry points (from pointer harvesting or
+    // the EXE entry point) that must survive the merge pass — even if the
+    // preceding function appears to fall through into them.
+    std::unordered_set<Address> pinned(additionalStarts.begin(), additionalStarts.end());
+
     // ── Merge consecutive functions where the first falls through or has
     //    a cross-branch (same unified logic as the single-arg overload).
-    mergeConsecutiveFunctionSplits(instructions, indexMap, startAddresses);
+    mergeConsecutiveFunctionSplits(instructions, indexMap, startAddresses, &pinned);
     return buildFunctionBoundaries(instructions, indexMap, startAddresses);
 }
 

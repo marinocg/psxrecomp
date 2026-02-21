@@ -460,16 +460,12 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("system.logger().setMinLevel(effectiveLogLevel);");
     emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
-    emitter.writeLine("const bool autoFrameProgress = "
-                      "envFlagEnabled(std::getenv(\"PSXRECOMP_AUTO_FRAME_PROGRESS\"), true);");
     emitter.writeLine("const bool renderDebugOverlay = "
                       "envFlagEnabled(std::getenv(\"PSXRECOMP_RENDER_DEBUG_OVERLAY\"), false);");
     emitter.writeLine("std::cout << \"[psxrecomp] Runtime log level: \" << "
                       "logLevelLabel(effectiveLogLevel) << \"\\n\";");
     emitter.writeLine("std::cout << \"[psxrecomp] Render debug overlay: \" << "
                       "(renderDebugOverlay ? \"on\" : \"off\") << \"\\n\";");
-    emitter.writeLine("std::cout << \"[psxrecomp] Auto frame progress: \" << "
-                      "(autoFrameProgress ? \"on\" : \"off\") << \"\\n\";");
     emitter.writeLine("try");
     emitter.openBlock("");
     emitter.writeLine("if (!system.initialize())");
@@ -480,7 +476,6 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::initMemory(system);");
-    emitter.writeLine("system.setAutoFrameProgressOnInterruptPoll(autoFrameProgress);");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
     emitter.writeLine("#else");

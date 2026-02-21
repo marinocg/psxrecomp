@@ -189,6 +189,9 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
                 registers.checkMaskBeforeDraw = (command.words[0] & 0x2) != 0;
             }
             break;
+        case GpuCommandKind::InterruptRequest:
+            registers.irqPending = true;
+            break;
         default:
             break;
         }
@@ -220,9 +223,6 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
         break;
     case GpuCommandKind::AcknowledgeIrq:
         registers.irqPending = false;
-        break;
-    case GpuCommandKind::InterruptRequest:
-        registers.irqPending = true;
         break;
     case GpuCommandKind::DisplayVramStart:
         if (!command.words.empty())
@@ -306,11 +306,16 @@ GpuCommand Gpu::decodePacket(const PacketState& packet) const
     }
     else if (packet.opcode == 0x01)
     {
-        command.kind = GpuCommandKind::InterruptRequest;
+        // GP0(01h) clears texture cache on hardware; model as NOP for now.
+        command.kind = GpuCommandKind::Nop;
     }
     else if (packet.opcode == 0x02)
     {
         command.kind = GpuCommandKind::FillRectangle;
+    }
+    else if (packet.opcode == 0x1F)
+    {
+        command.kind = GpuCommandKind::InterruptRequest;
     }
     else if (isOpcodeInRange(packet.opcode, 0x20, 0x27) ||
              isOpcodeInRange(packet.opcode, 0x30, 0x37))
