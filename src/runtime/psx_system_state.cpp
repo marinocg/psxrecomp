@@ -121,8 +121,8 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_debugOverlay.reset();
     m_timers.reset();
     m_criticalSectionDepth = 0;
-    m_customExitHandler = 0;
-    m_inCustomExitHandler = false;
+    m_hookEntryInt = {};
+    m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
     m_frameCount = 0;
     m_cpuCycles = 0;

@@ -1,5 +1,6 @@
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <cstdlib>
 #include <sstream>
 #include <utility>
 
@@ -15,6 +16,93 @@ constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
 constexpr u32 VBLANK_CYCLES = CYCLES_PER_FRAME / 10u;
 constexpr u32 VBLANK_MID_CYCLES = VBLANK_CYCLES / 2u;
 constexpr u32 ACTIVE_CYCLES = CYCLES_PER_FRAME - VBLANK_CYCLES;
+
+bool traceIrqFlowEnabled()
+{
+    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
+    {
+        return env[0] == '1';
+    }
+    return false;
+}
+
+const char* interruptTraceKindName(InterruptController::TraceEvent::Kind kind)
+{
+    switch (kind)
+    {
+    case InterruptController::TraceEvent::Kind::Reset:
+        return "reset";
+    case InterruptController::TraceEvent::Kind::WriteStatus:
+        return "write_status";
+    case InterruptController::TraceEvent::Kind::WriteMask:
+        return "write_mask";
+    case InterruptController::TraceEvent::Kind::Raise:
+        return "raise";
+    case InterruptController::TraceEvent::Kind::RestoreState:
+        return "restore_state";
+    default:
+        return "unknown";
+    }
+}
+
+const char* interruptLineName(InterruptLine line)
+{
+    switch (line)
+    {
+    case InterruptLine::VBlank:
+        return "VBlank";
+    case InterruptLine::Gpu:
+        return "Gpu";
+    case InterruptLine::Cdrom:
+        return "Cdrom";
+    case InterruptLine::Dma:
+        return "Dma";
+    case InterruptLine::Timer0:
+        return "Timer0";
+    case InterruptLine::Timer1:
+        return "Timer1";
+    case InterruptLine::Timer2:
+        return "Timer2";
+    case InterruptLine::Controller:
+        return "Controller";
+    case InterruptLine::Sio:
+        return "Sio";
+    case InterruptLine::Spu:
+        return "Spu";
+    case InterruptLine::Pio:
+        return "Pio";
+    default:
+        return "Unknown";
+    }
+}
+
+std::string formatPendingLineOrder(u32 pendingMasked)
+{
+    constexpr InterruptLine kPriorityOrder[] = {
+        InterruptLine::VBlank, InterruptLine::Gpu,    InterruptLine::Cdrom,  InterruptLine::Dma,
+        InterruptLine::Timer0, InterruptLine::Timer1, InterruptLine::Timer2, InterruptLine::Controller,
+        InterruptLine::Sio,    InterruptLine::Spu,    InterruptLine::Pio,
+    };
+
+    std::ostringstream out;
+    bool first = true;
+    for (InterruptLine line : kPriorityOrder)
+    {
+        const u32 bit = static_cast<u32>(line);
+        if ((pendingMasked & bit) == 0)
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ",";
+        }
+        out << interruptLineName(line);
+        first = false;
+    }
+
+    return out.str();
+}
 
 void appendU32(std::vector<u8>& out, u32 value)
 {
@@ -68,10 +156,28 @@ void PsxSystem::reset()
     m_debugOverlay.reset();
     m_timers.reset();
     m_criticalSectionDepth = 0;
-    m_customExitHandler = 0;
+    m_hookEntryInt = {};
     m_callbackInvoker = CallbackInvoker{};
-    m_inCustomExitHandler = false;
+    m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
+    if (traceIrqFlowEnabled())
+    {
+        m_interrupts.setTraceHook(
+            [this](const InterruptController::TraceEvent& event)
+            {
+                std::ostringstream msg;
+                msg << "event=irq_state kind=" << interruptTraceKindName(event.kind)
+                    << " value=0x" << std::hex << event.value << " status_before=0x"
+                    << event.statusBefore << " status_after=0x" << event.statusAfter
+                    << " mask_before=0x" << event.maskBefore << " mask_after=0x"
+                    << event.maskAfter << " pc=0x" << m_debugOverlay.lastProgramCounter();
+                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            });
+    }
+    else
+    {
+        m_interrupts.setTraceHook(InterruptController::TraceHook{});
+    }
     m_irqChainHeads = {};
     m_frameCount = 0;
     m_cpuCycles = 0;
@@ -313,6 +419,15 @@ void PsxSystem::serviceInterrupts()
     }
 
     const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
+    if (traceIrqFlowEnabled())
+    {
+        std::ostringstream msg;
+        msg << "event=service_interrupts pending_masked=0x" << std::hex << pendingMasked
+            << " status=0x" << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
+            << " critical_depth=" << std::dec << m_criticalSectionDepth << " in_callback="
+            << (m_inCallbackInvocation ? 1 : 0);
+        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+    }
     if (pendingMasked == 0)
     {
         // Still allow the event dispatcher to flush deferred callbacks.
@@ -323,9 +438,21 @@ void PsxSystem::serviceInterrupts()
         }
         catch (const ReturnFromExceptionSignal&)
         {
+            if (traceIrqFlowEnabled())
+            {
+                m_logger.log(LogLevel::Info, "irq_trace",
+                             "event=return_from_exception source=dispatcher_empty_pending");
+            }
             return;
         }
         return;
+    }
+    if (traceIrqFlowEnabled())
+    {
+        std::ostringstream msg;
+        msg << "event=irq_dispatch_order source=service_interrupts pending_masked=0x" << std::hex
+            << pendingMasked << " lines=" << formatPendingLineOrder(pendingMasked);
+        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
 
     // BIOS-style exception handler priority chains (installed via SysEnqIntRP).
@@ -333,14 +460,37 @@ void PsxSystem::serviceInterrupts()
     // and for acknowledging IRQ sources.
     if (dispatchIrqChains())
     {
+        if (traceIrqFlowEnabled())
+        {
+            m_logger.log(LogLevel::Info, "irq_trace",
+                         "event=return_from_exception source=irq_chain_dispatch");
+        }
         return;
     }
 
-    // Custom exit hook (SetCustomExitFromException) must run while IRQ status
-    // bits are still visible so SDK handlers can observe and acknowledge them.
-    if (pendingMasked != 0 && m_customExitHandler != 0 && !m_inCustomExitHandler)
+    // HookEntryInt descriptor callback runs while IRQ status bits are visible.
+    if (pendingMasked != 0 && m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
     {
-        invokeCustomExitHandler();
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=hook_entry_int_invoke descriptor=0x" << std::hex
+                << m_hookEntryInt.descriptorAddress;
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
+        try
+        {
+            invokeHookEntryIntHandler();
+        }
+        catch (const ReturnFromExceptionSignal&)
+        {
+            if (traceIrqFlowEnabled())
+            {
+                m_logger.log(LogLevel::Info, "irq_trace",
+                             "event=return_from_exception source=hook_entry_int");
+            }
+            return;
+        }
     }
 
     // Kernel event delivery (OpenEvent/EnableEvent model).
@@ -351,34 +501,53 @@ void PsxSystem::serviceInterrupts()
     }
     catch (const ReturnFromExceptionSignal&)
     {
+        if (traceIrqFlowEnabled())
+        {
+            m_logger.log(LogLevel::Info, "irq_trace",
+                         "event=return_from_exception source=dispatcher_pending");
+        }
         return;
     }
 }
 
-u32 PsxSystem::resolveCustomExitCallback(u32 address) const
+u32 PsxSystem::resolveHookEntryIntCallback(u32 descriptorAddress) const
 {
-    const Address physical = normalizeAddress(address);
-    if (physical > MemoryMap::RAM_SIZE - sizeof(u32))
+    if (descriptorAddress == 0)
     {
-        return address;
+        return 0;
     }
 
-    const u32 tableTarget = readFromRegion<u32>(m_ram.data(), physical, MemoryMap::RAM_SIZE);
-    const Address tableTargetPhysical = normalizeAddress(tableTarget);
-    if ((tableTarget & 0xE0000000u) == 0x80000000u &&
-        tableTargetPhysical <= (MemoryMap::RAM_SIZE - sizeof(u32)) &&
-        (tableTargetPhysical & 0x3u) == 0u)
+    const Address descriptorPhysical = normalizeAddress(descriptorAddress);
+    if (descriptorPhysical > MemoryMap::RAM_SIZE - sizeof(u32) ||
+        (descriptorPhysical & 0x3u) != 0u)
     {
-        return tableTarget;
+        return 0;
     }
-    return address;
+
+    const u32 callbackAddress =
+        readFromRegion<u32>(m_ram.data(), descriptorPhysical, MemoryMap::RAM_SIZE);
+    const Address callbackPhysical = normalizeAddress(callbackAddress);
+    if ((callbackAddress & 0xE0000000u) != 0x80000000u ||
+        callbackPhysical > MemoryMap::RAM_SIZE - sizeof(u32) || (callbackPhysical & 0x3u) != 0u)
+    {
+        return 0;
+    }
+    return callbackAddress;
 }
 
-void PsxSystem::invokeCustomExitHandler()
+void PsxSystem::invokeHookEntryIntHandler()
 {
-    m_inCustomExitHandler = true;
-    invokeCallback(resolveCustomExitCallback(m_customExitHandler));
-    m_inCustomExitHandler = false;
+    m_inHookEntryIntHandler = true;
+    try
+    {
+        (void)invokeCallbackRaw(resolveHookEntryIntCallback(m_hookEntryInt.descriptorAddress));
+    }
+    catch (...)
+    {
+        m_inHookEntryIntHandler = false;
+        throw;
+    }
+    m_inHookEntryIntHandler = false;
 }
 
 void PsxSystem::invokeCallback(u32 address)
@@ -389,6 +558,13 @@ void PsxSystem::invokeCallback(u32 address)
     }
     if (m_callbackInvoker)
     {
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=callback_invoke mode=void addr=0x" << std::hex << address << " pc=0x"
+                << m_debugOverlay.lastProgramCounter();
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
         const bool previousInCallbackInvocation = m_inCallbackInvocation;
         m_inCallbackInvocation = true;
         try
@@ -397,6 +573,13 @@ void PsxSystem::invokeCallback(u32 address)
         }
         catch (const ReturnFromExceptionSignal&)
         {
+            if (traceIrqFlowEnabled())
+            {
+                std::ostringstream msg;
+                msg << "event=return_from_exception source=callback_invoke addr=0x" << std::hex
+                    << address;
+                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            }
             m_inCallbackInvocation = previousInCallbackInvocation;
             return;
         }
@@ -424,7 +607,21 @@ u32 PsxSystem::invokeCallbackRaw(u32 address)
     m_inCallbackInvocation = true;
     try
     {
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=callback_invoke mode=raw addr=0x" << std::hex << address << " pc=0x"
+                << m_debugOverlay.lastProgramCounter();
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
         const u32 result = m_callbackInvoker(address);
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=callback_return mode=raw addr=0x" << std::hex << address
+                << " v0=0x" << result;
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
         m_inCallbackInvocation = previousInCallbackInvocation;
         return result;
     }
@@ -455,6 +652,14 @@ bool PsxSystem::dispatchIrqChains()
         {
             const u32 func2 = read<u32>(node + 0x04);
             const u32 func1 = read<u32>(node + 0x08);
+            if (traceIrqFlowEnabled())
+            {
+                std::ostringstream msg;
+                msg << "event=irq_dispatch_order source=irq_chain prio=" << std::dec << prio
+                    << " index=" << safety << " node=0x" << std::hex << node << " func1=0x"
+                    << func1 << " func2=0x" << func2;
+                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            }
 
             if (func1 != 0)
             {
@@ -465,6 +670,11 @@ bool PsxSystem::dispatchIrqChains()
                 }
                 catch (const ReturnFromExceptionSignal&)
                 {
+                    if (traceIrqFlowEnabled())
+                    {
+                        m_logger.log(LogLevel::Info, "irq_trace",
+                                     "event=return_from_exception source=irq_chain_func1");
+                    }
                     return true;
                 }
 
@@ -476,6 +686,11 @@ bool PsxSystem::dispatchIrqChains()
                     }
                     catch (const ReturnFromExceptionSignal&)
                     {
+                        if (traceIrqFlowEnabled())
+                        {
+                            m_logger.log(LogLevel::Info, "irq_trace",
+                                         "event=return_from_exception source=irq_chain_func2");
+                        }
                         return true;
                     }
                 }

@@ -2,12 +2,25 @@
 
 #include "bios_helpers.h"
 
+#include <cstdlib>
 #include <sstream>
 
 namespace psxrecomp
 {
 namespace runtime
 {
+
+namespace
+{
+bool traceIrqFlowEnabled()
+{
+    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
+    {
+        return env[0] == '1';
+    }
+    return false;
+}
+} // namespace
 
 bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
 {
@@ -94,20 +107,34 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         // to the interrupted execution point.
         if (m_inCallbackInvocation)
         {
+            if (traceIrqFlowEnabled())
+            {
+                std::ostringstream msg;
+                msg << "event=return_from_exception source=bios_b0_17 action=throw pc=0x"
+                    << std::hex << m_debugOverlay.lastProgramCounter();
+                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            }
             throw ReturnFromExceptionSignal{};
         }
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=return_from_exception source=bios_b0_17 action=ignored pc=0x"
+                << std::hex << m_debugOverlay.lastProgramCounter();
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
         return true;
-    case 0x18: // SetDefaultExitFromException
-        m_customExitHandler = 0;
-        regs[2] = 0;
+    case 0x18: // ResetEntryInt
+        regs[2] = m_hookEntryInt.descriptorAddress;
+        m_hookEntryInt = {};
         return true;
-    case 0x19: // SetCustomExitFromException
+    case 0x19: // HookEntryInt
     {
-        regs[2] = m_customExitHandler;
-        m_customExitHandler = a0;
+        regs[2] = m_hookEntryInt.descriptorAddress;
+        m_hookEntryInt.descriptorAddress = a0;
 
         std::ostringstream msg;
-        msg << "SetCustomExitFromException -> 0x" << std::hex << a0;
+        msg << "HookEntryInt descriptor=0x" << std::hex << a0;
         m_logger.log(LogLevel::Debug, "bios", msg.str());
         return true;
     }

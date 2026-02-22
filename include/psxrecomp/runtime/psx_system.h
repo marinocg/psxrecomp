@@ -289,9 +289,13 @@ class PsxSystem
     DiscSwapInfo m_discSwapInfo;
     u32 m_frameCount = 0;
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
-    u32 m_customExitHandler = 0;       ///< Address set by SetCustomExitFromException (B0 0x19)
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
-    bool m_inCustomExitHandler = false;
+    struct HookEntryIntState
+    {
+        u32 descriptorAddress = 0; ///< B0(19) HookEntryInt descriptor pointer.
+    };
+    HookEntryIntState m_hookEntryInt;
+    bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
 
     /// BIOS IRQ priority chains (C0:02 SysEnqIntRP / C0:03 SysDeqIntRP).
@@ -310,8 +314,8 @@ class PsxSystem
     void primeVideoSchedule();
 
     void handleVBlankStart();
-    void invokeCustomExitHandler();
-    u32 resolveCustomExitCallback(u32 address) const;
+    void invokeHookEntryIntHandler();
+    u32 resolveHookEntryIntCallback(u32 descriptorAddress) const;
 
     static Address normalizeAddress(Address address)
     {
