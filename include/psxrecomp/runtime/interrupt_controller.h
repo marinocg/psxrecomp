@@ -27,6 +27,14 @@ enum class InterruptLine : u16
 class InterruptController
 {
   public:
+    static constexpr u32 ValidLineMask =
+        static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Gpu) |
+        static_cast<u32>(InterruptLine::Cdrom) | static_cast<u32>(InterruptLine::Dma) |
+        static_cast<u32>(InterruptLine::Timer0) | static_cast<u32>(InterruptLine::Timer1) |
+        static_cast<u32>(InterruptLine::Timer2) | static_cast<u32>(InterruptLine::Controller) |
+        static_cast<u32>(InterruptLine::Sio) | static_cast<u32>(InterruptLine::Spu) |
+        static_cast<u32>(InterruptLine::Pio);
+
     struct TraceEvent
     {
         enum class Kind

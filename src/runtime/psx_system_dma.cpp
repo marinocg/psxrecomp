@@ -74,9 +74,8 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             }
 
             m_dma.clearTrigger(port);
-            m_interrupts.raise(InterruptLine::Dma);
+            m_dma.notifyTransferComplete(port);
             m_debugOverlay.incrementDmaTransfers();
-            m_debugOverlay.incrementInterruptsRaised();
             return;
         }
 
@@ -223,9 +222,8 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     }
 
     m_dma.clearTrigger(port);
-    m_interrupts.raise(InterruptLine::Dma);
+    m_dma.notifyTransferComplete(port);
     m_debugOverlay.incrementDmaTransfers();
-    m_debugOverlay.incrementInterruptsRaised();
 
     std::ostringstream message;
     message << "DMA transfer on port " << static_cast<int>(port) << " words=" << transferredWords;

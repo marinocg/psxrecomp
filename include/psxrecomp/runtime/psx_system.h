@@ -314,6 +314,7 @@ class PsxSystem
     void primeVideoSchedule();
 
     void handleVBlankStart();
+    void syncLevelInterruptSources();
     void invokeHookEntryIntHandler();
     u32 resolveHookEntryIntCallback(u32 descriptorAddress) const;
 

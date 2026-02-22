@@ -7,10 +7,30 @@ namespace runtime
 
 namespace
 {
-constexpr Address CONTROL_REG = 0x1F8010F0;
-constexpr Address INTERRUPT_REG = 0x1F8010F4;
-
 constexpr u32 START_TRIGGER = 0x01000000;
+constexpr u32 DICR_FORCE_IRQ = 0x00008000u;
+constexpr u32 DICR_CHANNEL_ENABLE_MASK = 0x007F0000u;
+constexpr u32 DICR_MASTER_ENABLE = 0x00800000u;
+constexpr u32 DICR_CHANNEL_FLAG_MASK = 0x7F000000u;
+constexpr u32 DICR_MASTER_FLAG = 0x80000000u;
+
+void updateMasterFlag(u32& dicr)
+{
+    const bool forceIrq = (dicr & DICR_FORCE_IRQ) != 0;
+    const bool masterEnabled = (dicr & DICR_MASTER_ENABLE) != 0;
+    const u32 enabledChannels = (dicr & DICR_CHANNEL_ENABLE_MASK) >> 16;
+    const u32 flaggedChannels = (dicr & DICR_CHANNEL_FLAG_MASK) >> 24;
+    const bool enabledFlagged = (enabledChannels & flaggedChannels) != 0;
+    const bool irqRequested = forceIrq || (masterEnabled && enabledFlagged);
+    if (irqRequested)
+    {
+        dicr |= DICR_MASTER_FLAG;
+    }
+    else
+    {
+        dicr &= ~DICR_MASTER_FLAG;
+    }
+}
 } // namespace
 
 void DmaController::reset()
@@ -25,11 +45,11 @@ void DmaController::reset()
 
 u32 DmaController::readRegister(Address address) const
 {
-    if (address == CONTROL_REG)
+    if (address == ControlReg)
     {
         return m_control;
     }
-    if (address == INTERRUPT_REG)
+    if (address == InterruptReg)
     {
         return m_interrupt;
     }
@@ -57,14 +77,19 @@ u32 DmaController::readRegister(Address address) const
 
 std::optional<DmaPort> DmaController::writeRegister(Address address, u32 value)
 {
-    if (address == CONTROL_REG)
+    if (address == ControlReg)
     {
         m_control = value;
         return std::nullopt;
     }
-    if (address == INTERRUPT_REG)
+    if (address == InterruptReg)
     {
-        m_interrupt = value;
+        // DICR lower 24 bits are control fields; bits 24-30 are write-1-to-clear
+        // channel flags; bit 31 is derived from force/master/flags state.
+        const u32 clearFlags = (value >> 24) & 0x7Fu;
+        m_interrupt = (m_interrupt & DICR_CHANNEL_FLAG_MASK) | (value & 0x00FFFFFFu);
+        m_interrupt &= ~(clearFlags << 24);
+        updateMasterFlag(m_interrupt);
         return std::nullopt;
     }
 
@@ -108,6 +133,18 @@ void DmaController::clearTrigger(DmaPort port)
 {
     auto& channel = m_channels[channelIndex(port)];
     channel.channelControl &= ~START_TRIGGER;
+}
+
+void DmaController::notifyTransferComplete(DmaPort port)
+{
+    const u32 channelBit = 1u << (24u + static_cast<u32>(port));
+    m_interrupt |= channelBit;
+    updateMasterFlag(m_interrupt);
+}
+
+bool DmaController::irqRequested() const
+{
+    return (m_interrupt & DICR_MASTER_FLAG) != 0;
 }
 
 size_t DmaController::channelIndex(DmaPort port) const

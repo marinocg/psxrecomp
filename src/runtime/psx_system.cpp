@@ -236,19 +236,31 @@ void PsxSystem::tickCpuCycles(u32 cpuCycles)
                       m_interrupts.raise(line);
                       m_debugOverlay.incrementInterruptsRaised();
                   });
-    if (m_gpu.irqPending() &&
-        (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Gpu)) == 0)
-    {
-        m_interrupts.raise(InterruptLine::Gpu);
-        m_debugOverlay.incrementInterruptsRaised();
-    }
-    if (m_cdrom.hasIrqRequest() &&
-        (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
-    {
-        m_interrupts.raise(InterruptLine::Cdrom);
-        m_debugOverlay.incrementInterruptsRaised();
-    }
+    syncLevelInterruptSources();
     m_scheduler.tick(cpuCycles);
+}
+
+void PsxSystem::syncLevelInterruptSources()
+{
+    const auto raiseIfRequested =
+        [this](bool requested, InterruptLine line)
+    {
+        if (!requested)
+        {
+            return;
+        }
+
+        const u32 lineBit = static_cast<u32>(line);
+        if ((m_interrupts.readStatus() & lineBit) == 0)
+        {
+            m_interrupts.raise(line);
+            m_debugOverlay.incrementInterruptsRaised();
+        }
+    };
+
+    raiseIfRequested(m_gpu.irqPending(), InterruptLine::Gpu);
+    raiseIfRequested(m_cdrom.hasIrqRequest(), InterruptLine::Cdrom);
+    raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
 }
 
 uint64_t PsxSystem::cpuCyclesElapsed() const
@@ -418,6 +430,8 @@ void PsxSystem::serviceInterrupts()
         return;
     }
 
+    syncLevelInterruptSources();
+
     const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
     if (traceIrqFlowEnabled())
     {
@@ -469,7 +483,8 @@ void PsxSystem::serviceInterrupts()
     }
 
     // HookEntryInt descriptor callback runs while IRQ status bits are visible.
-    if (pendingMasked != 0 && m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
+    if (pendingMasked != 0 && m_criticalSectionDepth == 0 && m_hookEntryInt.descriptorAddress != 0 &&
+        !m_inHookEntryIntHandler)
     {
         if (traceIrqFlowEnabled())
         {

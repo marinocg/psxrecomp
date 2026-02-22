@@ -12,7 +12,9 @@ namespace MemoryMap = psxrecomp::MemoryMap;
 int main()
 {
     using psxrecomp::Address;
+    using psxrecomp::runtime::DmaController;
     using psxrecomp::runtime::DmaPort;
+    using psxrecomp::runtime::InterruptController;
     using psxrecomp::runtime::InterruptLine;
     using psxrecomp::runtime::LogLevel;
     using psxrecomp::runtime::PsxSystem;
@@ -33,9 +35,8 @@ int main()
     system.write<psxrecomp::u32>(ramOut, 0xFACEB00C);
     assert(system.read<psxrecomp::u32>(ramOut) == 0);
 
-    Address gpuBase =
-        psxrecomp::runtime::DmaController::ChannelBase +
-        psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Gpu);
+    Address gpuBase = DmaController::ChannelBase +
+                      DmaController::ChannelStride * static_cast<Address>(DmaPort::Gpu);
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
     system.write<psxrecomp::u32>(0x00010000, 0x11111111);
     system.write<psxrecomp::u32>(0x00010004, 0x22222222);
@@ -45,8 +46,25 @@ int main()
 
     assert(system.gpu().fifoDepth() == 2);
     assert(system.gpu().peekFifo() == 0x11111111);
-    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Dma)) !=
-           0);
+    const auto dmaLine = static_cast<psxrecomp::u32>(InterruptLine::Dma);
+    assert((system.interrupts().readStatus() & dmaLine) == 0u);
+
+    // DMA IRQ should only assert when DICR enables that source.
+    const psxrecomp::u32 dmaGpuEnable = (1u << (16 + static_cast<psxrecomp::u32>(DmaPort::Gpu))) |
+                                        (1u << 23);
+    system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg, (1u << 26));
+    system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg, dmaGpuEnable);
+    assert((system.interrupts().readStatus() & dmaLine) == 0u);
+    system.write<psxrecomp::u32>(0x00010008, 0x33333333);
+    system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00010008);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000001);
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000001);
+    assert((system.interrupts().readStatus() & dmaLine) != 0u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS, ~dmaLine);
+    assert((system.interrupts().readStatus() & dmaLine) != 0u);
+    system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg, dmaGpuEnable | (1u << 26));
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS, ~dmaLine);
+    assert((system.interrupts().readStatus() & dmaLine) == 0u);
 
     // GPU DMA RAM->GPU should honor address decrement mode in normal sync.
     system.gpu().reset();
@@ -138,14 +156,17 @@ int main()
     // GPU GP0 interrupt command should propagate to the hardware IRQ line.
     system.interrupts().restoreState(0, static_cast<psxrecomp::u32>(InterruptLine::Gpu));
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x1F000000u);
-    system.tickCpuCycles(1);
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) !=
+           0u);
+    // Acknowledging I_STAT while GPU source is still active should reassert.
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
+                                             ~static_cast<psxrecomp::u32>(InterruptLine::Gpu));
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) !=
            0u);
     // GP1 acknowledge + I_STAT acknowledge should clear and keep it cleared.
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x02000000u);
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
                                              ~static_cast<psxrecomp::u32>(InterruptLine::Gpu));
-    system.tickCpuCycles(1);
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) ==
            0u);
     // GP0(01h) cache clear should not trigger GPU IRQ.
@@ -170,6 +191,42 @@ int main()
     system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
     assert(syscallRegs[2] == 0u);
 
+    // HookEntryInt callback should not run while inside a critical section.
+    constexpr Address hookDescriptorAddress = 0x00001000;
+    constexpr psxrecomp::u32 hookCallbackAddress = 0x80002000u;
+    system.write<psxrecomp::u32>(hookDescriptorAddress, hookCallbackAddress);
+    std::array<psxrecomp::u32, 32> hookRegs{};
+    hookRegs[9] = 0x19; // HookEntryInt
+    hookRegs[4] = hookDescriptorAddress;
+    system.callBiosVector(0xB0, hookRegs.data(), hookRegs.size());
+
+    psxrecomp::u32 hookInvocations = 0;
+    system.setCallbackInvoker(
+        [&hookInvocations, hookCallbackAddress](psxrecomp::u32 address) -> psxrecomp::u32
+        {
+            if (address == hookCallbackAddress)
+            {
+                ++hookInvocations;
+            }
+            return 0;
+        });
+
+    system.interrupts().restoreState(static_cast<psxrecomp::u32>(InterruptLine::VBlank),
+                                     static_cast<psxrecomp::u32>(InterruptLine::VBlank));
+    syscallRegs[4] = 1; // EnterCriticalSection
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    system.serviceInterrupts();
+    assert(hookInvocations == 0u);
+    syscallRegs[4] = 2; // ExitCriticalSection
+    system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    system.serviceInterrupts();
+    assert(hookInvocations == 1u);
+
+    hookRegs = {};
+    hookRegs[9] = 0x18; // ResetEntryInt
+    system.callBiosVector(0xB0, hookRegs.data(), hookRegs.size());
+    system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
+
     Address spuBase =
         psxrecomp::runtime::DmaController::ChannelBase +
         psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);
@@ -186,7 +243,26 @@ int main()
     assert(system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1) ==
            0x00);
 
+    // CD-ROM source should reassert on I_STAT ack until CDROM flags are acknowledged.
+    system.interrupts().restoreState(0, static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x01);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0x09);
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) !=
+           0u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
+                                             ~static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) !=
+           0u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x01);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
+                                             ~static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) ==
+           0u);
+
     // 16-bit I_STAT/I_MASK accesses must behave like hardware low-halfword accesses.
+    system.interrupts().restoreState(0xFFFFFFFFu, 0xFFFFFFFFu);
+    assert(system.interrupts().readStatus() == InterruptController::ValidLineMask);
+    assert(system.interrupts().readMask() == InterruptController::ValidLineMask);
     system.interrupts().restoreState(0, 0);
     system.interrupts().raise(InterruptLine::VBlank);
     assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS) ==
@@ -411,7 +487,7 @@ int main()
     stateWithInterrupts[interruptStateOffset + 6] = 0x00;
     stateWithInterrupts[interruptStateOffset + 7] = 0x00;
     assert(system.deserializeState(stateWithInterrupts));
-    assert(system.interrupts().readStatus() == 0xF00055AAu);
+    assert(system.interrupts().readStatus() == (0xF00055AAu & InterruptController::ValidLineMask));
     assert(system.interrupts().readMask() == 0x0000000Fu);
 
     auto stateWithJunk = state;

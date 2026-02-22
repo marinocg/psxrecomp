@@ -114,16 +114,19 @@ void PsxSystem::writeMmio32(Address address, u32 value)
     if (address == Mmio::GPU_GP0)
     {
         m_gpu.writeCommand(value);
+        syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::GPU_GP1)
     {
         m_gpu.writeStatus(value);
+        syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
         m_interrupts.writeStatus(value);
+        syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::INTERRUPT_MASK)
@@ -138,6 +141,7 @@ void PsxSystem::writeMmio32(Address address, u32 value)
         {
             handleDmaTransfer(*triggered);
         }
+        syncLevelInterruptSources();
         return;
     }
     // Timer registers: some code writes timers with 32-bit SW instructions.
@@ -167,7 +171,10 @@ void PsxSystem::writeMmio16(Address address, u16 value)
 {
     if (address == Mmio::INTERRUPT_STATUS)
     {
-        m_interrupts.writeStatus(static_cast<u32>(value));
+        const u32 mergedStatus =
+            (m_interrupts.readStatus() & 0xFFFF0000u) | static_cast<u32>(value);
+        m_interrupts.writeStatus(mergedStatus);
+        syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::INTERRUPT_MASK)
@@ -215,27 +222,18 @@ void PsxSystem::writeMmio8(Address address, u8 value)
         {
         case 0:
             m_cdrom.writeCommand(value);
-            if (m_cdrom.hasIrqRequest() &&
-                (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
-            {
-                m_interrupts.raise(InterruptLine::Cdrom);
-                m_debugOverlay.incrementInterruptsRaised();
-            }
+            syncLevelInterruptSources();
             break;
         case 1:
             m_cdrom.writeParam(value);
             break;
         case 2:
             m_cdrom.writeInterruptFlags(value);
+            syncLevelInterruptSources();
             break;
         case 3:
             m_cdrom.writeInterruptEnable(value);
-            if (m_cdrom.hasIrqRequest() &&
-                (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
-            {
-                m_interrupts.raise(InterruptLine::Cdrom);
-                m_debugOverlay.incrementInterruptsRaised();
-            }
+            syncLevelInterruptSources();
             break;
         default:
             break;
