@@ -584,7 +584,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.openBlock("");
     emitter.writeLine("RecompilerContext context{system, {}};");
 
-    // Install callback invoker bridge so interrupts can call recompiled code.
+    // Install only the ABI-required callback invoker bridge.
+    // Compatibility shims (VSync/DrawSync detection, runtime toggles) are intentionally omitted.
     emitter.writeBlank();
     emitter.writeLine("// Install callback invoker bridge for interrupt dispatch.");
     emitter.writeLine("system.setCallbackInvoker(");

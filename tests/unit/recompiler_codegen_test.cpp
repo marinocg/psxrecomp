@@ -80,6 +80,22 @@ int main()
     std::string source = generator.generateSource(program, "module");
     std::string buildFile = generator.generateBuildFile("module");
     std::string runner = generator.generateRunnerSource("module");
+    auto countOccurrences =
+        [](const std::string& haystack, const std::string& needle) -> size_t
+    {
+        if (needle.empty())
+        {
+            return 0;
+        }
+        size_t count = 0;
+        size_t pos = 0;
+        while ((pos = haystack.find(needle, pos)) != std::string::npos)
+        {
+            ++count;
+            pos += needle.size();
+        }
+        return count;
+    };
 
     assert(header.find("RecompiledModule") != std::string::npos);
     assert(source.find("readMemory32") != std::string::npos);
@@ -93,6 +109,12 @@ int main()
     assert(source.find("kModuleEntryAddress") != std::string::npos);
     assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
            std::string::npos);
+    // Runtime shim policy: emit only the callback invoker bridge in run().
+    assert(countOccurrences(source, "setCallbackInvoker(") == 1);
+    assert(source.find("VSync") == std::string::npos);
+    assert(source.find("DrawSync") == std::string::npos);
+    assert(source.find("PSXRECOMP_AUTO_FRAME_PROGRESS") == std::string::npos);
+    assert(source.find("setAutoFrameProgress") == std::string::npos);
     assert(source.find("triggerTrap") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
     assert(buildFile.find("add_executable") != std::string::npos);
