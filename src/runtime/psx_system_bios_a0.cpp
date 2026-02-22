@@ -136,26 +136,58 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
     }
     case 0x4B: // send_gpu_linked_list (GPU ordering table DMA)
     {
-        u32 nodeAddr = a0 & 0x1FFFFC;
-        for (u32 safety = 0; safety < 0x100000u; ++safety)
+        // PSX-SPX sequence:
+        //   GP1(04h)=2 (DMA CPU->GP0), DICR=0, DPCR|=0x800, CHCR setup/start.
+        // This path intentionally models register side-effects instead of a
+        // direct software push of OT words.
+        constexpr Address gpuDmaBase = DmaController::ChannelBase +
+                                       static_cast<Address>(DmaPort::Gpu) *
+                                           DmaController::ChannelStride;
+        writeMmio32(Mmio::GPU_GP1, 0x04000002u);
+        writeMmio32(DmaController::InterruptReg, 0u);
+        const u32 dpcr = readMmio32(DmaController::ControlReg);
+        writeMmio32(DmaController::ControlReg, dpcr | 0x00000800u);
+        writeMmio32(gpuDmaBase + 0x0, a0 & 0x1FFFFCu);
+        writeMmio32(gpuDmaBase + 0x4, 0u);
+        writeMmio32(gpuDmaBase + 0x8, 0x01000401u);
+        return true;
+    }
+    case 0x4E: // gpu_sync
+    {
+        constexpr u32 gpuStatDmaRequest = 1u << 28;
+        constexpr Address gpuDmaChcr =
+            DmaController::ChannelBase + static_cast<Address>(DmaPort::Gpu) *
+                                            DmaController::ChannelStride +
+            0x8;
+
+        // If GPU DMA mode is enabled, ensure channel transfer has quiesced
+        // and then force GP1(04h)=0 (DMA off), mirroring BIOS behavior.
+        bool timeout = false;
+        const u32 dmaDirection = (m_gpu.pollStatus() >> 29) & 0x3u;
+        if (dmaDirection != 0)
         {
-            u32 header = 0;
-            std::memcpy(&header, m_ram.data() + nodeAddr, sizeof(u32));
-            const u32 commandCount = (header >> 24) & 0xFF;
-            for (u32 i = 0; i < commandCount; ++i)
+            const u32 chcr = readMmio32(gpuDmaChcr);
+            if ((chcr & 0x01000000u) != 0)
             {
-                const u32 cmdAddr = (nodeAddr + (i + 1) * sizeof(u32)) & 0x1FFFFC;
-                u32 word = 0;
-                std::memcpy(&word, m_ram.data() + cmdAddr, sizeof(u32));
-                m_gpu.writeCommand(word);
+                handleDmaTransfer(DmaPort::Gpu);
             }
-            const u32 next = header & 0x00FFFFFF;
-            if (next == 0x00FFFFFF)
+
+            if ((m_gpu.pollStatus() & gpuStatDmaRequest) == 0)
             {
-                break;
+                timeout = true;
             }
-            nodeAddr = next & 0x1FFFFC;
+            else
+            {
+                writeMmio32(Mmio::GPU_GP1, 0x04000000u);
+            }
         }
+
+        if (dmaDirection == 0 && (m_gpu.pollStatus() & gpuStatDmaRequest) == 0)
+        {
+            timeout = true;
+        }
+
+        regs[2] = timeout ? 0xFFFFFFFFu : 0u;
         return true;
     }
     case 0x70: // GPU_init

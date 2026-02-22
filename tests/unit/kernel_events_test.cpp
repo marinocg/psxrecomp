@@ -285,6 +285,12 @@ int main()
     // Test 17: interruptLineToEventClass mapping
     // ---------------------------------------------------------------
     {
+        assert(EventClass::Timer2 == EventClass::Timer1);
+        assert(EventClass::Controller == 0xF0000008u);
+        assert(EventClass::Spu == 0xF0000009u);
+        assert(EventClass::Pio == 0xF000000Au);
+        assert(EventClass::Sio == 0xF000000Bu);
+
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::VBlank) ==
                EventClass::VBlank);
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Gpu) == EventClass::Gpu);
@@ -299,6 +305,7 @@ int main()
                EventClass::Timer2);
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Controller) ==
                EventClass::Controller);
+         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Sio) == EventClass::Sio);
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Spu) == EventClass::Spu);
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Pio) == EventClass::Pio);
         std::cerr << "[PASS] interruptLineToEventClass mapping\n";

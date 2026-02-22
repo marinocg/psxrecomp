@@ -189,6 +189,8 @@ u32 KernelEventTable::interruptLineToEventClass(InterruptLine line)
         return EventClass::Timer2;
     case InterruptLine::Controller:
         return EventClass::Controller;
+    case InterruptLine::Sio:
+        return EventClass::Sio;
     case InterruptLine::Spu:
         return EventClass::Spu;
     case InterruptLine::Pio:

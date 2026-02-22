@@ -296,7 +296,66 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 11: B0 vector - OpenEvent (function 0x08)
+    // Test 11: A0 vector - send_gpu_linked_list (function 0x4B)
+    //
+    // Should configure GPU DMA via registers and consume linked-list words.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr Address otBase = 0x00012000;
+        system.write<u32>(otBase + 0x0, (2u << 24) | 0x00FFFFFFu);
+        system.write<u32>(otBase + 0x4, 0xE1000000u);
+        system.write<u32>(otBase + 0x8, 0x20010203u);
+
+        u32 regs[32] = {};
+        regs[9] = 0x4B;
+        regs[4] = otBase;
+        system.callBiosVector(0xA0, regs, 32);
+
+        const u32 gpuDmaChcr = system.read<u32>(0x1F8010A8u);
+        const u32 dmaDicr = system.read<u32>(0x1F8010F4u);
+        const u32 gpuStat = system.read<u32>(0x1F801814u);
+
+        // Transfer completed (start bit cleared), DMA2 completion latched.
+        assert((gpuDmaChcr & 0x01000000u) == 0);
+        assert((dmaDicr & (1u << 26)) != 0);
+        assert(((gpuStat >> 29) & 0x3u) == 0x2u);
+
+        std::cerr << "[PASS] A0 send_gpu_linked_list uses DMA register path\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 12: A0 vector - gpu_sync (function 0x4E)
+    //
+    // Should disable GPU DMA mode after synchronization.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr Address otBase = 0x00012200;
+        system.write<u32>(otBase + 0x0, (1u << 24) | 0x00FFFFFFu);
+        system.write<u32>(otBase + 0x4, 0xE1000000u);
+
+        u32 regs[32] = {};
+        regs[9] = 0x4B;
+        regs[4] = otBase;
+        system.callBiosVector(0xA0, regs, 32);
+
+        regs[9] = 0x4E;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(regs[2] == 0);
+
+        const u32 gpuStat = system.read<u32>(0x1F801814u);
+        assert(((gpuStat >> 29) & 0x3u) == 0u);
+
+        std::cerr << "[PASS] A0 gpu_sync disables DMA mode\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 13: B0 vector - OpenEvent (function 0x08)
     //
     // Should return a valid event handle from the kernel event table.
     // ---------------------------------------------------------------
@@ -319,7 +378,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 12: B0 vector - TestEvent (function 0x0B)
+    // Test 14: B0 vector - TestEvent (function 0x0B)
     //
     // Should return 0 for enabled-but-undelivered, 1 after delivery.
     // ---------------------------------------------------------------
@@ -364,7 +423,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 13: B0 vector stubs (InitPad, StartPad, etc.)
+    // Test 15: B0 vector stubs (InitPad, StartPad, etc.)
     //
     // Should not crash.
     // ---------------------------------------------------------------
@@ -373,8 +432,8 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        const u32 stubFunctions[] = {0x07, 0x09, 0x0A, 0x0C, 0x0D, 0x12, 0x13,
-                                     0x17, 0x18, 0x19, 0x20, 0x4A, 0x4B, 0x5B};
+        const u32 stubFunctions[] = {0x07, 0x09, 0x0A, 0x0C, 0x0D, 0x12, 0x13, 0x17,
+                         0x18, 0x19, 0x20, 0x46, 0x4A, 0x4B, 0x5B};
         for (u32 func : stubFunctions)
         {
             regs[9] = func;
@@ -385,7 +444,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 14: B0 HookEntryInt descriptor callback runs on IRQ service
+    // Test 16: B0 HookEntryInt descriptor callback runs on IRQ service
     // ---------------------------------------------------------------
     {
         PsxSystem system;
@@ -426,7 +485,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 15: B0 HookEntryInt no longer treats raw callback as descriptor
+    // Test 17: B0 HookEntryInt no longer treats raw callback as descriptor
     // ---------------------------------------------------------------
     {
         PsxSystem system;
@@ -456,7 +515,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 16: C0 vector stubs
+    // Test 18: C0 vector stubs
     //
     // All C0 stubs should be no-ops and not crash.
     // ---------------------------------------------------------------
@@ -477,7 +536,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 16b: B0 ReturnFromException exits callback invocation
+    // Test 18b: B0 ReturnFromException exits callback invocation
     // ---------------------------------------------------------------
     {
         PsxSystem system;
@@ -501,7 +560,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 17: Unhandled BIOS call logs a warning
+    // Test 19: Unhandled BIOS call logs a warning
     //
     // Calling an unimplemented function should log a warning.
     // ---------------------------------------------------------------

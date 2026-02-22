@@ -419,7 +419,9 @@ void Gpu::updateStatusBits()
     switch (m_registers.dmaDirection)
     {
     case Registers::DmaDirection::Off:
-        request = false;
+        // BIOS gpu_sync() polls GPUSTAT.bit28 even with DMA disabled.
+        // Keep bit28 high when GP0 can accept commands.
+        request = canAcceptCommands;
         break;
     case Registers::DmaDirection::Fifo:
     case Registers::DmaDirection::CpuToGp0:
@@ -434,9 +436,8 @@ void Gpu::updateStatusBits()
         m_status |= statusDmaRequest;
     }
 
-    // Bit 31 reflects the current odd/even field.  Always mirror
-    // m_oddField so that PSn00bSDK VSync can detect frame boundaries
-    // via XOR of consecutive GPUSTAT reads, even in progressive mode.
+    // Bit 31 mirrors odd/even field state and is used by some VSync loops
+    // even in progressive display modes.
     if (m_oddField)
     {
         m_status |= statusInterlaceField;

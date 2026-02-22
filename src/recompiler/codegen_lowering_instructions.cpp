@@ -378,50 +378,51 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         {
             std::string target = valueToExpr(instruction.inputs.front(), context);
             std::string sourcePc = "0";
-            Address sourcePhysical = 0;
             if (instruction.sourceAddress.has_value())
             {
                 std::ostringstream sourceStream;
                 sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                 sourcePc = sourceStream.str();
-                sourcePhysical = instruction.sourceAddress.value() & 0x1FFFFFFFu;
             }
-            std::ostringstream sourcePhysicalStream;
-            sourcePhysicalStream << "0x" << std::hex << sourcePhysical;
             emitter.writeLine("const Address jumpTargetPhysical = " + target + " & 0x1FFFFFFF;");
-            emitter.writeLine("const Address jumpSourcePhysical = " + sourcePhysicalStream.str() +
-                              ";");
-            emitter.writeLine("const bool resumeAfterJump =");
-            emitter.writeLine("    (jumpTargetPhysical != 0) &&");
-            emitter.writeLine("    ((jumpTargetPhysical >= jumpSourcePhysical)");
-            emitter.writeLine("         ? ((jumpTargetPhysical - jumpSourcePhysical) <= 0x200)");
-            emitter.writeLine("         : ((jumpSourcePhysical - jumpTargetPhysical) <= 0x200));");
-            if (!block.successors.empty())
+            emitter.openBlock("if (jumpTargetPhysical == 0)");
+            emitter.writeLine("return;");
+            emitter.closeBlock();
+
+            // Fast path for jump tables and other intra-function computed
+            // jumps: transfer directly to the matching local block.
+            emitter.writeLine("switch (jumpTargetPhysical)");
+            emitter.openBlock("");
+            for (const auto& entry : blockNames)
             {
-                emitter.openBlock("if (" + target + " == 0)");
-                emitter.writeLine("return;");
+                const std::string& blockName = entry.first;
+                if (blockName.size() <= 8 || blockName.substr(0, 8) != "block_0x")
+                {
+                    continue;
+                }
+
+                const Address blockAddress =
+                    std::stoul(blockName.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+                std::ostringstream caseLine;
+                caseLine << "case 0x" << std::hex << blockAddress << ":";
+                emitter.writeLine(caseLine.str());
+                emitter.openBlock("");
+                emitter.writeLine("previousBlock = block;");
+                emitter.writeLine("block = BlockId::" + entry.second + ";");
+                emitter.writeLine("continue;");
                 emitter.closeBlock();
             }
-            else
-            {
-                emitter.openBlock("if (" + target + " == 0)");
-                emitter.writeLine("return;");
-                emitter.closeBlock();
-            }
+            emitter.writeLine("default:");
+            emitter.openBlock("");
+            emitter.writeLine("break;");
+            emitter.closeBlock();
+            emitter.closeBlock();
+
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.openBlock("if (!jumpRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.closeBlock();
-            if (!block.successors.empty())
-            {
-                emitter.openBlock("if (resumeAfterJump)");
-                emitter.writeLine("previousBlock = block;");
-                emitter.writeLine("block = " +
-                                  resolveBlockId(block.successors.front(), blockNames) + ";");
-                emitter.writeLine("continue;");
-                emitter.closeBlock();
-            }
             emitter.writeLine("return;");
         }
         else if (!block.successors.empty())

@@ -71,12 +71,10 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     }
     case 0x0A: // WaitEvent(handle)
     {
-        // In a static recompiler we cannot spin-wait. TestEvent returns 1
-        // for delivered events, so for polling-mode events games will
-        // detect delivery on the next call. As a simplification, mark
-        // the event delivered immediately so the game can proceed.
-        m_events.deliverEvent(a0);
-        m_logger.log(LogLevel::Debug, "bios", "WaitEvent (immediate deliver)");
+        // Real BIOS blocks until delivery. In this runtime we keep
+        // WaitEvent non-blocking and do not fabricate delivery.
+        // The game can observe delivery via TestEvent after IRQ dispatch.
+        m_logger.log(LogLevel::Debug, "bios", "WaitEvent (non-blocking stub)");
         return true;
     }
     case 0x0B: // TestEvent(handle)
@@ -180,10 +178,10 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         m_logger.log(LogLevel::Info, "bios", msg.str());
         return true;
     }
-    case 0x46: // GPU_sync
+    case 0x46: // undelete(filename) - file API stub
     {
         regs[2] = 0;
-        m_logger.log(LogLevel::Debug, "bios", "GPU_sync (B0 0x46)");
+        m_logger.log(LogLevel::Debug, "bios", "undelete (B0 0x46) - stub");
         return true;
     }
     case 0x47: // AddDevice

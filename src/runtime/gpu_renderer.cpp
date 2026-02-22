@@ -27,23 +27,15 @@ GpuVertex decodeVertex(u32 packed)
 GpuVertex decodeFillRectPosition(u32 packed)
 {
     return GpuVertex{
-        static_cast<s16>(packed & 0x3FF),
+        static_cast<s16>(packed & 0x3F0),
         static_cast<s16>((packed >> 16) & 0x1FF),
     };
 }
 
 std::pair<u16, u16> decodeFillRectSize(u32 packed)
 {
-    u16 width = static_cast<u16>(packed & 0x3FF);
-    u16 height = static_cast<u16>((packed >> 16) & 0x1FF);
-    if (width == 0)
-    {
-        width = SoftwareGpuRenderer::Width;
-    }
-    if (height == 0)
-    {
-        height = SoftwareGpuRenderer::Height;
-    }
+    const u16 width = static_cast<u16>(packed & 0x3FF);
+    const u16 height = static_cast<u16>((packed >> 16) & 0x1FF);
     return {width, height};
 }
 
@@ -130,29 +122,25 @@ void SoftwareGpuRenderer::submit(const GpuCommand& command)
         //  - Not affected by GP0(E6h) mask setting.
         //  - The color is converted from 24-bit RGB to 15-bit RGB with mask
         //    bit (bit 15) forced to 0.
-        // NOTE: Real hardware rounds Xpos/Xsiz to 16-pixel boundaries and
-        // wraps coordinates within VRAM. Those details are omitted here for
-        // simplicity; add them when hardware-accurate fill rounding matters.
         const auto pos = decodeFillRectPosition(command.words[1]);
-        const auto [fw, fh] = decodeFillRectSize(command.words[2]);
-        if (fw == 0 || fh == 0)
+        const auto [rawWidth, rawHeight] = decodeFillRectSize(command.words[2]);
+        if (rawWidth == 0 || rawHeight == 0)
         {
             break;
         }
+
+        const u16 width = static_cast<u16>(std::min<u32>(Width, (rawWidth + 0x0Fu) & ~0x0Fu));
+        const u16 height = static_cast<u16>(std::min<u32>(Height, rawHeight));
         const u16 color = toColor15(command.words[0], false);
-        for (u16 row = 0; row < fh; ++row)
+        for (u16 row = 0; row < height; ++row)
         {
-            for (u16 col = 0; col < fw; ++col)
+            for (u16 col = 0; col < width; ++col)
             {
-                const s16 px = static_cast<s16>(pos.x + col);
-                const s16 py = static_cast<s16>(pos.y + row);
-                if (px >= 0 && px < static_cast<s16>(Width) && py >= 0 &&
-                    py < static_cast<s16>(Height))
-                {
-                    const size_t index = static_cast<size_t>(py) * Width + static_cast<size_t>(px);
-                    m_frameBuffer[index] = color;
-                    m_vramRaw[index] = color;
-                }
+                const u16 px = static_cast<u16>((static_cast<u16>(pos.x) + col) % Width);
+                const u16 py = static_cast<u16>((static_cast<u16>(pos.y) + row) % Height);
+                const size_t index = static_cast<size_t>(py) * Width + static_cast<size_t>(px);
+                m_frameBuffer[index] = color;
+                m_vramRaw[index] = color;
             }
         }
         break;

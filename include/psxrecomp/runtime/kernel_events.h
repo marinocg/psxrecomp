@@ -28,10 +28,11 @@ constexpr u32 Cdrom = 0xF0000003;      ///< CD-ROM interrupt
 constexpr u32 Dma = 0xF0000004;        ///< DMA interrupt
 constexpr u32 Timer0 = 0xF0000005;     ///< Root counter 0
 constexpr u32 Timer1 = 0xF0000006;     ///< Root counter 1
-constexpr u32 Timer2 = 0xF0000007;     ///< Root counter 2
+constexpr u32 Timer2 = 0xF0000006;     ///< Root counter 2 (shares class with Timer1 on BIOS)
 constexpr u32 Controller = 0xF0000008; ///< Joypad / memory-card
-constexpr u32 Spu = 0xF000000A;        ///< SPU interrupt
-constexpr u32 Pio = 0xF000000B;        ///< Parallel I/O
+constexpr u32 Spu = 0xF0000009;        ///< SPU interrupt
+constexpr u32 Pio = 0xF000000A;        ///< Parallel I/O
+constexpr u32 Sio = 0xF000000B;        ///< Serial I/O
 constexpr u32 Card = 0xF0000011;       ///< Memory-card BIOS events
 } // namespace EventClass
 
