@@ -11,7 +11,8 @@ namespace runtime
 
 bool PsxSystem::callBiosVectorC0(u32 functionId, u32* regs)
 {
-    (void)regs;
+    const u32 a0 = regs[4];
+    const u32 a1 = regs[5];
 
     switch (functionId)
     {
@@ -34,13 +35,66 @@ bool PsxSystem::callBiosVectorC0(u32 functionId, u32* regs)
         return true;
     case 0x02: // SysEnqIntRP
     {
-        // Priority chain enqueue — not needed for event-driven model.
-        m_logger.log(LogLevel::Debug, "bios", "SysEnqIntRP (stub)");
+        // PSX-SPX: C(02h) SysEnqIntRP(priority, struc)
+        // Inserts a new element at the head of the specified priority chain.
+        // The BIOS writes the "next" pointer into struc+0.
+        //
+        // Structure layout (16 bytes):
+        //   +00 next pointer (written by BIOS)
+        //   +04 func2 pointer (optional)
+        //   +08 func1 pointer
+        //   +0C unused
+        if (a0 < m_irqChainHeads.size() && a1 != 0)
+        {
+            const u32 previousHead = m_irqChainHeads[a0];
+            write<u32>(a1 + 0x00, previousHead);
+            m_irqChainHeads[a0] = a1;
+            regs[2] = 1;
+        }
+        else
+        {
+            regs[2] = 0;
+        }
+        m_logger.log(LogLevel::Debug, "bios", "SysEnqIntRP");
         return true;
     }
     case 0x03: // SysDeqIntRP
     {
-        m_logger.log(LogLevel::Debug, "bios", "SysDeqIntRP (stub)");
+        // PSX-SPX: C(03h) SysDeqIntRP(priority, struc)
+        // Removes the specified element from the chain; returns r2=struc or 0.
+        if (a0 >= m_irqChainHeads.size() || a1 == 0)
+        {
+            regs[2] = 0;
+            return true;
+        }
+
+        u32* head = &m_irqChainHeads[a0];
+        u32 node = *head;
+        u32 prev = 0;
+        constexpr int kMaxNodes = 64;
+        for (int safety = 0; node != 0 && safety < kMaxNodes; ++safety)
+        {
+            if (node == a1)
+            {
+                const u32 next = read<u32>(node + 0x00);
+                if (prev == 0)
+                {
+                    *head = next;
+                }
+                else
+                {
+                    write<u32>(prev + 0x00, next);
+                }
+                regs[2] = a1;
+                m_logger.log(LogLevel::Debug, "bios", "SysDeqIntRP");
+                return true;
+            }
+            prev = node;
+            node = read<u32>(node + 0x00);
+        }
+
+        regs[2] = 0;
+        m_logger.log(LogLevel::Debug, "bios", "SysDeqIntRP (not found)");
         return true;
     }
     case 0x07: // InstallExceptionHandlers

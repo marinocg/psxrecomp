@@ -23,7 +23,8 @@ class RuntimeLogger;
  * interrupt dispatcher can invoke PSX callback code without any
  * knowledge of the recompiled-module layout.
  */
-using CallbackInvoker = std::function<void(u32 address)>;
+// Returns the callee's $v0 (r2) after invocation.
+using CallbackInvoker = std::function<u32(u32 address)>;
 
 /**
  * @brief Dispatches pending hardware interrupts to kernel events.

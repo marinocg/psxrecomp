@@ -424,21 +424,68 @@ bool copyDirectoryRecursive(const std::filesystem::path& source,
         outError = "Missing source directory: " + source.string();
         return false;
     }
+    if (!std::filesystem::is_directory(source, error) || error)
+    {
+        outError = "Source is not a directory: " + source.string();
+        return false;
+    }
+
     std::filesystem::create_directories(destination, error);
     if (error)
     {
         outError = "Failed to create destination directory: " + destination.string();
         return false;
     }
-    std::filesystem::copy(source, destination,
-                          std::filesystem::copy_options::recursive |
-                              std::filesystem::copy_options::overwrite_existing,
-                          error);
-    if (error)
+
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(source))
     {
-        outError =
-            "Failed to copy directory from " + source.string() + " to " + destination.string();
-        return false;
+        error.clear();
+        const std::filesystem::path relativePath = std::filesystem::relative(entry.path(), source);
+        const std::filesystem::path targetPath = destination / relativePath;
+
+        if (entry.is_directory(error))
+        {
+            std::filesystem::create_directories(targetPath, error);
+            if (error)
+            {
+                outError = "Failed to create destination directory: " + targetPath.string();
+                return false;
+            }
+            continue;
+        }
+
+        std::filesystem::create_directories(targetPath.parent_path(), error);
+        if (error)
+        {
+            outError = "Failed to create destination directory: " + targetPath.parent_path().string();
+            return false;
+        }
+
+        if (entry.is_regular_file(error) || entry.is_symlink(error))
+        {
+            std::ifstream input(entry.path(), std::ios::binary);
+            if (!input)
+            {
+                outError = "Failed to open source file: " + entry.path().string();
+                return false;
+            }
+
+            std::ofstream output(targetPath, std::ios::binary | std::ios::trunc);
+            if (!output)
+            {
+                outError = "Failed to open destination file: " + targetPath.string();
+                return false;
+            }
+
+            output << input.rdbuf();
+            if (!output.good())
+            {
+                outError =
+                    "Failed to copy file from " + entry.path().string() + " to " + targetPath.string();
+                return false;
+            }
+            continue;
+        }
     }
     return true;
 }

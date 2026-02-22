@@ -16,68 +16,6 @@ constexpr u32 VBLANK_CYCLES = CYCLES_PER_FRAME / 10u;
 constexpr u32 VBLANK_MID_CYCLES = VBLANK_CYCLES / 2u;
 constexpr u32 ACTIVE_CYCLES = CYCLES_PER_FRAME - VBLANK_CYCLES;
 
-std::optional<Address> findLegacyDrawSyncDispatcher(const std::vector<u8>& ram)
-{
-    // Signature for PSn00bSDK's DrawSync callback dispatcher:
-    //   addiu sp,sp,-32
-    //   sw    s1,24(sp)
-    //   lui   s1,0x8001
-    //   sw    s0,20(sp)
-    //   lbu   s0,0x55f9(s1)
-    constexpr u32 kSig0 = 0x27BDFFE0u;
-    constexpr u32 kSig1 = 0xAFB10018u;
-    constexpr u32 kSig2 = 0x3C118001u;
-    constexpr u32 kSig3 = 0xAFB00014u;
-    constexpr u32 kSig4Mask = 0xFFFF0000u;
-    constexpr u32 kSig4Value = 0x92300000u;
-
-    for (Address offset = 0; offset <= MemoryMap::RAM_SIZE - sizeof(u32) * 5; offset += 4)
-    {
-        u32 w0 = 0;
-        u32 w1 = 0;
-        u32 w2 = 0;
-        u32 w3 = 0;
-        u32 w4 = 0;
-        std::memcpy(&w0, ram.data() + offset + 0, sizeof(u32));
-        std::memcpy(&w1, ram.data() + offset + 4, sizeof(u32));
-        std::memcpy(&w2, ram.data() + offset + 8, sizeof(u32));
-        std::memcpy(&w3, ram.data() + offset + 12, sizeof(u32));
-        std::memcpy(&w4, ram.data() + offset + 16, sizeof(u32));
-        if (w0 == kSig0 && w1 == kSig1 && w2 == kSig2 && w3 == kSig3 &&
-            (w4 & kSig4Mask) == kSig4Value)
-        {
-            return 0x80000000u | offset;
-        }
-    }
-    return std::nullopt;
-}
-
-bool matchesLegacyVblankDispatcherSignature(const std::vector<u8>& ram, Address address)
-{
-    const Address offset = address & 0x1FFFFFFFu;
-    if (offset > MemoryMap::RAM_SIZE - sizeof(u32) * 4)
-    {
-        return false;
-    }
-
-    u32 w0 = 0;
-    u32 w1 = 0;
-    u32 w2 = 0;
-    u32 w3 = 0;
-    std::memcpy(&w0, ram.data() + offset + 0, sizeof(u32));
-    std::memcpy(&w1, ram.data() + offset + 4, sizeof(u32));
-    std::memcpy(&w2, ram.data() + offset + 8, sizeof(u32));
-    std::memcpy(&w3, ram.data() + offset + 12, sizeof(u32));
-
-    // PSn00bSDK VBlank dispatcher preamble:
-    //   lui v1,0x8001
-    //   lw  v0,imm(v1)
-    //   lui a0,0x8001
-    //   lw  t9,imm(a0)
-    return w0 == 0x3C038001u && (w1 & 0xFFFF0000u) == 0x8C620000u && w2 == 0x3C048001u &&
-           (w3 & 0xFFFF0000u) == 0x8C990000u;
-}
-
 void appendU32(std::vector<u8>& out, u32 value)
 {
     out.push_back(static_cast<u8>(value & 0xFF));
@@ -134,8 +72,7 @@ void PsxSystem::reset()
     m_callbackInvoker = CallbackInvoker{};
     m_inCustomExitHandler = false;
     m_inCallbackInvocation = false;
-    m_legacyDrawSyncDispatcher.reset();
-    m_legacyDrawSyncScanDone = false;
+    m_irqChainHeads = {};
     m_frameCount = 0;
     m_cpuCycles = 0;
     m_gpuDrainCarry = 0;
@@ -276,23 +213,6 @@ void PsxSystem::callCdromIntrinsic(Address address)
             }());
 }
 
-void PsxSystem::setAutoFrameProgressOnInterruptPoll(bool enabled)
-{
-    (void)enabled;
-}
-
-void PsxSystem::setVsyncCounterAddress(Address address)
-{
-    (void)address;
-}
-
-void PsxSystem::setDrawSyncBusyAddress(Address address)
-{
-    (void)address;
-}
-
-void PsxSystem::clearDrawSyncBusy() {}
-
 u32 PsxSystem::frameCount() const
 {
     return m_frameCount;
@@ -376,8 +296,13 @@ InterruptDispatcher& PsxSystem::dispatcher()
 
 void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
 {
-    m_callbackInvoker = invoker;
-    m_dispatcher.setCallbackInvoker(std::move(invoker));
+    // Store the raw invoker bridge (calls into the generated module).
+    m_callbackInvoker = std::move(invoker);
+
+    // The dispatcher should invoke callbacks through the system so that
+    // ReturnFromException works (requires m_inCallbackInvocation=true).
+    m_dispatcher.setCallbackInvoker(
+        [this](u32 address) -> u32 { return this->invokeCallbackRaw(address); });
 }
 
 void PsxSystem::serviceInterrupts()
@@ -388,42 +313,46 @@ void PsxSystem::serviceInterrupts()
     }
 
     const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
-    // Transitional fallback:
-    // Some demos still rely on SDK interrupt callback trampolines that are not yet
-    // covered by the C0/B0 interrupt API model in this runtime. Until that model
-    // is complete, keep this signature-based callback path to avoid regressing
-    // DrawSync/VSync progress.
-    if (!m_legacyDrawSyncScanDone)
+    if (pendingMasked == 0)
     {
-        m_legacyDrawSyncDispatcher = findLegacyDrawSyncDispatcher(m_ram);
-        m_legacyDrawSyncScanDone = true;
-    }
-
-    if ((pendingMasked & static_cast<u32>(InterruptLine::VBlank)) != 0 &&
-        m_legacyDrawSyncDispatcher.has_value() && *m_legacyDrawSyncDispatcher >= 0x80000030u)
-    {
-        const Address vblankDispatcher = *m_legacyDrawSyncDispatcher - 0x30u;
-        if (matchesLegacyVblankDispatcherSignature(m_ram, vblankDispatcher))
+        // Still allow the event dispatcher to flush deferred callbacks.
+        try
         {
-            invokeCallback(vblankDispatcher);
+            m_dispatcher.serviceInterrupts(
+                m_interrupts, m_events, m_criticalSectionDepth, &m_logger);
         }
-    }
-
-    if ((pendingMasked & static_cast<u32>(InterruptLine::Dma)) != 0)
-    {
-        if (m_legacyDrawSyncDispatcher.has_value())
+        catch (const ReturnFromExceptionSignal&)
         {
-            invokeCallback(*m_legacyDrawSyncDispatcher);
+            return;
         }
+        return;
     }
 
-    const u32 statusBefore = m_interrupts.readStatus();
-    if (statusBefore != 0 && m_customExitHandler != 0 && !m_inCustomExitHandler)
+    // BIOS-style exception handler priority chains (installed via SysEnqIntRP).
+    // These handlers are responsible for updating SDK counters (eg. PSn00bSDK VSync)
+    // and for acknowledging IRQ sources.
+    if (dispatchIrqChains())
+    {
+        return;
+    }
+
+    // Custom exit hook (SetCustomExitFromException) must run while IRQ status
+    // bits are still visible so SDK handlers can observe and acknowledge them.
+    if (pendingMasked != 0 && m_customExitHandler != 0 && !m_inCustomExitHandler)
     {
         invokeCustomExitHandler();
     }
 
-    m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth, &m_logger);
+    // Kernel event delivery (OpenEvent/EnableEvent model).
+    // A callback may execute ReturnFromException to abort further handling.
+    try
+    {
+        m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth, &m_logger);
+    }
+    catch (const ReturnFromExceptionSignal&)
+    {
+        return;
+    }
 }
 
 u32 PsxSystem::resolveCustomExitCallback(u32 address) const
@@ -464,7 +393,7 @@ void PsxSystem::invokeCallback(u32 address)
         m_inCallbackInvocation = true;
         try
         {
-            m_callbackInvoker(address);
+            (void)m_callbackInvoker(address);
         }
         catch (const ReturnFromExceptionSignal&)
         {
@@ -478,6 +407,84 @@ void PsxSystem::invokeCallback(u32 address)
         }
         m_inCallbackInvocation = previousInCallbackInvocation;
     }
+}
+
+u32 PsxSystem::invokeCallbackRaw(u32 address)
+{
+    if (address == 0)
+    {
+        return 0;
+    }
+    if (!m_callbackInvoker)
+    {
+        return 0;
+    }
+
+    const bool previousInCallbackInvocation = m_inCallbackInvocation;
+    m_inCallbackInvocation = true;
+    try
+    {
+        const u32 result = m_callbackInvoker(address);
+        m_inCallbackInvocation = previousInCallbackInvocation;
+        return result;
+    }
+    catch (...)
+    {
+        m_inCallbackInvocation = previousInCallbackInvocation;
+        throw;
+    }
+}
+
+bool PsxSystem::dispatchIrqChains()
+{
+    // Skip delivery inside critical sections.
+    if (m_criticalSectionDepth > 0)
+    {
+        return false;
+    }
+    if (!m_callbackInvoker)
+    {
+        return false;
+    }
+
+    constexpr int kMaxNodesPerChain = 64;
+    for (u32 prio = 0; prio < m_irqChainHeads.size(); ++prio)
+    {
+        u32 node = m_irqChainHeads[prio];
+        for (int safety = 0; node != 0 && safety < kMaxNodesPerChain; ++safety)
+        {
+            const u32 func2 = read<u32>(node + 0x04);
+            const u32 func1 = read<u32>(node + 0x08);
+
+            if (func1 != 0)
+            {
+                u32 func1Result = 0;
+                try
+                {
+                    func1Result = invokeCallbackRaw(func1);
+                }
+                catch (const ReturnFromExceptionSignal&)
+                {
+                    return true;
+                }
+
+                if (func1Result != 0 && func2 != 0)
+                {
+                    try
+                    {
+                        (void)invokeCallbackRaw(func2);
+                    }
+                    catch (const ReturnFromExceptionSignal&)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            node = read<u32>(node + 0x00);
+        }
+    }
+    return false;
 }
 
 u32 PsxSystem::criticalSectionDepth() const

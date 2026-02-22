@@ -25,7 +25,7 @@ PSXRecomp aims to bring classic PlayStation games to modern platforms through st
 The recompilation process follows these stages:
 
 ```
-PSX ISO → ISO Parser → Executable Extractor → MIPS Disassembler → 
+PSX ISO → ISO Parser → Executable Extractor → MIPS Disassembler →
     IR Generator → Optimizer → C++ Code Generator → Native Binary
 ```
 
@@ -110,9 +110,14 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 
 For agent collaboration, see [agents.md](agents.md).
 
+## Quickstart
+
+See [DOCKER_QUICKSTART.md](DOCKER_QUICKSTART.md) for a quick way to get started using Docker.
+
 ## Roadmap
 
 See the consolidated roadmap and current status reports:
+
 - [Master Roadmap](docs/architecture/master_roadmap.md)
 - [Implementation Status](docs/architecture/implementation_status.md)
 - [Gap Analysis](docs/architecture/gaps_report.md)

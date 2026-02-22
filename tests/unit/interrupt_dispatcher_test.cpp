@@ -39,7 +39,12 @@ int main()
         dispatcher.reset();
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
         assert(invoked.empty());
@@ -70,7 +75,12 @@ int main()
         interrupts.raise(InterruptLine::VBlank);
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
         assert(invoked.size() == 1);
@@ -101,7 +111,12 @@ int main()
         interrupts.raise(InterruptLine::VBlank);
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         // In critical section
         dispatcher.serviceInterrupts(interrupts, events, 1, &logger);
@@ -132,7 +147,12 @@ int main()
         interrupts.raise(InterruptLine::VBlank);
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
         assert(invoked.empty());
@@ -167,7 +187,12 @@ int main()
         interrupts.raise(InterruptLine::Timer0);
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
         // VBlank has higher priority (processed first)
@@ -202,7 +227,12 @@ int main()
         interrupts.raise(InterruptLine::VBlank);
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
         // Budget is 1 — should invoke first callback immediately and defer second
@@ -233,7 +263,12 @@ int main()
         interrupts.raise(InterruptLine::VBlank);
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
         assert(invoked.empty());
@@ -299,7 +334,12 @@ int main()
         interrupts.writeMask(static_cast<u32>(InterruptLine::VBlank));
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         interrupts.raise(InterruptLine::VBlank);
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
@@ -332,7 +372,12 @@ int main()
         interrupts.raise(InterruptLine::Cdrom);
 
         std::vector<u32> invoked;
-        dispatcher.setCallbackInvoker([&invoked](u32 addr) { invoked.push_back(addr); });
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
 
         dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
         assert(invoked.size() == 1);

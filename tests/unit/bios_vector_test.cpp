@@ -389,7 +389,12 @@ int main()
         assert(system.initialize());
 
         u32 lastCallback = 0;
-        system.setCallbackInvoker([&lastCallback](u32 address) { lastCallback = address; });
+        system.setCallbackInvoker(
+            [&lastCallback](u32 address) -> u32
+            {
+                lastCallback = address;
+                return 0;
+            });
 
         u32 regs[32] = {};
         regs[9] = 0x19;       // SetCustomExitFromException
@@ -419,7 +424,12 @@ int main()
         assert(system.initialize());
 
         u32 lastCallback = 0;
-        system.setCallbackInvoker([&lastCallback](u32 address) { lastCallback = address; });
+        system.setCallbackInvoker(
+            [&lastCallback](u32 address) -> u32
+            {
+                lastCallback = address;
+                return 0;
+            });
 
         constexpr u32 tableAddress = 0x80014000;
         constexpr u32 callbackAddress = 0x80012340;
@@ -468,12 +478,13 @@ int main()
 
         bool reachedAfterReturnFromException = false;
         system.setCallbackInvoker(
-            [&system, &reachedAfterReturnFromException](u32)
+            [&system, &reachedAfterReturnFromException](u32) -> u32
             {
                 u32 regs[32] = {};
                 regs[9] = 0x17; // ReturnFromException
                 system.callBiosVector(0xB0, regs, 32);
                 reachedAfterReturnFromException = true;
+                return 0;
             });
 
         system.invokeCallback(0x80012000);

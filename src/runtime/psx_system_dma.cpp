@@ -226,12 +226,6 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     m_interrupts.raise(InterruptLine::Dma);
     m_debugOverlay.incrementDmaTransfers();
     m_debugOverlay.incrementInterruptsRaised();
-    if (port == DmaPort::Gpu)
-    {
-        // GPU DMA completes synchronously in this runtime, so emulate
-        // the DrawSync completion callback by dropping the busy byte.
-        clearDrawSyncBusy();
-    }
 
     std::ostringstream message;
     message << "DMA transfer on port " << static_cast<int>(port) << " words=" << transferredWords;

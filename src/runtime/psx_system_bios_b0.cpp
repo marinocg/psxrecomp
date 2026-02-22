@@ -2,7 +2,6 @@
 
 #include "bios_helpers.h"
 
-#include <cstring>
 #include <sstream>
 
 namespace psxrecomp
@@ -106,6 +105,7 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     {
         regs[2] = m_customExitHandler;
         m_customExitHandler = a0;
+
         std::ostringstream msg;
         msg << "SetCustomExitFromException -> 0x" << std::hex << a0;
         m_logger.log(LogLevel::Debug, "bios", msg.str());

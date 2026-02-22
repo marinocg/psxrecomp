@@ -205,14 +205,11 @@ int main()
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
     runtimeHeader << "    void setDiscSwapInfo(const DiscSwapInfo&) {}\n";
-    runtimeHeader << "    void setAutoFrameProgressOnInterruptPoll(bool) {}\n";
-    runtimeHeader << "    void setVsyncCounterAddress(Address) {}\n";
-    runtimeHeader << "    void setDrawSyncBusyAddress(Address) {}\n";
     runtimeHeader << "    void tickCpuCycles(u32) {}\n";
     runtimeHeader << "    u32 frameCount() const { return 0; }\n";
     runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
     runtimeHeader << "    void serviceInterrupts() {}\n";
-    runtimeHeader << "    void setCallbackInvoker(std::function<void(u32)>) {}\n";
+    runtimeHeader << "    void setCallbackInvoker(std::function<u32(u32)>) {}\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";

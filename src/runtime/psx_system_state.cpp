@@ -124,8 +124,6 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_customExitHandler = 0;
     m_inCustomExitHandler = false;
     m_inCallbackInvocation = false;
-    m_legacyDrawSyncDispatcher.reset();
-    m_legacyDrawSyncScanDone = false;
     m_frameCount = 0;
     m_cpuCycles = 0;
     m_gpuDrainCarry = 0;

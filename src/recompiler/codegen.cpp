@@ -464,6 +464,14 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     }
     emitter.writeLine("default:");
     emitter.openBlock("");
+    emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
+    emitter.openBlock("");
+    emitter.writeLine("const Address indirect = readMemory32(context.system, address) & 0x1FFFFFFF;");
+    emitter.writeLine("if (indirect != physical)");
+    emitter.openBlock("");
+    emitter.writeLine("return callRecompiledFunction(context, indirect);");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.writeLine("return false;");
     emitter.closeBlock();
     emitter.closeBlock();
@@ -581,7 +589,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("// Install callback invoker bridge for interrupt dispatch.");
     emitter.writeLine("system.setCallbackInvoker(");
     emitter.writeLine(
-        "    [&context](u32 address) { callRecompiledFunction(context, address); });");
+        "    [&context](u32 address) -> u32 { callRecompiledFunction(context, address); "
+        "return context.regs[Registers::V0]; });");
 
     // Set initial registers from PSX-EXE header.
     {

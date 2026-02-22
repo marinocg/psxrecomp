@@ -15,9 +15,9 @@
 #include "psxrecomp/runtime/timers.h"
 #include "psxrecomp/types.h"
 
+#include <array>
 #include <cstddef>
 #include <cstring>
-#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -189,30 +189,6 @@ class PsxSystem
     void callBiosVector(u32 vector, u32* regs, size_t regCount);
 
     /**
-     * @brief Legacy compatibility switch.
-     *
-     * Kept for ABI/source compatibility with generated modules; this runtime
-     * now uses cycle-driven timing and ignores this toggle.
-     */
-    void setAutoFrameProgressOnInterruptPoll(bool enabled);
-
-    /**
-     * @brief Register a RAM address containing the vsync frame counter.
-     *
-     * Legacy compatibility entry point. The runtime no longer mutates
-     * arbitrary RAM to emulate SDK-specific handlers.
-     */
-    void setVsyncCounterAddress(Address address);
-
-    /**
-     * @brief Register the RAM address of PSn00bSDK's "GPU busy" byte.
-     *
-     * Legacy compatibility entry point. The runtime no longer patches RAM
-     * for SDK-specific DrawSync behavior.
-     */
-    void setDrawSyncBusyAddress(Address address);
-
-    /**
      * @brief Get the monotonic frame counter (incremented on each VBlank).
      */
     u32 frameCount() const;
@@ -274,6 +250,14 @@ class PsxSystem
     void invokeCallback(u32 address);
 
     /**
+     * @brief Invoke a PSX callback and return $v0.
+     *
+     * Used internally for BIOS IRQ priority-chain emulation.
+     * May throw ReturnFromExceptionSignal.
+     */
+    u32 invokeCallbackRaw(u32 address);
+
+    /**
      * @brief Current critical-section nesting depth.
      */
     u32 criticalSectionDepth() const;
@@ -309,13 +293,16 @@ class PsxSystem
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     bool m_inCustomExitHandler = false;
     bool m_inCallbackInvocation = false;
-    std::optional<Address> m_legacyDrawSyncDispatcher;
-    bool m_legacyDrawSyncScanDone = false;
+
+    /// BIOS IRQ priority chains (C0:02 SysEnqIntRP / C0:03 SysDeqIntRP).
+    /// Each head is a PSX pointer to a 16-byte structure in RAM.
+    std::array<u32, 4> m_irqChainHeads{};
 
     /**
-     * @brief Legacy no-op compatibility hook.
+     * @brief Run BIOS IRQ priority chains once (ExceptionHandler model).
+     * @return true if a handler executed ReturnFromException (abort lower-priority processing).
      */
-    void clearDrawSyncBusy();
+    bool dispatchIrqChains();
 
     /**
      * @brief Prime periodic VBlank/display events.
