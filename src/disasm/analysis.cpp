@@ -90,6 +90,20 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
                                     std::unordered_set<Address>& startAddresses,
                                     const std::unordered_set<Address>* pinnedAddresses = nullptr)
 {
+    std::unordered_set<Address> directCallTargets;
+    directCallTargets.reserve(instructions.size() / 8);
+    for (const auto& instruction : instructions)
+    {
+        if (!detail::isDirectCall(instruction))
+        {
+            continue;
+        }
+        if (auto target = detail::resolveDirectCallTarget(instruction))
+        {
+            directCallTargets.insert(*target);
+        }
+    }
+
     std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
     std::sort(tempStarts.begin(), tempStarts.end());
 
@@ -118,12 +132,17 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
             // PSn00bSDK wrapper stubs that should merge with the next chunk.
             bool hasHardTerminator = false;
             bool hasBranch = false;
+            bool hasComputedJump = false;
             for (size_t i = startIdx; i < limitIdx; ++i)
             {
                 if (instructions[i].isReturn() || instructions[i].isJump())
                 {
                     hasHardTerminator = true;
-                    break;
+                    if (instructions[i].opcode == Opcode::JR &&
+                        instructions[i].rs != Registers::RA)
+                    {
+                        hasComputedJump = true;
+                    }
                 }
                 if (instructions[i].isBranch())
                 {
@@ -158,12 +177,19 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
             if (!hasHardTerminator || hasCrossBranch)
             {
                 // Do not merge if the next function start is a pinned
-                // address (e.g. an explicitly-provided additionalStart).
-                // These are known entry points discovered through pointer
-                // harvesting that must remain as independent functions.
+                // address (e.g. an explicitly-provided additionalStart),
+                // unless a branch in the current range clearly targets the
+                // next range. In that case, keeping the split would break a
+                // single function into disconnected chunks.
                 if (pinnedAddresses && pinnedAddresses->count(nextFuncStart))
                 {
-                    continue;
+                    const bool isDirectCallTarget = directCallTargets.count(nextFuncStart) != 0;
+                    const bool nextHasPrologue = detail::hasProloguePattern(instructions, limitIdx);
+                    if (isDirectCallTarget || nextHasPrologue || !hasCrossBranch ||
+                        !hasComputedJump)
+                    {
+                        continue;
+                    }
                 }
                 startAddresses.erase(nextFuncStart);
                 tempStarts.erase(tempStarts.begin() + static_cast<std::ptrdiff_t>(si + 1));

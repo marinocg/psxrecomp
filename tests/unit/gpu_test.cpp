@@ -461,10 +461,11 @@ int main()
     assert(afterFillMask != maskedPixel);
     assert((afterFillMask & 0x8000u) == 0); // mask bit NOT forced for fill rect
 
-    // Fill rect with zero size should be a no-op.
+    // Fill rect width/height=0 expands to full VRAM extent (0x400 x 0x200).
     gpu.reset();
     writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00000000u}); // 0x0 fill
-    assert(readFramePixel(gpu, 0, 0) == 0);
+    assert(readFramePixel(gpu, 0, 0) != 0);
+    assert(readFramePixel(gpu, 1023, 511) != 0);
 
     return 0;
 }

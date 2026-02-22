@@ -324,10 +324,10 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 8: Register JUMP fallback to recompiled dispatch
+    // Test 8: Register JUMP fallback to jump dispatch
     //
     // For JR/JALR-like dynamic jumps, generated code should try intrinsic
-    // handling first, then attempt callRecompiledFunction before raising
+    // handling first, then attempt jumpRecompiledFunction before raising
     // unsupported-jump errors.
     // ---------------------------------------------------------------
     {
@@ -346,14 +346,14 @@ int main()
         const std::string intrinsicProbe = "if (!callIntrinsic(context.system, context.regs[9], "
                                            "context.regs))";
         const std::string recompiledProbe =
-            "if (!callRecompiledFunction(context, context.regs[9]))";
+            "if (!jumpRecompiledFunction(context, context.regs[9]))";
         const std::string failProbe = "failUnsupportedJump(context.regs[9], 0x80090000);";
 
         assert(source.find(intrinsicProbe) != std::string::npos);
         assert(source.find(recompiledProbe) != std::string::npos);
         assert(source.find(failProbe) != std::string::npos);
 
-        std::cerr << "[PASS] register JUMP fallback to recompiled dispatch\n";
+        std::cerr << "[PASS] register JUMP fallback to jump dispatch\n";
     }
 
     std::cerr << "All codegen lowering tests passed.\n";

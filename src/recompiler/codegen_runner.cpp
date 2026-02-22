@@ -732,6 +732,28 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();
+    emitter.writeLine("if (countNonZeroPixels(exPixels) == 0 && exWidth > 0 && exHeight > 0)");
+    emitter.openBlock("");
+    emitter.writeLine("const auto& exVramWords = system.gpu().vramWords();");
+    emitter.writeLine("if (!exVramWords.empty())");
+    emitter.openBlock("");
+    emitter.writeLine("const size_t fullWidth = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine("exPixels.assign(exWidth * exHeight, 0);");
+    emitter.writeLine("for (size_t y = 0; y < exHeight; ++y)");
+    emitter.openBlock("");
+    emitter.writeLine("for (size_t x = 0; x < exWidth; ++x)");
+    emitter.openBlock("");
+    emitter.writeLine("const size_t srcPixel =");
+    emitter.writeLine("    (static_cast<size_t>(exWindow.y) + y) * fullWidth +");
+    emitter.writeLine("    (static_cast<size_t>(exWindow.x) + x);");
+    emitter.writeLine("const psxrecomp::u32 word = exVramWords[srcPixel / 2];");
+    emitter.writeLine("const psxrecomp::u16 pixel = static_cast<psxrecomp::u16>(");
+    emitter.writeLine("    ((srcPixel % 2) == 0) ? (word & 0xFFFF) : ((word >> 16) & 0xFFFF));");
+    emitter.writeLine("exPixels[y * exWidth + x] = pixel;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.writeLine(
         "if (renderDebugOverlay) system.debugOverlay().drawOnFrameBuffer(exPixels, exWidth, "
         "exHeight);");

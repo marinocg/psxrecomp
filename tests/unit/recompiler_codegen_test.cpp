@@ -105,6 +105,8 @@ int main()
     assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("if (") != std::string::npos);
     assert(source.find("callRecompiledFunction") != std::string::npos);
+    assert(source.find("restoreCalleeSaved") != std::string::npos);
+    assert(source.find("context.regs[Registers::S0] = preservedS0;") != std::string::npos);
     assert(source.find("failUnsupportedCall") != std::string::npos);
     assert(source.find("kModuleEntryAddress") != std::string::npos);
     assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
@@ -142,6 +144,9 @@ int main()
     assert(runner.find("envFlagEnabled(presentEnv, defaultPresent)") != std::string::npos);
     assert(runner.find("PSXRECOMP_RENDER_DEBUG_OVERLAY") != std::string::npos);
     assert(runner.find("decodeLogLevel") != std::string::npos);
+    assert(runner.find("const auto& exVramWords = system.gpu().vramWords();") !=
+           std::string::npos);
+    assert(runner.find("exPixels[y * exWidth + x] = pixel;") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";

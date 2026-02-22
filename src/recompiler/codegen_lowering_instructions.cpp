@@ -378,17 +378,50 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         {
             std::string target = valueToExpr(instruction.inputs.front(), context);
             std::string sourcePc = "0";
+            Address sourcePhysical = 0;
             if (instruction.sourceAddress.has_value())
             {
                 std::ostringstream sourceStream;
                 sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                 sourcePc = sourceStream.str();
+                sourcePhysical = instruction.sourceAddress.value() & 0x1FFFFFFFu;
+            }
+            std::ostringstream sourcePhysicalStream;
+            sourcePhysicalStream << "0x" << std::hex << sourcePhysical;
+            emitter.writeLine("const Address jumpTargetPhysical = " + target + " & 0x1FFFFFFF;");
+            emitter.writeLine("const Address jumpSourcePhysical = " + sourcePhysicalStream.str() +
+                              ";");
+            emitter.writeLine("const bool resumeAfterJump =");
+            emitter.writeLine("    (jumpTargetPhysical != 0) &&");
+            emitter.writeLine("    ((jumpTargetPhysical >= jumpSourcePhysical)");
+            emitter.writeLine("         ? ((jumpTargetPhysical - jumpSourcePhysical) <= 0x200)");
+            emitter.writeLine("         : ((jumpSourcePhysical - jumpTargetPhysical) <= 0x200));");
+            if (!block.successors.empty())
+            {
+                emitter.openBlock("if (" + target + " == 0)");
+                emitter.writeLine("return;");
+                emitter.closeBlock();
+            }
+            else
+            {
+                emitter.openBlock("if (" + target + " == 0)");
+                emitter.writeLine("return;");
+                emitter.closeBlock();
             }
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
-            emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
+            emitter.openBlock("if (!jumpRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.closeBlock();
+            if (!block.successors.empty())
+            {
+                emitter.openBlock("if (resumeAfterJump)");
+                emitter.writeLine("previousBlock = block;");
+                emitter.writeLine("block = " +
+                                  resolveBlockId(block.successors.front(), blockNames) + ";");
+                emitter.writeLine("continue;");
+                emitter.closeBlock();
+            }
             emitter.writeLine("return;");
         }
         else if (!block.successors.empty())

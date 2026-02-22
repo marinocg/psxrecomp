@@ -134,8 +134,18 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                     emitter.writeLine("continue;");
                     emitter.closeBlock();
                 }
-                // Fallback: if no continuation matches, return.
-                emitter.writeLine("return;");
+                // Fallback: if no continuation matches, route to the single
+                // continuation target when unambiguous; otherwise return.
+                if (block.continuations.size() == 1)
+                {
+                    const auto& only = *block.continuations.begin();
+                    emitter.writeLine("block = " + resolveBlockId(only.second, blockNames) + ";");
+                    emitter.writeLine("continue;");
+                }
+                else
+                {
+                    emitter.writeLine("return;");
+                }
                 emitter.closeBlock();
                 continue;
             }

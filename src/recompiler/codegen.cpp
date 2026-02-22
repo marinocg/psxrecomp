@@ -389,6 +389,106 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     }
     emitter.writeBlank();
 
+    auto emitRecompiledDispatchSwitch = [&](const std::string& recurseHelper)
+    {
+        emitter.writeLine("switch (physical)");
+        emitter.openBlock("");
+        {
+            std::unordered_set<Address> emittedEntries;
+
+            // First: emit cases for every function entry point (called with
+            // default startAddress = 0 so execution begins at the first block).
+            for (const auto& entry : functionSymbols)
+            {
+                const Address normalizedEntry = entry.first & 0x1FFFFFFFu;
+                if (!emittedEntries.insert(normalizedEntry).second)
+                {
+                    continue;
+                }
+                std::ostringstream caseLine;
+                caseLine << "case 0x" << std::hex << normalizedEntry << ":";
+                emitter.writeLine(caseLine.str());
+                emitter.openBlock("");
+                emitter.writeLine(entry.second + "(context);");
+                emitter.writeLine("return true;");
+                emitter.closeBlock();
+            }
+
+            // Second: emit cases for every non-entry block address so that
+            // JALR/JR targets to a mid-function address can enter at the
+            // correct block via the startAddress parameter.
+            {
+                std::unordered_set<std::string> usedNames2;
+                for (const auto& function : program.functions)
+                {
+                    std::string funcName = uniquifyIdentifier(function.name, usedNames2);
+                    for (const auto& block : function.blocks)
+                    {
+                        if (block.name.size() > 8 && block.name.substr(0, 8) == "block_0x")
+                        {
+                            const Address blockAddr =
+                                std::stoul(block.name.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+                            if (emittedEntries.insert(blockAddr).second)
+                            {
+                                std::ostringstream caseLine;
+                                caseLine << "case 0x" << std::hex << blockAddr << ":";
+                                emitter.writeLine(caseLine.str());
+                                emitter.openBlock("");
+                                std::ostringstream callLine;
+                                callLine << funcName << "(context, 0x" << std::hex << blockAddr
+                                         << ");";
+                                emitter.writeLine(callLine.str());
+                                emitter.writeLine("return true;");
+                                emitter.closeBlock();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        emitter.writeLine("default:");
+        emitter.openBlock("");
+        emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
+        emitter.openBlock("");
+        emitter.writeLine("const Address indirect = readMemory32(context.system, address) & 0x1FFFFFFF;");
+        emitter.writeLine("if (indirect != physical)");
+        emitter.openBlock("");
+        emitter.writeLine("return " + recurseHelper + "(context, indirect);");
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.writeLine("return false;");
+        emitter.closeBlock();
+        emitter.closeBlock();
+    };
+
+    emitter.writeLine(
+        "inline bool jumpRecompiledFunction(RecompilerContext& context, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("Address physical = address & 0x1FFFFFFF;");
+    emitter.writeLine("static const bool traceCalls = []()");
+    emitter.openBlock("");
+    emitter.writeLine("if (const char* env = std::getenv(\"PSXRECOMP_TRACE_CALLS\"))");
+    emitter.openBlock("");
+    emitter.writeLine("return env[0] == '1';");
+    emitter.closeBlock();
+    emitter.writeLine("return false;");
+    emitter.closeBlock("();");
+    emitter.writeLine("if (traceCalls)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[jump] target=0x\" << std::hex << physical << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("const bool handled = [&]() -> bool");
+    emitter.openBlock("");
+    emitRecompiledDispatchSwitch("jumpRecompiledFunction");
+    emitter.closeBlock("();");
+    emitter.writeLine("if (handled)");
+    emitter.openBlock("");
+    emitter.writeLine("context.regs[Registers::ZERO] = 0;");
+    emitter.closeBlock();
+    emitter.writeLine("return handled;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
     emitter.writeLine(
         "inline bool callRecompiledFunction(RecompilerContext& context, Address address)");
     emitter.openBlock("");
@@ -406,75 +506,43 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("std::cerr << \"[call] target=0x\" << std::hex << physical");
     emitter.writeLine("         << \" ra=0x\" << context.regs[Registers::RA] << \"\\n\";");
     emitter.closeBlock();
-    emitter.writeLine("switch (physical)");
+    emitter.writeLine("const u32 preservedS0 = context.regs[Registers::S0];");
+    emitter.writeLine("const u32 preservedS1 = context.regs[Registers::S1];");
+    emitter.writeLine("const u32 preservedS2 = context.regs[Registers::S2];");
+    emitter.writeLine("const u32 preservedS3 = context.regs[Registers::S3];");
+    emitter.writeLine("const u32 preservedS4 = context.regs[Registers::S4];");
+    emitter.writeLine("const u32 preservedS5 = context.regs[Registers::S5];");
+    emitter.writeLine("const u32 preservedS6 = context.regs[Registers::S6];");
+    emitter.writeLine("const u32 preservedS7 = context.regs[Registers::S7];");
+    emitter.writeLine("const u32 preservedGp = context.regs[Registers::GP];");
+    emitter.writeLine("const u32 preservedSp = context.regs[Registers::SP];");
+    emitter.writeLine("const u32 preservedFp = context.regs[Registers::FP];");
+    emitter.writeLine("const u32 preservedRa = context.regs[Registers::RA];");
+    emitter.writeLine("auto restoreCalleeSaved = [&]()");
     emitter.openBlock("");
-    {
-        std::unordered_set<Address> emittedEntries;
-
-        // First: emit cases for every function entry point (called with
-        // default startAddress = 0 so execution begins at the first block).
-        for (const auto& entry : functionSymbols)
-        {
-            const Address normalizedEntry = entry.first & 0x1FFFFFFFu;
-            if (!emittedEntries.insert(normalizedEntry).second)
-            {
-                continue;
-            }
-            std::ostringstream caseLine;
-            caseLine << "case 0x" << std::hex << normalizedEntry << ":";
-            emitter.writeLine(caseLine.str());
-            emitter.openBlock("");
-            emitter.writeLine(entry.second + "(context);");
-            emitter.writeLine("return true;");
-            emitter.closeBlock();
-        }
-
-        // Second: emit cases for every non-entry block address so that JALR
-        // calls targeting a mid-function address can enter at the correct
-        // block via the startAddress parameter.
-        {
-            std::unordered_set<std::string> usedNames2;
-            size_t funcIdx = 0;
-            for (const auto& function : program.functions)
-            {
-                std::string funcName = uniquifyIdentifier(function.name, usedNames2);
-                for (const auto& block : function.blocks)
-                {
-                    if (block.name.size() > 8 && block.name.substr(0, 8) == "block_0x")
-                    {
-                        const Address blockAddr =
-                            std::stoul(block.name.substr(6), nullptr, 16) & 0x1FFFFFFFu;
-                        if (emittedEntries.insert(blockAddr).second)
-                        {
-                            std::ostringstream caseLine;
-                            caseLine << "case 0x" << std::hex << blockAddr << ":";
-                            emitter.writeLine(caseLine.str());
-                            emitter.openBlock("");
-                            std::ostringstream callLine;
-                            callLine << funcName << "(context, 0x" << std::hex << blockAddr << ");";
-                            emitter.writeLine(callLine.str());
-                            emitter.writeLine("return true;");
-                            emitter.closeBlock();
-                        }
-                    }
-                }
-                ++funcIdx;
-            }
-        }
-    }
-    emitter.writeLine("default:");
+    emitter.writeLine("context.regs[Registers::S0] = preservedS0;");
+    emitter.writeLine("context.regs[Registers::S1] = preservedS1;");
+    emitter.writeLine("context.regs[Registers::S2] = preservedS2;");
+    emitter.writeLine("context.regs[Registers::S3] = preservedS3;");
+    emitter.writeLine("context.regs[Registers::S4] = preservedS4;");
+    emitter.writeLine("context.regs[Registers::S5] = preservedS5;");
+    emitter.writeLine("context.regs[Registers::S6] = preservedS6;");
+    emitter.writeLine("context.regs[Registers::S7] = preservedS7;");
+    emitter.writeLine("context.regs[Registers::GP] = preservedGp;");
+    emitter.writeLine("context.regs[Registers::SP] = preservedSp;");
+    emitter.writeLine("context.regs[Registers::FP] = preservedFp;");
+    emitter.writeLine("context.regs[Registers::RA] = preservedRa;");
+    emitter.writeLine("context.regs[Registers::ZERO] = 0;");
+    emitter.closeBlock(";");
+    emitter.writeLine("const bool handled = [&]() -> bool");
     emitter.openBlock("");
-    emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
+    emitRecompiledDispatchSwitch("callRecompiledFunction");
+    emitter.closeBlock("();");
+    emitter.writeLine("if (handled)");
     emitter.openBlock("");
-    emitter.writeLine("const Address indirect = readMemory32(context.system, address) & 0x1FFFFFFF;");
-    emitter.writeLine("if (indirect != physical)");
-    emitter.openBlock("");
-    emitter.writeLine("return callRecompiledFunction(context, indirect);");
+    emitter.writeLine("restoreCalleeSaved();");
     emitter.closeBlock();
-    emitter.closeBlock();
-    emitter.writeLine("return false;");
-    emitter.closeBlock();
-    emitter.closeBlock();
+    emitter.writeLine("return handled;");
     emitter.closeBlock();
     emitter.writeBlank();
 
