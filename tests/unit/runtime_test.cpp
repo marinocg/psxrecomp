@@ -50,8 +50,8 @@ int main()
     assert((system.interrupts().readStatus() & dmaLine) == 0u);
 
     // DMA IRQ should only assert when DICR enables that source.
-    const psxrecomp::u32 dmaGpuEnable = (1u << (16 + static_cast<psxrecomp::u32>(DmaPort::Gpu))) |
-                                        (1u << 23);
+    const psxrecomp::u32 dmaGpuEnable =
+        (1u << (16 + static_cast<psxrecomp::u32>(DmaPort::Gpu))) | (1u << 23);
     system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg, (1u << 26));
     system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg, dmaGpuEnable);
     assert((system.interrupts().readStatus() & dmaLine) == 0u);
@@ -62,7 +62,8 @@ int main()
     assert((system.interrupts().readStatus() & dmaLine) != 0u);
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS, ~dmaLine);
     assert((system.interrupts().readStatus() & dmaLine) != 0u);
-    system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg, dmaGpuEnable | (1u << 26));
+    system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg,
+                                             dmaGpuEnable | (1u << 26));
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS, ~dmaLine);
     assert((system.interrupts().readStatus() & dmaLine) == 0u);
 

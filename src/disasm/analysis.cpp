@@ -138,8 +138,7 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
                 if (instructions[i].isReturn() || instructions[i].isJump())
                 {
                     hasHardTerminator = true;
-                    if (instructions[i].opcode == Opcode::JR &&
-                        instructions[i].rs != Registers::RA)
+                    if (instructions[i].opcode == Opcode::JR && instructions[i].rs != Registers::RA)
                     {
                         hasComputedJump = true;
                     }

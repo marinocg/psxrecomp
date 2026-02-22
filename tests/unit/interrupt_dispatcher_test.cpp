@@ -404,10 +404,10 @@ int main()
 
         constexpr u32 callback1 = 0x80010A00;
         constexpr u32 callback2 = 0x80010A10;
-        u32 h1 =
-            events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback, callback1);
-        u32 h2 =
-            events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback, callback2);
+        u32 h1 = events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
+                                  callback1);
+        u32 h2 = events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
+                                  callback2);
         events.enableEvent(h1);
         events.enableEvent(h2);
 
@@ -474,10 +474,10 @@ int main()
 
         constexpr u32 callback1 = 0x80010B00;
         constexpr u32 callback2 = 0x80010B10;
-        u32 h1 =
-            events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback, callback1);
-        u32 h2 =
-            events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback, callback2);
+        u32 h1 = events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
+                                  callback1);
+        u32 h2 = events.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
+                                  callback2);
         events.enableEvent(h1);
         events.enableEvent(h2);
 

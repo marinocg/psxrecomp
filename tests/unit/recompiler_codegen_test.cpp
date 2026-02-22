@@ -80,8 +80,7 @@ int main()
     std::string source = generator.generateSource(program, "module");
     std::string buildFile = generator.generateBuildFile("module");
     std::string runner = generator.generateRunnerSource("module");
-    auto countOccurrences =
-        [](const std::string& haystack, const std::string& needle) -> size_t
+    auto countOccurrences = [](const std::string& haystack, const std::string& needle) -> size_t
     {
         if (needle.empty())
         {
@@ -144,8 +143,7 @@ int main()
     assert(runner.find("envFlagEnabled(presentEnv, defaultPresent)") != std::string::npos);
     assert(runner.find("PSXRECOMP_RENDER_DEBUG_OVERLAY") != std::string::npos);
     assert(runner.find("decodeLogLevel") != std::string::npos);
-    assert(runner.find("const auto& exVramWords = system.gpu().vramWords();") !=
-           std::string::npos);
+    assert(runner.find("const auto& exVramWords = system.gpu().vramWords();") != std::string::npos);
     assert(runner.find("exPixels[y * exWidth + x] = pixel;") != std::string::npos);
 
 #if defined(_MSC_VER)

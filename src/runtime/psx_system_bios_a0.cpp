@@ -140,9 +140,9 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         //   GP1(04h)=2 (DMA CPU->GP0), DICR=0, DPCR|=0x800, CHCR setup/start.
         // This path intentionally models register side-effects instead of a
         // direct software push of OT words.
-        constexpr Address gpuDmaBase = DmaController::ChannelBase +
-                                       static_cast<Address>(DmaPort::Gpu) *
-                                           DmaController::ChannelStride;
+        constexpr Address gpuDmaBase =
+            DmaController::ChannelBase +
+            static_cast<Address>(DmaPort::Gpu) * DmaController::ChannelStride;
         writeMmio32(Mmio::GPU_GP1, 0x04000002u);
         writeMmio32(DmaController::InterruptReg, 0u);
         const u32 dpcr = readMmio32(DmaController::ControlReg);
@@ -156,9 +156,8 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
     {
         constexpr u32 gpuStatDmaRequest = 1u << 28;
         constexpr Address gpuDmaChcr =
-            DmaController::ChannelBase + static_cast<Address>(DmaPort::Gpu) *
-                                            DmaController::ChannelStride +
-            0x8;
+            DmaController::ChannelBase +
+            static_cast<Address>(DmaPort::Gpu) * DmaController::ChannelStride + 0x8;
 
         // If GPU DMA mode is enabled, ensure channel transfer has quiesced
         // and then force GP1(04h)=0 (DMA off), mirroring BIOS behavior.

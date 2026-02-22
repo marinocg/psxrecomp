@@ -81,8 +81,7 @@ void InterruptDispatcher::serviceInterrupts(InterruptController& interrupts,
         return;
     }
 
-    const auto flushDeferredCallbacks =
-        [this, logger](const char* source)
+    const auto flushDeferredCallbacks = [this, logger](const char* source)
     {
         if (m_deferredCallbacks.empty() || !m_invoker)
         {
@@ -152,8 +151,8 @@ void InterruptDispatcher::serviceInterrupts(InterruptController& interrupts,
             if (traceIrqFlowEnabled() && logger)
             {
                 std::ostringstream msg;
-                msg << "event=irq_dispatch_order index=" << std::dec << i << " line=0x"
-                    << std::hex << bit << " remaining_budget=" << std::dec << remainingBudget;
+                msg << "event=irq_dispatch_order index=" << std::dec << i << " line=0x" << std::hex
+                    << bit << " remaining_budget=" << std::dec << remainingBudget;
                 logger->log(LogLevel::Info, "irq_trace", msg.str());
             }
             const u32 dispatched =

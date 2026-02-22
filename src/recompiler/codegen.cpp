@@ -450,7 +450,8 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         emitter.openBlock("");
         emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
         emitter.openBlock("");
-        emitter.writeLine("const Address indirect = readMemory32(context.system, address) & 0x1FFFFFFF;");
+        emitter.writeLine(
+            "const Address indirect = readMemory32(context.system, address) & 0x1FFFFFFF;");
         emitter.writeLine("if (indirect != physical)");
         emitter.openBlock("");
         emitter.writeLine("return " + recurseHelper + "(context, indirect);");

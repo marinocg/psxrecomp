@@ -433,7 +433,7 @@ int main()
 
         u32 regs[32] = {};
         const u32 stubFunctions[] = {0x07, 0x09, 0x0A, 0x0C, 0x0D, 0x12, 0x13, 0x17,
-                         0x18, 0x19, 0x20, 0x46, 0x4A, 0x4B, 0x5B};
+                                     0x18, 0x19, 0x20, 0x46, 0x4A, 0x4B, 0x5B};
         for (u32 func : stubFunctions)
         {
             regs[9] = func;
@@ -463,7 +463,7 @@ int main()
         system.write<u32>(descriptorAddress, callbackAddress);
 
         u32 regs[32] = {};
-        regs[9] = 0x19;            // HookEntryInt
+        regs[9] = 0x19;              // HookEntryInt
         regs[4] = descriptorAddress; // descriptor address
         system.callBiosVector(0xB0, regs, 32);
         assert(regs[2] == 0);
@@ -502,7 +502,7 @@ int main()
         constexpr u32 callbackAddress = 0x80012340;
 
         u32 regs[32] = {};
-        regs[9] = 0x19; // HookEntryInt
+        regs[9] = 0x19;            // HookEntryInt
         regs[4] = callbackAddress; // not a descriptor (heuristic path removed)
         system.callBiosVector(0xB0, regs, 32);
 
@@ -721,9 +721,8 @@ int main()
         system.callBiosVector(0xC0, regs, 32);
         assert(regs[2] == 1);
 
-        const u32 handle =
-            system.events().openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
-                                      eventCallback);
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
         system.events().enableEvent(handle);
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
@@ -769,9 +768,8 @@ int main()
         system.callBiosVector(0xC0, regs, 32);
         assert(regs[2] == 1);
 
-        const u32 handle =
-            system.events().openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
-                                      eventCallback);
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
         system.events().enableEvent(handle);
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
@@ -822,9 +820,8 @@ int main()
         system.callBiosVector(0xC0, regs, 32);
         assert(regs[2] == 1);
 
-        const u32 handle =
-            system.events().openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
-                                      eventCallback);
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
         system.events().enableEvent(handle);
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
@@ -854,9 +851,8 @@ int main()
         regs[4] = hookDescriptor;
         system.callBiosVector(0xB0, regs, 32);
 
-        const u32 handle =
-            system.events().openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
-                                      eventCallback);
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
         system.events().enableEvent(handle);
 
         std::vector<u32> order;

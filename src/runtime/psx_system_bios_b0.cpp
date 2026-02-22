@@ -117,8 +117,8 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         if (traceIrqFlowEnabled())
         {
             std::ostringstream msg;
-            msg << "event=return_from_exception source=bios_b0_17 action=ignored pc=0x"
-                << std::hex << m_debugOverlay.lastProgramCounter();
+            msg << "event=return_from_exception source=bios_b0_17 action=ignored pc=0x" << std::hex
+                << m_debugOverlay.lastProgramCounter();
             m_logger.log(LogLevel::Info, "irq_trace", msg.str());
         }
         return true;

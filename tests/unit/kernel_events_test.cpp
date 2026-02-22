@@ -305,7 +305,7 @@ int main()
                EventClass::Timer2);
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Controller) ==
                EventClass::Controller);
-         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Sio) == EventClass::Sio);
+        assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Sio) == EventClass::Sio);
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Spu) == EventClass::Spu);
         assert(KernelEventTable::interruptLineToEventClass(InterruptLine::Pio) == EventClass::Pio);
         std::cerr << "[PASS] interruptLineToEventClass mapping\n";

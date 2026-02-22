@@ -49,8 +49,8 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
     {
         std::ostringstream trace;
         trace << "event=bios_call vector=" << vecName << " function=0x" << std::hex << functionId
-              << " a0=0x" << a0 << " a1=0x" << a1 << " a2=0x" << a2 << " a3=0x" << a3
-              << " pc=0x" << m_debugOverlay.lastProgramCounter();
+              << " a0=0x" << a0 << " a1=0x" << a1 << " a2=0x" << a2 << " a3=0x" << a3 << " pc=0x"
+              << m_debugOverlay.lastProgramCounter();
         m_logger.log(LogLevel::Info, "bios_trace", trace.str());
     }
 

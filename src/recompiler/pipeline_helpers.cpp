@@ -457,7 +457,8 @@ bool copyDirectoryRecursive(const std::filesystem::path& source,
         std::filesystem::create_directories(targetPath.parent_path(), error);
         if (error)
         {
-            outError = "Failed to create destination directory: " + targetPath.parent_path().string();
+            outError =
+                "Failed to create destination directory: " + targetPath.parent_path().string();
             return false;
         }
 
@@ -480,8 +481,8 @@ bool copyDirectoryRecursive(const std::filesystem::path& source,
             output << input.rdbuf();
             if (!output.good())
             {
-                outError =
-                    "Failed to copy file from " + entry.path().string() + " to " + targetPath.string();
+                outError = "Failed to copy file from " + entry.path().string() + " to " +
+                           targetPath.string();
                 return false;
             }
             continue;

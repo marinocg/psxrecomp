@@ -79,9 +79,10 @@ const char* interruptLineName(InterruptLine line)
 std::string formatPendingLineOrder(u32 pendingMasked)
 {
     constexpr InterruptLine kPriorityOrder[] = {
-        InterruptLine::VBlank, InterruptLine::Gpu,    InterruptLine::Cdrom,  InterruptLine::Dma,
-        InterruptLine::Timer0, InterruptLine::Timer1, InterruptLine::Timer2, InterruptLine::Controller,
-        InterruptLine::Sio,    InterruptLine::Spu,    InterruptLine::Pio,
+        InterruptLine::VBlank, InterruptLine::Gpu,        InterruptLine::Cdrom,
+        InterruptLine::Dma,    InterruptLine::Timer0,     InterruptLine::Timer1,
+        InterruptLine::Timer2, InterruptLine::Controller, InterruptLine::Sio,
+        InterruptLine::Spu,    InterruptLine::Pio,
     };
 
     std::ostringstream out;
@@ -166,11 +167,11 @@ void PsxSystem::reset()
             [this](const InterruptController::TraceEvent& event)
             {
                 std::ostringstream msg;
-                msg << "event=irq_state kind=" << interruptTraceKindName(event.kind)
-                    << " value=0x" << std::hex << event.value << " status_before=0x"
-                    << event.statusBefore << " status_after=0x" << event.statusAfter
-                    << " mask_before=0x" << event.maskBefore << " mask_after=0x"
-                    << event.maskAfter << " pc=0x" << m_debugOverlay.lastProgramCounter();
+                msg << "event=irq_state kind=" << interruptTraceKindName(event.kind) << " value=0x"
+                    << std::hex << event.value << " status_before=0x" << event.statusBefore
+                    << " status_after=0x" << event.statusAfter << " mask_before=0x"
+                    << event.maskBefore << " mask_after=0x" << event.maskAfter << " pc=0x"
+                    << m_debugOverlay.lastProgramCounter();
                 m_logger.log(LogLevel::Info, "irq_trace", msg.str());
             });
     }
@@ -242,8 +243,7 @@ void PsxSystem::tickCpuCycles(u32 cpuCycles)
 
 void PsxSystem::syncLevelInterruptSources()
 {
-    const auto raiseIfRequested =
-        [this](bool requested, InterruptLine line)
+    const auto raiseIfRequested = [this](bool requested, InterruptLine line)
     {
         if (!requested)
         {
@@ -419,8 +419,8 @@ void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
 
     // The dispatcher should invoke callbacks through the system so that
     // ReturnFromException works (requires m_inCallbackInvocation=true).
-    m_dispatcher.setCallbackInvoker(
-        [this](u32 address) -> u32 { return this->invokeCallbackRaw(address); });
+    m_dispatcher.setCallbackInvoker([this](u32 address) -> u32
+                                    { return this->invokeCallbackRaw(address); });
 }
 
 void PsxSystem::serviceInterrupts()
@@ -438,8 +438,8 @@ void PsxSystem::serviceInterrupts()
         std::ostringstream msg;
         msg << "event=service_interrupts pending_masked=0x" << std::hex << pendingMasked
             << " status=0x" << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
-            << " critical_depth=" << std::dec << m_criticalSectionDepth << " in_callback="
-            << (m_inCallbackInvocation ? 1 : 0);
+            << " critical_depth=" << std::dec << m_criticalSectionDepth
+            << " in_callback=" << (m_inCallbackInvocation ? 1 : 0);
         m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
     if (pendingMasked == 0)
@@ -447,8 +447,8 @@ void PsxSystem::serviceInterrupts()
         // Still allow the event dispatcher to flush deferred callbacks.
         try
         {
-            m_dispatcher.serviceInterrupts(
-                m_interrupts, m_events, m_criticalSectionDepth, &m_logger);
+            m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth,
+                                           &m_logger);
         }
         catch (const ReturnFromExceptionSignal&)
         {
@@ -483,8 +483,8 @@ void PsxSystem::serviceInterrupts()
     }
 
     // HookEntryInt descriptor callback runs while IRQ status bits are visible.
-    if (pendingMasked != 0 && m_criticalSectionDepth == 0 && m_hookEntryInt.descriptorAddress != 0 &&
-        !m_inHookEntryIntHandler)
+    if (pendingMasked != 0 && m_criticalSectionDepth == 0 &&
+        m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
     {
         if (traceIrqFlowEnabled())
         {
@@ -533,8 +533,7 @@ u32 PsxSystem::resolveHookEntryIntCallback(u32 descriptorAddress) const
     }
 
     const Address descriptorPhysical = normalizeAddress(descriptorAddress);
-    if (descriptorPhysical > MemoryMap::RAM_SIZE - sizeof(u32) ||
-        (descriptorPhysical & 0x3u) != 0u)
+    if (descriptorPhysical > MemoryMap::RAM_SIZE - sizeof(u32) || (descriptorPhysical & 0x3u) != 0u)
     {
         return 0;
     }
@@ -633,8 +632,8 @@ u32 PsxSystem::invokeCallbackRaw(u32 address)
         if (traceIrqFlowEnabled())
         {
             std::ostringstream msg;
-            msg << "event=callback_return mode=raw addr=0x" << std::hex << address
-                << " v0=0x" << result;
+            msg << "event=callback_return mode=raw addr=0x" << std::hex << address << " v0=0x"
+                << result;
             m_logger.log(LogLevel::Info, "irq_trace", msg.str());
         }
         m_inCallbackInvocation = previousInCallbackInvocation;
@@ -671,8 +670,8 @@ bool PsxSystem::dispatchIrqChains()
             {
                 std::ostringstream msg;
                 msg << "event=irq_dispatch_order source=irq_chain prio=" << std::dec << prio
-                    << " index=" << safety << " node=0x" << std::hex << node << " func1=0x"
-                    << func1 << " func2=0x" << func2;
+                    << " index=" << safety << " node=0x" << std::hex << node << " func1=0x" << func1
+                    << " func2=0x" << func2;
                 m_logger.log(LogLevel::Info, "irq_trace", msg.str());
             }
 
