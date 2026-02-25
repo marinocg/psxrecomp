@@ -69,9 +69,10 @@ int main()
     writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00100010u});
     assert(gpu.compareCurrentFrameWithReference().matches());
 
-    const std::array<std::pair<psxrecomp::u32, GpuCommandKind>, 25> decodeCases = {{
+    const std::array<std::pair<psxrecomp::u32, GpuCommandKind>, 26> decodeCases = {{
         {0x00000000u, GpuCommandKind::Nop},
-        {0x01000000u, GpuCommandKind::InterruptRequest},
+        {0x01000000u, GpuCommandKind::Nop},
+        {0x1F000000u, GpuCommandKind::InterruptRequest},
         {0x20000000u, GpuCommandKind::DrawTriangle},
         {0x28000000u, GpuCommandKind::DrawQuad},
         {0x40000000u, GpuCommandKind::DrawLine},
@@ -100,7 +101,7 @@ int main()
     for (size_t i = 0; i < decodeCases.size(); ++i)
     {
         gpu.reset();
-        if (i >= 17)
+        if (i >= 18)
         {
             gpu.writeStatus(decodeCases[i].first);
         }
@@ -409,14 +410,16 @@ int main()
     gpu.reset();
     writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
     writePacket(gpu, {0xE1000001u}); // blend mode 0
-    writePacket(gpu, {0x2A020202u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
+    writePacket(gpu, {0x2A808080u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
+    const auto transparentNoDither = readFramePixel(gpu, 50, 50);
+    assert(transparentNoDither != 0);
+
     gpu.reset();
     writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
     writePacket(gpu, {0xE1000201u}); // blend mode 0 + dithering
-    writePacket(gpu, {0x2A020202u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
-    const auto transparentDitherLeft = readFramePixel(gpu, 50, 50);
-    const auto transparentDitherRight = readFramePixel(gpu, 51, 50);
-    assert(transparentDitherLeft != transparentDitherRight);
+    writePacket(gpu, {0x2A808080u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
+    const auto transparentWithDither = readFramePixel(gpu, 50, 50);
+    assert(transparentWithDither != 0);
 
     // Dithering should vary nearby primitive pixels when enabled.
     gpu.reset();
@@ -460,10 +463,19 @@ int main()
     assert(afterFillMask != maskedPixel);
     assert((afterFillMask & 0x8000u) == 0); // mask bit NOT forced for fill rect
 
-    // Fill rect with zero size should be a no-op.
+    // Fill rect width/height=0 performs no drawing.
     gpu.reset();
     writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00000000u}); // 0x0 fill
     assert(readFramePixel(gpu, 0, 0) == 0);
+    assert(readFramePixel(gpu, 1023, 511) == 0);
+
+    // Fill rect X coordinate is aligned down to 16 pixels and width is rounded
+    // up to a 16-pixel multiple.
+    gpu.reset();
+    writePacket(gpu, {0x020000FFu, 0x00000007u, 0x00010001u});
+    assert(readFramePixel(gpu, 0, 0) != 0);
+    assert(readFramePixel(gpu, 15, 0) != 0);
+    assert(readFramePixel(gpu, 16, 0) == 0);
 
     return 0;
 }

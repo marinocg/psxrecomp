@@ -33,6 +33,8 @@ class DmaController
     static constexpr size_t ChannelCount = 7;
     static constexpr Address ChannelBase = 0x1F801080;
     static constexpr Address ChannelStride = 0x10;
+    static constexpr Address ControlReg = 0x1F8010F0;
+    static constexpr Address InterruptReg = 0x1F8010F4;
 
     void reset();
 
@@ -41,6 +43,8 @@ class DmaController
 
     const DmaChannel& channel(DmaPort port) const;
     void clearTrigger(DmaPort port);
+    void notifyTransferComplete(DmaPort port);
+    bool irqRequested() const;
 
   private:
     DmaChannel m_channels[ChannelCount] = {};

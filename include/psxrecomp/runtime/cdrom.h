@@ -38,7 +38,7 @@ class Cdrom
     static constexpr size_t RESPONSE_CAPACITY = 32;
     static constexpr size_t DATA_FIFO_CAPACITY = 4096;
     static constexpr size_t MAX_QUEUED_SECTORS = 64;
-    static constexpr u32 CDROM_READ_CYCLES = 338688;
+    static constexpr u32 CDROM_READ_CYCLES = 451584; // 33.8688MHz / 75 sectors/sec (1x)
 
     u8 m_status = 0;
     std::deque<u8> m_params;

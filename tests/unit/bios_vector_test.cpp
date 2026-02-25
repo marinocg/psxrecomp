@@ -17,8 +17,12 @@ int main()
     using psxrecomp::Address;
     using psxrecomp::u32;
     using psxrecomp::u8;
+    using psxrecomp::runtime::InterruptLine;
     using psxrecomp::runtime::LogLevel;
     using psxrecomp::runtime::PsxSystem;
+    namespace EventClass = psxrecomp::runtime::EventClass;
+    namespace EventSpec = psxrecomp::runtime::EventSpec;
+    using psxrecomp::runtime::EventMode;
 
     // ---------------------------------------------------------------
     // Test 1: Guard against insufficient register file
@@ -292,41 +296,134 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 11: B0 vector - OpenEvent (function 0x08)
+    // Test 11: A0 vector - send_gpu_linked_list (function 0x4B)
     //
-    // Should return a fake event handle.
+    // Should configure GPU DMA via registers and consume linked-list words.
     // ---------------------------------------------------------------
     {
         PsxSystem system;
         assert(system.initialize());
 
-        u32 regs[32] = {};
-        regs[9] = 0x08; // OpenEvent
-        system.callBiosVector(0xB0, regs, 32);
-        assert(regs[2] == 0x10); // fake handle
+        constexpr Address otBase = 0x00012000;
+        system.write<u32>(otBase + 0x0, (2u << 24) | 0x00FFFFFFu);
+        system.write<u32>(otBase + 0x4, 0xE1000000u);
+        system.write<u32>(otBase + 0x8, 0x20010203u);
 
-        std::cerr << "[PASS] B0 OpenEvent\n";
+        u32 regs[32] = {};
+        regs[9] = 0x4B;
+        regs[4] = otBase;
+        system.callBiosVector(0xA0, regs, 32);
+
+        const u32 gpuDmaChcr = system.read<u32>(0x1F8010A8u);
+        const u32 dmaDicr = system.read<u32>(0x1F8010F4u);
+        const u32 gpuStat = system.read<u32>(0x1F801814u);
+
+        // Transfer completed (start bit cleared), DMA2 completion latched.
+        assert((gpuDmaChcr & 0x01000000u) == 0);
+        assert((dmaDicr & (1u << 26)) != 0);
+        assert(((gpuStat >> 29) & 0x3u) == 0x2u);
+
+        std::cerr << "[PASS] A0 send_gpu_linked_list uses DMA register path\n";
     }
 
     // ---------------------------------------------------------------
-    // Test 12: B0 vector - TestEvent (function 0x0B)
+    // Test 12: A0 vector - gpu_sync (function 0x4E)
     //
-    // Should return 1 (event already occurred).
+    // Should disable GPU DMA mode after synchronization.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr Address otBase = 0x00012200;
+        system.write<u32>(otBase + 0x0, (1u << 24) | 0x00FFFFFFu);
+        system.write<u32>(otBase + 0x4, 0xE1000000u);
+
+        u32 regs[32] = {};
+        regs[9] = 0x4B;
+        regs[4] = otBase;
+        system.callBiosVector(0xA0, regs, 32);
+
+        regs[9] = 0x4E;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(regs[2] == 0);
+
+        const u32 gpuStat = system.read<u32>(0x1F801814u);
+        assert(((gpuStat >> 29) & 0x3u) == 0u);
+
+        std::cerr << "[PASS] A0 gpu_sync disables DMA mode\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 13: B0 vector - OpenEvent (function 0x08)
+    //
+    // Should return a valid event handle from the kernel event table.
     // ---------------------------------------------------------------
     {
         PsxSystem system;
         assert(system.initialize());
 
         u32 regs[32] = {};
+        regs[9] = 0x08;       // OpenEvent
+        regs[4] = 0xF0000001; // class = VBlank
+        regs[5] = 0x0001;     // spec = Counter
+        regs[6] = 0x2000;     // mode = NoCallback
+        regs[7] = 0;          // callback = none
+        system.callBiosVector(0xB0, regs, 32);
+        // Should return a real handle, not the old fake 0x10
+        assert(regs[2] != 0xFFFFFFFFu);
+        assert((regs[2] & 0xFF000000u) == 0xF1000000u);
+
+        std::cerr << "[PASS] B0 OpenEvent (real handle)\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 14: B0 vector - TestEvent (function 0x0B)
+    //
+    // Should return 0 for enabled-but-undelivered, 1 after delivery.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        // Open an event
+        u32 regs[32] = {};
+        regs[9] = 0x08;       // OpenEvent
+        regs[4] = 0xF0000001; // class = VBlank
+        regs[5] = 0x0001;     // spec = Counter
+        regs[6] = 0x2000;     // mode = NoCallback
+        regs[7] = 0;
+        system.callBiosVector(0xB0, regs, 32);
+        u32 handle = regs[2];
+
+        // Enable it
+        regs[9] = 0x0C; // EnableEvent
+        regs[4] = handle;
+        system.callBiosVector(0xB0, regs, 32);
+
+        // Test — should be 0 (not yet delivered)
         regs[9] = 0x0B; // TestEvent
+        regs[4] = handle;
+        system.callBiosVector(0xB0, regs, 32);
+        assert(regs[2] == 0);
+
+        // Deliver it
+        regs[9] = 0x07;       // DeliverEvent
+        regs[4] = 0xF0000001; // class = VBlank
+        regs[5] = 0x0001;     // spec = Counter
+        system.callBiosVector(0xB0, regs, 32);
+
+        // Test — should be 1
+        regs[9] = 0x0B; // TestEvent
+        regs[4] = handle;
         system.callBiosVector(0xB0, regs, 32);
         assert(regs[2] == 1);
 
-        std::cerr << "[PASS] B0 TestEvent\n";
+        std::cerr << "[PASS] B0 TestEvent (real state transitions)\n";
     }
 
     // ---------------------------------------------------------------
-    // Test 13: B0 vector stubs (InitPad, StartPad, etc.)
+    // Test 15: B0 vector stubs (InitPad, StartPad, etc.)
     //
     // Should not crash.
     // ---------------------------------------------------------------
@@ -335,8 +432,8 @@ int main()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        const u32 stubFunctions[] = {0x07, 0x09, 0x0A, 0x0C, 0x0D, 0x12, 0x13,
-                                     0x17, 0x18, 0x19, 0x20, 0x4A, 0x4B, 0x5B};
+        const u32 stubFunctions[] = {0x07, 0x09, 0x0A, 0x0C, 0x0D, 0x12, 0x13, 0x17,
+                                     0x18, 0x19, 0x20, 0x46, 0x4A, 0x4B, 0x5B};
         for (u32 func : stubFunctions)
         {
             regs[9] = func;
@@ -347,7 +444,78 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 14: C0 vector stubs
+    // Test 16: B0 HookEntryInt descriptor callback runs on IRQ service
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 lastCallback = 0;
+        system.setCallbackInvoker(
+            [&lastCallback](u32 address) -> u32
+            {
+                lastCallback = address;
+                return 0;
+            });
+
+        constexpr u32 descriptorAddress = 0x80014000;
+        constexpr u32 callbackAddress = 0x80012340;
+        system.write<u32>(descriptorAddress, callbackAddress);
+
+        u32 regs[32] = {};
+        regs[9] = 0x19;              // HookEntryInt
+        regs[4] = descriptorAddress; // descriptor address
+        system.callBiosVector(0xB0, regs, 32);
+        assert(regs[2] == 0);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+        assert(lastCallback == callbackAddress);
+
+        regs[9] = 0x18; // ResetEntryInt
+        system.callBiosVector(0xB0, regs, 32);
+        assert(regs[2] == descriptorAddress);
+        lastCallback = 0;
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+        assert(lastCallback == 0);
+
+        std::cerr << "[PASS] B0 HookEntryInt descriptor dispatches on IRQ service\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 17: B0 HookEntryInt no longer treats raw callback as descriptor
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 lastCallback = 0;
+        system.setCallbackInvoker(
+            [&lastCallback](u32 address) -> u32
+            {
+                lastCallback = address;
+                return 0;
+            });
+
+        constexpr u32 callbackAddress = 0x80012340;
+
+        u32 regs[32] = {};
+        regs[9] = 0x19;            // HookEntryInt
+        regs[4] = callbackAddress; // not a descriptor (heuristic path removed)
+        system.callBiosVector(0xB0, regs, 32);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+        assert(lastCallback == 0);
+
+        std::cerr << "[PASS] B0 HookEntryInt requires descriptor pointer\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 18: C0 vector stubs
     //
     // All C0 stubs should be no-ops and not crash.
     // ---------------------------------------------------------------
@@ -368,7 +536,31 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 15: Unhandled BIOS call logs a warning
+    // Test 18b: B0 ReturnFromException exits callback invocation
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        bool reachedAfterReturnFromException = false;
+        system.setCallbackInvoker(
+            [&system, &reachedAfterReturnFromException](u32) -> u32
+            {
+                u32 regs[32] = {};
+                regs[9] = 0x17; // ReturnFromException
+                system.callBiosVector(0xB0, regs, 32);
+                reachedAfterReturnFromException = true;
+                return 0;
+            });
+
+        system.invokeCallback(0x80012000);
+        assert(!reachedAfterReturnFromException);
+
+        std::cerr << "[PASS] B0 ReturnFromException unwinds callback invocation\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 19: Unhandled BIOS call logs a warning
     //
     // Calling an unimplemented function should log a warning.
     // ---------------------------------------------------------------
@@ -397,7 +589,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 16: A0 vector - setjmp (function 0x13)
+    // Test 18: A0 vector - setjmp (function 0x13)
     //
     // Should return 0 in $v0.
     // ---------------------------------------------------------------
@@ -415,7 +607,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 17: A0 vector - InitHeap (function 0x39)
+    // Test 18: A0 vector - InitHeap (function 0x39)
     //
     // Should acknowledge without crash.
     // ---------------------------------------------------------------
@@ -433,7 +625,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 18: B0 vector - alloc_kernel_memory (function 0x00)
+    // Test 19: B0 vector - alloc_kernel_memory (function 0x00)
     //
     // Should return a non-zero address.
     // ---------------------------------------------------------------
@@ -451,7 +643,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 19: A0 vector - free (function 0x34)
+    // Test 20: A0 vector - free (function 0x34)
     //
     // Should be a no-op stub.
     // ---------------------------------------------------------------
@@ -468,7 +660,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 20: NULL regs pointer
+    // Test 21: NULL regs pointer
     //
     // Should log a warning without crashing.
     // ---------------------------------------------------------------
@@ -491,6 +683,200 @@ int main()
         assert(warningLogged);
 
         std::cerr << "[PASS] null regs pointer handled\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 22: serviceInterrupts order is chain func1->func2->events
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr u32 func1 = 0x80016000;
+        constexpr u32 func2 = 0x80016010;
+        constexpr u32 eventCallback = 0x80016020;
+        constexpr u32 node = 0x80017000;
+
+        std::vector<u32> order;
+        system.setCallbackInvoker(
+            [&order, func1](u32 address) -> u32
+            {
+                order.push_back(address);
+                if (address == func1)
+                {
+                    return 1;
+                }
+                return 0;
+            });
+
+        system.write<u32>(node + 0x00, 0);
+        system.write<u32>(node + 0x04, func2);
+        system.write<u32>(node + 0x08, func1);
+        system.write<u32>(node + 0x0C, 0);
+
+        u32 regs[32] = {};
+        regs[9] = 0x02; // SysEnqIntRP
+        regs[4] = 0;    // priority
+        regs[5] = node;
+        system.callBiosVector(0xC0, regs, 32);
+        assert(regs[2] == 1);
+
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
+        system.events().enableEvent(handle);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+
+        assert(order.size() == 3);
+        assert(order[0] == func1);
+        assert(order[1] == func2);
+        assert(order[2] == eventCallback);
+        std::cerr << "[PASS] serviceInterrupts chain->event order\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 23: chain func2 is skipped when func1 returns 0
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr u32 func1 = 0x80016100;
+        constexpr u32 func2 = 0x80016110;
+        constexpr u32 eventCallback = 0x80016120;
+        constexpr u32 node = 0x80017100;
+
+        std::vector<u32> order;
+        system.setCallbackInvoker(
+            [&order](u32 address) -> u32
+            {
+                order.push_back(address);
+                return 0;
+            });
+
+        system.write<u32>(node + 0x00, 0);
+        system.write<u32>(node + 0x04, func2);
+        system.write<u32>(node + 0x08, func1);
+        system.write<u32>(node + 0x0C, 0);
+
+        u32 regs[32] = {};
+        regs[9] = 0x02; // SysEnqIntRP
+        regs[4] = 0;    // priority
+        regs[5] = node;
+        system.callBiosVector(0xC0, regs, 32);
+        assert(regs[2] == 1);
+
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
+        system.events().enableEvent(handle);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+
+        assert(order.size() == 2);
+        assert(order[0] == func1);
+        assert(order[1] == eventCallback);
+        std::cerr << "[PASS] serviceInterrupts skips func2 on zero v0\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 24: ReturnFromException in chain short-circuits event dispatch
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr u32 func1 = 0x80016200;
+        constexpr u32 func2 = 0x80016210;
+        constexpr u32 eventCallback = 0x80016220;
+        constexpr u32 node = 0x80017200;
+
+        std::vector<u32> order;
+        system.setCallbackInvoker(
+            [&system, &order, func1](u32 address) -> u32
+            {
+                order.push_back(address);
+                if (address == func1)
+                {
+                    u32 regs[32] = {};
+                    regs[9] = 0x17; // ReturnFromException
+                    system.callBiosVector(0xB0, regs, 32);
+                }
+                return 0;
+            });
+
+        system.write<u32>(node + 0x00, 0);
+        system.write<u32>(node + 0x04, func2);
+        system.write<u32>(node + 0x08, func1);
+        system.write<u32>(node + 0x0C, 0);
+
+        u32 regs[32] = {};
+        regs[9] = 0x02; // SysEnqIntRP
+        regs[4] = 0;    // priority
+        regs[5] = node;
+        system.callBiosVector(0xC0, regs, 32);
+        assert(regs[2] == 1);
+
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
+        system.events().enableEvent(handle);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+
+        assert(order.size() == 1);
+        assert(order[0] == func1);
+        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) != 0);
+        std::cerr << "[PASS] chain ReturnFromException short-circuits dispatch\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 25: ReturnFromException in HookEntryInt short-circuits dispatcher
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr u32 hookDescriptor = 0x80017300;
+        constexpr u32 hookCallback = 0x80016300;
+        constexpr u32 eventCallback = 0x80016310;
+
+        system.write<u32>(hookDescriptor, hookCallback);
+        u32 regs[32] = {};
+        regs[9] = 0x19; // HookEntryInt
+        regs[4] = hookDescriptor;
+        system.callBiosVector(0xB0, regs, 32);
+
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
+        system.events().enableEvent(handle);
+
+        std::vector<u32> order;
+        system.setCallbackInvoker(
+            [&system, &order, hookCallback](u32 address) -> u32
+            {
+                order.push_back(address);
+                if (address == hookCallback)
+                {
+                    u32 regs[32] = {};
+                    regs[9] = 0x17; // ReturnFromException
+                    system.callBiosVector(0xB0, regs, 32);
+                }
+                return 0;
+            });
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+
+        assert(order.size() == 1);
+        assert(order[0] == hookCallback);
+        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) != 0);
+        std::cerr << "[PASS] HookEntryInt ReturnFromException short-circuits dispatcher\n";
     }
 
     std::cerr << "All BIOS vector tests passed.\n";

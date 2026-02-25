@@ -460,16 +460,12 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("system.logger().setMinLevel(effectiveLogLevel);");
     emitter.writeLine("const char* presentEnv = std::getenv(\"PSXRECOMP_PRESENT_FRAMEBUFFER\");");
-    emitter.writeLine("const bool autoFrameProgress = "
-                      "envFlagEnabled(std::getenv(\"PSXRECOMP_AUTO_FRAME_PROGRESS\"), true);");
     emitter.writeLine("const bool renderDebugOverlay = "
                       "envFlagEnabled(std::getenv(\"PSXRECOMP_RENDER_DEBUG_OVERLAY\"), false);");
     emitter.writeLine("std::cout << \"[psxrecomp] Runtime log level: \" << "
                       "logLevelLabel(effectiveLogLevel) << \"\\n\";");
     emitter.writeLine("std::cout << \"[psxrecomp] Render debug overlay: \" << "
                       "(renderDebugOverlay ? \"on\" : \"off\") << \"\\n\";");
-    emitter.writeLine("std::cout << \"[psxrecomp] Auto frame progress: \" << "
-                      "(autoFrameProgress ? \"on\" : \"off\") << \"\\n\";");
     emitter.writeLine("try");
     emitter.openBlock("");
     emitter.writeLine("if (!system.initialize())");
@@ -480,7 +476,6 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::initMemory(system);");
-    emitter.writeLine("system.setAutoFrameProgressOnInterruptPoll(autoFrameProgress);");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
     emitter.writeLine("#else");
@@ -734,6 +729,28 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
                       "countNonZeroPixels(altPixels) > 0)");
     emitter.openBlock("");
     emitter.writeLine("exPixels.swap(altPixels);");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("if (countNonZeroPixels(exPixels) == 0 && exWidth > 0 && exHeight > 0)");
+    emitter.openBlock("");
+    emitter.writeLine("const auto& exVramWords = system.gpu().vramWords();");
+    emitter.writeLine("if (!exVramWords.empty())");
+    emitter.openBlock("");
+    emitter.writeLine("const size_t fullWidth = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
+    emitter.writeLine("exPixels.assign(exWidth * exHeight, 0);");
+    emitter.writeLine("for (size_t y = 0; y < exHeight; ++y)");
+    emitter.openBlock("");
+    emitter.writeLine("for (size_t x = 0; x < exWidth; ++x)");
+    emitter.openBlock("");
+    emitter.writeLine("const size_t srcPixel =");
+    emitter.writeLine("    (static_cast<size_t>(exWindow.y) + y) * fullWidth +");
+    emitter.writeLine("    (static_cast<size_t>(exWindow.x) + x);");
+    emitter.writeLine("const psxrecomp::u32 word = exVramWords[srcPixel / 2];");
+    emitter.writeLine("const psxrecomp::u16 pixel = static_cast<psxrecomp::u16>(");
+    emitter.writeLine("    ((srcPixel % 2) == 0) ? (word & 0xFFFF) : ((word >> 16) & 0xFFFF));");
+    emitter.writeLine("exPixels[y * exWidth + x] = pixel;");
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();

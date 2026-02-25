@@ -162,7 +162,14 @@ std::string resolveBlockId(std::string_view name,
     {
         return "BlockId::" + it->second;
     }
-    return "BlockId::" + toIdentifier(name);
+    // Unknown successors are external edges that should resolve to the
+    // function's external barrier block.
+    auto externalIt = blockNames.find("block_external");
+    if (externalIt != blockNames.end())
+    {
+        return "BlockId::" + externalIt->second;
+    }
+    return "BlockId::block_external";
 }
 
 std::unordered_map<std::string, size_t> buildBlockIndex(const ir::Function& function)

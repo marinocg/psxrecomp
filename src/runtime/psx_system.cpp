@@ -1,6 +1,6 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <algorithm>
+#include <cstdlib>
 #include <sstream>
 #include <utility>
 
@@ -13,6 +13,105 @@ namespace
 {
 constexpr u32 CYCLES_PER_FRAME = 564480;
 constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
+constexpr u32 VBLANK_CYCLES = CYCLES_PER_FRAME / 10u;
+constexpr u32 VBLANK_MID_CYCLES = VBLANK_CYCLES / 2u;
+constexpr u32 ACTIVE_CYCLES = CYCLES_PER_FRAME - VBLANK_CYCLES;
+
+bool traceIrqFlowEnabled()
+{
+    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
+    {
+        return env[0] == '1';
+    }
+    return false;
+}
+
+const char* interruptTraceKindName(InterruptController::TraceEvent::Kind kind)
+{
+    switch (kind)
+    {
+    case InterruptController::TraceEvent::Kind::Reset:
+        return "reset";
+    case InterruptController::TraceEvent::Kind::WriteStatus:
+        return "write_status";
+    case InterruptController::TraceEvent::Kind::WriteMask:
+        return "write_mask";
+    case InterruptController::TraceEvent::Kind::Raise:
+        return "raise";
+    case InterruptController::TraceEvent::Kind::RestoreState:
+        return "restore_state";
+    default:
+        return "unknown";
+    }
+}
+
+const char* interruptLineName(InterruptLine line)
+{
+    switch (line)
+    {
+    case InterruptLine::VBlank:
+        return "VBlank";
+    case InterruptLine::Gpu:
+        return "Gpu";
+    case InterruptLine::Cdrom:
+        return "Cdrom";
+    case InterruptLine::Dma:
+        return "Dma";
+    case InterruptLine::Timer0:
+        return "Timer0";
+    case InterruptLine::Timer1:
+        return "Timer1";
+    case InterruptLine::Timer2:
+        return "Timer2";
+    case InterruptLine::Controller:
+        return "Controller";
+    case InterruptLine::Sio:
+        return "Sio";
+    case InterruptLine::Spu:
+        return "Spu";
+    case InterruptLine::Pio:
+        return "Pio";
+    default:
+        return "Unknown";
+    }
+}
+
+std::string formatPendingLineOrder(u32 pendingMasked)
+{
+    constexpr InterruptLine kPriorityOrder[] = {
+        InterruptLine::VBlank, InterruptLine::Gpu,        InterruptLine::Cdrom,
+        InterruptLine::Dma,    InterruptLine::Timer0,     InterruptLine::Timer1,
+        InterruptLine::Timer2, InterruptLine::Controller, InterruptLine::Sio,
+        InterruptLine::Spu,    InterruptLine::Pio,
+    };
+
+    std::ostringstream out;
+    bool first = true;
+    for (InterruptLine line : kPriorityOrder)
+    {
+        const u32 bit = static_cast<u32>(line);
+        if ((pendingMasked & bit) == 0)
+        {
+            continue;
+        }
+        if (!first)
+        {
+            out << ",";
+        }
+        out << interruptLineName(line);
+        first = false;
+    }
+
+    return out.str();
+}
+
+constexpr size_t REG_V0 = 2;
+constexpr size_t REG_S0 = 16;
+constexpr size_t REG_S7 = 23;
+constexpr size_t REG_GP = 28;
+constexpr size_t REG_SP = 29;
+constexpr size_t REG_FP = 30;
+constexpr size_t REG_RA = 31;
 
 void appendU32(std::vector<u8>& out, u32 value)
 {
@@ -22,28 +121,6 @@ void appendU32(std::vector<u8>& out, u32 value)
     out.push_back(static_cast<u8>((value >> 24) & 0xFF));
 }
 
-bool consumeU32(const std::vector<u8>& data, size_t& cursor, u32& out)
-{
-    if (cursor + sizeof(u32) > data.size())
-    {
-        return false;
-    }
-    out = static_cast<u32>(data[cursor]) | (static_cast<u32>(data[cursor + 1]) << 8) |
-          (static_cast<u32>(data[cursor + 2]) << 16) | (static_cast<u32>(data[cursor + 3]) << 24);
-    cursor += sizeof(u32);
-    return true;
-}
-
-uint64_t fnv1a64(const std::vector<u8>& bytes)
-{
-    uint64_t hash = 1469598103934665603ull;
-    for (u8 byte : bytes)
-    {
-        hash ^= byte;
-        hash *= 1099511628211ull;
-    }
-    return hash;
-}
 } // namespace
 
 PsxSystem::PsxSystem()
@@ -82,64 +159,149 @@ void PsxSystem::reset()
     m_input.reset();
     m_dma.reset();
     m_interrupts.reset();
+    m_events.reset();
+    m_dispatcher.reset();
     m_scheduler.reset();
     m_debugOverlay.reset();
     m_timers.reset();
     m_criticalSectionDepth = 0;
+    m_hookEntryInt = {};
+    m_callbackInvoker = CallbackInvoker{};
+    m_inHookEntryIntHandler = false;
+    m_inCallbackInvocation = false;
+    m_hasPendingCallbackRegisters = false;
+    m_pendingCallbackRegisters = {};
+    m_pendingCallbackRegisterMask.fill(false);
+    if (traceIrqFlowEnabled())
+    {
+        m_interrupts.setTraceHook(
+            [this](const InterruptController::TraceEvent& event)
+            {
+                std::ostringstream msg;
+                msg << "event=irq_state kind=" << interruptTraceKindName(event.kind) << " value=0x"
+                    << std::hex << event.value << " status_before=0x" << event.statusBefore
+                    << " status_after=0x" << event.statusAfter << " mask_before=0x"
+                    << event.maskBefore << " mask_after=0x" << event.maskAfter << " pc=0x"
+                    << m_debugOverlay.lastProgramCounter();
+                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            });
+    }
+    else
+    {
+        m_interrupts.setTraceHook(InterruptController::TraceHook{});
+    }
+    m_irqChainHeads = {};
+    m_frameCount = 0;
+    m_cpuCycles = 0;
+    m_gpuDrainCarry = 0;
+    m_videoSchedulePrimed = false;
+    primeVideoSchedule();
 
     m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
 }
 
 void PsxSystem::boot()
 {
+    // Emulate the real PSX BIOS boot sequence: the kernel enables VBlank
+    // and timer interrupts in I_MASK before calling the game's entry point.
+    // Without this, serviceInterrupts() will never see pending IRQs and
+    // VSync/timer callbacks will not fire.
+    const u32 bootMask =
+        static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
+        static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2);
+    m_interrupts.writeMask(bootMask);
+
     m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
 }
 
 void PsxSystem::runFrame()
 {
-    // Advance GPU command consumption so GPUSTAT ready/request bits evolve over time.
-    // Drain up to one full FIFO worth of words per frame (64 words, 2 cycles/word).
-    // Without this, a saturated FIFO can remain permanently "not ready", causing
-    // DrawSync/VSync-style polling loops in game code to spin forever.
-    m_gpu.tickGpu(GPU_FIFO_DRAIN_CYCLES_PER_FRAME);
-    m_spu.tick(CYCLES_PER_FRAME);
-    m_cdrom.tick(CYCLES_PER_FRAME);
-    m_timers.tick(CYCLES_PER_FRAME,
+    tickCpuCycles(CYCLES_PER_FRAME);
+}
+
+void PsxSystem::tickCpuCycles(u32 cpuCycles)
+{
+    if (cpuCycles == 0)
+    {
+        return;
+    }
+
+    if (!m_videoSchedulePrimed)
+    {
+        primeVideoSchedule();
+    }
+
+    m_cpuCycles += cpuCycles;
+    m_gpuDrainCarry += static_cast<uint64_t>(cpuCycles) * GPU_FIFO_DRAIN_CYCLES_PER_FRAME;
+    const u32 gpuDrainCycles = static_cast<u32>(m_gpuDrainCarry / CYCLES_PER_FRAME);
+    m_gpuDrainCarry %= CYCLES_PER_FRAME;
+    if (gpuDrainCycles > 0)
+    {
+        m_gpu.tickGpu(gpuDrainCycles);
+    }
+
+    m_spu.tick(cpuCycles);
+    m_cdrom.tick(cpuCycles);
+    m_timers.tick(cpuCycles,
                   [this](InterruptLine line)
                   {
                       m_interrupts.raise(line);
                       m_debugOverlay.incrementInterruptsRaised();
                   });
-    if (m_cdrom.hasIrqRequest() &&
-        (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
+    syncLevelInterruptSources();
+    m_scheduler.tick(cpuCycles);
+}
+
+void PsxSystem::syncLevelInterruptSources()
+{
+    const auto raiseIfRequested = [this](bool requested, InterruptLine line)
     {
-        m_interrupts.raise(InterruptLine::Cdrom);
-        m_debugOverlay.incrementInterruptsRaised();
+        if (!requested)
+        {
+            return;
+        }
+
+        const u32 lineBit = static_cast<u32>(line);
+        if ((m_interrupts.readStatus() & lineBit) == 0)
+        {
+            m_interrupts.raise(line);
+            m_debugOverlay.incrementInterruptsRaised();
+        }
+    };
+
+    raiseIfRequested(m_gpu.irqPending(), InterruptLine::Gpu);
+    raiseIfRequested(m_cdrom.hasIrqRequest(), InterruptLine::Cdrom);
+
+    raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
+}
+
+uint64_t PsxSystem::cpuCyclesElapsed() const
+{
+    return m_cpuCycles;
+}
+
+void PsxSystem::primeVideoSchedule()
+{
+    if (m_videoSchedulePrimed)
+    {
+        return;
     }
-    m_scheduler.tick(CYCLES_PER_FRAME);
+    m_videoSchedulePrimed = true;
+    m_scheduler.schedule(ACTIVE_CYCLES, [this]() { handleVBlankStart(); });
+}
+
+void PsxSystem::handleVBlankStart()
+{
+    m_gpu.tickDisplayLine();
     m_interrupts.raise(InterruptLine::VBlank);
     m_debugOverlay.incrementInterruptsRaised();
-    // Toggle GPU interlace field (bit 31 of GPUSTAT).  PSn00bSDK VSync
-    // detects frame boundaries by XOR-ing consecutive GPUSTAT reads and
-    // checking if bit 31 changed.
-    m_gpu.tickDisplayLine();
-    // Simulate VBlank IRQ delivery: increment the vsync counter in RAM
-    // that PSn00bSDK's VBlank handler would normally update.  Without
-    // this, VSync(0) loops forever waiting for the counter to change.
-    if (m_vsyncCounterAddress != 0)
-    {
-        const Address offset = (m_vsyncCounterAddress & 0x1FFFFF);
-        if (offset + 4 <= MemoryMap::RAM_SIZE)
-        {
-            u32 counter = 0;
-            std::memcpy(&counter, m_ram.data() + offset, sizeof(u32));
-            ++counter;
-            std::memcpy(m_ram.data() + offset, &counter, sizeof(u32));
-        }
-    }
     m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
     m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
     ++m_frameCount;
+
+    m_scheduler.schedule(VBLANK_MID_CYCLES, [this]() { m_gpu.tickDisplayLine(); });
+    m_scheduler.schedule(VBLANK_CYCLES, [this]() { m_gpu.tickDisplayLine(); });
+    m_scheduler.schedule(CYCLES_PER_FRAME, [this]() { handleVBlankStart(); });
 }
 
 void PsxSystem::callGpuIntrinsic(Address address)
@@ -181,96 +343,6 @@ void PsxSystem::callCdromIntrinsic(Address address)
             }());
 }
 
-void PsxSystem::setAutoFrameProgressOnInterruptPoll(bool enabled)
-{
-    m_autoFrameProgressOnInterruptPoll = enabled;
-}
-
-void PsxSystem::setVsyncCounterAddress(Address address)
-{
-    m_vsyncCounterAddress = address;
-    m_logger.log(
-        LogLevel::Info, "system",
-        "VSync counter registered at 0x" +
-            [&]()
-            {
-                std::ostringstream s;
-                s << std::hex << address;
-                return s.str();
-            }());
-}
-
-void PsxSystem::setDrawSyncBusyAddress(Address address)
-{
-    m_drawSyncBusyAddress = address;
-    m_logger.log(
-        LogLevel::Info, "system",
-        "DrawSync busy byte registered at 0x" +
-            [&]()
-            {
-                std::ostringstream s;
-                s << std::hex << address;
-                return s.str();
-            }());
-}
-
-void PsxSystem::clearDrawSyncBusy()
-{
-    if (m_drawSyncBusyAddress != 0)
-    {
-        const Address offset = m_drawSyncBusyAddress & 0x1FFFFF;
-        if (offset < MemoryMap::RAM_SIZE)
-        {
-            m_ram[offset] = 0;
-        }
-    }
-}
-
-void PsxSystem::onVsyncCounterRead()
-{
-    // Re-entrancy guard: runFrame() may trigger reads that hit this again.
-    m_inVsyncCounterRead = true;
-
-    // Lightweight frame progression for VSync counter polling:
-    // Only increment the counter and toggle the GPU display phase.
-    // We do NOT call the full runFrame() here because it ticks SPU,
-    // CDROM, timers, scheduler etc. and is too expensive to call on
-    // every VSync poll iteration.
-    if (m_gpu.inActiveDisplay())
-    {
-        // Transition through VBlank phases so the counter increments
-        m_gpu.tickDisplayLine(); // ActiveDisplay → VBlankStart
-        m_gpu.tickDisplayLine(); // VBlankStart → VBlankEnd
-        m_gpu.tickDisplayLine(); // VBlankEnd → ActiveDisplay
-
-        // Increment the counter in RAM
-        if (m_vsyncCounterAddress != 0)
-        {
-            const Address offset = (m_vsyncCounterAddress & 0x1FFFFF);
-            if (offset + 4 <= MemoryMap::RAM_SIZE)
-            {
-                u32 counter = 0;
-                std::memcpy(&counter, m_ram.data() + offset, sizeof(u32));
-                ++counter;
-                std::memcpy(m_ram.data() + offset, &counter, sizeof(u32));
-            }
-        }
-        ++m_frameCount;
-    }
-    else
-    {
-        // Already in VBlank — step through phases
-        m_gpuStatReadCount++;
-        if (m_gpuStatReadCount >= 2)
-        {
-            m_gpu.tickDisplayLine();
-            m_gpuStatReadCount = 0;
-        }
-    }
-
-    m_inVsyncCounterRead = false;
-}
-
 u32 PsxSystem::frameCount() const
 {
     return m_frameCount;
@@ -278,7 +350,7 @@ u32 PsxSystem::frameCount() const
 
 u32 PsxSystem::advanceFrame()
 {
-    runFrame();
+    tickCpuCycles(CYCLES_PER_FRAME);
     return m_frameCount;
 }
 
@@ -342,6 +414,382 @@ TimerController& PsxSystem::timers()
     return m_timers;
 }
 
+KernelEventTable& PsxSystem::events()
+{
+    return m_events;
+}
+
+InterruptDispatcher& PsxSystem::dispatcher()
+{
+    return m_dispatcher;
+}
+
+void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
+{
+    // Store the raw invoker bridge (calls into the generated module).
+    m_callbackInvoker = std::move(invoker);
+
+    // The dispatcher should invoke callbacks through the system so that
+    // ReturnFromException works (requires m_inCallbackInvocation=true).
+    m_dispatcher.setCallbackInvoker([this](u32 address) -> u32
+                                    { return this->invokeCallbackRaw(address); });
+}
+
+void PsxSystem::serviceInterrupts()
+{
+    syncLevelInterruptSources();
+
+    const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
+    if (traceIrqFlowEnabled())
+    {
+        std::ostringstream msg;
+        msg << "event=service_interrupts pending_masked=0x" << std::hex << pendingMasked
+            << " status=0x" << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
+            << " critical_depth=" << std::dec << m_criticalSectionDepth
+            << " in_callback=" << (m_inCallbackInvocation ? 1 : 0);
+        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+    }
+    if (pendingMasked == 0)
+    {
+        // Still allow the event dispatcher to flush deferred callbacks.
+        try
+        {
+            m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth,
+                                           &m_logger);
+        }
+        catch (const ReturnFromExceptionSignal&)
+        {
+            if (traceIrqFlowEnabled())
+            {
+                m_logger.log(LogLevel::Info, "irq_trace",
+                             "event=return_from_exception source=dispatcher_empty_pending");
+            }
+            return;
+        }
+        return;
+    }
+    // HookEntryInt descriptor callback runs while IRQ status bits are visible.
+    if (pendingMasked != 0 && m_criticalSectionDepth == 0 &&
+        m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
+    {
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=hook_entry_int_invoke descriptor=0x" << std::hex
+                << m_hookEntryInt.descriptorAddress;
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
+        try
+        {
+            invokeHookEntryIntHandler();
+        }
+        catch (const ReturnFromExceptionSignal&)
+        {
+            if (traceIrqFlowEnabled())
+            {
+                m_logger.log(LogLevel::Info, "irq_trace",
+                             "event=return_from_exception source=hook_entry_int");
+            }
+            return;
+        }
+    }
+
+    // The hook callback may acknowledge IRQ bits. Recompute pending state
+    // before running priority chains so we don't act on stale masks.
+    const u32 pendingAfterHook = m_interrupts.readStatus() & m_interrupts.readMask();
+    if (pendingAfterHook != 0 && traceIrqFlowEnabled())
+    {
+        std::ostringstream msg;
+        msg << "event=irq_dispatch_order source=service_interrupts pending_masked=0x" << std::hex
+            << pendingAfterHook << " lines=" << formatPendingLineOrder(pendingAfterHook);
+        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+    }
+
+    // BIOS-style exception handler priority chains (installed via SysEnqIntRP).
+    // These handlers are responsible for updating SDK counters (eg. PSn00bSDK VSync)
+    // and for acknowledging IRQ sources.
+    if (pendingAfterHook != 0 && dispatchIrqChains())
+    {
+        if (traceIrqFlowEnabled())
+        {
+            m_logger.log(LogLevel::Info, "irq_trace",
+                         "event=return_from_exception source=irq_chain_dispatch");
+        }
+        return;
+    }
+
+    // Kernel event delivery (OpenEvent/EnableEvent model).
+    // A callback may execute ReturnFromException to abort further handling.
+    try
+    {
+        m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth, &m_logger);
+    }
+    catch (const ReturnFromExceptionSignal&)
+    {
+        if (traceIrqFlowEnabled())
+        {
+            m_logger.log(LogLevel::Info, "irq_trace",
+                         "event=return_from_exception source=dispatcher_pending");
+        }
+        return;
+    }
+}
+
+u32 PsxSystem::resolveHookEntryIntCallback(u32 descriptorAddress) const
+{
+    if (descriptorAddress == 0)
+    {
+        return 0;
+    }
+
+    const Address descriptorPhysical = normalizeAddress(descriptorAddress);
+    if (descriptorPhysical > MemoryMap::RAM_SIZE - sizeof(u32) || (descriptorPhysical & 0x3u) != 0u)
+    {
+        return 0;
+    }
+
+    const u32 callbackAddress =
+        readFromRegion<u32>(m_ram.data(), descriptorPhysical, MemoryMap::RAM_SIZE);
+    const Address callbackPhysical = normalizeAddress(callbackAddress);
+    if ((callbackAddress & 0xE0000000u) != 0x80000000u ||
+        callbackPhysical > MemoryMap::RAM_SIZE - sizeof(u32) || (callbackPhysical & 0x3u) != 0u)
+    {
+        return 0;
+    }
+    return callbackAddress;
+}
+
+void PsxSystem::invokeHookEntryIntHandler()
+{
+    m_inHookEntryIntHandler = true;
+    try
+    {
+        const u32 callbackAddress = resolveHookEntryIntCallback(m_hookEntryInt.descriptorAddress);
+        if (callbackAddress != 0)
+        {
+            // HookEntryInt is implemented by BIOS as longjmp(setjmp_buf, 1):
+            // restore callee-saved registers and resume at saved RA with v0=1.
+            const Address descriptorPhysical = normalizeAddress(m_hookEntryInt.descriptorAddress);
+            if (descriptorPhysical <= MemoryMap::RAM_SIZE - 0x30u)
+            {
+                m_pendingCallbackRegisters = {};
+                m_pendingCallbackRegisterMask.fill(false);
+                m_pendingCallbackRegisters[REG_V0] = 1; // PSX-SPX: hook callback enters with r2=1.
+                m_pendingCallbackRegisterMask[REG_V0] = true;
+                m_pendingCallbackRegisters[REG_RA] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x00u, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_RA] = true;
+                m_pendingCallbackRegisters[REG_SP] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x04u, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_SP] = true;
+                m_pendingCallbackRegisters[REG_FP] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x08u, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_FP] = true;
+                for (size_t reg = REG_S0; reg <= REG_S7; ++reg)
+                {
+                    const Address offset =
+                        static_cast<Address>(0x0Cu + (reg - REG_S0) * sizeof(u32));
+                    m_pendingCallbackRegisters[reg] = readFromRegion<u32>(
+                        m_ram.data(), descriptorPhysical + offset, MemoryMap::RAM_SIZE);
+                    m_pendingCallbackRegisterMask[reg] = true;
+                }
+                m_pendingCallbackRegisters[REG_GP] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x2Cu, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_GP] = true;
+                m_hasPendingCallbackRegisters = true;
+            }
+        }
+
+        (void)invokeCallbackRaw(callbackAddress);
+    }
+    catch (...)
+    {
+        m_hasPendingCallbackRegisters = false;
+        m_pendingCallbackRegisterMask.fill(false);
+        m_inHookEntryIntHandler = false;
+        throw;
+    }
+    m_hasPendingCallbackRegisters = false;
+    m_pendingCallbackRegisterMask.fill(false);
+    m_inHookEntryIntHandler = false;
+}
+
+void PsxSystem::invokeCallback(u32 address)
+{
+    if (address == 0)
+    {
+        return;
+    }
+    if (m_callbackInvoker)
+    {
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=callback_invoke mode=void addr=0x" << std::hex << address << " pc=0x"
+                << m_debugOverlay.lastProgramCounter();
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
+        const bool previousInCallbackInvocation = m_inCallbackInvocation;
+        m_inCallbackInvocation = true;
+        try
+        {
+            (void)m_callbackInvoker(address);
+        }
+        catch (const ReturnFromExceptionSignal&)
+        {
+            if (traceIrqFlowEnabled())
+            {
+                std::ostringstream msg;
+                msg << "event=return_from_exception source=callback_invoke addr=0x" << std::hex
+                    << address;
+                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            }
+            m_inCallbackInvocation = previousInCallbackInvocation;
+            return;
+        }
+        catch (...)
+        {
+            m_inCallbackInvocation = previousInCallbackInvocation;
+            throw;
+        }
+        m_inCallbackInvocation = previousInCallbackInvocation;
+    }
+}
+
+u32 PsxSystem::invokeCallbackRaw(u32 address)
+{
+    if (address == 0)
+    {
+        return 0;
+    }
+    if (!m_callbackInvoker)
+    {
+        return 0;
+    }
+
+    const bool previousInCallbackInvocation = m_inCallbackInvocation;
+    m_inCallbackInvocation = true;
+    try
+    {
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=callback_invoke mode=raw addr=0x" << std::hex << address << " pc=0x"
+                << m_debugOverlay.lastProgramCounter();
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
+        const u32 result = m_callbackInvoker(address);
+        if (traceIrqFlowEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=callback_return mode=raw addr=0x" << std::hex << address << " v0=0x"
+                << result;
+            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+        }
+        m_inCallbackInvocation = previousInCallbackInvocation;
+        return result;
+    }
+    catch (...)
+    {
+        m_inCallbackInvocation = previousInCallbackInvocation;
+        throw;
+    }
+}
+
+bool PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
+{
+    if (!m_hasPendingCallbackRegisters)
+    {
+        return false;
+    }
+
+    for (size_t reg = 0; reg < m_pendingCallbackRegisters.size(); ++reg)
+    {
+        if (m_pendingCallbackRegisterMask[reg])
+        {
+            regsInOut[reg] = m_pendingCallbackRegisters[reg];
+        }
+    }
+    m_hasPendingCallbackRegisters = false;
+    m_pendingCallbackRegisterMask.fill(false);
+    return true;
+}
+
+bool PsxSystem::dispatchIrqChains()
+{
+    // Skip delivery inside critical sections.
+    if (m_criticalSectionDepth > 0)
+    {
+        return false;
+    }
+    if (!m_callbackInvoker)
+    {
+        return false;
+    }
+
+    constexpr int kMaxNodesPerChain = 64;
+    for (u32 prio = 0; prio < m_irqChainHeads.size(); ++prio)
+    {
+        u32 node = m_irqChainHeads[prio];
+        for (int safety = 0; node != 0 && safety < kMaxNodesPerChain; ++safety)
+        {
+            const u32 func2 = read<u32>(node + 0x04);
+            const u32 func1 = read<u32>(node + 0x08);
+            if (traceIrqFlowEnabled())
+            {
+                std::ostringstream msg;
+                msg << "event=irq_dispatch_order source=irq_chain prio=" << std::dec << prio
+                    << " index=" << safety << " node=0x" << std::hex << node << " func1=0x" << func1
+                    << " func2=0x" << func2;
+                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            }
+
+            if (func1 != 0)
+            {
+                u32 func1Result = 0;
+                try
+                {
+                    func1Result = invokeCallbackRaw(func1);
+                }
+                catch (const ReturnFromExceptionSignal&)
+                {
+                    if (traceIrqFlowEnabled())
+                    {
+                        m_logger.log(LogLevel::Info, "irq_trace",
+                                     "event=return_from_exception source=irq_chain_func1");
+                    }
+                    return true;
+                }
+
+                if (func1Result != 0 && func2 != 0)
+                {
+                    try
+                    {
+                        (void)invokeCallbackRaw(func2);
+                    }
+                    catch (const ReturnFromExceptionSignal&)
+                    {
+                        if (traceIrqFlowEnabled())
+                        {
+                            m_logger.log(LogLevel::Info, "irq_trace",
+                                         "event=return_from_exception source=irq_chain_func2");
+                        }
+                        return true;
+                    }
+                }
+            }
+
+            node = read<u32>(node + 0x00);
+        }
+    }
+    return false;
+}
+
+u32 PsxSystem::criticalSectionDepth() const
+{
+    return m_criticalSectionDepth;
+}
+
 void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
 {
     m_discSwapInfo = std::move(info);
@@ -379,154 +827,6 @@ std::vector<u8> PsxSystem::dumpSpuRam() const
         appendU32(bytes, value);
     }
     return bytes;
-}
-
-std::vector<u8> PsxSystem::serializeState() const
-{
-    std::vector<u8> state;
-    state.reserve(sizeof(u32) * 7 + m_ram.size() + m_scratchpad.size() + m_bios.size());
-
-    appendU32(state, static_cast<u32>(m_ram.size()));
-    state.insert(state.end(), m_ram.begin(), m_ram.end());
-
-    appendU32(state, static_cast<u32>(m_scratchpad.size()));
-    state.insert(state.end(), m_scratchpad.begin(), m_scratchpad.end());
-
-    appendU32(state, static_cast<u32>(m_bios.size()));
-    state.insert(state.end(), m_bios.begin(), m_bios.end());
-
-    appendU32(state, m_interrupts.readStatus());
-    appendU32(state, m_interrupts.readMask());
-    appendU32(state, m_spu.cyclesElapsed());
-    appendU32(state, m_gpu.readStatus());
-    return state;
-}
-bool PsxSystem::deserializeState(const std::vector<u8>& state)
-{
-    size_t cursor = 0;
-    u32 ramSize = 0;
-    u32 scratchpadSize = 0;
-    u32 biosSize = 0;
-    u32 irqStatus = 0;
-    u32 irqMask = 0;
-    u32 spuCycles = 0;
-    u32 gpuStatus = 0;
-
-    auto readBlob = [&state, &cursor](u32 blobSize, std::vector<u8>& out)
-    {
-        if (cursor > state.size() || blobSize > (state.size() - cursor))
-        {
-            return false;
-        }
-
-        out.assign(state.begin() + static_cast<std::ptrdiff_t>(cursor),
-                   state.begin() + static_cast<std::ptrdiff_t>(cursor + blobSize));
-        cursor += blobSize;
-        return true;
-    };
-
-    std::vector<u8> ramCopy;
-    std::vector<u8> scratchpadCopy;
-    std::vector<u8> biosCopy;
-
-    if (!consumeU32(state, cursor, ramSize) || ramSize != m_ram.size() ||
-        !readBlob(ramSize, ramCopy) || !consumeU32(state, cursor, scratchpadSize) ||
-        scratchpadSize != m_scratchpad.size() || !readBlob(scratchpadSize, scratchpadCopy) ||
-        !consumeU32(state, cursor, biosSize) || biosSize != m_bios.size() ||
-        !readBlob(biosSize, biosCopy) || !consumeU32(state, cursor, irqStatus) ||
-        !consumeU32(state, cursor, irqMask) || !consumeU32(state, cursor, spuCycles) ||
-        !consumeU32(state, cursor, gpuStatus) || cursor != state.size())
-    {
-        return false;
-    }
-
-    std::copy(ramCopy.begin(), ramCopy.end(), m_ram.begin());
-    std::copy(scratchpadCopy.begin(), scratchpadCopy.end(), m_scratchpad.begin());
-    std::copy(biosCopy.begin(), biosCopy.end(), m_bios.begin());
-
-    m_interrupts.restoreState(irqStatus, irqMask);
-
-    m_spu.reset();
-    m_spu.tick(spuCycles);
-
-    m_gpu.reset();
-    m_gpu.restoreStatus(gpuStatus);
-
-    m_cdrom.reset();
-    m_input.reset();
-    m_dma.reset();
-    m_scheduler.reset();
-    m_debugOverlay.reset();
-    m_timers.reset();
-    return true;
-}
-uint64_t PsxSystem::stateChecksum() const
-{
-    return fnv1a64(serializeState());
-}
-void PsxSystem::callBiosSyscall(u32 code, u32* regs, size_t regCount)
-{
-    if (regs == nullptr || regCount == 0)
-    {
-        m_logger.log(LogLevel::Warn, "bios", "BIOS syscall called with empty register file");
-        return;
-    }
-
-    std::ostringstream stream;
-    switch (code)
-    {
-    case 0x00:
-    {
-        // On PS1, syscall(0) dispatches kernel critical-section helpers
-        // using a0 as a subcommand (1=enter, 2=exit).
-        const u32 subcommand = regCount > 4 ? regs[4] : 0;
-        if (subcommand == 1)
-        {
-            regs[2] = m_criticalSectionDepth > 0 ? 1u : 0u;
-            ++m_criticalSectionDepth;
-            stream << "BIOS EnterCriticalSection depth=" << m_criticalSectionDepth;
-            m_logger.log(LogLevel::Debug, "bios", stream.str());
-            return;
-        }
-        if (subcommand == 2)
-        {
-            regs[2] = m_criticalSectionDepth > 0 ? 1u : 0u;
-            if (m_criticalSectionDepth > 0)
-            {
-                --m_criticalSectionDepth;
-            }
-            stream << "BIOS ExitCriticalSection depth=" << m_criticalSectionDepth;
-            m_logger.log(LogLevel::Debug, "bios", stream.str());
-            return;
-        }
-
-        stream << "BIOS syscall(0) stub subcommand a0=0x" << std::hex << subcommand;
-        m_logger.log(LogLevel::Warn, "bios", stream.str());
-        return;
-    }
-    case 0x01:
-        stream << "BIOS syscall(1) stub";
-        m_logger.log(LogLevel::Warn, "bios", stream.str());
-        return;
-    case 0x3F:
-        if (regCount <= 4)
-        {
-            m_logger.log(LogLevel::Warn, "bios", "BIOS Putchar called without a0 register");
-            return;
-        }
-        stream << "BIOS Putchar: '" << static_cast<char>(regs[4] & 0xFF) << "'";
-        m_logger.log(LogLevel::Info, "bios", stream.str());
-        return;
-    default:
-        stream << "BIOS syscall stub invoked: code=0x" << std::hex << code << std::dec
-               << ", regs=" << regCount;
-        if (regCount > 4)
-        {
-            stream << ", a0=0x" << std::hex << regs[4];
-        }
-        m_logger.log(LogLevel::Warn, "bios", stream.str());
-        return;
-    }
 }
 
 } // namespace runtime

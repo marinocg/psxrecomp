@@ -9,39 +9,7 @@ u32 PsxSystem::readMmio32(Address address)
 {
     if (address == Mmio::GPU_GP1)
     {
-        // PSn00bSDK VSync polls GPUSTAT to detect VBlank boundaries.
-        // It expects a three-phase sequence within each frame:
-        //   Phase 1: bit 22 = 0 → spin until bit 22 set (VBlank starts)
-        //   Phase 2: bit 22 = 1, bit 31 = X → stable (same as capture)
-        //   Phase 3: bit 22 = 1, bit 31 = !X → field flipped, VBlank ends
-        //
-        // We model this with a three-state display phase in the GPU.
-        // runFrame() enters VBlankStart.  Subsequent GPUSTAT reads step
-        // through VBlankStart → VBlankEnd → ActiveDisplay with a small
-        // dwell time in VBlankStart so that VSync's Phase 2 sees a
-        // stable bit-31 before Phase 3 detects the flip.
-        if (m_autoFrameProgressOnInterruptPoll)
-        {
-            if (m_gpu.inActiveDisplay())
-            {
-                // Start a new frame — enters VBlankStart phase.
-                runFrame();
-            }
-            else
-            {
-                // Already in VBlank.  Advance the sub-frame phase, but
-                // dwell in VBlankStart for 2 reads so VSync Phase 2
-                // sees bit 31 unchanged before Phase 3 sees it flip.
-                m_gpuStatReadCount++;
-                if (m_gpuStatReadCount >= 2)
-                {
-                    m_gpu.tickDisplayLine();
-                    m_gpuStatReadCount = 0;
-                }
-            }
-        }
-        u32 status = m_gpu.readStatus();
-        return status;
+        return m_gpu.pollStatus();
     }
     if (address == Mmio::GPU_GP0)
     {
@@ -49,14 +17,6 @@ u32 PsxSystem::readMmio32(Address address)
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
-        if (m_autoFrameProgressOnInterruptPoll)
-        {
-            const u32 statusBefore = m_interrupts.readStatus();
-            if ((statusBefore & static_cast<u32>(InterruptLine::VBlank)) == 0)
-            {
-                runFrame();
-            }
-        }
         return m_interrupts.readStatus();
     }
     if (address == Mmio::INTERRUPT_MASK)
@@ -91,6 +51,14 @@ u32 PsxSystem::readMmio32(Address address)
 
 u16 PsxSystem::readMmio16(Address address)
 {
+    if (address == Mmio::INTERRUPT_STATUS)
+    {
+        return static_cast<u16>(m_interrupts.readStatus() & 0xFFFFu);
+    }
+    if (address == Mmio::INTERRUPT_MASK)
+    {
+        return static_cast<u16>(m_interrupts.readMask() & 0xFFFFu);
+    }
     if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
     {
         return m_spu.readRegister(address - Mmio::SPU_BASE);
@@ -146,16 +114,19 @@ void PsxSystem::writeMmio32(Address address, u32 value)
     if (address == Mmio::GPU_GP0)
     {
         m_gpu.writeCommand(value);
+        syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::GPU_GP1)
     {
         m_gpu.writeStatus(value);
+        syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
         m_interrupts.writeStatus(value);
+        syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::INTERRUPT_MASK)
@@ -170,6 +141,7 @@ void PsxSystem::writeMmio32(Address address, u32 value)
         {
             handleDmaTransfer(*triggered);
         }
+        syncLevelInterruptSources();
         return;
     }
     // Timer registers: some code writes timers with 32-bit SW instructions.
@@ -197,6 +169,20 @@ void PsxSystem::writeMmio32(Address address, u32 value)
 
 void PsxSystem::writeMmio16(Address address, u16 value)
 {
+    if (address == Mmio::INTERRUPT_STATUS)
+    {
+        const u32 mergedStatus =
+            (m_interrupts.readStatus() & 0xFFFF0000u) | static_cast<u32>(value);
+        m_interrupts.writeStatus(mergedStatus);
+        syncLevelInterruptSources();
+        return;
+    }
+    if (address == Mmio::INTERRUPT_MASK)
+    {
+        const u32 mergedMask = (m_interrupts.readMask() & 0xFFFF0000u) | static_cast<u32>(value);
+        m_interrupts.writeMask(mergedMask);
+        return;
+    }
     if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
     {
         m_spu.writeRegister(address - Mmio::SPU_BASE, value);
@@ -236,27 +222,18 @@ void PsxSystem::writeMmio8(Address address, u8 value)
         {
         case 0:
             m_cdrom.writeCommand(value);
-            if (m_cdrom.hasIrqRequest() &&
-                (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
-            {
-                m_interrupts.raise(InterruptLine::Cdrom);
-                m_debugOverlay.incrementInterruptsRaised();
-            }
+            syncLevelInterruptSources();
             break;
         case 1:
             m_cdrom.writeParam(value);
             break;
         case 2:
             m_cdrom.writeInterruptFlags(value);
+            syncLevelInterruptSources();
             break;
         case 3:
             m_cdrom.writeInterruptEnable(value);
-            if (m_cdrom.hasIrqRequest() &&
-                (m_interrupts.readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0)
-            {
-                m_interrupts.raise(InterruptLine::Cdrom);
-                m_debugOverlay.incrementInterruptsRaised();
-            }
+            syncLevelInterruptSources();
             break;
         default:
             break;

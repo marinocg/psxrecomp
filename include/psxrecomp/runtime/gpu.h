@@ -37,6 +37,7 @@ class Gpu
     void reset();
 
     u32 readStatus() const;
+    u32 pollStatus();
     u32 readData();
     void writeStatus(u32 value);
     void restoreStatus(u32 value);
@@ -61,6 +62,7 @@ class Gpu
 
     void tickGpu(u32 cycles);
     void tickDisplayLine();
+    bool irqPending() const;
 
     /// Returns true when the GPU is in the active-display phase (not VBlank).
     bool inActiveDisplay() const;
@@ -151,9 +153,7 @@ class Gpu
     void updateStatusBits();
     void updateRendererState();
 
-    /// Display phase within a single frame.  VSync polls GPUSTAT to
-    /// detect VBlank boundaries, so we cycle through these states to
-    /// give the polling loop the transitions it expects.
+    /// Display phase within a single frame.
     enum class DisplayPhase : u8
     {
         ActiveDisplay, ///< bit 22=0, field=current
@@ -166,7 +166,6 @@ class Gpu
     u32 m_gpuCycles = 0;
     bool m_oddField = false;
     DisplayPhase m_displayPhase = DisplayPhase::ActiveDisplay;
-    u8 m_phaseReadCount = 0; ///< GPUSTAT reads in current phase
 
     Registers m_registers;
     PacketState m_packet;

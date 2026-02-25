@@ -87,8 +87,23 @@ collectFunctionStartAddresses(const std::vector<Instruction>& instructions,
 
 void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions,
                                     const InstructionIndexMap& indexMap,
-                                    std::unordered_set<Address>& startAddresses)
+                                    std::unordered_set<Address>& startAddresses,
+                                    const std::unordered_set<Address>* pinnedAddresses = nullptr)
 {
+    std::unordered_set<Address> directCallTargets;
+    directCallTargets.reserve(instructions.size() / 8);
+    for (const auto& instruction : instructions)
+    {
+        if (!detail::isDirectCall(instruction))
+        {
+            continue;
+        }
+        if (auto target = detail::resolveDirectCallTarget(instruction))
+        {
+            directCallTargets.insert(*target);
+        }
+    }
+
     std::vector<Address> tempStarts(startAddresses.begin(), startAddresses.end());
     std::sort(tempStarts.begin(), tempStarts.end());
 
@@ -117,12 +132,16 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
             // PSn00bSDK wrapper stubs that should merge with the next chunk.
             bool hasHardTerminator = false;
             bool hasBranch = false;
+            bool hasComputedJump = false;
             for (size_t i = startIdx; i < limitIdx; ++i)
             {
                 if (instructions[i].isReturn() || instructions[i].isJump())
                 {
                     hasHardTerminator = true;
-                    break;
+                    if (instructions[i].opcode == Opcode::JR && instructions[i].rs != Registers::RA)
+                    {
+                        hasComputedJump = true;
+                    }
                 }
                 if (instructions[i].isBranch())
                 {
@@ -156,6 +175,21 @@ void mergeConsecutiveFunctionSplits(const std::vector<Instruction>& instructions
 
             if (!hasHardTerminator || hasCrossBranch)
             {
+                // Do not merge if the next function start is a pinned
+                // address (e.g. an explicitly-provided additionalStart),
+                // unless a branch in the current range clearly targets the
+                // next range. In that case, keeping the split would break a
+                // single function into disconnected chunks.
+                if (pinnedAddresses && pinnedAddresses->count(nextFuncStart))
+                {
+                    const bool isDirectCallTarget = directCallTargets.count(nextFuncStart) != 0;
+                    const bool nextHasPrologue = detail::hasProloguePattern(instructions, limitIdx);
+                    if (isDirectCallTarget || nextHasPrologue || !hasCrossBranch ||
+                        !hasComputedJump)
+                    {
+                        continue;
+                    }
+                }
                 startAddresses.erase(nextFuncStart);
                 tempStarts.erase(tempStarts.begin() + static_cast<std::ptrdiff_t>(si + 1));
                 merged = true;
@@ -293,9 +327,15 @@ std::vector<FunctionBoundary> findFunctionBoundaries(const std::vector<Instructi
     auto indexMap = detail::buildInstructionIndex(instructions);
     auto startAddresses = collectFunctionStartAddresses(instructions, indexMap, &additionalStarts);
 
+    // Build a set of pinned addresses from the additional starts.  These
+    // are explicitly-identified entry points (from pointer harvesting or
+    // the EXE entry point) that must survive the merge pass — even if the
+    // preceding function appears to fall through into them.
+    std::unordered_set<Address> pinned(additionalStarts.begin(), additionalStarts.end());
+
     // ── Merge consecutive functions where the first falls through or has
     //    a cross-branch (same unified logic as the single-arg overload).
-    mergeConsecutiveFunctionSplits(instructions, indexMap, startAddresses);
+    mergeConsecutiveFunctionSplits(instructions, indexMap, startAddresses, &pinned);
     return buildFunctionBoundaries(instructions, indexMap, startAddresses);
 }
 

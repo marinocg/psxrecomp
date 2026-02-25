@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/gpu_renderer.h"
 
 #include <algorithm>
+#include <utility>
 
 namespace psxrecomp
 {
@@ -9,9 +10,40 @@ namespace runtime
 
 namespace
 {
+s16 signExtend11(u16 value)
+{
+    const s16 signedValue = static_cast<s16>(value & 0x7FF);
+    return (signedValue & 0x400) != 0 ? static_cast<s16>(signedValue | ~0x7FF) : signedValue;
+}
+
 GpuVertex decodeVertex(u32 packed)
 {
-    return GpuVertex{static_cast<s16>(packed & 0xFFFF), static_cast<s16>((packed >> 16) & 0xFFFF)};
+    return GpuVertex{
+        signExtend11(static_cast<u16>(packed & 0x7FF)),
+        signExtend11(static_cast<u16>((packed >> 16) & 0x7FF)),
+    };
+}
+
+GpuVertex decodeFillRectPosition(u32 packed)
+{
+    return GpuVertex{
+        static_cast<s16>(packed & 0x3F0),
+        static_cast<s16>((packed >> 16) & 0x1FF),
+    };
+}
+
+std::pair<u16, u16> decodeFillRectSize(u32 packed)
+{
+    const u16 width = static_cast<u16>(packed & 0x3FF);
+    const u16 height = static_cast<u16>((packed >> 16) & 0x1FF);
+    return {width, height};
+}
+
+std::pair<u16, u16> decodeRectExtent(u32 packed)
+{
+    const u16 width = static_cast<u16>(packed & 0x3FF);
+    const u16 height = static_cast<u16>((packed >> 16) & 0x1FF);
+    return {width, height};
 }
 
 u16 narrow8To5(u8 value)
@@ -40,12 +72,6 @@ s32 signArea2(const GpuVertex& a, const GpuVertex& b, const GpuVertex& c)
     const s32 cx = c.x;
     const s32 cy = c.y;
     return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
-}
-
-s16 signExtend11(u16 value)
-{
-    const s16 signedValue = static_cast<s16>(value & 0x7FF);
-    return (signedValue & 0x400) != 0 ? static_cast<s16>(signedValue | ~0x7FF) : signedValue;
 }
 
 } // namespace
@@ -96,31 +122,25 @@ void SoftwareGpuRenderer::submit(const GpuCommand& command)
         //  - Not affected by GP0(E6h) mask setting.
         //  - The color is converted from 24-bit RGB to 15-bit RGB with mask
         //    bit (bit 15) forced to 0.
-        // NOTE: Real hardware rounds Xpos/Xsiz to 16-pixel boundaries and
-        // wraps coordinates within VRAM. Those details are omitted here for
-        // simplicity; add them when hardware-accurate fill rounding matters.
-        const auto pos = decodeVertex(command.words[1]);
-        const auto size = decodeVertex(command.words[2]);
-        const u16 fw = static_cast<u16>(std::max<s16>(0, size.x));
-        const u16 fh = static_cast<u16>(std::max<s16>(0, size.y));
-        if (fw == 0 || fh == 0)
+        const auto pos = decodeFillRectPosition(command.words[1]);
+        const auto [rawWidth, rawHeight] = decodeFillRectSize(command.words[2]);
+        if (rawWidth == 0 || rawHeight == 0)
         {
             break;
         }
+
+        const u16 width = static_cast<u16>(std::min<u32>(Width, (rawWidth + 0x0Fu) & ~0x0Fu));
+        const u16 height = static_cast<u16>(std::min<u32>(Height, rawHeight));
         const u16 color = toColor15(command.words[0], false);
-        for (u16 row = 0; row < fh; ++row)
+        for (u16 row = 0; row < height; ++row)
         {
-            for (u16 col = 0; col < fw; ++col)
+            for (u16 col = 0; col < width; ++col)
             {
-                const s16 px = static_cast<s16>(pos.x + col);
-                const s16 py = static_cast<s16>(pos.y + row);
-                if (px >= 0 && px < static_cast<s16>(Width) && py >= 0 &&
-                    py < static_cast<s16>(Height))
-                {
-                    const size_t index = static_cast<size_t>(py) * Width + static_cast<size_t>(px);
-                    m_frameBuffer[index] = color;
-                    m_vramRaw[index] = color;
-                }
+                const u16 px = static_cast<u16>((static_cast<u16>(pos.x) + col) % Width);
+                const u16 py = static_cast<u16>((static_cast<u16>(pos.y) + row) % Height);
+                const size_t index = static_cast<size_t>(py) * Width + static_cast<size_t>(px);
+                m_frameBuffer[index] = color;
+                m_vramRaw[index] = color;
             }
         }
         break;
@@ -293,16 +313,16 @@ void SoftwareGpuRenderer::drawSprite(const GpuCommand& command)
     else if (command.opcode >= 0x60 && command.opcode <= 0x63 && command.words.size() >= 3)
     {
         // GP0(60h-63h): variable-size monochrome rectangle, size in word 2.
-        const auto size = decodeVertex(command.words[2]);
-        width = static_cast<u16>(std::max<s16>(1, size.x));
-        height = static_cast<u16>(std::max<s16>(1, size.y));
+        const auto [rawWidth, rawHeight] = decodeRectExtent(command.words[2]);
+        width = std::max<u16>(1, rawWidth);
+        height = std::max<u16>(1, rawHeight);
     }
     else if (command.opcode >= 0x64 && command.opcode <= 0x67 && command.words.size() >= 4)
     {
         // GP0(64h-67h): variable-size textured sprite, size in word 3.
-        const auto size = decodeVertex(command.words[3]);
-        width = static_cast<u16>(std::max<s16>(1, size.x));
-        height = static_cast<u16>(std::max<s16>(1, size.y));
+        const auto [rawWidth, rawHeight] = decodeRectExtent(command.words[3]);
+        width = std::max<u16>(1, rawWidth);
+        height = std::max<u16>(1, rawHeight);
     }
 
     const u8 baseU = static_cast<u8>(command.words.size() > 2 ? command.words[2] & 0xFF : 0);

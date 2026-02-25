@@ -8,16 +8,18 @@ Quick reference for PlayStation 1 hardware components relevant to static recompi
 - **Clock Speed**: 33.8688 MHz
 - **Pipeline**: 5 stages
 - **Instruction Set**: MIPS I
-- **Coprocessors**: 
+- **Coprocessors**:
   - COP0: System Control (exceptions, cache)
   - COP2: GTE (Geometry Transform Engine)
 
 ### Registers
+
 - 32 general-purpose registers ($0-$31)
 - $0 is hardwired to zero
 - $31 is used for return addresses (by convention)
 
 ### Branch Delay Slots
+
 All branch and jump instructions have a delay slot - the instruction immediately following the branch always executes before the branch takes effect.
 
 ```
@@ -47,12 +49,31 @@ BIOS ROM            0x1FC00000-0x1FC7FFFF     512KB       System BIOS
 - **Texture**: 4-bit, 8-bit, 15-bit
 
 ### GPU Commands
+
 Commands are written to 0x1F801810:
+
 - Drawing commands (polygons, sprites, lines)
 - VRAM transfer commands
 - GPU control commands
 
+### Runtime Conformance Notes
+
+- `GP0(02h)` (Quick Rectangle Fill) uses raw VRAM coordinates and ignores draw
+  area clipping, draw offset, and mask checks from `GP0(E6h)`.
+- `GP0(02h)` aligns X down to 16-pixel boundaries and rounds width up to a
+  16-pixel multiple; zero width/height acts as a no-op.
+- `GPUSTAT` bit 22 indicates VBlank phase, and bit 31 odd/even field toggles
+  each frame (used by SDK VSync loops in both progressive and interlaced modes).
+- BIOS `A0(4Bh)` (`send_gpu_linked_list`) now follows the DMA2 register path
+  (`GP1(04h)=2`, DMA control setup, CHCR start) rather than direct software
+  pushing of OT words.
+- BIOS `A0(4Eh)` (`gpu_sync`) is modeled separately from B0 file APIs and turns
+  GPU DMA direction off after synchronization when DMA mode is active.
+- Kernel hardware-event classes follow PSX-SPX mapping for `SIO/SPU/PIO`, and
+  `Timer2` uses the same class ID as `Timer1` (BIOS quirk).
+
 ### Display Modes
+
 - NTSC: 60Hz, 480i
 - PAL: 50Hz, 576i
 - Progressive modes available
@@ -65,6 +86,7 @@ Commands are written to 0x1F801810:
 - **Effects**: Reverb, ADPCM decompression
 
 ### Audio Formats
+
 - ADPCM: 4-bit compressed
 - 16-bit PCM
 
@@ -76,6 +98,7 @@ Commands are written to 0x1F801810:
 - **Audio**: CD-DA and XA-ADPCM
 
 ### Disc Formats
+
 - ISO 9660 filesystem
 - PSX-specific extensions
 - Multi-session support
@@ -83,12 +106,14 @@ Commands are written to 0x1F801810:
 ## Controllers
 
 ### Standard Controller
+
 - D-Pad (4 directions)
 - 4 face buttons (△, ○, ×, □)
 - 4 shoulder buttons (L1, R1, L2, R2)
 - Start, Select
 
 ### DualShock
+
 - All standard controller features
 - 2 analog sticks
 - Rumble motors
@@ -104,6 +129,7 @@ Commands are written to 0x1F801810:
 ## DMA: Direct Memory Access
 
 7 DMA channels for high-speed transfers:
+
 1. MDECin (MDEC decompression)
 2. MDECout
 3. GPU (commands and VRAM)
@@ -115,6 +141,7 @@ Commands are written to 0x1F801810:
 ## Interrupts
 
 IRQ sources:
+
 - VBLANK (vertical blank)
 - GPU (command complete)
 - CD-ROM
@@ -126,6 +153,7 @@ IRQ sources:
 ## Timers
 
 3 hardware timers:
+
 - Timer 0: System clock or GPU dot clock
 - Timer 1: System clock or horizontal blank
 - Timer 2: System clock or system clock/8
@@ -144,6 +172,7 @@ IRQ sources:
 ## Notes for Recompilation
 
 ### Critical Behaviors
+
 - Write-through cache behavior
 - Unaligned memory access handling
 - Interrupt timing
@@ -151,12 +180,14 @@ IRQ sources:
 - GPU/SPU synchronization
 
 ### Performance Considerations
+
 - DMA is faster than CPU copy
 - GPU command buffering
 - SPU streaming for large audio
 - CD-ROM prefetching
 
 ### Common Patterns
+
 - Double buffering for graphics
 - Ring buffers for audio
 - Linked lists in VRAM (GPU ordering tables)

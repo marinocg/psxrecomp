@@ -34,9 +34,6 @@ cmake-build-*/
 *.EXE
 *.out
 *.app
-psxrecomp
-!include/psxrecomp/**
-psxrecomp.exe
 
 # CMake
 CMakeCache.txt

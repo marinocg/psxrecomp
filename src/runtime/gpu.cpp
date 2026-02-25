@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdio>
 #include <cstdlib>
 #include <mutex>
 #include <string>
@@ -33,7 +32,6 @@ void Gpu::reset()
     m_gpuCycles = 0;
     m_oddField = false;
     m_displayPhase = DisplayPhase::ActiveDisplay;
-    m_phaseReadCount = 0;
     m_registers = {};
     m_fifo.clear();
     m_vram.assign(VramWordCount, 0);
@@ -51,6 +49,11 @@ void Gpu::reset()
 }
 
 u32 Gpu::readStatus() const
+{
+    return m_status;
+}
+
+u32 Gpu::pollStatus()
 {
     return m_status;
 }
@@ -253,9 +256,8 @@ void Gpu::tickDisplayLine()
     //   VBlankStart    → VBlankEnd    (bit 31 flips — field changes)
     //   VBlankEnd      → ActiveDisplay (bit 22 goes low, next frame)
     //
-    // Each call to tickDisplayLine() advances one phase.  runFrame()
-    // calls this once, but we also expose it so the GPUSTAT polling
-    // path can step through the sub-frame phases.
+    // Each call to tickDisplayLine() advances one phase. The system
+    // timing scheduler drives these transitions during VBlank.
     switch (m_displayPhase)
     {
     case DisplayPhase::ActiveDisplay:
@@ -276,6 +278,11 @@ void Gpu::tickDisplayLine()
         updateRendererState();
     }
     updateStatusBits();
+}
+
+bool Gpu::irqPending() const
+{
+    return m_registers.irqPending;
 }
 
 bool Gpu::inActiveDisplay() const
@@ -320,25 +327,6 @@ void Gpu::processPacket(const PacketState& packet)
         command.words.size() >= 3 && (command.opcode & 0x04u) != 0)
     {
         command.clut = static_cast<u16>((command.words[2] >> 16) & 0x7FFF);
-    }
-
-    // Debug: log FillRectangle commands with decoded dimensions
-    if (command.kind == GpuCommandKind::FillRectangle && command.words.size() >= 3)
-    {
-        const u32 colorWord = command.words[0];
-        const u32 posWord = command.words[1];
-        const u32 sizeWord = command.words[2];
-        const s16 x = static_cast<s16>(posWord & 0xFFFF);
-        const s16 y = static_cast<s16>((posWord >> 16) & 0xFFFF);
-        const s16 w = static_cast<s16>(sizeWord & 0xFFFF);
-        const s16 h = static_cast<s16>((sizeWord >> 16) & 0xFFFF);
-        const u8 r = static_cast<u8>(colorWord & 0xFF);
-        const u8 g = static_cast<u8>((colorWord >> 8) & 0xFF);
-        const u8 b = static_cast<u8>((colorWord >> 16) & 0xFF);
-        std::fprintf(stderr,
-                     "[GPU] FillRectangle: color=(%u,%u,%u) pos=(%d,%d) size=(%d,%d) "
-                     "raw=[0x%08x,0x%08x,0x%08x]\n",
-                     r, g, b, x, y, w, h, colorWord, posWord, sizeWord);
     }
 
     if (!command.fromGp1)
@@ -431,7 +419,9 @@ void Gpu::updateStatusBits()
     switch (m_registers.dmaDirection)
     {
     case Registers::DmaDirection::Off:
-        request = false;
+        // BIOS gpu_sync() polls GPUSTAT.bit28 even with DMA disabled.
+        // Keep bit28 high when GP0 can accept commands.
+        request = canAcceptCommands;
         break;
     case Registers::DmaDirection::Fifo:
     case Registers::DmaDirection::CpuToGp0:
@@ -446,9 +436,8 @@ void Gpu::updateStatusBits()
         m_status |= statusDmaRequest;
     }
 
-    // Bit 31 reflects the current odd/even field.  Always mirror
-    // m_oddField so that PSn00bSDK VSync can detect frame boundaries
-    // via XOR of consecutive GPUSTAT reads, even in progressive mode.
+    // Bit 31 mirrors odd/even field state and is used by some VSync loops
+    // even in progressive display modes.
     if (m_oddField)
     {
         m_status |= statusInterlaceField;

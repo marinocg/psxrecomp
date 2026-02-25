@@ -34,6 +34,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             continue;
         }
 
+        emitter.writeLine("CycleScope cycleScope(context);");
+
         auto temporaries = collectTemporaries(function);
         for (u32 temporaryId : temporaries)
         {
@@ -66,6 +68,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         {
             emitter.writeLine("BlockId block = BlockId::" + blockIds.front() + ";");
         }
+        emitter.writeLine("Address resumeAddress = 0;");
 
         // Emit a startAddress → BlockId dispatch so that callers can enter
         // this function at an arbitrary block (needed for JALR targets that
@@ -77,17 +80,24 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             emitter.writeLine("Address physical = startAddress & 0x1FFFFFFF;");
             emitter.writeLine("switch (physical)");
             emitter.openBlock("");
+            std::unordered_set<Address> emittedStartCases;
             for (size_t i = 0; i < function.blocks.size(); ++i)
             {
-                const auto& blockName = function.blocks[i].name;
-                // Block names are formatted as "block_0x<hex_addr>"
-                if (blockName.size() > 8 && blockName.substr(0, 8) == "block_0x")
+                for (const auto& instruction : function.blocks[i].instructions)
                 {
-                    const Address blockAddr =
-                        std::stoul(blockName.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+                    if (!instruction.sourceAddress.has_value())
+                    {
+                        continue;
+                    }
+                    const Address blockAddr = (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                    if (!emittedStartCases.insert(blockAddr).second)
+                    {
+                        continue;
+                    }
                     std::ostringstream caseLine;
                     caseLine << "case 0x" << std::hex << blockAddr
-                             << ": block = BlockId::" << blockIds[i] << "; break;";
+                             << ": block = BlockId::" << blockIds[i]
+                             << "; resumeAddress = physical; break;";
                     emitter.writeLine(caseLine.str());
                 }
             }
@@ -132,7 +142,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                     emitter.writeLine("continue;");
                     emitter.closeBlock();
                 }
-                // Fallback: if no continuation matches, return.
+                // Fallback: unknown predecessor resumes are treated as a
+                // normal function exit.
                 emitter.writeLine("return;");
                 emitter.closeBlock();
                 continue;
@@ -146,10 +157,20 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 }
                 if (instruction.sourceAddress.has_value())
                 {
+                    std::ostringstream addrLiteral;
+                    addrLiteral << "0x" << std::hex << ((*instruction.sourceAddress) & 0x1FFFFFFFu);
+                    emitter.openBlock(
+                        "if (resumeAddress == 0 || resumeAddress == " + addrLiteral.str() + ")");
+                    emitter.openBlock("if (resumeAddress != 0)");
+                    emitter.writeLine("resumeAddress = 0;");
+                    emitter.closeBlock();
                     std::ostringstream pcLine;
                     pcLine << "setProgramCounter(context, 0x" << std::hex
                            << ((*instruction.sourceAddress) & 0x1FFFFFFFu) << ");";
                     emitter.writeLine(pcLine.str());
+                    emitInstruction(instruction, block, blockNames, context, emitter);
+                    emitter.closeBlock();
+                    continue;
                 }
                 emitInstruction(instruction, block, blockNames, context, emitter);
             }

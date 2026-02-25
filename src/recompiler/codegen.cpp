@@ -148,6 +148,23 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("system.callBiosSyscall(code, regs.data(), regs.size());");
     emitter.closeBlock();
     emitter.writeBlank();
+    emitter.writeLine("inline void flushCycles(RecompilerContext& context)");
+    emitter.openBlock("");
+    emitter.writeLine("if (context.pendingCycles != 0)");
+    emitter.openBlock("");
+    emitter.writeLine("context.system.tickCpuCycles(context.pendingCycles);");
+    emitter.writeLine("context.pendingCycles = 0;");
+    emitter.writeLine("context.system.serviceInterrupts();");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("struct CycleScope");
+    emitter.openBlock("");
+    emitter.writeLine("RecompilerContext& context;");
+    emitter.writeLine("explicit CycleScope(RecompilerContext& ctx) : context(ctx) {}");
+    emitter.writeLine("~CycleScope() { flushCycles(context); }");
+    emitter.closeBlock(";");
+    emitter.writeBlank();
     emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");
     emitter.openBlock("");
     emitter.writeLine("context.system.debugOverlay().setLastProgramCounter(pc);");
@@ -186,6 +203,14 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("std::ostringstream stream;");
     emitter.writeLine("stream << \"Breakpoint hit at PC 0x\" << std::hex << pc;");
     emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("// Approximate one emulated CPU cycle per original instruction.");
+    emitter.writeLine("++context.pendingCycles;");
+    emitter.writeLine("static constexpr u32 kCycleFlushThreshold = 2048;");
+    emitter.writeLine("if (context.pendingCycles >= kCycleFlushThreshold)");
+    emitter.openBlock("");
+    emitter.writeLine("flushCycles(context);");
     emitter.closeBlock();
     emitter.closeBlock(); // close setProgramCounter
     emitter.writeBlank();
@@ -235,12 +260,19 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("[[noreturn]] inline void triggerTrap(u32 code, Address pc)");
+    emitter.writeLine("inline void triggerTrap(u32 code, Address pc)");
     emitter.openBlock("");
-    emitter.writeLine("std::ostringstream stream;");
-    emitter.writeLine(
-        "stream << \"BREAK/TRAP reached (code=0x\" << std::hex << code << \") at PC 0x\" << pc;");
-    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.writeLine("// On real PSX, BREAK triggers an exception whose handler simply");
+    emitter.writeLine("// returns — execution continues at the next instruction.  The");
+    emitter.writeLine("// most common code is 0x1C00 (divide-by-zero guard inserted by");
+    emitter.writeLine("// PSn00bSDK / PSY-Q); the divide result is already safely set");
+    emitter.writeLine("// to zero before we reach here.");
+    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[trap] BREAK code=0x\" << std::hex << code");
+    emitter.writeLine("          << \" at PC 0x\" << pc << \" -- continuing\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("(void)code; (void)pc;");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void logWarning(const char* message)");
@@ -327,6 +359,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("std::array<u32, Registers::NUM_REGISTERS> regs{};");
     emitter.writeLine("u32 hi = 0;");
     emitter.writeLine("u32 lo = 0;");
+    emitter.writeLine("u32 pendingCycles = 0;");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.openBlock("namespace");
@@ -356,6 +389,112 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     }
     emitter.writeBlank();
 
+    auto emitRecompiledDispatchSwitch = [&](const std::string& recurseHelper)
+    {
+        emitter.writeLine("switch (physical)");
+        emitter.openBlock("");
+        {
+            std::unordered_set<Address> emittedEntries;
+
+            // First: emit cases for every function entry point (called with
+            // default startAddress = 0 so execution begins at the first block).
+            for (const auto& entry : functionSymbols)
+            {
+                const Address normalizedEntry = entry.first & 0x1FFFFFFFu;
+                if (!emittedEntries.insert(normalizedEntry).second)
+                {
+                    continue;
+                }
+                std::ostringstream caseLine;
+                caseLine << "case 0x" << std::hex << normalizedEntry << ":";
+                emitter.writeLine(caseLine.str());
+                emitter.openBlock("");
+                emitter.writeLine(entry.second + "(context);");
+                emitter.writeLine("return true;");
+                emitter.closeBlock();
+            }
+
+            // Second: emit cases for every instruction source address so that
+            // JALR/JR targets to a mid-function address can enter at the
+            // correct point via the startAddress parameter.
+            {
+                std::unordered_set<std::string> usedNames2;
+                for (const auto& function : program.functions)
+                {
+                    std::string funcName = uniquifyIdentifier(function.name, usedNames2);
+                    for (const auto& block : function.blocks)
+                    {
+                        for (const auto& instruction : block.instructions)
+                        {
+                            if (!instruction.sourceAddress.has_value())
+                            {
+                                continue;
+                            }
+                            const Address instructionAddr =
+                                (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                            if (!emittedEntries.insert(instructionAddr).second)
+                            {
+                                continue;
+                            }
+                            std::ostringstream caseLine;
+                            caseLine << "case 0x" << std::hex << instructionAddr << ":";
+                            emitter.writeLine(caseLine.str());
+                            emitter.openBlock("");
+                            std::ostringstream callLine;
+                            callLine << funcName << "(context, 0x" << std::hex << instructionAddr
+                                     << ");";
+                            emitter.writeLine(callLine.str());
+                            emitter.writeLine("return true;");
+                            emitter.closeBlock();
+                        }
+                    }
+                }
+            }
+        }
+        emitter.writeLine("default:");
+        emitter.openBlock("");
+        emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
+        emitter.openBlock("");
+        emitter.writeLine(
+            "const Address indirect = readMemory32(context.system, address) & 0x1FFFFFFF;");
+        emitter.writeLine("if (indirect != physical)");
+        emitter.openBlock("");
+        emitter.writeLine("return " + recurseHelper + "(context, indirect);");
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.writeLine("return false;");
+        emitter.closeBlock();
+        emitter.closeBlock();
+    };
+
+    emitter.writeLine(
+        "inline bool jumpRecompiledFunction(RecompilerContext& context, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("Address physical = address & 0x1FFFFFFF;");
+    emitter.writeLine("static const bool traceCalls = []()");
+    emitter.openBlock("");
+    emitter.writeLine("if (const char* env = std::getenv(\"PSXRECOMP_TRACE_CALLS\"))");
+    emitter.openBlock("");
+    emitter.writeLine("return env[0] == '1';");
+    emitter.closeBlock();
+    emitter.writeLine("return false;");
+    emitter.closeBlock("();");
+    emitter.writeLine("if (traceCalls)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[jump] target=0x\" << std::hex << physical << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("const bool handled = [&]() -> bool");
+    emitter.openBlock("");
+    emitRecompiledDispatchSwitch("jumpRecompiledFunction");
+    emitter.closeBlock("();");
+    emitter.writeLine("if (handled)");
+    emitter.openBlock("");
+    emitter.writeLine("context.regs[Registers::ZERO] = 0;");
+    emitter.closeBlock();
+    emitter.writeLine("return handled;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
     emitter.writeLine(
         "inline bool callRecompiledFunction(RecompilerContext& context, Address address)");
     emitter.openBlock("");
@@ -373,67 +512,48 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("std::cerr << \"[call] target=0x\" << std::hex << physical");
     emitter.writeLine("         << \" ra=0x\" << context.regs[Registers::RA] << \"\\n\";");
     emitter.closeBlock();
-    emitter.writeLine("switch (physical)");
+    emitter.writeLine("const u32 preservedS0 = context.regs[Registers::S0];");
+    emitter.writeLine("const u32 preservedS1 = context.regs[Registers::S1];");
+    emitter.writeLine("const u32 preservedS2 = context.regs[Registers::S2];");
+    emitter.writeLine("const u32 preservedS3 = context.regs[Registers::S3];");
+    emitter.writeLine("const u32 preservedS4 = context.regs[Registers::S4];");
+    emitter.writeLine("const u32 preservedS5 = context.regs[Registers::S5];");
+    emitter.writeLine("const u32 preservedS6 = context.regs[Registers::S6];");
+    emitter.writeLine("const u32 preservedS7 = context.regs[Registers::S7];");
+    emitter.writeLine("const u32 preservedGp = context.regs[Registers::GP];");
+    emitter.writeLine("const u32 preservedSp = context.regs[Registers::SP];");
+    emitter.writeLine("const u32 preservedFp = context.regs[Registers::FP];");
+    emitter.writeLine("const u32 preservedRa = context.regs[Registers::RA];");
+    emitter.writeLine("auto restoreCalleeSaved = [&]()");
     emitter.openBlock("");
-    {
-        std::unordered_set<Address> emittedEntries;
-
-        // First: emit cases for every function entry point (called with
-        // default startAddress = 0 so execution begins at the first block).
-        for (const auto& entry : functionSymbols)
-        {
-            const Address normalizedEntry = entry.first & 0x1FFFFFFFu;
-            if (!emittedEntries.insert(normalizedEntry).second)
-            {
-                continue;
-            }
-            std::ostringstream caseLine;
-            caseLine << "case 0x" << std::hex << normalizedEntry << ":";
-            emitter.writeLine(caseLine.str());
-            emitter.openBlock("");
-            emitter.writeLine(entry.second + "(context);");
-            emitter.writeLine("return true;");
-            emitter.closeBlock();
-        }
-
-        // Second: emit cases for every non-entry block address so that JALR
-        // calls targeting a mid-function address can enter at the correct
-        // block via the startAddress parameter.
-        {
-            std::unordered_set<std::string> usedNames2;
-            size_t funcIdx = 0;
-            for (const auto& function : program.functions)
-            {
-                std::string funcName = uniquifyIdentifier(function.name, usedNames2);
-                for (const auto& block : function.blocks)
-                {
-                    if (block.name.size() > 8 && block.name.substr(0, 8) == "block_0x")
-                    {
-                        const Address blockAddr =
-                            std::stoul(block.name.substr(6), nullptr, 16) & 0x1FFFFFFFu;
-                        if (emittedEntries.insert(blockAddr).second)
-                        {
-                            std::ostringstream caseLine;
-                            caseLine << "case 0x" << std::hex << blockAddr << ":";
-                            emitter.writeLine(caseLine.str());
-                            emitter.openBlock("");
-                            std::ostringstream callLine;
-                            callLine << funcName << "(context, 0x" << std::hex << blockAddr << ");";
-                            emitter.writeLine(callLine.str());
-                            emitter.writeLine("return true;");
-                            emitter.closeBlock();
-                        }
-                    }
-                }
-                ++funcIdx;
-            }
-        }
-    }
-    emitter.writeLine("default:");
+    emitter.writeLine("context.regs[Registers::S0] = preservedS0;");
+    emitter.writeLine("context.regs[Registers::S1] = preservedS1;");
+    emitter.writeLine("context.regs[Registers::S2] = preservedS2;");
+    emitter.writeLine("context.regs[Registers::S3] = preservedS3;");
+    emitter.writeLine("context.regs[Registers::S4] = preservedS4;");
+    emitter.writeLine("context.regs[Registers::S5] = preservedS5;");
+    emitter.writeLine("context.regs[Registers::S6] = preservedS6;");
+    emitter.writeLine("context.regs[Registers::S7] = preservedS7;");
+    emitter.writeLine("context.regs[Registers::GP] = preservedGp;");
+    emitter.writeLine("context.regs[Registers::SP] = preservedSp;");
+    emitter.writeLine("context.regs[Registers::FP] = preservedFp;");
+    emitter.writeLine("context.regs[Registers::RA] = preservedRa;");
+    emitter.writeLine("context.regs[Registers::ZERO] = 0;");
+    emitter.closeBlock(";");
+    emitter.writeLine("const bool handled = [&]() -> bool");
     emitter.openBlock("");
-    emitter.writeLine("return false;");
+    emitRecompiledDispatchSwitch("callRecompiledFunction");
+    emitter.closeBlock("();");
+    emitter.writeLine("if (traceCalls && handled)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[call-ret] target=0x\" << std::hex << physical");
+    emitter.writeLine("         << \" v0=0x\" << context.regs[Registers::V0] << \"\\n\";");
     emitter.closeBlock();
+    emitter.writeLine("if (handled)");
+    emitter.openBlock("");
+    emitter.writeLine("restoreCalleeSaved();");
     emitter.closeBlock();
+    emitter.writeLine("return handled;");
     emitter.closeBlock();
     emitter.writeBlank();
 
@@ -539,138 +659,38 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.closeBlock();
     emitter.writeBlank();
 
-    // Auto-detect PSn00bSDK vsync_counter address.
-    // The VBlank IRQ handler has a distinctive pattern:
-    //   LUI r3, HI        ; 3c03xxxx
-    //   LW  r2, LO(r3)    ; 8c62yyyy
-    //   ...
-    //   ADDIU r2, r2, 1   ; 24420001
-    //   SW  r2, LO(r3)    ; ac62yyyy  (same base/offset)
-    // We scan the loaded program for this pattern and extract the
-    // full counter address (HI<<16 + sign-extended LO).
-    emitter.writeLine("static Address detectVsyncCounter(const u8* ram)");
-    emitter.openBlock("");
-    emitter.writeLine("if (kRamInitLoadSize < 32) return 0;");
-    emitter.writeLine("const Address base = kRamInitLoadAddress & 0x1FFFFF;");
-    emitter.writeLine("const u32 nWords = kRamInitLoadSize / 4;");
-    emitter.writeLine("auto word = [&](u32 idx) -> u32");
-    emitter.openBlock("");
-    emitter.writeLine("u32 v = 0;");
-    emitter.writeLine("std::memcpy(&v, ram + base + idx * 4, 4);");
-    emitter.writeLine("return v;");
-    emitter.closeBlock(";");
-    emitter.writeLine("for (u32 i = 0; i + 6 < nWords; ++i)");
-    emitter.openBlock("");
-    // Match: LUI r3, HI (opcode 0x3c03xxxx)
-    emitter.writeLine("const u32 w0 = word(i);");
-    emitter.writeLine("if ((w0 & 0xFFFF0000u) != 0x3c030000u) continue;");
-    emitter.writeLine("const u32 hi = w0 & 0xFFFF;");
-    // Match: LW r2, LO(r3) (opcode 0x8c62yyyy)
-    emitter.writeLine("const u32 w1 = word(i + 1);");
-    emitter.writeLine("if ((w1 & 0xFFFF0000u) != 0x8c620000u) continue;");
-    emitter.writeLine("const u32 lo = w1 & 0xFFFF;");
-    // Scan forward for ADDIU r2,r2,1 (0x24420001) within 6 words
-    emitter.writeLine("bool foundInc = false;");
-    emitter.writeLine("u32 swIdx = 0;");
-    emitter.writeLine("for (u32 j = 2; j < 6 && i + j < nWords; ++j)");
-    emitter.openBlock("");
-    emitter.writeLine("if (word(i + j) == 0x24420001u) { foundInc = true; swIdx = j + 1; break; "
-                      "}");
-    emitter.closeBlock();
-    emitter.writeLine("if (!foundInc || i + swIdx >= nWords) continue;");
-    // Match: SW r2, LO(r3) with same offset as LW
-    emitter.writeLine("const u32 sw = word(i + swIdx);");
-    emitter.writeLine("if (sw != (0xac620000u | lo)) continue;");
-    // Build full address
-    emitter.writeLine("const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
-                      "static_cast<s32>(lo);");
-    emitter.writeLine("const Address addr = (hi << 16) + static_cast<u32>(slo);");
-    emitter.writeLine("return addr;");
-    emitter.closeBlock();
-    emitter.writeLine("return 0;");
-    emitter.closeBlock();
-    emitter.writeBlank();
-
-    // Auto-detect PSn00bSDK DrawSync "GPU busy" byte address.
-    // DrawSync(0) has a distinctive prologue:
-    //   BNEZ $a0, <alt>       ; 0x1480xxxx
-    //   LUI  $v1, 0x0010      ; 0x3C030010  (timeout = 1M)
-    //   B    <poll>            ; 0x1000xxxx
-    //   LUI  $a0, 0x80xx      ; 0x3C04xxxx  (base address hi)
-    //   ...  (2 words)
-    //   LBU  $v0, offset($a0) ; 0x9082yyyy  (the busy byte)
-    // The busy byte address = (LUI_imm << 16) + sign-extended(LBU_offset).
-    emitter.writeLine("static Address detectDrawSyncBusy(const u8* ram)");
-    emitter.openBlock("");
-    emitter.writeLine("if (kRamInitLoadSize < 32) return 0;");
-    emitter.writeLine("const Address base = kRamInitLoadAddress & 0x1FFFFF;");
-    emitter.writeLine("const u32 nWords = kRamInitLoadSize / 4;");
-    emitter.writeLine("auto word = [&](u32 idx) -> u32");
-    emitter.openBlock("");
-    emitter.writeLine("u32 v = 0;");
-    emitter.writeLine("std::memcpy(&v, ram + base + idx * 4, 4);");
-    emitter.writeLine("return v;");
-    emitter.closeBlock(";");
-    emitter.writeLine("for (u32 i = 0; i + 7 < nWords; ++i)");
-    emitter.openBlock("");
-    // Match BNEZ $a0 (BNE $a0,$zero → opcode=000101, rs=00100, rt=00000: 0x1480xxxx)
-    emitter.writeLine("const u32 w0 = word(i);");
-    emitter.writeLine("if ((w0 & 0xFFFF0000u) != 0x14800000u) continue;");
-    // Match LUI $v1, 0x0010 (exact = 0x3C030010)
-    emitter.writeLine("if (word(i + 1) != 0x3C030010u) continue;");
-    // Match B (unconditional branch, opcode 000100, rs=rt=0 → 0x1000xxxx)
-    emitter.writeLine("const u32 w2 = word(i + 2);");
-    emitter.writeLine("if ((w2 & 0xFFFF0000u) != 0x10000000u) continue;");
-    // Match LUI $a0, 0x80xx (0x3C04xxxx where imm starts with 0x80)
-    emitter.writeLine("const u32 w3 = word(i + 3);");
-    emitter.writeLine("if ((w3 & 0xFFFF0000u) != 0x3C040000u) continue;");
-    emitter.writeLine("const u32 baseHi = w3 & 0xFFFF;");
-    // Scan forward (words 4..8) for LBU $v0, offset($a0) (opcode 0x9082yyyy)
-    emitter.writeLine("for (u32 j = 4; j < 8 && i + j < nWords; ++j)");
-    emitter.openBlock("");
-    emitter.writeLine("const u32 lbu = word(i + j);");
-    // LBU = opcode 100000 (0x20), rs=$a0=4, rt=$v0=2 → 0x90820000 + offset
-    emitter.writeLine("if ((lbu & 0xFFFF0000u) != 0x90820000u) continue;");
-    emitter.writeLine("const u32 lo = lbu & 0xFFFF;");
-    emitter.writeLine("const s32 slo = (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : "
-                      "static_cast<s32>(lo);");
-    emitter.writeLine("const Address addr = (baseHi << 16) + static_cast<u32>(slo);");
-    emitter.writeLine("return addr;");
-    emitter.closeBlock();
-    emitter.closeBlock();
-    emitter.writeLine("return 0;");
-    emitter.closeBlock();
-    emitter.writeBlank();
-
     emitter.writeLine("void RecompiledModule::run(runtime::PsxSystem& system)");
     emitter.openBlock("");
-    // Auto-detect and register vsync counter before running.
-    emitter.writeLine("// Auto-detect PSn00bSDK vsync counter location.");
-    emitter.writeLine("const Address vsyncAddr = detectVsyncCounter(system.getRam());");
-    emitter.writeLine("if (vsyncAddr != 0)");
-    emitter.openBlock("");
-    emitter.writeLine("system.setVsyncCounterAddress(vsyncAddr);");
-    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
-    emitter.openBlock("");
-    emitter.writeLine("std::cerr << \"[psxrecomp] Auto-detected vsync counter at 0x\"");
-    emitter.writeLine("          << std::hex << vsyncAddr << \"\\n\";");
-    emitter.closeBlock();
-    emitter.closeBlock();
-    emitter.writeBlank();
-    // Auto-detect and register DrawSync GPU busy byte.
-    emitter.writeLine("// Auto-detect PSn00bSDK DrawSync busy byte location.");
-    emitter.writeLine("const Address drawSyncAddr = detectDrawSyncBusy(system.getRam());");
-    emitter.writeLine("if (drawSyncAddr != 0)");
-    emitter.openBlock("");
-    emitter.writeLine("system.setDrawSyncBusyAddress(drawSyncAddr);");
-    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
-    emitter.openBlock("");
-    emitter.writeLine("std::cerr << \"[psxrecomp] Auto-detected DrawSync busy byte at 0x\"");
-    emitter.writeLine("          << std::hex << drawSyncAddr << \"\\n\";");
-    emitter.closeBlock();
-    emitter.closeBlock();
-    emitter.writeBlank();
     emitter.writeLine("RecompilerContext context{system, {}};");
+
+    // Install only the ABI-required callback invoker bridge.
+    // Compatibility shims (VSync/DrawSync detection, runtime toggles) are intentionally omitted.
+    emitter.writeBlank();
+    emitter.writeLine("// Install callback invoker bridge for interrupt dispatch.");
+    emitter.writeLine("system.setCallbackInvoker(");
+    emitter.writeLine("    [&context, &system](u32 address) -> u32");
+    emitter.openBlock("");
+    emitter.writeLine("const auto savedRegs = context.regs;");
+    emitter.writeLine("const u32 savedHi = context.hi;");
+    emitter.writeLine("const u32 savedLo = context.lo;");
+    emitter.writeLine("system.consumePendingCallbackRegisters(context.regs);");
+    emitter.writeLine("try");
+    emitter.openBlock("");
+    emitter.writeLine("callRecompiledFunction(context, address);");
+    emitter.writeLine("const u32 callbackResult = context.regs[Registers::V0];");
+    emitter.writeLine("context.regs = savedRegs;");
+    emitter.writeLine("context.hi = savedHi;");
+    emitter.writeLine("context.lo = savedLo;");
+    emitter.writeLine("return callbackResult;");
+    emitter.closeBlock();
+    emitter.writeLine("catch (...) ");
+    emitter.openBlock("");
+    emitter.writeLine("context.regs = savedRegs;");
+    emitter.writeLine("context.hi = savedHi;");
+    emitter.writeLine("context.lo = savedLo;");
+    emitter.writeLine("throw;");
+    emitter.closeBlock();
+    emitter.closeBlock(");");
 
     // Set initial registers from PSX-EXE header.
     {

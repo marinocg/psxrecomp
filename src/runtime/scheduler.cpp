@@ -8,52 +8,47 @@ namespace psxrecomp
 namespace runtime
 {
 
-Scheduler::EventId Scheduler::schedule(uint64_t cycles, Callback callback)
+Scheduler::EventId Scheduler::schedule(Time cyclesFromNow, Callback callback)
 {
-    EventId id = m_nextId++;
-    m_events.push_back({id, cycles, std::move(callback)});
+    const EventId id = m_nextId++;
+    Event event;
+    event.id = id;
+    event.time = m_now + cyclesFromNow;
+    event.callback = std::move(callback);
+    m_heap.push_back(std::move(event));
+    std::push_heap(m_heap.begin(), m_heap.end(), &Scheduler::heapComp);
     return id;
 }
 
-void Scheduler::tick(uint64_t cycles)
+void Scheduler::tick(Time cycles)
 {
-    for (auto& event : m_events)
+    const Time endTime = m_now + cycles;
+
+    while (!m_heap.empty())
     {
-        if (event.cyclesRemaining > cycles)
+        std::pop_heap(m_heap.begin(), m_heap.end(), &Scheduler::heapComp);
+        Event next = std::move(m_heap.back());
+        if (next.time > endTime)
         {
-            event.cyclesRemaining -= cycles;
+            m_heap.back() = std::move(next);
+            std::push_heap(m_heap.begin(), m_heap.end(), &Scheduler::heapComp);
+            break;
         }
-        else
+        m_heap.pop_back();
+        m_now = next.time;
+        if (next.callback)
         {
-            event.cyclesRemaining = 0;
+            next.callback();
         }
     }
 
-    std::vector<Event> readyEvents;
-    auto it = std::remove_if(m_events.begin(), m_events.end(),
-                             [&readyEvents](Event& event)
-                             {
-                                 if (event.cyclesRemaining == 0)
-                                 {
-                                     readyEvents.push_back(std::move(event));
-                                     return true;
-                                 }
-                                 return false;
-                             });
-    m_events.erase(it, m_events.end());
-
-    for (auto& event : readyEvents)
-    {
-        if (event.callback)
-        {
-            event.callback();
-        }
-    }
+    m_now = endTime;
 }
 
 void Scheduler::reset()
 {
-    m_events.clear();
+    m_heap.clear();
+    m_now = 0;
     m_nextId = 1;
 }
 

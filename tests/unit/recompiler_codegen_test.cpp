@@ -80,6 +80,21 @@ int main()
     std::string source = generator.generateSource(program, "module");
     std::string buildFile = generator.generateBuildFile("module");
     std::string runner = generator.generateRunnerSource("module");
+    auto countOccurrences = [](const std::string& haystack, const std::string& needle) -> size_t
+    {
+        if (needle.empty())
+        {
+            return 0;
+        }
+        size_t count = 0;
+        size_t pos = 0;
+        while ((pos = haystack.find(needle, pos)) != std::string::npos)
+        {
+            ++count;
+            pos += needle.size();
+        }
+        return count;
+    };
 
     assert(header.find("RecompiledModule") != std::string::npos);
     assert(source.find("readMemory32") != std::string::npos);
@@ -89,10 +104,18 @@ int main()
     assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("if (") != std::string::npos);
     assert(source.find("callRecompiledFunction") != std::string::npos);
+    assert(source.find("restoreCalleeSaved") != std::string::npos);
+    assert(source.find("context.regs[Registers::S0] = preservedS0;") != std::string::npos);
     assert(source.find("failUnsupportedCall") != std::string::npos);
     assert(source.find("kModuleEntryAddress") != std::string::npos);
     assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
            std::string::npos);
+    // Runtime shim policy: emit only the callback invoker bridge in run().
+    assert(countOccurrences(source, "setCallbackInvoker(") == 1);
+    assert(source.find("VSync") == std::string::npos);
+    assert(source.find("DrawSync") == std::string::npos);
+    assert(source.find("PSXRECOMP_AUTO_FRAME_PROGRESS") == std::string::npos);
+    assert(source.find("setAutoFrameProgress") == std::string::npos);
     assert(source.find("triggerTrap") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
     assert(buildFile.find("add_executable") != std::string::npos);
@@ -105,7 +128,7 @@ int main()
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_DUMP_FULL_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
-    assert(runner.find("PSXRECOMP_AUTO_FRAME_PROGRESS") != std::string::npos);
+    assert(runner.find("PSXRECOMP_AUTO_FRAME_PROGRESS") == std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
     assert(runner.find("extractDisplayPixels") != std::string::npos);
     assert(runner.find("appendSuffixBeforeExtension") != std::string::npos);
@@ -120,6 +143,8 @@ int main()
     assert(runner.find("envFlagEnabled(presentEnv, defaultPresent)") != std::string::npos);
     assert(runner.find("PSXRECOMP_RENDER_DEBUG_OVERLAY") != std::string::npos);
     assert(runner.find("decodeLogLevel") != std::string::npos);
+    assert(runner.find("const auto& exVramWords = system.gpu().vramWords();") != std::string::npos);
+    assert(runner.find("exPixels[y * exWidth + x] = pixel;") != std::string::npos);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
@@ -169,8 +194,10 @@ int main()
     std::ofstream runtimeHeader(runtimeHeaderPath);
     runtimeHeader << "#pragma once\n";
     runtimeHeader << "#include \"psxrecomp/types.h\"\n";
+    runtimeHeader << "#include <array>\n";
     runtimeHeader << "#include <cstddef>\n";
     runtimeHeader << "#include <cstring>\n";
+    runtimeHeader << "#include <functional>\n";
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
@@ -204,11 +231,13 @@ int main()
     runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
     runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
     runtimeHeader << "    void setDiscSwapInfo(const DiscSwapInfo&) {}\n";
-    runtimeHeader << "    void setAutoFrameProgressOnInterruptPoll(bool) {}\n";
-    runtimeHeader << "    void setVsyncCounterAddress(Address) {}\n";
-    runtimeHeader << "    void setDrawSyncBusyAddress(Address) {}\n";
+    runtimeHeader << "    void tickCpuCycles(u32) {}\n";
     runtimeHeader << "    u32 frameCount() const { return 0; }\n";
     runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
+    runtimeHeader << "    void serviceInterrupts() {}\n";
+    runtimeHeader
+        << "    bool consumePendingCallbackRegisters(std::array<u32, 32>&) { return false; }\n";
+    runtimeHeader << "    void setCallbackInvoker(std::function<u32(u32)>) {}\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
