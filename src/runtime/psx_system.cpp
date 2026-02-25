@@ -105,6 +105,14 @@ std::string formatPendingLineOrder(u32 pendingMasked)
     return out.str();
 }
 
+constexpr size_t REG_V0 = 2;
+constexpr size_t REG_S0 = 16;
+constexpr size_t REG_S7 = 23;
+constexpr size_t REG_GP = 28;
+constexpr size_t REG_SP = 29;
+constexpr size_t REG_FP = 30;
+constexpr size_t REG_RA = 31;
+
 void appendU32(std::vector<u8>& out, u32 value)
 {
     out.push_back(static_cast<u8>(value & 0xFF));
@@ -161,6 +169,9 @@ void PsxSystem::reset()
     m_callbackInvoker = CallbackInvoker{};
     m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
+    m_hasPendingCallbackRegisters = false;
+    m_pendingCallbackRegisters = {};
+    m_pendingCallbackRegisterMask.fill(false);
     if (traceIrqFlowEnabled())
     {
         m_interrupts.setTraceHook(
@@ -260,6 +271,7 @@ void PsxSystem::syncLevelInterruptSources()
 
     raiseIfRequested(m_gpu.irqPending(), InterruptLine::Gpu);
     raiseIfRequested(m_cdrom.hasIrqRequest(), InterruptLine::Cdrom);
+
     raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
 }
 
@@ -427,7 +439,7 @@ void PsxSystem::serviceInterrupts()
 {
     syncLevelInterruptSources();
 
-    u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
+    const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
     if (traceIrqFlowEnabled())
     {
         std::ostringstream msg;
@@ -484,19 +496,19 @@ void PsxSystem::serviceInterrupts()
 
     // The hook callback may acknowledge IRQ bits. Recompute pending state
     // before running priority chains so we don't act on stale masks.
-    pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
-    if (pendingMasked != 0 && traceIrqFlowEnabled())
+    const u32 pendingAfterHook = m_interrupts.readStatus() & m_interrupts.readMask();
+    if (pendingAfterHook != 0 && traceIrqFlowEnabled())
     {
         std::ostringstream msg;
         msg << "event=irq_dispatch_order source=service_interrupts pending_masked=0x" << std::hex
-            << pendingMasked << " lines=" << formatPendingLineOrder(pendingMasked);
+            << pendingAfterHook << " lines=" << formatPendingLineOrder(pendingAfterHook);
         m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
 
     // BIOS-style exception handler priority chains (installed via SysEnqIntRP).
     // These handlers are responsible for updating SDK counters (eg. PSn00bSDK VSync)
     // and for acknowledging IRQ sources.
-    if (pendingMasked != 0 && dispatchIrqChains())
+    if (pendingAfterHook != 0 && dispatchIrqChains())
     {
         if (traceIrqFlowEnabled())
         {
@@ -552,13 +564,53 @@ void PsxSystem::invokeHookEntryIntHandler()
     m_inHookEntryIntHandler = true;
     try
     {
-        (void)invokeCallbackRaw(resolveHookEntryIntCallback(m_hookEntryInt.descriptorAddress));
+        const u32 callbackAddress = resolveHookEntryIntCallback(m_hookEntryInt.descriptorAddress);
+        if (callbackAddress != 0)
+        {
+            // HookEntryInt is implemented by BIOS as longjmp(setjmp_buf, 1):
+            // restore callee-saved registers and resume at saved RA with v0=1.
+            const Address descriptorPhysical = normalizeAddress(m_hookEntryInt.descriptorAddress);
+            if (descriptorPhysical <= MemoryMap::RAM_SIZE - 0x30u)
+            {
+                m_pendingCallbackRegisters = {};
+                m_pendingCallbackRegisterMask.fill(false);
+                m_pendingCallbackRegisters[REG_V0] = 1; // PSX-SPX: hook callback enters with r2=1.
+                m_pendingCallbackRegisterMask[REG_V0] = true;
+                m_pendingCallbackRegisters[REG_RA] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x00u, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_RA] = true;
+                m_pendingCallbackRegisters[REG_SP] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x04u, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_SP] = true;
+                m_pendingCallbackRegisters[REG_FP] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x08u, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_FP] = true;
+                for (size_t reg = REG_S0; reg <= REG_S7; ++reg)
+                {
+                    const Address offset =
+                        static_cast<Address>(0x0Cu + (reg - REG_S0) * sizeof(u32));
+                    m_pendingCallbackRegisters[reg] = readFromRegion<u32>(
+                        m_ram.data(), descriptorPhysical + offset, MemoryMap::RAM_SIZE);
+                    m_pendingCallbackRegisterMask[reg] = true;
+                }
+                m_pendingCallbackRegisters[REG_GP] = readFromRegion<u32>(
+                    m_ram.data(), descriptorPhysical + 0x2Cu, MemoryMap::RAM_SIZE);
+                m_pendingCallbackRegisterMask[REG_GP] = true;
+                m_hasPendingCallbackRegisters = true;
+            }
+        }
+
+        (void)invokeCallbackRaw(callbackAddress);
     }
     catch (...)
     {
+        m_hasPendingCallbackRegisters = false;
+        m_pendingCallbackRegisterMask.fill(false);
         m_inHookEntryIntHandler = false;
         throw;
     }
+    m_hasPendingCallbackRegisters = false;
+    m_pendingCallbackRegisterMask.fill(false);
     m_inHookEntryIntHandler = false;
 }
 
@@ -642,6 +694,25 @@ u32 PsxSystem::invokeCallbackRaw(u32 address)
         m_inCallbackInvocation = previousInCallbackInvocation;
         throw;
     }
+}
+
+bool PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
+{
+    if (!m_hasPendingCallbackRegisters)
+    {
+        return false;
+    }
+
+    for (size_t reg = 0; reg < m_pendingCallbackRegisters.size(); ++reg)
+    {
+        if (m_pendingCallbackRegisterMask[reg])
+        {
+            regsInOut[reg] = m_pendingCallbackRegisters[reg];
+        }
+    }
+    m_hasPendingCallbackRegisters = false;
+    m_pendingCallbackRegisterMask.fill(false);
+    return true;
 }
 
 bool PsxSystem::dispatchIrqChains()

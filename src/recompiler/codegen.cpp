@@ -414,9 +414,9 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
                 emitter.closeBlock();
             }
 
-            // Second: emit cases for every non-entry block address so that
+            // Second: emit cases for every instruction source address so that
             // JALR/JR targets to a mid-function address can enter at the
-            // correct block via the startAddress parameter.
+            // correct point via the startAddress parameter.
             {
                 std::unordered_set<std::string> usedNames2;
                 for (const auto& function : program.functions)
@@ -424,23 +424,28 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
                     std::string funcName = uniquifyIdentifier(function.name, usedNames2);
                     for (const auto& block : function.blocks)
                     {
-                        if (block.name.size() > 8 && block.name.substr(0, 8) == "block_0x")
+                        for (const auto& instruction : block.instructions)
                         {
-                            const Address blockAddr =
-                                std::stoul(block.name.substr(6), nullptr, 16) & 0x1FFFFFFFu;
-                            if (emittedEntries.insert(blockAddr).second)
+                            if (!instruction.sourceAddress.has_value())
                             {
-                                std::ostringstream caseLine;
-                                caseLine << "case 0x" << std::hex << blockAddr << ":";
-                                emitter.writeLine(caseLine.str());
-                                emitter.openBlock("");
-                                std::ostringstream callLine;
-                                callLine << funcName << "(context, 0x" << std::hex << blockAddr
-                                         << ");";
-                                emitter.writeLine(callLine.str());
-                                emitter.writeLine("return true;");
-                                emitter.closeBlock();
+                                continue;
                             }
+                            const Address instructionAddr =
+                                (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                            if (!emittedEntries.insert(instructionAddr).second)
+                            {
+                                continue;
+                            }
+                            std::ostringstream caseLine;
+                            caseLine << "case 0x" << std::hex << instructionAddr << ":";
+                            emitter.writeLine(caseLine.str());
+                            emitter.openBlock("");
+                            std::ostringstream callLine;
+                            callLine << funcName << "(context, 0x" << std::hex << instructionAddr
+                                     << ");";
+                            emitter.writeLine(callLine.str());
+                            emitter.writeLine("return true;");
+                            emitter.closeBlock();
                         }
                     }
                 }
@@ -539,6 +544,11 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.openBlock("");
     emitRecompiledDispatchSwitch("callRecompiledFunction");
     emitter.closeBlock("();");
+    emitter.writeLine("if (traceCalls && handled)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[call-ret] target=0x\" << std::hex << physical");
+    emitter.writeLine("         << \" v0=0x\" << context.regs[Registers::V0] << \"\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("if (handled)");
     emitter.openBlock("");
     emitter.writeLine("restoreCalleeSaved();");
@@ -658,15 +668,12 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeBlank();
     emitter.writeLine("// Install callback invoker bridge for interrupt dispatch.");
     emitter.writeLine("system.setCallbackInvoker(");
-    emitter.writeLine("    [&context](u32 address) -> u32");
+    emitter.writeLine("    [&context, &system](u32 address) -> u32");
     emitter.openBlock("");
     emitter.writeLine("const auto savedRegs = context.regs;");
     emitter.writeLine("const u32 savedHi = context.hi;");
     emitter.writeLine("const u32 savedLo = context.lo;");
-    emitter.writeLine("constexpr u32 kInterruptStackTop = 0x801ff000;");
-    emitter.writeLine("context.regs[Registers::SP] = kInterruptStackTop;");
-    emitter.writeLine("context.regs[Registers::FP] = kInterruptStackTop;");
-    emitter.writeLine("context.regs[Registers::RA] = 0;");
+    emitter.writeLine("system.consumePendingCallbackRegisters(context.regs);");
     emitter.writeLine("try");
     emitter.openBlock("");
     emitter.writeLine("callRecompiledFunction(context, address);");

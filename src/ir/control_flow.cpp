@@ -172,10 +172,16 @@ ControlFlowBuildResult buildControlFlowFunction(std::string_view functionName, A
             if (successorIt == result.addressToBlockName.end())
             {
                 needsExternalBlock = true;
+                // Preserve explicit external branch targets so lowering can
+                // dispatch cross-function branches to their absolute address.
+                // Continuation-style edges (eg. external JUMP/CALL paths) keep
+                // using block_external.
+                const std::string externalSuccessorName =
+                    recordContinuation ? std::string(ExternalBlockName) : formatBlockName(target);
                 if (std::find(block.successors.begin(), block.successors.end(),
-                              ExternalBlockName) == block.successors.end())
+                              externalSuccessorName) == block.successors.end())
                 {
-                    block.successors.push_back(ExternalBlockName);
+                    block.successors.push_back(externalSuccessorName);
                 }
                 // Record the continuation for this block: resume at the next
                 // sequential address after the external jump/call.

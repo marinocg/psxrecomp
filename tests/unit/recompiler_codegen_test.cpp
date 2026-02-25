@@ -194,6 +194,7 @@ int main()
     std::ofstream runtimeHeader(runtimeHeaderPath);
     runtimeHeader << "#pragma once\n";
     runtimeHeader << "#include \"psxrecomp/types.h\"\n";
+    runtimeHeader << "#include <array>\n";
     runtimeHeader << "#include <cstddef>\n";
     runtimeHeader << "#include <cstring>\n";
     runtimeHeader << "#include <functional>\n";
@@ -234,6 +235,8 @@ int main()
     runtimeHeader << "    u32 frameCount() const { return 0; }\n";
     runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
     runtimeHeader << "    void serviceInterrupts() {}\n";
+    runtimeHeader
+        << "    bool consumePendingCallbackRegisters(std::array<u32, 32>&) { return false; }\n";
     runtimeHeader << "    void setCallbackInvoker(std::function<u32(u32)>) {}\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "  private:\n";

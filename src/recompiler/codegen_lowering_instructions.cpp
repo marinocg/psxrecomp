@@ -1,5 +1,6 @@
 #include "codegen_lowering_helpers.h"
 
+#include <optional>
 #include <sstream>
 
 namespace psxrecomp
@@ -309,6 +310,66 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (!instruction.inputs.empty())
         {
             std::string cond = valueToExpr(instruction.inputs.front(), context);
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
+            std::optional<std::string> takenTargetLiteral;
+            if (instruction.inputs.size() >= 2 &&
+                instruction.inputs[1].kind == ir::ValueKind::ADDRESS)
+            {
+                std::ostringstream targetStream;
+                targetStream << "0x" << std::hex << (instruction.inputs[1].address & 0x1FFFFFFFu);
+                takenTargetLiteral = targetStream.str();
+            }
+
+            auto emitSuccessorTransfer = [&](const std::string& successorName,
+                                             const std::optional<std::string>& externalTarget)
+            {
+                const auto localIt = blockNames.find(successorName);
+                if (localIt != blockNames.end())
+                {
+                    emitter.writeLine("previousBlock = block;");
+                    emitter.writeLine("block = BlockId::" + localIt->second + ";");
+                    emitter.writeLine("continue;");
+                    return;
+                }
+
+                if (successorName == "block_external" && externalTarget.has_value())
+                {
+                    emitter.openBlock("if (!jumpRecompiledFunction(context, " + *externalTarget +
+                                      "))");
+                    emitter.writeLine("failUnsupportedJump(" + *externalTarget + ", " + sourcePc +
+                                      ");");
+                    emitter.closeBlock();
+                    emitter.writeLine("return;");
+                    return;
+                }
+
+                // Branch targets can leave the current emitted function when
+                // the CFG is partitioned. Dispatch through jumpRecompiledFunction
+                // so execution continues at the correct absolute address.
+                if (successorName.size() > 8 && successorName.substr(0, 8) == "block_0x")
+                {
+                    const Address targetAddress =
+                        std::stoul(successorName.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+                    std::ostringstream targetStream;
+                    targetStream << "0x" << std::hex << targetAddress;
+                    const std::string targetLiteral = targetStream.str();
+                    emitter.openBlock("if (!jumpRecompiledFunction(context, " + targetLiteral +
+                                      "))");
+                    emitter.writeLine("failUnsupportedJump(" + targetLiteral + ", " + sourcePc +
+                                      ");");
+                    emitter.closeBlock();
+                    emitter.writeLine("return;");
+                    return;
+                }
+
+                emitter.writeLine("return;");
+            };
 
             // Detect self-loop spin-waits: on PSX, BEQ $zero,$zero,self is an
             // IRQ-breakable spin-wait.  The IRQ handler modifies the return
@@ -337,16 +398,10 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                     // Normal branch (including conditional self-loops which are
                     // regular loops handled by the outer while(true)/switch).
                     emitter.openBlock("if (" + cond + ")");
-                    emitter.writeLine("previousBlock = block;");
-                    emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
-                                      ";");
-                    emitter.writeLine("continue;");
+                    emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
                     emitter.closeBlock();
                     emitter.openBlock("else");
-                    emitter.writeLine("previousBlock = block;");
-                    emitter.writeLine("block = " + resolveBlockId(block.successors[1], blockNames) +
-                                      ";");
-                    emitter.writeLine("continue;");
+                    emitSuccessorTransfer(block.successors[1], std::nullopt);
                     emitter.closeBlock();
                 }
             }
@@ -360,10 +415,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                 else
                 {
                     emitter.openBlock("if (" + cond + ")");
-                    emitter.writeLine("previousBlock = block;");
-                    emitter.writeLine("block = " + resolveBlockId(block.successors[0], blockNames) +
-                                      ";");
-                    emitter.writeLine("continue;");
+                    emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
                     emitter.closeBlock();
                     emitter.openBlock("else");
                     emitter.writeLine("return;");

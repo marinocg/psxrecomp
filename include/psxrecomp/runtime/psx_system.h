@@ -258,6 +258,16 @@ class PsxSystem
     u32 invokeCallbackRaw(u32 address);
 
     /**
+     * @brief Apply queued HookEntryInt register state to callback registers.
+     *
+     * HookEntryInt behaves like longjmp(setjmp_buf, 1), so only callee-saved
+     * registers plus v0 are restored. Caller-saved registers are left intact.
+     *
+     * @return true if queued register state was applied.
+     */
+    bool consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut);
+
+    /**
      * @brief Current critical-section nesting depth.
      */
     u32 criticalSectionDepth() const;
@@ -297,6 +307,9 @@ class PsxSystem
     HookEntryIntState m_hookEntryInt;
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
+    bool m_hasPendingCallbackRegisters = false;
+    std::array<u32, 32> m_pendingCallbackRegisters{};
+    std::array<bool, 32> m_pendingCallbackRegisterMask{};
 
     /// BIOS IRQ priority chains (C0:02 SysEnqIntRP / C0:03 SysDeqIntRP).
     /// Each head is a PSX pointer to a 16-byte structure in RAM.

@@ -124,6 +124,9 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_hookEntryInt = {};
     m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
+    m_hasPendingCallbackRegisters = false;
+    m_pendingCallbackRegisters = {};
+    m_pendingCallbackRegisterMask.fill(false);
     m_frameCount = 0;
     m_cpuCycles = 0;
     m_gpuDrainCarry = 0;

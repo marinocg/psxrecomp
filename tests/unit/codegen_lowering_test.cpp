@@ -124,7 +124,48 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 3: Self-loop prevention
+    // Test 3: Single continuation fallback must not hijack other predecessors
+    //
+    // A continuation block may have one continuation entry but several
+    // predecessors. Unmatched predecessors must still return.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_single_cont_fallback_guard", 0x80035000);
+        auto& fromMapped = builder.createBlock(function, "from_mapped");
+        auto& fromUnmapped = builder.createBlock(function, "from_unmapped");
+        auto& barrier = builder.createBlock(function, "barrier");
+        auto& resumeOnly = builder.createBlock(function, "resume_only");
+
+        fromMapped.instructions.push_back(
+            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80035000));
+        fromMapped.successors = {"barrier"};
+
+        fromUnmapped.instructions.push_back(
+            builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80035004));
+        fromUnmapped.successors = {"barrier"};
+
+        barrier.continuations["from_mapped"] = "resume_only";
+
+        resumeOnly.instructions.push_back(
+            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80035008));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "single_cont_guard_module");
+
+        // Only the mapped predecessor branch should route to resume_only.
+        assert(source.find("if (previousBlock == BlockId::from_mapped)") != std::string::npos);
+        assert(source.find("block = BlockId::resume_only;") != std::string::npos);
+        // Unmapped predecessors must still hit a fallback return.
+        assert(source.find("return;") != std::string::npos);
+
+        std::cerr << "[PASS] single continuation fallback guarded by predecessor ambiguity\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 4: Self-loop prevention
     //
     // When a block's sole successor is itself AND a next block exists
     // in the function, the lowering should redirect to the next block
@@ -163,7 +204,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 4: Non-self-loop fallthrough is preserved
+    // Test 5: Non-self-loop fallthrough is preserved
     //
     // When a block's successor is a different block, no redirection
     // should occur - the normal successor is used.
@@ -194,7 +235,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 5: Barrier block with empty continuations falls through to return
+    // Test 6: Barrier block with empty continuations falls through to return
     //
     // A block_external block with no continuations should still produce
     // a return statement.
@@ -226,7 +267,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 6: BRANCH unconditional self-loop spin-wait detection
+    // Test 7: BRANCH unconditional self-loop spin-wait detection
     //
     // When a block's BRANCH instruction has BOTH successors pointing to
     // itself (unconditional self-loop / spin-wait), the generated code
@@ -272,7 +313,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 7: Conditional self-loop is a normal branch (not advanceFrame)
+    // Test 8: Conditional self-loop is a normal branch (not advanceFrame)
     //
     // When a BRANCH has only ONE successor pointing to self (a regular
     // loop like BSS clearing or memcpy), it should be treated as a
@@ -324,7 +365,43 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 8: Register JUMP fallback to jump dispatch
+    // Test 8: BRANCH fallback to jump dispatch for out-of-function targets
+    //
+    // Conditional branches can target blocks outside the current emitted
+    // function when the CFG is partitioned. Those edges must dispatch via
+    // jumpRecompiledFunction, not silently return.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_branch_external_fallback", 0x80091000);
+        auto& entry = builder.createBlock(function, "entry");
+        auto& localExit = builder.createBlock(function, "local_exit");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::BRANCH, {Value::makeRegister(1), Value::makeAddress(0x80091020)}, {},
+            0x80091004));
+        entry.successors = {"block_external", "local_exit"};
+
+        localExit.instructions.push_back(
+            builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80091008));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "branch_external_fallback_module");
+
+        const std::string recompiledProbe = "if (!jumpRecompiledFunction(context, 0x91020))";
+        const std::string failProbe = "failUnsupportedJump(0x91020, 0x80091004);";
+
+        assert(source.find(recompiledProbe) != std::string::npos);
+        assert(source.find(failProbe) != std::string::npos);
+        assert(source.find("block = BlockId::local_exit;") != std::string::npos);
+
+        std::cerr << "[PASS] branch external successor dispatches via jump fallback\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 9: Register JUMP fallback to jump dispatch
     //
     // For JR/JALR-like dynamic jumps, generated code should try intrinsic
     // handling first, then attempt jumpRecompiledFunction before raising
