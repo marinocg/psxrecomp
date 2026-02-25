@@ -425,14 +425,9 @@ void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
 
 void PsxSystem::serviceInterrupts()
 {
-    if (m_inCallbackInvocation)
-    {
-        return;
-    }
-
     syncLevelInterruptSources();
 
-    const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
+    u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
     if (traceIrqFlowEnabled())
     {
         std::ostringstream msg;
@@ -461,27 +456,6 @@ void PsxSystem::serviceInterrupts()
         }
         return;
     }
-    if (traceIrqFlowEnabled())
-    {
-        std::ostringstream msg;
-        msg << "event=irq_dispatch_order source=service_interrupts pending_masked=0x" << std::hex
-            << pendingMasked << " lines=" << formatPendingLineOrder(pendingMasked);
-        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-    }
-
-    // BIOS-style exception handler priority chains (installed via SysEnqIntRP).
-    // These handlers are responsible for updating SDK counters (eg. PSn00bSDK VSync)
-    // and for acknowledging IRQ sources.
-    if (dispatchIrqChains())
-    {
-        if (traceIrqFlowEnabled())
-        {
-            m_logger.log(LogLevel::Info, "irq_trace",
-                         "event=return_from_exception source=irq_chain_dispatch");
-        }
-        return;
-    }
-
     // HookEntryInt descriptor callback runs while IRQ status bits are visible.
     if (pendingMasked != 0 && m_criticalSectionDepth == 0 &&
         m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
@@ -506,6 +480,30 @@ void PsxSystem::serviceInterrupts()
             }
             return;
         }
+    }
+
+    // The hook callback may acknowledge IRQ bits. Recompute pending state
+    // before running priority chains so we don't act on stale masks.
+    pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
+    if (pendingMasked != 0 && traceIrqFlowEnabled())
+    {
+        std::ostringstream msg;
+        msg << "event=irq_dispatch_order source=service_interrupts pending_masked=0x" << std::hex
+            << pendingMasked << " lines=" << formatPendingLineOrder(pendingMasked);
+        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+    }
+
+    // BIOS-style exception handler priority chains (installed via SysEnqIntRP).
+    // These handlers are responsible for updating SDK counters (eg. PSn00bSDK VSync)
+    // and for acknowledging IRQ sources.
+    if (pendingMasked != 0 && dispatchIrqChains())
+    {
+        if (traceIrqFlowEnabled())
+        {
+            m_logger.log(LogLevel::Info, "irq_trace",
+                         "event=return_from_exception source=irq_chain_dispatch");
+        }
+        return;
     }
 
     // Kernel event delivery (OpenEvent/EnableEvent model).

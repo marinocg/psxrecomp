@@ -658,9 +658,32 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeBlank();
     emitter.writeLine("// Install callback invoker bridge for interrupt dispatch.");
     emitter.writeLine("system.setCallbackInvoker(");
-    emitter.writeLine(
-        "    [&context](u32 address) -> u32 { callRecompiledFunction(context, address); "
-        "return context.regs[Registers::V0]; });");
+    emitter.writeLine("    [&context](u32 address) -> u32");
+    emitter.openBlock("");
+    emitter.writeLine("const auto savedRegs = context.regs;");
+    emitter.writeLine("const u32 savedHi = context.hi;");
+    emitter.writeLine("const u32 savedLo = context.lo;");
+    emitter.writeLine("constexpr u32 kInterruptStackTop = 0x801ff000;");
+    emitter.writeLine("context.regs[Registers::SP] = kInterruptStackTop;");
+    emitter.writeLine("context.regs[Registers::FP] = kInterruptStackTop;");
+    emitter.writeLine("context.regs[Registers::RA] = 0;");
+    emitter.writeLine("try");
+    emitter.openBlock("");
+    emitter.writeLine("callRecompiledFunction(context, address);");
+    emitter.writeLine("const u32 callbackResult = context.regs[Registers::V0];");
+    emitter.writeLine("context.regs = savedRegs;");
+    emitter.writeLine("context.hi = savedHi;");
+    emitter.writeLine("context.lo = savedLo;");
+    emitter.writeLine("return callbackResult;");
+    emitter.closeBlock();
+    emitter.writeLine("catch (...) ");
+    emitter.openBlock("");
+    emitter.writeLine("context.regs = savedRegs;");
+    emitter.writeLine("context.hi = savedHi;");
+    emitter.writeLine("context.lo = savedLo;");
+    emitter.writeLine("throw;");
+    emitter.closeBlock();
+    emitter.closeBlock(");");
 
     // Set initial registers from PSX-EXE header.
     {
