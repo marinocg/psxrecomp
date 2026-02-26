@@ -20,6 +20,9 @@ bool hasSideEffects(Opcode opcode)
     case Opcode::STORE16:
     case Opcode::MMIO_STORE:
     case Opcode::CALL:
+    case Opcode::COP0_MFC:
+    case Opcode::COP0_MTC:
+    case Opcode::COP0_RFE:
     case Opcode::SYSCALL:
     case Opcode::BRANCH:
     case Opcode::JUMP:

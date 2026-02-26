@@ -1,10 +1,8 @@
 #include "psxrecomp/runtime/psx_system.h"
-#include "psxrecomp/runtime/resource_pack.h"
+#include "runtime_test_sections.h"
 
 #include <array>
 #include <cassert>
-#include <filesystem>
-#include <fstream>
 #include <vector>
 
 namespace MemoryMap = psxrecomp::MemoryMap;
@@ -12,13 +10,12 @@ namespace MemoryMap = psxrecomp::MemoryMap;
 int main()
 {
     using psxrecomp::Address;
+    using psxrecomp::runtime::Cop0;
     using psxrecomp::runtime::DmaController;
     using psxrecomp::runtime::DmaPort;
     using psxrecomp::runtime::InterruptController;
     using psxrecomp::runtime::InterruptLine;
-    using psxrecomp::runtime::LogLevel;
     using psxrecomp::runtime::PsxSystem;
-    using psxrecomp::runtime::ResourcePack;
 
     PsxSystem system;
     assert(system.initialize());
@@ -228,6 +225,46 @@ int main()
     system.callBiosVector(0xB0, hookRegs.data(), hookRegs.size());
     system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
 
+    // IRQ delivery should populate COP0 and ReturnFromException should
+    // restore Status low mode bits via RFE.
+    constexpr Address cop0HookDescriptorAddress = 0x00001100;
+    constexpr psxrecomp::u32 cop0HookCallbackAddress = 0x80003000u;
+    system.write<psxrecomp::u32>(cop0HookDescriptorAddress, cop0HookCallbackAddress);
+    std::array<psxrecomp::u32, 32> cop0HookRegs{};
+    cop0HookRegs[9] = 0x19; // HookEntryInt
+    cop0HookRegs[4] = cop0HookDescriptorAddress;
+    system.callBiosVector(0xB0, cop0HookRegs.data(), cop0HookRegs.size());
+
+    bool cop0ReturnInvoked = false;
+    system.setCallbackInvoker(
+        [&system, &cop0ReturnInvoked,
+         cop0HookCallbackAddress](psxrecomp::u32 address) -> psxrecomp::u32
+        {
+            if (address == cop0HookCallbackAddress)
+            {
+                cop0ReturnInvoked = true;
+                std::array<psxrecomp::u32, 32> regs{};
+                regs[9] = 0x17; // ReturnFromException
+                system.callBiosVector(0xB0, regs.data(), regs.size());
+            }
+            return 0;
+        });
+
+    system.cop0().mtc0(Cop0::RegisterIndex::Status, 0x0Bu);
+    system.debugOverlay().setLastProgramCounter(0x80023456u);
+    system.interrupts().restoreState(static_cast<psxrecomp::u32>(InterruptLine::VBlank),
+                                     static_cast<psxrecomp::u32>(InterruptLine::VBlank));
+    system.serviceInterrupts();
+    assert(cop0ReturnInvoked);
+    assert(system.cop0().mfc0(Cop0::RegisterIndex::Epc) == 0x80023456u);
+    assert((system.cop0().mfc0(Cop0::RegisterIndex::Cause) & 0x7Cu) == 0u);
+    assert((system.cop0().mfc0(Cop0::RegisterIndex::Status) & 0x3Fu) == 0x0Bu);
+
+    cop0HookRegs = {};
+    cop0HookRegs[9] = 0x18; // ResetEntryInt
+    system.callBiosVector(0xB0, cop0HookRegs.data(), cop0HookRegs.size());
+    system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
+
     Address spuBase =
         psxrecomp::runtime::DmaController::ChannelBase +
         psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);
@@ -429,97 +466,9 @@ int main()
     assert(pollOnlySystem.frameCount() == 1);
     assert(pollOnlySystem.cpuCyclesElapsed() == 564480);
 
-    bool sawInfo = false;
-    system.logger().setMinLevel(LogLevel::Info);
-    system.logger().setCallback(
-        [&sawInfo](const psxrecomp::runtime::LogEvent& event)
-        {
-            if (event.level == LogLevel::Info && event.category == "bios")
-            {
-                sawInfo = true;
-            }
-        });
-    psxrecomp::u32 regs[32] = {'A'};
-    system.callBiosSyscall(0x3F, regs, 32);
-    assert(sawInfo);
-
-    system.callBiosSyscall(0x3F, regs, 1);
-    auto lastEvent = system.logger().lastEvent();
-    assert(lastEvent.has_value());
-    assert(lastEvent->level == LogLevel::Warn);
-
-    system.runFrame();
-    assert(system.debugOverlay().frameCounter() >= 1);
-    assert(system.debugOverlay().dmaTransfers() >= 2);
-
-    auto ramDump = system.dumpRam();
-    auto vramDump = system.dumpVram();
-    auto spuDump = system.dumpSpuRam();
-    assert(ramDump.size() == MemoryMap::RAM_SIZE);
-    assert(!vramDump.empty());
-    assert(!spuDump.empty());
-
-    auto checksum1 = system.stateChecksum();
-    auto state = system.serializeState();
-
-    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xAABBCCDDu);
-    assert(system.gpu().fifoDepth() > 0);
-    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0x1Au);
-    assert((system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0) &
-            0x1Fu) == 0x1Au);
-
-    assert(system.deserializeState(state));
-    auto checksum2 = system.stateChecksum();
-    assert(checksum1 == checksum2);
-    assert(system.gpu().fifoDepth() == 0);
-    assert(system.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0) == 0);
-    assert(system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0) == 0);
-
-    auto stateWithInterrupts = state;
-    const size_t interruptStateOffset = sizeof(psxrecomp::u32) + MemoryMap::RAM_SIZE +
-                                        sizeof(psxrecomp::u32) + MemoryMap::SCRATCHPAD_SIZE +
-                                        sizeof(psxrecomp::u32) + MemoryMap::BIOS_SIZE;
-    stateWithInterrupts[interruptStateOffset + 0] = 0xAA;
-    stateWithInterrupts[interruptStateOffset + 1] = 0x55;
-    stateWithInterrupts[interruptStateOffset + 2] = 0x00;
-    stateWithInterrupts[interruptStateOffset + 3] = 0xF0;
-    stateWithInterrupts[interruptStateOffset + 4] = 0x0F;
-    stateWithInterrupts[interruptStateOffset + 5] = 0x00;
-    stateWithInterrupts[interruptStateOffset + 6] = 0x00;
-    stateWithInterrupts[interruptStateOffset + 7] = 0x00;
-    assert(system.deserializeState(stateWithInterrupts));
-    assert(system.interrupts().readStatus() == (0xF00055AAu & InterruptController::ValidLineMask));
-    assert(system.interrupts().readMask() == 0x0000000Fu);
-
-    auto stateWithJunk = state;
-    const auto firstRamByteBeforeFailedLoad = system.read<psxrecomp::u8>(MemoryMap::RAM_BASE);
-    stateWithJunk[4] = static_cast<psxrecomp::u8>(firstRamByteBeforeFailedLoad ^ 0xFFu);
-    stateWithJunk.push_back(0x99);
-    assert(!system.deserializeState(stateWithJunk));
-    assert(system.read<psxrecomp::u8>(MemoryMap::RAM_BASE) == firstRamByteBeforeFailedLoad);
-
-    auto tempRoot = std::filesystem::temp_directory_path() / "psxrecomp_runtime_test_assets";
-    std::filesystem::create_directories(tempRoot / "textures");
-    {
-        std::ofstream file(tempRoot / "textures" / "logo.bin", std::ios::binary);
-        const char bytes[] = {1, 2, 3, 4};
-        file.write(bytes, sizeof(bytes));
-    }
-
-    ResourcePack pack;
-    assert(!pack.loadFromDirectory(tempRoot / "missing"));
-    assert(pack.loadFromDirectory(tempRoot));
-    assert(pack.hasResource("textures/logo.bin"));
-    auto resource = pack.readResource("textures/logo.bin");
-    assert(resource.has_value());
-    assert(resource->size() == 4);
-    assert(pack.resourceCount() == 1);
-
-    std::filesystem::remove(tempRoot / "textures" / "logo.bin");
-    auto missingResource = pack.readResource("textures/logo.bin");
-    assert(!missingResource.has_value());
-
-    std::filesystem::remove_all(tempRoot);
+    runRuntimeLoggingAndDumpChecks(system);
+    runRuntimeStateSerializationChecks(system);
+    runRuntimeResourcePackChecks();
 
     return 0;
 }

@@ -118,6 +118,12 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "jump";
     case ir::Opcode::CALL:
         return "call";
+    case ir::Opcode::COP0_MFC:
+        return "cop0_mfc";
+    case ir::Opcode::COP0_MTC:
+        return "cop0_mtc";
+    case ir::Opcode::COP0_RFE:
+        return "cop0_rfe";
     case ir::Opcode::SYSCALL:
         return "syscall";
     case ir::Opcode::TRAP:

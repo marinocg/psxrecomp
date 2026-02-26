@@ -105,6 +105,7 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         // to the interrupted execution point.
         if (m_inCallbackInvocation)
         {
+            m_cop0.rfe();
             if (traceIrqFlowEnabled())
             {
                 std::ostringstream msg;

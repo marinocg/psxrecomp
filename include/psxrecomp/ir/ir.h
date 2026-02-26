@@ -54,6 +54,9 @@ enum class Opcode
     BRANCH,
     JUMP,
     CALL,
+    COP0_MFC,
+    COP0_MTC,
+    COP0_RFE,
     SYSCALL,
     TRAP,
     RETURN

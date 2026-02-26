@@ -157,6 +157,17 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
         emit(Opcode::MOVE, {Value::makeRegister(instr.rs)},
              {Value::makeSpecial(SpecialRegister::LO)});
         break;
+    case disasm::Opcode::MFC0:
+        emit(Opcode::COP0_MFC, {Value::makeImmediate(static_cast<s32>(instr.rd))},
+             {Value::makeRegister(instr.rt)});
+        break;
+    case disasm::Opcode::MTC0:
+        emit(Opcode::COP0_MTC,
+             {Value::makeImmediate(static_cast<s32>(instr.rd)), Value::makeRegister(instr.rt)}, {});
+        break;
+    case disasm::Opcode::RFE:
+        emit(Opcode::COP0_RFE, {}, {});
+        break;
     case disasm::Opcode::ADDI:
     case disasm::Opcode::ADDIU:
         emit(Opcode::ADD,

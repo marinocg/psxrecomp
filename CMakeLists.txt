@@ -65,6 +65,7 @@ set(ISO_SOURCES
 set(DISASM_SOURCES
     src/disasm/analysis_helpers.cpp
     src/disasm/analysis.cpp
+    src/disasm/analysis_flow.cpp
     src/disasm/mips_disassembler.cpp
     src/disasm/instruction.cpp
     src/disasm/instruction_format.cpp
@@ -86,16 +87,23 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen.cpp
     src/recompiler/codegen_build.cpp
     src/recompiler/codegen_runner.cpp
+    src/recompiler/codegen_runner_main.cpp
     src/recompiler/codegen_lowering.cpp
     src/recompiler/codegen_lowering_helpers.cpp
     src/recompiler/codegen_lowering_instructions.cpp
+    src/recompiler/codegen_lowering_control_flow.cpp
+    src/recompiler/codegen_runtime_helpers.cpp
     src/recompiler/cpp_emitter.cpp
+    src/recompiler/pipeline_analysis_helpers.cpp
     src/recompiler/pipeline_helpers.cpp
+    src/recompiler/pipeline_helpers_output.cpp
+    src/recompiler/pipeline_selection_helpers.cpp
     src/recompiler/pipeline.cpp
 )
 
 set(RUNTIME_SOURCES
     src/runtime/cdrom.cpp
+    src/runtime/cop0.cpp
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gpu.cpp
@@ -109,6 +117,7 @@ set(RUNTIME_SOURCES
     src/runtime/kernel_events.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
+    src/runtime/psx_system_interrupts.cpp
     src/runtime/psx_system_bios.cpp
     src/runtime/psx_system_bios_a0.cpp
     src/runtime/psx_system_bios_b0.cpp
@@ -248,10 +257,18 @@ if(BUILD_TESTS)
     add_test(NAME gpu_test COMMAND gpu_test)
     add_executable(runtime_test
         tests/unit/runtime_test.cpp
+        tests/unit/runtime_test_sections.cpp
         ${RUNTIME_SOURCES}
     )
     target_include_directories(runtime_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
     add_test(NAME runtime_test COMMAND runtime_test)
+
+    add_executable(cop0_test
+        tests/unit/cop0_test.cpp
+        src/runtime/cop0.cpp
+    )
+    target_include_directories(cop0_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    add_test(NAME cop0_test COMMAND cop0_test)
 
     add_executable(spu_test
         tests/unit/spu_test.cpp
@@ -304,6 +321,8 @@ if(BUILD_TESTS)
 
     add_executable(bios_vector_test
         tests/unit/bios_vector_test.cpp
+        tests/unit/bios_vector_test_sections.cpp
+        tests/unit/bios_vector_test_interrupts.cpp
         ${RUNTIME_SOURCES}
     )
     target_include_directories(bios_vector_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -319,6 +338,7 @@ if(BUILD_TESTS)
 
     add_executable(interrupt_dispatcher_test
         tests/unit/interrupt_dispatcher_test.cpp
+        tests/unit/interrupt_dispatcher_test_sections.cpp
         src/runtime/interrupt_dispatcher.cpp
         src/runtime/kernel_events.cpp
         src/runtime/interrupt_controller.cpp

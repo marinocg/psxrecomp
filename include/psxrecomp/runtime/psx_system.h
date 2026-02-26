@@ -1,6 +1,7 @@
 #pragma once
 
 #include "psxrecomp/runtime/cdrom.h"
+#include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/debug_overlay.h"
 #include "psxrecomp/runtime/dma.h"
 #include "psxrecomp/runtime/gpu.h"
@@ -164,6 +165,7 @@ class PsxSystem
     RuntimeLogger& logger();
     RuntimeDebugOverlay& debugOverlay();
     TimerController& timers();
+    Cop0& cop0();
 
     void setDiscSwapInfo(DiscSwapInfo info);
     const DiscSwapInfo& discSwapInfo() const;
@@ -296,6 +298,7 @@ class PsxSystem
     RuntimeLogger m_logger;
     RuntimeDebugOverlay m_debugOverlay;
     TimerController m_timers;
+    Cop0 m_cop0;
     DiscSwapInfo m_discSwapInfo;
     u32 m_frameCount = 0;
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
