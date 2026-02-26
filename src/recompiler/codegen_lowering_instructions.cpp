@@ -337,7 +337,14 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         if (!instruction.inputs.empty())
         {
             std::string code = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine("callSyscall(context.system, " + code + ", context.regs);");
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
+            emitter.writeLine("callSyscall(context, " + code + ", " + sourcePc + ");");
         }
         break;
     case ir::Opcode::TRAP:

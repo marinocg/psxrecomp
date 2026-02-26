@@ -80,9 +80,9 @@ void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)
     assert(lastEvent->level == LogLevel::Warn);
 
     const auto dmaTransfersBeforeFrame = system.debugOverlay().dmaTransfers();
-    const psxrecomp::Address spuBase = DmaController::ChannelBase +
-                                       DmaController::ChannelStride *
-                                           static_cast<psxrecomp::Address>(DmaPort::Spu);
+    const psxrecomp::Address spuBase =
+        DmaController::ChannelBase +
+        DmaController::ChannelStride * static_cast<psxrecomp::Address>(DmaPort::Spu);
     constexpr psxrecomp::Address spuDmaAddress = 0x00016000u;
     system.write<psxrecomp::u32>(spuDmaAddress, 0xA5A5A5A5u);
     system.write<psxrecomp::u32>(spuBase + 0x0, spuDmaAddress);

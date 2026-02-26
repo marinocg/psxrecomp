@@ -5,8 +5,8 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 ## Overall completion (estimate)
 
-- **Project-wide completion:** ~59%
-- **End-to-end playable pipeline:** ~50%
+- **Project-wide completion:** ~61%
+- **End-to-end playable pipeline:** ~54%
 
 ## Subsystem status (estimate)
 
@@ -14,18 +14,18 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 | Area                 | Estimated completion |
 | -------------------- | -------------------: |
-| Pipeline & Tooling   |                 ~62% |
+| Pipeline & Tooling   |                 ~64% |
 | ISO/BIN Parsing      |                 ~85% |
 | PSX-EXE Loader       |                 ~90% |
-| Disassembler         |                 ~75% |
-| IR Pipeline          |                 ~85% |
-| Recompiler / Codegen |                 ~80% |
-| Runtime Library      |                 ~75% |
+| Disassembler         |                 ~77% |
+| IR Pipeline          |                 ~87% |
+| Recompiler / Codegen |                 ~82% |
+| Runtime Library      |                 ~77% |
 | GPU Emulation        |                 ~76% |
 | SPU Emulation        |                 ~45% |
 | CD-ROM               |                 ~42% |
 
-### Pipeline & Tooling (~62%)
+### Pipeline & Tooling (~64%)
 
 **Present**
 
@@ -35,6 +35,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Bundle output includes resources plus runtime source/include copies for standalone CMake builds.
 - Fixture generator + validation scripts exist for malformed/good/rich ISO scenarios.
 - CI recompile-demos workflow builds generated C++ artifacts with SDL2 presenter support on Linux, macOS, and Windows.
+- Demo verification harness now emits per-demo render screenshots and a summary report (`out/recompiled-demos-ubuntu-latest/verification/reports/summary.csv`).
 
 **Missing**
 
@@ -66,11 +67,11 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 - Additional diagnostics for edge cases and BIOS integration hooks.
 
-### Disassembler (~75%)
+### Disassembler (~77%)
 
 **Present**
 
-- Core integer instruction decoding, COP0 moves, COP2/GTE mnemonics.
+- Core integer instruction decoding, COP0 transfer/control decode (`MFC0`/`MTC0`/`CFC0`/`CTC0`/`RFE`), COP2/GTE mnemonics.
 - Delay slot flagging and target resolution helpers.
 - Function boundary discovery heuristics and indirect jump/jump table detection.
 - Code-vs-data segmentation helpers for mixed sections.
@@ -80,27 +81,28 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 - Broader decode coverage for edge-case encodings and validation in real binaries.
 
-### IR Pipeline (~85%)
+### IR Pipeline (~87%)
 
 **Present**
 
 - IR data structures, CFG builder, SSA conversion, and verification utilities.
 - Function boundary detection and call graph discovery in the pipeline.
 - MIPS→IR lowering for arithmetic/logical ops, shifts, mult/div, HI/LO moves, branches, jumps,
-  calls, returns, syscalls, and MMIO intrinsics with non-nop delay slots, including link-register semantics for `JAL`/`JALR` and register-target `JR` lowering.
+  calls, returns, syscalls, COP0 `MFC0`/`MTC0`/`RFE`, and MMIO intrinsics with non-nop delay slots, including link-register semantics for `JAL`/`JALR` and register-target `JR` lowering.
 - BIOS JAL targets (addresses in the `A0`/`B0`/`C0` vector range) are now lowered to `CALL` IR ops instead of `SYSCALL`, routing them through `callBiosVector` for correct dispatch.
 - Optimization passes (constant folding, DCE, CSE, LICM) integrated into the pipeline.
 
 **Missing**
 
-- Coprocessor-specific IR modeling and richer memory width semantics in backend lowering (byte/halfword/unaligned currently map to generic LOAD/STORE IR ops).
+- Remaining COP0/COP branch lowering (`CFC0`/`CTC0`, `BC0F`/`BC0T`) and richer memory width semantics in backend lowering (byte/halfword/unaligned currently map to generic LOAD/STORE IR ops).
 
-### Recompiler / Codegen (~80%)
+### Recompiler / Codegen (~82%)
 
 **Present**
 
 - Structured C++ emission for core IR ops with control flow and phi-node lowering.
 - Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
+- COP0 lowering now emits runtime calls for `mfc0`/`mtc0`/`rfe`, and syscall lowering routes non-BIOS syscall codes through COP0 exception entry + vector dispatch.
 - Peephole optimizations, logging hooks, and debug metadata in generated output.
 - End-to-end pipeline validation and compile-and-run checks in unit tests.
 - Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs, including per-run trend snapshots and top-family prioritization.
@@ -116,13 +118,14 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 **Missing**
 
-- Higher-level ABI conventions (stack, callee-saved handling) and aggressive inlining heuristics.
+- Higher-level ABI conventions (stack, callee-saved handling), remaining COP0 branch/control transfer variants, and aggressive inlining heuristics.
 
-### Runtime Library (~75%)
+### Runtime Library (~77%)
 
 **Present**
 
 - Core PSX system scaffolding (memory, basic subsystems).
+- Minimal COP0 runtime device with `Status`/`Cause`/`EPC`/`BadVAddr` register backing, exception entry bookkeeping, and `RFE` mode restore behavior.
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
 - Structured runtime logging with per-category events and configurable verbosity.
 - Debug overlay counters for frame timing, DMA transfers, and interrupt activity.
@@ -137,10 +140,13 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - System initialization stubs for C0 vector (EnqueueTimerAndVblankIrqs, SysEnqIntRP, InstallExceptionHandlers, etc.).
 - BIOS trace support via `PSXRECOMP_TRACE_BIOS` environment variable.
 - Refactored runtime into focused modules: `psx_system.cpp` and `psx_system_bios.cpp`.
+- COP0 state is serialized in save-state snapshots and restored on load.
 
 **Missing**
 
 - Cycle-exact timer edge behavior still needs hardware-trace validation.
+- COP0 interrupt-mask/pending wiring parity (`Status.IM` with `Cause.IP`) and precise exception-vector selection parity across all exception sources are still incomplete.
+- Reset/boot-state parity with reference emulators/hardware (initial COP0 snapshots and timing alignment) is not yet finalized.
 - Remaining BIOS function coverage (~168 functions still unimplemented); see [BIOS Functions Roadmap](bios_functions_roadmap.md).
 
 ### GPU Emulation (~76%)

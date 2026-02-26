@@ -24,11 +24,13 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     std::vector<Address> entrySeeds = {entryAddress};
     for (const auto& instruction : disassembled)
     {
-        if (instruction.opcode == disasm::Opcode::JAL || instruction.opcode == disasm::Opcode::BGEZAL ||
+        if (instruction.opcode == disasm::Opcode::JAL ||
+            instruction.opcode == disasm::Opcode::BGEZAL ||
             instruction.opcode == disasm::Opcode::BLTZAL)
         {
             auto target = instruction.getTargetAddress();
-            if (target.has_value() && *target >= baseAddress && *target < binaryEnd && (*target % 4) == 0)
+            if (target.has_value() && *target >= baseAddress && *target < binaryEnd &&
+                (*target % 4) == 0)
             {
                 entrySeeds.push_back(*target);
             }
@@ -47,10 +49,11 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
                 const size_t offset = addr - baseAddress;
                 if (offset + 4 <= exeImage.programData.size())
                 {
-                    const uint32_t value = static_cast<uint32_t>(exeImage.programData[offset]) |
-                                           (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
-                                           (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
-                                           (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
+                    const uint32_t value =
+                        static_cast<uint32_t>(exeImage.programData[offset]) |
+                        (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
+                        (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
+                        (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
                     if (value >= baseAddress && value < endAddress && (value % 4) == 0)
                     {
                         harvestedPointers.push_back(value);
@@ -92,7 +95,8 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
                     const u32 lo = next.immediate & 0xFFFFu;
                     const s32 slo =
                         (lo & 0x8000u) ? static_cast<s32>(lo | 0xFFFF0000u) : static_cast<s32>(lo);
-                    const Address addr = static_cast<Address>((hiImm << 16) + static_cast<u32>(slo));
+                    const Address addr =
+                        static_cast<Address>((hiImm << 16) + static_cast<u32>(slo));
                     if (addr >= baseAddress && addr < endAddress && (addr % 4) == 0 &&
                         existingSeeds.find(addr) == existingSeeds.end())
                     {
@@ -162,7 +166,8 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     layout.boundaries = disasm::findFunctionBoundaries(layout.codeInstructions, additionalStarts);
     if (layout.boundaries.empty())
     {
-        layout.boundaries.push_back({entryAddress, layout.codeInstructions.back().address, false, false});
+        layout.boundaries.push_back(
+            {entryAddress, layout.codeInstructions.back().address, false, false});
     }
 
     bool entryFound = false;
@@ -179,18 +184,18 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
         layout.boundaries.push_back({entryAddress, entryAddress, false, false});
     }
 
-    std::sort(layout.boundaries.begin(), layout.boundaries.end(),
-              [entryAddress](const disasm::FunctionBoundary& lhs,
-                             const disasm::FunctionBoundary& rhs)
-              {
-                  const bool lhsIsEntry = lhs.start == entryAddress;
-                  const bool rhsIsEntry = rhs.start == entryAddress;
-                  if (lhsIsEntry != rhsIsEntry)
-                  {
-                      return lhsIsEntry;
-                  }
-                  return lhs.start < rhs.start;
-              });
+    std::sort(
+        layout.boundaries.begin(), layout.boundaries.end(),
+        [entryAddress](const disasm::FunctionBoundary& lhs, const disasm::FunctionBoundary& rhs)
+        {
+            const bool lhsIsEntry = lhs.start == entryAddress;
+            const bool rhsIsEntry = rhs.start == entryAddress;
+            if (lhsIsEntry != rhsIsEntry)
+            {
+                return lhsIsEntry;
+            }
+            return lhs.start < rhs.start;
+        });
 
     std::vector<disasm::FunctionBoundary> filledBoundaries;
     filledBoundaries.reserve(layout.boundaries.size() * 2);

@@ -409,8 +409,8 @@ bool PsxSystem::dispatchIrqChains()
             {
                 std::ostringstream msg;
                 msg << "event=irq_dispatch_order source=irq_chain prio=" << std::dec << prio
-                    << " index=" << safety << " node=0x" << std::hex << node << " func1=0x"
-                    << func1 << " func2=0x" << func2;
+                    << " index=" << safety << " node=0x" << std::hex << node << " func1=0x" << func1
+                    << " func2=0x" << func2;
                 m_logger.log(LogLevel::Info, "irq_trace", msg.str());
             }
 

@@ -106,8 +106,7 @@ void appendManifestDiagnostics(std::ostringstream& stream, const PipelineResult&
         stream << "      \"severity\": \"" << escapeJson(diag.severity) << "\",\n";
         stream << "      \"message\": \"" << escapeJson(diag.message) << "\",\n";
         stream << "      \"context\": {\n";
-        stream << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file))
-               << "\",\n";
+        stream << "        \"file\": \"" << escapeJson(summarizePath(diag.context.file)) << "\",\n";
         stream << "        \"module\": \"" << escapeJson(diag.context.module) << "\"";
         if (diag.context.offset.has_value())
         {

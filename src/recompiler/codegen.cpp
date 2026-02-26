@@ -112,6 +112,11 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("u32 pendingCycles = 0;");
     emitter.closeBlock(";");
     emitter.writeBlank();
+    emitter.writeLine(
+        "inline bool jumpRecompiledFunction(RecompilerContext& context, Address address);");
+    emitter.writeLine(
+        "inline bool callRecompiledFunction(RecompilerContext& context, Address address);");
+    emitter.writeBlank();
     emitter.openBlock("namespace");
     emitRuntimeSupportHelpers(emitter);
     emitter.closeBlock();

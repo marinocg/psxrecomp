@@ -26,7 +26,8 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 sourcePc = sourceStream.str();
             }
             std::optional<std::string> takenTargetLiteral;
-            if (instruction.inputs.size() >= 2 && instruction.inputs[1].kind == ir::ValueKind::ADDRESS)
+            if (instruction.inputs.size() >= 2 &&
+                instruction.inputs[1].kind == ir::ValueKind::ADDRESS)
             {
                 std::ostringstream targetStream;
                 targetStream << "0x" << std::hex << (instruction.inputs[1].address & 0x1FFFFFFFu);
@@ -47,7 +48,8 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
 
                 if (successorName == "block_external" && externalTarget.has_value())
                 {
-                    emitter.openBlock("if (!jumpRecompiledFunction(context, " + *externalTarget + "))");
+                    emitter.openBlock("if (!jumpRecompiledFunction(context, " + *externalTarget +
+                                      "))");
                     emitter.writeLine("failUnsupportedJump(" + *externalTarget + ", " + sourcePc +
                                       ");");
                     emitter.closeBlock();
@@ -65,7 +67,8 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     std::ostringstream targetStream;
                     targetStream << "0x" << std::hex << targetAddress;
                     const std::string targetLiteral = targetStream.str();
-                    emitter.openBlock("if (!jumpRecompiledFunction(context, " + targetLiteral + "))");
+                    emitter.openBlock("if (!jumpRecompiledFunction(context, " + targetLiteral +
+                                      "))");
                     emitter.writeLine("failUnsupportedJump(" + targetLiteral + ", " + sourcePc +
                                       ");");
                     emitter.closeBlock();
@@ -123,7 +126,8 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
         }
         return true;
     case ir::Opcode::JUMP:
-        if (!instruction.inputs.empty() && instruction.inputs.front().kind == ir::ValueKind::REGISTER)
+        if (!instruction.inputs.empty() &&
+            instruction.inputs.front().kind == ir::ValueKind::REGISTER)
         {
             std::string target = valueToExpr(instruction.inputs.front(), context);
             std::string sourcePc = "0";
@@ -175,7 +179,8 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
         else if (!block.successors.empty())
         {
             const std::string successor = resolveBlockId(block.successors.front(), blockNames);
-            if (successor.find("block_external") != std::string::npos && !instruction.inputs.empty() &&
+            if (successor.find("block_external") != std::string::npos &&
+                !instruction.inputs.empty() &&
                 instruction.inputs.front().kind == ir::ValueKind::ADDRESS)
             {
                 std::string target = valueToExpr(instruction.inputs.front(), context);
@@ -186,7 +191,8 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                     sourcePc = sourceStream.str();
                 }
-                emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
+                emitter.openBlock("if (!callIntrinsic(context.system, " + target +
+                                  ", context.regs))");
                 emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
                 emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
                 emitter.closeBlock();

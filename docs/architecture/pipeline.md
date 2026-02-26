@@ -41,8 +41,8 @@ Offset  Size  Description
 
 The disassembler converts raw MIPS machine code into structured instruction objects. The current
 implementation decodes core R3000 integer instructions, branch/jump targets, COP0 register moves,
-and full COP2/GTE command mnemonics, while flagging delay slots (including the owning instruction)
-for downstream analysis.
+basic COP0 control transfer decode (`RFE`, `CFC0`, `CTC0`), and full COP2/GTE command mnemonics,
+while flagging delay slots (including the owning instruction) for downstream analysis.
 
 Challenges:
 - Identifying code vs. data
@@ -73,6 +73,7 @@ IR features:
 - Explicit register dataflow
 - Memory operations as load/store
 - Hardware calls as intrinsics
+- COP0 operations for exception-critical paths (`MFC0`, `MTC0`, `RFE`)
 
 ### 6. Optimization
 **Input**: IR  

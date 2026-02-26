@@ -7,7 +7,7 @@ support end-to-end static recompilation.
 
 - [x] IR-to-C++ lowering and emission pipeline with structured blocks.
 - [x] Lowering for core IR ops (move/add/sub/bitwise/compare/load/store/branch/jump/call/return).
-- [x] Lowering for expanded IR ops (shifts, mult/div, HI/LO moves, syscalls, MMIO intrinsics).
+- [x] Lowering for expanded IR ops (shifts, mult/div, HI/LO moves, syscalls, MMIO intrinsics, COP0 `MFC0`/`MTC0`/`RFE`).
 - [x] Phi-node lowering and SSA-aware temporaries in C++.
 - [x] Backend helpers for PSX memory accesses and address-based intrinsic dispatch.
 - [x] Peephole optimizations for zero-value arithmetic and redundant moves.
@@ -58,5 +58,12 @@ support end-to-end static recompilation.
 - [x] Support debug environment variables (`PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`).
 - [x] Refactor codegen into focused modules: `codegen.cpp`, `codegen_build.cpp`, `codegen_runner.cpp`.
 - [x] Add SDL2 presenter support in generated CMakeLists.txt (`find_package(SDL2 QUIET)`).
+- [x] Route non-BIOS syscall opcodes through COP0 exception entry and exception-vector dispatch.
 - [ ] Add headless frame-capture mode for automated validation.
 - [ ] Implement callee-saved register preservation across function calls.
+
+## Phase 7: COP0 Coverage Closure
+
+- [ ] Add lowering support for `CFC0` and `CTC0` with deterministic runtime behavior.
+- [ ] Add lowering support for COP0 conditional branches (`BC0F`/`BC0T`) and validate CFG stability.
+- [ ] Remove ad-hoc syscall special-casing once unified exception/IRQ vector dispatch is in place.

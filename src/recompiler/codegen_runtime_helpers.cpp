@@ -105,11 +105,35 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("system.writeMmioExplicit<u32>(address, value);");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine(
-        "inline void callSyscall(runtime::PsxSystem& system, u32 code, std::array<u32, "
-        "Registers::NUM_REGISTERS>& regs)");
+    emitter.writeLine("inline void callSyscall(RecompilerContext& context, u32 code, Address pc)");
     emitter.openBlock("");
-    emitter.writeLine("system.callBiosSyscall(code, regs.data(), regs.size());");
+    emitter.openBlock("if (code == 0)");
+    emitter.writeLine(
+        "context.system.callBiosSyscall(code, context.regs.data(), context.regs.size());");
+    emitter.writeLine("return;");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "context.system.cop0().exceptionEnter(runtime::Cop0::ExceptionCode::Syscall, pc, false);");
+    emitter.writeLine(
+        "const u32 status = context.system.cop0().mfc0(runtime::Cop0::RegisterIndex::Status);");
+    emitter.writeLine(
+        "const Address vectorBase = (status & (1u << 22)) != 0 ? 0xBFC00180u : 0x80000080u;");
+    emitter.writeLine("const u32 vectorInstruction = context.system.read<u32>(vectorBase);");
+    emitter.writeLine("const u32 vectorOp = (vectorInstruction >> 26) & 0x3Fu;");
+    emitter.openBlock("if (vectorOp != 0x02u)");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine("stream << \"Unsupported exception vector instruction 0x\" << std::hex "
+                      "<< vectorInstruction << \" at 0x\" << vectorBase;");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.closeBlock();
+    emitter.writeLine("const Address handlerTarget = ((vectorInstruction & 0x03FFFFFFu) << 2) | "
+                      "(vectorBase & 0xF0000000u);");
+    emitter.openBlock("if (!jumpRecompiledFunction(context, handlerTarget))");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine("stream << \"Exception vector target 0x\" << std::hex << handlerTarget "
+                      "<< \" is not recompiled.\";");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void flushCycles(RecompilerContext& context)");

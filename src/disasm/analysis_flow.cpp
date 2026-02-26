@@ -40,7 +40,8 @@ struct CallGraphEdgeKeyHash
 };
 } // namespace
 
-std::vector<IndirectBranchTarget> findIndirectBranchTargets(const std::vector<Instruction>& instructions)
+std::vector<IndirectBranchTarget>
+findIndirectBranchTargets(const std::vector<Instruction>& instructions)
 {
     std::vector<IndirectBranchTarget> targets;
     targets.reserve(instructions.size());

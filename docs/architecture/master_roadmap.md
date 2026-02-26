@@ -107,10 +107,11 @@ Goal: run a controlled demo binary end-to-end with deterministic output.
 
 **Deliverables**
 
-- [ ] Known-good demo ROM/EXE pipeline build.
+- [x] Known-good demo ROM/EXE pipeline build (current corpus: ADVHELLO, COP0TEST, GPUTEST, HELLOWLD, MEMTEST).
 - [x] CI recompile-demos workflow builds generated artifacts with SDL2 display support on all platforms.
+- [x] COP0 exception-path demo (`COP0TEST`) passes functional criteria (`MFC0`/`MTC0`/`RFE`, syscall exception, resume path).
 - [ ] Recompiled output runs to completion in CI.
-- [ ] Test harness for frame/time-based validation.
+- [x] Test harness for frame/render validation (summary report + screenshot artifacts per demo).
 
 **Dependencies (complete these roadmaps)**
 
@@ -125,6 +126,7 @@ Goal: basic compatibility with a subset of non-commercial or permissibly tested 
 **Deliverables**
 
 - [ ] Expanded instruction coverage (including edge cases).
+- [ ] COP0 compatibility hardening (Status.IM/Cause.IP gating, BEV vector selection, delay-slot exception parity, CFC0/CTC0 stubs, BC0F/BC0T support).
 - [ ] Runtime correctness for GPU/SPU/CD-ROM interactions.
 - [ ] Instrumentation for tracing and regression testing.
 - [ ] Optional game metadata registry for reproducible builds and compatibility tracking.
@@ -160,6 +162,7 @@ Goal: broad compatibility, performance, and tooling for real-world usage.
 ## Risk and dependency highlights
 
 - **Instruction coverage edge cases** remain a key risk for M4+ stability and M5 compatibility.
+- **COP0 reset/boot-state and interrupt timing parity** remains a key risk for exact emulator-level numeric parity.
 - **MMIO accuracy** is critical for GPU/SPU/CD-ROM correctness in M3+.
 - **Function boundary discovery** impacts CFG building and codegen quality.
 - **Testing infrastructure** must scale before M5 to prevent regressions.
