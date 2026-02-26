@@ -433,6 +433,33 @@ int main()
         std::cerr << "[PASS] register JUMP fallback to jump dispatch\n";
     }
 
+    // ---------------------------------------------------------------
+    // Test 10: COP0 lowering emits runtime COP0 helpers
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_cop0_lowering", 0x800A0000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::COP0_MTC, {Value::makeImmediate(12), Value::makeRegister(2)}, {}, 0x800A0000));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::COP0_MFC, {Value::makeImmediate(12)}, {Value::makeRegister(3)}, 0x800A0004));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::COP0_RFE, {}, {}, 0x800A0008));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x800A000C));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "cop0_lowering_module");
+
+        assert(source.find("context.system.cop0().mtc0") != std::string::npos);
+        assert(source.find("context.system.cop0().mfc0") != std::string::npos);
+        assert(source.find("context.system.cop0().rfe()") != std::string::npos);
+
+        std::cerr << "[PASS] COP0 lowering emits runtime COP0 helpers\n";
+    }
+
     std::cerr << "All codegen lowering tests passed.\n";
     return 0;
 }

@@ -10,7 +10,7 @@ on the architecture pipeline stages and is intended to track near-term milestone
 - [x] SSA conversion and verification (phi placement + dominance checks).
 - [x] Function boundary detection heuristics (entry points, call targets, prologue patterns).
 - [x] MIPS→IR lowering for arithmetic/logical ops, immediates, loads/stores, branches, jumps,
-      calls, returns, shifts, mult/div, HI/LO moves, and syscalls.
+      calls, returns, shifts, mult/div, HI/LO moves, syscalls, and COP0 `MFC0`/`MTC0`/`RFE`.
 - [x] Delay-slot semantics for non-nop delay-slot instructions.
 - [x] Memory-mapped IO modeled as explicit IR intrinsics.
 
@@ -48,3 +48,8 @@ on the architecture pipeline stages and is intended to track near-term milestone
 ## Phase 6: Runtime Integration
 - [x] Map explicit IR intrinsics to runtime interfaces (GPU, SPU, CD-ROM, controllers).
 - [x] Maintain PSX memory model in generated code with explicit MMIO reads/writes.
+
+## Phase 7: COP0 Completion
+- [ ] Add IR lowering for `CFC0` and `CTC0` with deterministic semantics.
+- [ ] Add IR/control-flow support for COP0 conditional branches (`BC0F`/`BC0T`).
+- [ ] Expand exception modeling hooks needed for Status.IM/Cause.IP interrupt gating parity.

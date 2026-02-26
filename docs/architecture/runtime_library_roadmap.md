@@ -58,3 +58,23 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [ ] Implement CD-ROM BIOS functions (CdInit, CdRemove).
 - [ ] Implement memory card sector read/write.
 - [ ] See full checklist: [BIOS Functions Roadmap](bios_functions_roadmap.md)
+
+## Phase 7: COP0 and Exception Semantics
+
+- [x] Add runtime COP0 register model for PSX-critical registers (`Status`, `Cause`, `EPC`, `BadVAddr`).
+- [x] Implement `mfc0`/`mtc0` behavior for supported registers (`Status`, `Cause`, `EPC`, `BadVAddr`).
+- [x] Implement exception entry bookkeeping:
+  - status mode stack push (low 6 bits),
+  - `Cause.ExcCode` write,
+  - delay-slot `BD` write,
+  - `EPC` write (`pc` or `pc-4` in delay slot),
+  - optional `BadVAddr` capture.
+- [x] Implement `rfe` restore semantics for status mode stack pop.
+- [x] Wire COP0 into `PsxSystem` reset path and save-state serialization/deserialization.
+- [x] Validate minimal COP0 flow with runtime/unit tests and `examples/demos/cop0test`.
+- [x] Route recompiled non-BIOS syscall codes through COP0 exception entry and vector dispatch.
+- [ ] Gate IRQ exception delivery with COP0 status/pending model (`Status.IEc`, `Status.IM`, `Cause.IP`).
+- [ ] Restrict `mtc0 Cause` writes to software-interrupt bits without clobbering hardware pending bits.
+- [ ] Unify BEV vector selection behavior across all exception/IRQ dispatch paths.
+- [ ] Implement precise reset/boot-time COP0 defaults to improve emulator/hardware numeric parity.
+- [ ] Add runtime trace hooks for COP0 reads/writes (`mfc0`/`mtc0`) keyed by current PC for debugging.

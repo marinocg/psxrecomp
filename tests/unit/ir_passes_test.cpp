@@ -242,6 +242,38 @@ int main()
     }
     assert(foundFolded);
 
+    Function cop0Effects{"cop0_effects", 0x6100, {}};
+    cop0Effects.blocks.push_back(BasicBlock{"entry", {}, {}, {}});
+    cop0Effects.blocks[0].instructions.push_back(Instruction{
+        Opcode::COP0_MFC, {Value::makeImmediate(12)}, {Value::makeTemporary(9)}, 0x6100});
+    cop0Effects.blocks[0].instructions.push_back(Instruction{
+        Opcode::COP0_MTC, {Value::makeImmediate(12), Value::makeRegister(r1)}, {}, 0x6104});
+    cop0Effects.blocks[0].instructions.push_back(Instruction{Opcode::COP0_RFE, {}, {}, 0x6108});
+    cop0Effects.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x610C});
+
+    psxrecomp::ir::runOptimizations(cop0Effects);
+    bool keptCop0Mfc = false;
+    bool keptCop0Mtc = false;
+    bool keptCop0Rfe = false;
+    for (const auto& instruction : cop0Effects.blocks[0].instructions)
+    {
+        if (instruction.opcode == Opcode::COP0_MFC)
+        {
+            keptCop0Mfc = true;
+        }
+        if (instruction.opcode == Opcode::COP0_MTC)
+        {
+            keptCop0Mtc = true;
+        }
+        if (instruction.opcode == Opcode::COP0_RFE)
+        {
+            keptCop0Rfe = true;
+        }
+    }
+    assert(keptCop0Mfc);
+    assert(keptCop0Mtc);
+    assert(keptCop0Rfe);
+
     Function crossBlockDce{"cross_block_dce", 0x7000, {}};
     crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}, {}});
     crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}, {}});

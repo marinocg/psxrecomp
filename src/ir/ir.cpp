@@ -83,6 +83,12 @@ std::string opcodeToString(Opcode opcode)
         return "jump";
     case Opcode::CALL:
         return "call";
+    case Opcode::COP0_MFC:
+        return "cop0_mfc";
+    case Opcode::COP0_MTC:
+        return "cop0_mtc";
+    case Opcode::COP0_RFE:
+        return "cop0_rfe";
     case Opcode::SYSCALL:
         return "syscall";
     case Opcode::TRAP:

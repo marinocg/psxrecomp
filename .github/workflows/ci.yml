@@ -120,3 +120,4 @@ jobs:
           make -C examples/demos/gputest
           make -C examples/demos/memorytest
           make -C examples/demos/advancedhello
+          make -C examples/demos/cop0test

@@ -4,35 +4,39 @@ This roadmap tracks the milestones needed to ship a first end-to-end recompiled 
 
 | Phase                           | Estimate |
 | ------------------------------- | -------: |
-| Overall demo readiness          |     ~55% |
-| Phase 1: Pipeline MVP           |     ~75% |
-| Phase 2: Runtime Bring-up       |     ~55% |
-| Phase 3: Validation & Packaging |     ~25% |
+| Overall demo readiness          |     ~68% |
+| Phase 1: Pipeline MVP           |     ~90% |
+| Phase 2: Runtime Bring-up       |     ~70% |
+| Phase 3: Validation & Packaging |     ~45% |
 
-## Current Status (~55%)
+## Current Status (~68%)
 
 - [x] Minimal pipeline that loads PSX-EXE, disassembles, and emits runnable C++ bundles.
 - [x] Generated runners include register init, RAM init image, and BIOS vector dispatch.
-- [ ] Demo selection and expected output definition (fixture-driven path is in place; rich emulator-playback demo remains pending).
+- [x] Demo corpus selected and reproducible (`ADVHELLO`, `COP0TEST`, `GPUTEST`, `HELLOWLD`, `MEMTEST`).
+- [x] Demo verification artifacts include per-demo screenshots and a machine-readable summary CSV.
+- [ ] Expected-output parity gates against external emulator traces remain pending.
 
-## Phase 1: Pipeline MVP (~75%)
+## Phase 1: Pipeline MVP (~90%)
 
-- [ ] Pick a small homebrew PSX-EXE as the target demo.
+- [x] Pick a small homebrew PSX-EXE as the target demo.
 - [x] Ensure ISO/EXE loader can extract the demo payload (including fixture-driven ISO workflows).
 - [x] Disassemble the demo and generate baseline IR.
 - [x] Emit C++ that builds (with SDL2 display support via CI workflow).
-- [ ] Emit C++ that runs to completion without hangs.
+- [x] Emit C++ that runs and renders under bounded-step verification harness.
+- [ ] Emit C++ that runs to natural completion without step-budget limits.
 
-## Phase 2: Runtime Bring-up (~55%)
+## Phase 2: Runtime Bring-up (~70%)
 
 - [x] Provide minimal runtime stubs for required MMIO accesses.
 - [x] Implement BIOS vector framework with 50 stub/functional functions.
 - [x] Add logging to validate control flow and memory access (debug env vars: `PSXRECOMP_MAX_STEPS`, `BREAK_PC`, `TRACE_MMIO`, `TRACE_CALLS`, `PSXRECOMP_TRACE_BIOS`).
-- [ ] Document build/run steps for the demo.
+- [x] Add focused COP0 demo (`cop0test`) that validates `MFC0`/`MTC0`/`RFE` + exception resume behavior.
+- [ ] Document deterministic local verification workflow for all demos in one command path.
 
-## Phase 3: Validation & Packaging (~25%)
+## Phase 3: Validation & Packaging (~45%)
 
-- [ ] Compare output or memory traces with a reference emulator.
+- [ ] Add automated differential checks against reference emulator traces/screenshots.
 - [x] CI workflow compiles generated artifacts on Linux/macOS/Windows.
-- [ ] Add automated run/validation for the demo in CI.
+- [ ] Add automated run/validation (with artifact screenshots + summary checks) in CI.
 - [ ] Document known limitations and next steps.

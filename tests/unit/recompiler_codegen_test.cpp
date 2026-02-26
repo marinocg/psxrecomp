@@ -207,6 +207,15 @@ int main()
     runtimeHeader << "    u32 lastProgramCounter() const { return 0; }\n";
     runtimeHeader << "    std::string renderText() const { return {}; }\n";
     runtimeHeader << "};\n";
+    runtimeHeader << "class Cop0 {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    enum RegisterIndex : u8 { Status = 12 };\n";
+    runtimeHeader << "    enum class ExceptionCode : u32 { Syscall = 8 };\n";
+    runtimeHeader << "    u32 mfc0(u8) const { return 0; }\n";
+    runtimeHeader << "    void mtc0(u8, u32) {}\n";
+    runtimeHeader << "    void exceptionEnter(ExceptionCode, u32, bool) {}\n";
+    runtimeHeader << "    void rfe() {}\n";
+    runtimeHeader << "};\n";
     runtimeHeader << "class PsxSystem {\n";
     runtimeHeader << "  public:\n";
     runtimeHeader << "    struct DiscSwapInfo {\n";
@@ -239,9 +248,11 @@ int main()
         << "    bool consumePendingCallbackRegisters(std::array<u32, 32>&) { return false; }\n";
     runtimeHeader << "    void setCallbackInvoker(std::function<u32(u32)>) {}\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
+    runtimeHeader << "    Cop0& cop0() { return m_cop0; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
     runtimeHeader << "    RuntimeDebugOverlay m_overlay;\n";
+    runtimeHeader << "    Cop0 m_cop0;\n";
     runtimeHeader << "};\n";
     runtimeHeader << "} }\n";
     runtimeHeader.close();
