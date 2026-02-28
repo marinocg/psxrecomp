@@ -107,8 +107,11 @@ int main()
     assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("static constexpr Address kBlockStarts[]") != std::string::npos);
     assert(source.find("static constexpr BlockId kBlockIds[]") != std::string::npos);
-    assert(source.find("static constexpr Address kResumableAddresses[]") != std::string::npos);
-    assert(source.find("std::binary_search(resumableBegin, resumableEnd, physical)") !=
+    assert(source.find("static constexpr Address kResumeRangeStarts[]") != std::string::npos);
+    assert(source.find("static constexpr Address kResumeRangeEnds[]") != std::string::npos);
+    assert(source.find("std::upper_bound(rangeStartsBegin, rangeStartsEnd, physical)") !=
+           std::string::npos);
+    assert(source.find("(physical & 0x3u) != 0 || physical >= kResumeRangeEnds[rangeIdx]") !=
            std::string::npos);
     assert(source.find("std::upper_bound(startsBegin, startsEnd, physical)") != std::string::npos);
     assert(source.find("case 0x10004: block = BlockId::") == std::string::npos);
