@@ -135,8 +135,6 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
             case disasm::Opcode::CFC0:
             case disasm::Opcode::MFC2:
             case disasm::Opcode::CFC2:
-            case disasm::Opcode::LWC0:
-            case disasm::Opcode::LWC2:
                 return instruction.rt == reg;
             case disasm::Opcode::JAL:
             case disasm::Opcode::BLTZAL:

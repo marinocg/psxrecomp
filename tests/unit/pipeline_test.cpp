@@ -77,6 +77,28 @@ std::vector<psxrecomp::u8> buildExeWithSeparateEntryAndBaseVector()
     return buffer;
 }
 
+std::vector<psxrecomp::u8> buildExeWithCopLoadBeforeIndirectJump()
+{
+    constexpr psxrecomp::u32 loadSize = 64;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x3C088001); // lui t0, 0x8001
+    writeLe32(buffer, codeOffset + 0x04, 0x35080020); // ori t0, t0, 0x0020
+    writeLe32(buffer, codeOffset + 0x08, 0xC9080000); // lwc2 $8, 0(t0)
+    writeLe32(buffer, codeOffset + 0x0C, 0x01000008); // jr t0
+    writeLe32(buffer, codeOffset + 0x10, 0x00000000); // nop delay slot
+    writeLe32(buffer, codeOffset + 0x20, 0x08004008); // j 0x80010020
+    writeLe32(buffer, codeOffset + 0x24, 0x00000000); // nop delay slot
+
+    return buffer;
+}
+
 } // namespace
 
 int main()
@@ -93,18 +115,21 @@ int main()
 
     struct CleanupGuard
     {
-        std::filesystem::path exe;
+        std::vector<std::filesystem::path> exes;
         std::filesystem::path ecm;
         std::filesystem::path out;
         ~CleanupGuard()
         {
             std::error_code error;
-            std::filesystem::remove(exe, error);
+            for (const auto& exe : exes)
+            {
+                std::filesystem::remove(exe, error);
+            }
             std::filesystem::remove(ecm, error);
             std::filesystem::remove_all(out, error);
         }
     };
-    CleanupGuard guard{exePath, ecmPath, outputDir};
+    CleanupGuard guard{{exePath}, ecmPath, outputDir};
 
     auto buffer = buildMinimalExe(16);
     std::ofstream outFile(exePath, std::ios::binary);
@@ -166,7 +191,7 @@ int main()
 
     std::filesystem::path vectorExePath =
         tempDir / ("psxrecomp_pipeline_vector_" + suffix + ".psx");
-    guard.exe = vectorExePath;
+    guard.exes.push_back(vectorExePath);
     auto vectorBuffer = buildExeWithSeparateEntryAndBaseVector();
     std::ofstream vectorFile(vectorExePath, std::ios::binary);
     vectorFile.write(reinterpret_cast<const char*>(vectorBuffer.data()),
@@ -185,8 +210,29 @@ int main()
     }
     assert(hasBaseVectorFunction);
 
+    std::filesystem::path copLoadExePath =
+        tempDir / ("psxrecomp_pipeline_lwc2_indirect_" + suffix + ".psx");
+    guard.exes.push_back(copLoadExePath);
+    auto copLoadBuffer = buildExeWithCopLoadBeforeIndirectJump();
+    std::ofstream copLoadFile(copLoadExePath, std::ios::binary);
+    copLoadFile.write(reinterpret_cast<const char*>(copLoadBuffer.data()),
+                      static_cast<std::streamsize>(copLoadBuffer.size()));
+    copLoadFile.close();
+    auto copLoadResult = pipeline.run(copLoadExePath.string());
+    assert(copLoadResult.success);
+    bool hasIndirectTargetFunction = false;
+    for (const auto& function : copLoadResult.functions)
+    {
+        if (function.entryAddress == 0x80010020)
+        {
+            hasIndirectTargetFunction = true;
+            break;
+        }
+    }
+    assert(hasIndirectTargetFunction);
+
     std::filesystem::path mixedExePath = tempDir / ("psxrecomp_pipeline_mixed_" + suffix + ".psx");
-    guard.exe = mixedExePath;
+    guard.exes.push_back(mixedExePath);
     auto mixedBuffer = buildExeWithCodeAndAsciiData();
     std::ofstream mixedFile(mixedExePath, std::ios::binary);
     mixedFile.write(reinterpret_cast<const char*>(mixedBuffer.data()),
