@@ -3,6 +3,9 @@
 #include "codegen_helpers.h"
 #include "codegen_lowering_helpers.h"
 
+#include <algorithm>
+#include <cctype>
+#include <optional>
 #include <sstream>
 #include <unordered_set>
 
@@ -47,7 +50,41 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         std::unordered_set<std::string> usedBlocks;
         std::unordered_map<std::string, std::string> blockNames;
         std::vector<std::string> blockIds;
+        std::vector<std::pair<Address, std::string>> blockStartDispatchEntries;
         blockIds.reserve(function.blocks.size());
+        blockStartDispatchEntries.reserve(function.blocks.size());
+        std::unordered_set<Address> seenBlockStarts;
+        auto parseBlockStartAddress = [](const std::string& blockName) -> std::optional<Address>
+        {
+            static constexpr const char* kPrefix = "block_0x";
+            static constexpr size_t kPrefixSize = 8;
+            if (blockName.compare(0, kPrefixSize, kPrefix) != 0)
+            {
+                return std::nullopt;
+            }
+
+            const size_t hexStart = kPrefixSize;
+            if (hexStart >= blockName.size())
+            {
+                return std::nullopt;
+            }
+            for (size_t index = hexStart; index < blockName.size(); ++index)
+            {
+                if (!std::isxdigit(static_cast<unsigned char>(blockName[index])))
+                {
+                    return std::nullopt;
+                }
+            }
+
+            std::istringstream parser(blockName.substr(hexStart));
+            Address parsed = 0;
+            parser >> std::hex >> parsed;
+            if (parser.fail())
+            {
+                return std::nullopt;
+            }
+            return parsed & 0x1FFFFFFFu;
+        };
         for (const auto& block : function.blocks)
         {
             std::string uniqueName = uniquifyIdentifier(block.name, usedBlocks);
@@ -56,7 +93,29 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 blockNames.emplace(block.name, uniqueName);
             }
             blockIds.push_back(uniqueName);
+
+            std::optional<Address> blockStart = parseBlockStartAddress(block.name);
+            if (!blockStart.has_value())
+            {
+                for (const auto& instruction : block.instructions)
+                {
+                    if (instruction.sourceAddress.has_value())
+                    {
+                        blockStart = (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                        break;
+                    }
+                }
+            }
+
+            if (blockStart.has_value() && seenBlockStarts.insert(*blockStart).second)
+            {
+                blockStartDispatchEntries.emplace_back(*blockStart, uniqueName);
+            }
         }
+        std::sort(blockStartDispatchEntries.begin(), blockStartDispatchEntries.end(),
+                  [](const std::pair<Address, std::string>& left,
+                     const std::pair<Address, std::string>& right)
+                  { return left.first < right.first; });
 
         emitter.writeLine("enum class BlockId {");
         for (size_t index = 0; index < blockIds.size(); ++index)
@@ -73,36 +132,37 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         // Emit a startAddress → BlockId dispatch so that callers can enter
         // this function at an arbitrary block (needed for JALR targets that
         // point into the middle of a function).
-        if (function.blocks.size() > 1)
+        if (function.blocks.size() > 1 && !blockStartDispatchEntries.empty())
         {
             emitter.writeLine("if (startAddress != 0)");
             emitter.openBlock("");
             emitter.writeLine("Address physical = startAddress & 0x1FFFFFFF;");
-            emitter.writeLine("switch (physical)");
-            emitter.openBlock("");
-            std::unordered_set<Address> emittedStartCases;
-            for (size_t i = 0; i < function.blocks.size(); ++i)
+            emitter.writeLine("static constexpr Address kBlockStarts[] = {");
             {
-                for (const auto& instruction : function.blocks[i].instructions)
+                for (const auto& entry : blockStartDispatchEntries)
                 {
-                    if (!instruction.sourceAddress.has_value())
-                    {
-                        continue;
-                    }
-                    const Address blockAddr = (*instruction.sourceAddress) & 0x1FFFFFFFu;
-                    if (!emittedStartCases.insert(blockAddr).second)
-                    {
-                        continue;
-                    }
-                    std::ostringstream caseLine;
-                    caseLine << "case 0x" << std::hex << blockAddr
-                             << ": block = BlockId::" << blockIds[i]
-                             << "; resumeAddress = physical; break;";
-                    emitter.writeLine(caseLine.str());
+                    std::ostringstream line;
+                    line << "    0x" << std::hex << entry.first << ",";
+                    emitter.writeLine(line.str());
                 }
             }
-            emitter.writeLine("default: break;");
+            emitter.writeLine("};");
+            emitter.writeLine("static constexpr BlockId kBlockIds[] = {");
+            for (const auto& entry : blockStartDispatchEntries)
+            {
+                emitter.writeLine("    BlockId::" + entry.second + ",");
+            }
+            emitter.writeLine("};");
+            emitter.writeLine("const Address* startsBegin = kBlockStarts;");
+            emitter.writeLine("const Address* startsEnd = kBlockStarts + sizeof(kBlockStarts) / sizeof(kBlockStarts[0]);");
+            emitter.writeLine("const Address* it = std::upper_bound(startsBegin, startsEnd, physical);");
+            emitter.writeLine("if (it == startsBegin)");
+            emitter.openBlock("");
+            emitter.writeLine("return;");
             emitter.closeBlock();
+            emitter.writeLine("const size_t idx = static_cast<size_t>((it - startsBegin) - 1);");
+            emitter.writeLine("block = kBlockIds[idx];");
+            emitter.writeLine("resumeAddress = physical;");
             emitter.closeBlock();
         }
 

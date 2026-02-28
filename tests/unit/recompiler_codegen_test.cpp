@@ -103,6 +103,10 @@ int main()
     assert(source.find("table_data") != std::string::npos);
     assert(source.find("switch (block)") != std::string::npos);
     assert(source.find("case BlockId::loop_1:") != std::string::npos);
+    assert(source.find("static constexpr Address kBlockStarts[]") != std::string::npos);
+    assert(source.find("static constexpr BlockId kBlockIds[]") != std::string::npos);
+    assert(source.find("std::upper_bound(startsBegin, startsEnd, physical)") != std::string::npos);
+    assert(source.find("case 0x10004: block = BlockId::") == std::string::npos);
     assert(source.find("if (") != std::string::npos);
     assert(source.find("callRecompiledFunction") != std::string::npos);
     assert(source.find("restoreCalleeSaved") != std::string::npos);

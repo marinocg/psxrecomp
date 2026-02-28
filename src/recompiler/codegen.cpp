@@ -146,6 +146,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     }
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
+    emitter.writeLine("#include <algorithm>");
     emitter.writeLine("#include <array>");
     emitter.writeLine("#include <chrono>");
     emitter.writeLine("#include <cstdlib>");
