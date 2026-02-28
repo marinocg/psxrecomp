@@ -188,6 +188,11 @@ CodeDataSegmentation segmentCodeAndData(const std::vector<Instruction>& instruct
         const size_t index = indexMap[address];
         const Instruction& instruction = instructions[index];
 
+        if (instruction.opcode == Opcode::UNKNOWN)
+        {
+            continue;
+        }
+
         const auto enqueueDelaySlot = [&](bool enqueue)
         {
             if (index + 1 < instructions.size())

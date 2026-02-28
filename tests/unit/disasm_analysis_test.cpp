@@ -118,6 +118,39 @@ int main()
     assert(segmentation.dataRanges[0].start == 0x8001004C);
     assert(segmentation.dataRanges[0].end == 0x8001004C);
 
+    // ---------------------------------------------------------------
+    // UNKNOWN instructions must terminate segmentation propagation.
+    //
+    // Seeding from an UNKNOWN opcode should mark only that address as
+    // code and must not walk into following instructions.
+    // ---------------------------------------------------------------
+    {
+        std::vector<Instruction> unknownSeedInstructions;
+        unknownSeedInstructions.push_back(Instruction{
+            0x80011000, encodeI(0x09, 0, 8, 1), Opcode::ADDIU, InstructionType::I_TYPE,
+            0,          0,                     8,              1,
+            0,          0,                     false,          std::nullopt});
+        unknownSeedInstructions.push_back(Instruction{
+            0x80011004, 0xFFFFFFFFu, Opcode::UNKNOWN, InstructionType::UNKNOWN,
+            0,          0,          0,               0,
+            0,          0,          false,           std::nullopt});
+        unknownSeedInstructions.push_back(Instruction{
+            0x80011008, encodeI(0x09, 0, 9, 2), Opcode::ADDIU, InstructionType::I_TYPE,
+            0,          0,                     9,              2,
+            0,          0,                     false,          std::nullopt});
+        unknownSeedInstructions.push_back(Instruction{
+            0x8001100C, encodeI(0x09, 0, 10, 3), Opcode::ADDIU, InstructionType::I_TYPE,
+            0,          0,                      10,             3,
+            0,          0,                      false,          std::nullopt});
+
+        CodeDataSegmentation unknownSeedSegmentation = segmentCodeAndData(
+            unknownSeedInstructions, {0x80011004}, std::vector<JumpTableInfo>{});
+
+        assert(unknownSeedSegmentation.codeRanges.size() == 1);
+        assert(unknownSeedSegmentation.codeRanges[0].start == 0x80011004);
+        assert(unknownSeedSegmentation.codeRanges[0].end == 0x80011004);
+    }
+
     std::vector<Instruction> duplicateCallInstructions;
     duplicateCallInstructions.push_back(Instruction{0x80020008, encodeJ(0x03, (0x80030000u >> 2)),
                                                     Opcode::JAL, InstructionType::J_TYPE, 0, 0, 0,
