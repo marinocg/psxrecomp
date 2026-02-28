@@ -98,6 +98,8 @@ int main()
     };
 
     assert(header.find("RecompiledModule") != std::string::npos);
+    assert(header.find("bool main_func(RecompilerContext& context, Address startAddress = 0);") !=
+           std::string::npos);
     assert(source.find("readMemory32") != std::string::npos);
     assert(source.find("writeMemory32") != std::string::npos);
     assert(source.find("table_data") != std::string::npos);
@@ -105,6 +107,9 @@ int main()
     assert(source.find("case BlockId::loop_1:") != std::string::npos);
     assert(source.find("static constexpr Address kBlockStarts[]") != std::string::npos);
     assert(source.find("static constexpr BlockId kBlockIds[]") != std::string::npos);
+    assert(source.find("static constexpr Address kResumableAddresses[]") != std::string::npos);
+    assert(source.find("std::binary_search(resumableBegin, resumableEnd, physical)") !=
+           std::string::npos);
     assert(source.find("std::upper_bound(startsBegin, startsEnd, physical)") != std::string::npos);
     assert(source.find("case 0x10004: block = BlockId::") == std::string::npos);
     assert(source.find("if (") != std::string::npos);
@@ -113,16 +118,19 @@ int main()
     assert(source.find("context.regs[Registers::S0] = preservedS0;") != std::string::npos);
     assert(source.find("failUnsupportedCall") != std::string::npos);
     assert(source.find("struct FnRange") != std::string::npos);
+    assert(source.find("bool (*cachedRangeFn)(RecompilerContext&, Address) = nullptr;") !=
+           std::string::npos);
+    assert(source.find("bool (*fn)(RecompilerContext&, Address);") != std::string::npos);
     assert(source.find("static constexpr FnRange kFnRanges[]") != std::string::npos);
     assert(source.find("const size_t rangeCount = sizeof(kFnRanges) / sizeof(kFnRanges[0]);") !=
            std::string::npos);
     assert(source.find("if (context.cachedRangeFn != nullptr)") != std::string::npos);
-    assert(source.find("context.cachedRangeFn(context, physical);") != std::string::npos);
+    assert(source.find("if (context.cachedRangeFn(context, physical))") != std::string::npos);
     assert(source.find("context.cachedRangeStart = range.start;") != std::string::npos);
     assert(source.find("context.cachedRangeEndExclusive = range.endExclusive;") !=
            std::string::npos);
     assert(source.find("context.cachedRangeFn = range.fn;") != std::string::npos);
-    assert(source.find("range.fn(context, physical);") != std::string::npos);
+    assert(source.find("if (range.fn(context, physical))") != std::string::npos);
     assert(source.find("main_func(context, 0x10004);") == std::string::npos);
     assert(source.find("main_func(context, 0x10007);") == std::string::npos);
     assert(source.find("main_func(context, 0x10006);") == std::string::npos);

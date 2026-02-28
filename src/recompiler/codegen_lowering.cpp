@@ -25,13 +25,13 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         context.enableOptimizations = m_options.enableOptimizations;
 
         std::string functionName = uniquifyIdentifier(function.name, usedFunctionNames);
-        emitter.writeLine("void " + functionName +
+        emitter.writeLine("bool " + functionName +
                           "(RecompilerContext& context, Address startAddress)");
         emitter.openBlock("");
         if (function.blocks.empty())
         {
             emitter.writeLine("// TODO: empty function body");
-            emitter.writeLine("return;");
+            emitter.writeLine("return true;");
             emitter.closeBlock();
             emitter.writeBlank();
             continue;
@@ -51,9 +51,12 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         std::unordered_map<std::string, std::string> blockNames;
         std::vector<std::string> blockIds;
         std::vector<std::pair<Address, std::string>> blockStartDispatchEntries;
+        std::vector<Address> resumableAddresses;
         blockIds.reserve(function.blocks.size());
         blockStartDispatchEntries.reserve(function.blocks.size());
+        resumableAddresses.reserve(function.blocks.size());
         std::unordered_set<Address> seenBlockStarts;
+        std::unordered_set<Address> seenResumableAddresses;
         auto parseBlockStartAddress = [](const std::string& blockName) -> std::optional<Address>
         {
             static constexpr const char* kPrefix = "block_0x";
@@ -111,11 +114,24 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             {
                 blockStartDispatchEntries.emplace_back(*blockStart, uniqueName);
             }
+            for (const auto& instruction : block.instructions)
+            {
+                if (!instruction.sourceAddress.has_value())
+                {
+                    continue;
+                }
+                const Address instructionAddress = (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                if (seenResumableAddresses.insert(instructionAddress).second)
+                {
+                    resumableAddresses.push_back(instructionAddress);
+                }
+            }
         }
         std::sort(blockStartDispatchEntries.begin(), blockStartDispatchEntries.end(),
                   [](const std::pair<Address, std::string>& left,
                      const std::pair<Address, std::string>& right)
                   { return left.first < right.first; });
+        std::sort(resumableAddresses.begin(), resumableAddresses.end());
 
         emitter.writeLine("enum class BlockId {");
         for (size_t index = 0; index < blockIds.size(); ++index)
@@ -132,38 +148,74 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         // Emit a startAddress → BlockId dispatch so that callers can enter
         // this function at an arbitrary block (needed for JALR targets that
         // point into the middle of a function).
-        if (function.blocks.size() > 1 && !blockStartDispatchEntries.empty())
+        if (!function.blocks.empty())
         {
             emitter.writeLine("if (startAddress != 0)");
             emitter.openBlock("");
             emitter.writeLine("Address physical = startAddress & 0x1FFFFFFF;");
-            emitter.writeLine("static constexpr Address kBlockStarts[] = {");
+            if (resumableAddresses.empty())
             {
-                for (const auto& entry : blockStartDispatchEntries)
+                emitter.writeLine("return false;");
+                emitter.closeBlock();
+            }
+            else
+            {
+                emitter.writeLine("static constexpr Address kResumableAddresses[] = {");
+                for (Address address : resumableAddresses)
                 {
                     std::ostringstream line;
-                    line << "    0x" << std::hex << entry.first << ",";
+                    line << "    0x" << std::hex << address << ",";
                     emitter.writeLine(line.str());
                 }
+                emitter.writeLine("};");
+                emitter.writeLine("const Address* resumableBegin = kResumableAddresses;");
+                emitter.writeLine("const Address* resumableEnd = kResumableAddresses + "
+                                  "sizeof(kResumableAddresses) / sizeof(kResumableAddresses[0]);");
+                emitter.writeLine(
+                    "if (!std::binary_search(resumableBegin, resumableEnd, physical))");
+                emitter.openBlock("");
+                emitter.writeLine("return false;");
+                emitter.closeBlock();
+
+                if (blockStartDispatchEntries.empty())
+                {
+                    emitter.writeLine("return false;");
+                    emitter.closeBlock();
+                }
+                else
+                {
+                    emitter.writeLine("static constexpr Address kBlockStarts[] = {");
+                    {
+                        for (const auto& entry : blockStartDispatchEntries)
+                        {
+                            std::ostringstream line;
+                            line << "    0x" << std::hex << entry.first << ",";
+                            emitter.writeLine(line.str());
+                        }
+                    }
+                    emitter.writeLine("};");
+                    emitter.writeLine("static constexpr BlockId kBlockIds[] = {");
+                    for (const auto& entry : blockStartDispatchEntries)
+                    {
+                        emitter.writeLine("    BlockId::" + entry.second + ",");
+                    }
+                    emitter.writeLine("};");
+                    emitter.writeLine("const Address* startsBegin = kBlockStarts;");
+                    emitter.writeLine("const Address* startsEnd = kBlockStarts + "
+                                      "sizeof(kBlockStarts) / sizeof(kBlockStarts[0]);");
+                    emitter.writeLine(
+                        "const Address* it = std::upper_bound(startsBegin, startsEnd, physical);");
+                    emitter.writeLine("if (it == startsBegin)");
+                    emitter.openBlock("");
+                    emitter.writeLine("return false;");
+                    emitter.closeBlock();
+                    emitter.writeLine(
+                        "const size_t idx = static_cast<size_t>((it - startsBegin) - 1);");
+                    emitter.writeLine("block = kBlockIds[idx];");
+                    emitter.writeLine("resumeAddress = physical;");
+                    emitter.closeBlock();
+                }
             }
-            emitter.writeLine("};");
-            emitter.writeLine("static constexpr BlockId kBlockIds[] = {");
-            for (const auto& entry : blockStartDispatchEntries)
-            {
-                emitter.writeLine("    BlockId::" + entry.second + ",");
-            }
-            emitter.writeLine("};");
-            emitter.writeLine("const Address* startsBegin = kBlockStarts;");
-            emitter.writeLine("const Address* startsEnd = kBlockStarts + sizeof(kBlockStarts) / sizeof(kBlockStarts[0]);");
-            emitter.writeLine("const Address* it = std::upper_bound(startsBegin, startsEnd, physical);");
-            emitter.writeLine("if (it == startsBegin)");
-            emitter.openBlock("");
-            emitter.writeLine("return;");
-            emitter.closeBlock();
-            emitter.writeLine("const size_t idx = static_cast<size_t>((it - startsBegin) - 1);");
-            emitter.writeLine("block = kBlockIds[idx];");
-            emitter.writeLine("resumeAddress = physical;");
-            emitter.closeBlock();
         }
 
         emitter.writeLine("BlockId previousBlock = block;");
@@ -204,7 +256,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 }
                 // Fallback: unknown predecessor resumes are treated as a
                 // normal function exit.
-                emitter.writeLine("return;");
+                emitter.writeLine("return true;");
                 emitter.closeBlock();
                 continue;
             }
@@ -258,14 +310,14 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 }
                 else
                 {
-                    emitter.writeLine("return;");
+                    emitter.writeLine("return true;");
                 }
             }
             emitter.closeBlock();
         }
         emitter.writeLine("default:");
         emitter.openBlock("");
-        emitter.writeLine("return;");
+        emitter.writeLine("return false;");
         emitter.closeBlock();
         emitter.closeBlock();
         emitter.closeBlock();

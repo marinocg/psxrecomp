@@ -362,7 +362,7 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         break;
     }
     case ir::Opcode::RETURN:
-        emitter.writeLine("return;");
+        emitter.writeLine("return true;");
         break;
     case ir::Opcode::BRANCH:
     case ir::Opcode::JUMP:
