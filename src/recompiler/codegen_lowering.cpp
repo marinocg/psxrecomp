@@ -52,6 +52,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         std::vector<std::string> blockIds;
         std::vector<std::pair<Address, std::string>> blockStartDispatchEntries;
         std::vector<Address> resumableAddresses;
+        std::vector<std::pair<Address, Address>> resumableAddressRanges;
         blockIds.reserve(function.blocks.size());
         blockStartDispatchEntries.reserve(function.blocks.size());
         resumableAddresses.reserve(function.blocks.size());
@@ -132,6 +133,21 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                      const std::pair<Address, std::string>& right)
                   { return left.first < right.first; });
         std::sort(resumableAddresses.begin(), resumableAddresses.end());
+        for (Address address : resumableAddresses)
+        {
+            if ((address & 0x3u) != 0)
+            {
+                continue;
+            }
+
+            if (resumableAddressRanges.empty() || resumableAddressRanges.back().second != address)
+            {
+                resumableAddressRanges.emplace_back(address, address + 4);
+                continue;
+            }
+
+            resumableAddressRanges.back().second = address + 4;
+        }
 
         emitter.writeLine("enum class BlockId {");
         for (size_t index = 0; index < blockIds.size(); ++index)
@@ -153,26 +169,43 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             emitter.writeLine("if (startAddress != 0)");
             emitter.openBlock("");
             emitter.writeLine("Address physical = startAddress & 0x1FFFFFFF;");
-            if (resumableAddresses.empty())
+            if (resumableAddressRanges.empty())
             {
                 emitter.writeLine("return false;");
                 emitter.closeBlock();
             }
             else
             {
-                emitter.writeLine("static constexpr Address kResumableAddresses[] = {");
-                for (Address address : resumableAddresses)
+                emitter.writeLine("static constexpr Address kResumeRangeStarts[] = {");
+                for (const auto& range : resumableAddressRanges)
                 {
                     std::ostringstream line;
-                    line << "    0x" << std::hex << address << ",";
+                    line << "    0x" << std::hex << range.first << ",";
                     emitter.writeLine(line.str());
                 }
                 emitter.writeLine("};");
-                emitter.writeLine("const Address* resumableBegin = kResumableAddresses;");
-                emitter.writeLine("const Address* resumableEnd = kResumableAddresses + "
-                                  "sizeof(kResumableAddresses) / sizeof(kResumableAddresses[0]);");
+                emitter.writeLine("static constexpr Address kResumeRangeEnds[] = {");
+                for (const auto& range : resumableAddressRanges)
+                {
+                    std::ostringstream line;
+                    line << "    0x" << std::hex << range.second << ",";
+                    emitter.writeLine(line.str());
+                }
+                emitter.writeLine("};");
+                emitter.writeLine("const Address* rangeStartsBegin = kResumeRangeStarts;");
+                emitter.writeLine("const Address* rangeStartsEnd = kResumeRangeStarts + "
+                                  "sizeof(kResumeRangeStarts) / sizeof(kResumeRangeStarts[0]);");
+                emitter.writeLine("const Address* rangeIt = std::upper_bound(rangeStartsBegin, "
+                                  "rangeStartsEnd, physical);");
+                emitter.writeLine("if (rangeIt == rangeStartsBegin)");
+                emitter.openBlock("");
+                emitter.writeLine("return false;");
+                emitter.closeBlock();
                 emitter.writeLine(
-                    "if (!std::binary_search(resumableBegin, resumableEnd, physical))");
+                    "const size_t rangeIdx = static_cast<size_t>((rangeIt - rangeStartsBegin) - "
+                    "1);");
+                emitter.writeLine(
+                    "if ((physical & 0x3u) != 0 || physical >= kResumeRangeEnds[rangeIdx])");
                 emitter.openBlock("");
                 emitter.writeLine("return false;");
                 emitter.closeBlock();
