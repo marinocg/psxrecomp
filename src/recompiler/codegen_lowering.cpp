@@ -3,6 +3,9 @@
 #include "codegen_helpers.h"
 #include "codegen_lowering_helpers.h"
 
+#include <algorithm>
+#include <cctype>
+#include <optional>
 #include <sstream>
 #include <unordered_set>
 
@@ -22,13 +25,13 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         context.enableOptimizations = m_options.enableOptimizations;
 
         std::string functionName = uniquifyIdentifier(function.name, usedFunctionNames);
-        emitter.writeLine("void " + functionName +
+        emitter.writeLine("bool " + functionName +
                           "(RecompilerContext& context, Address startAddress)");
         emitter.openBlock("");
         if (function.blocks.empty())
         {
             emitter.writeLine("// TODO: empty function body");
-            emitter.writeLine("return;");
+            emitter.writeLine("return true;");
             emitter.closeBlock();
             emitter.writeBlank();
             continue;
@@ -47,7 +50,44 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         std::unordered_set<std::string> usedBlocks;
         std::unordered_map<std::string, std::string> blockNames;
         std::vector<std::string> blockIds;
+        std::vector<std::pair<Address, std::string>> blockStartDispatchEntries;
+        std::vector<Address> resumableAddresses;
         blockIds.reserve(function.blocks.size());
+        blockStartDispatchEntries.reserve(function.blocks.size());
+        resumableAddresses.reserve(function.blocks.size());
+        std::unordered_set<Address> seenBlockStarts;
+        std::unordered_set<Address> seenResumableAddresses;
+        auto parseBlockStartAddress = [](const std::string& blockName) -> std::optional<Address>
+        {
+            static constexpr const char* kPrefix = "block_0x";
+            static constexpr size_t kPrefixSize = 8;
+            if (blockName.compare(0, kPrefixSize, kPrefix) != 0)
+            {
+                return std::nullopt;
+            }
+
+            const size_t hexStart = kPrefixSize;
+            if (hexStart >= blockName.size())
+            {
+                return std::nullopt;
+            }
+            for (size_t index = hexStart; index < blockName.size(); ++index)
+            {
+                if (!std::isxdigit(static_cast<unsigned char>(blockName[index])))
+                {
+                    return std::nullopt;
+                }
+            }
+
+            std::istringstream parser(blockName.substr(hexStart));
+            Address parsed = 0;
+            parser >> std::hex >> parsed;
+            if (parser.fail())
+            {
+                return std::nullopt;
+            }
+            return parsed & 0x1FFFFFFFu;
+        };
         for (const auto& block : function.blocks)
         {
             std::string uniqueName = uniquifyIdentifier(block.name, usedBlocks);
@@ -56,7 +96,42 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 blockNames.emplace(block.name, uniqueName);
             }
             blockIds.push_back(uniqueName);
+
+            std::optional<Address> blockStart = parseBlockStartAddress(block.name);
+            if (!blockStart.has_value())
+            {
+                for (const auto& instruction : block.instructions)
+                {
+                    if (instruction.sourceAddress.has_value())
+                    {
+                        blockStart = (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                        break;
+                    }
+                }
+            }
+
+            if (blockStart.has_value() && seenBlockStarts.insert(*blockStart).second)
+            {
+                blockStartDispatchEntries.emplace_back(*blockStart, uniqueName);
+            }
+            for (const auto& instruction : block.instructions)
+            {
+                if (!instruction.sourceAddress.has_value())
+                {
+                    continue;
+                }
+                const Address instructionAddress = (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                if (seenResumableAddresses.insert(instructionAddress).second)
+                {
+                    resumableAddresses.push_back(instructionAddress);
+                }
+            }
         }
+        std::sort(blockStartDispatchEntries.begin(), blockStartDispatchEntries.end(),
+                  [](const std::pair<Address, std::string>& left,
+                     const std::pair<Address, std::string>& right)
+                  { return left.first < right.first; });
+        std::sort(resumableAddresses.begin(), resumableAddresses.end());
 
         emitter.writeLine("enum class BlockId {");
         for (size_t index = 0; index < blockIds.size(); ++index)
@@ -73,37 +148,74 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         // Emit a startAddress → BlockId dispatch so that callers can enter
         // this function at an arbitrary block (needed for JALR targets that
         // point into the middle of a function).
-        if (function.blocks.size() > 1)
+        if (!function.blocks.empty())
         {
             emitter.writeLine("if (startAddress != 0)");
             emitter.openBlock("");
             emitter.writeLine("Address physical = startAddress & 0x1FFFFFFF;");
-            emitter.writeLine("switch (physical)");
-            emitter.openBlock("");
-            std::unordered_set<Address> emittedStartCases;
-            for (size_t i = 0; i < function.blocks.size(); ++i)
+            if (resumableAddresses.empty())
             {
-                for (const auto& instruction : function.blocks[i].instructions)
+                emitter.writeLine("return false;");
+                emitter.closeBlock();
+            }
+            else
+            {
+                emitter.writeLine("static constexpr Address kResumableAddresses[] = {");
+                for (Address address : resumableAddresses)
                 {
-                    if (!instruction.sourceAddress.has_value())
+                    std::ostringstream line;
+                    line << "    0x" << std::hex << address << ",";
+                    emitter.writeLine(line.str());
+                }
+                emitter.writeLine("};");
+                emitter.writeLine("const Address* resumableBegin = kResumableAddresses;");
+                emitter.writeLine("const Address* resumableEnd = kResumableAddresses + "
+                                  "sizeof(kResumableAddresses) / sizeof(kResumableAddresses[0]);");
+                emitter.writeLine(
+                    "if (!std::binary_search(resumableBegin, resumableEnd, physical))");
+                emitter.openBlock("");
+                emitter.writeLine("return false;");
+                emitter.closeBlock();
+
+                if (blockStartDispatchEntries.empty())
+                {
+                    emitter.writeLine("return false;");
+                    emitter.closeBlock();
+                }
+                else
+                {
+                    emitter.writeLine("static constexpr Address kBlockStarts[] = {");
                     {
-                        continue;
+                        for (const auto& entry : blockStartDispatchEntries)
+                        {
+                            std::ostringstream line;
+                            line << "    0x" << std::hex << entry.first << ",";
+                            emitter.writeLine(line.str());
+                        }
                     }
-                    const Address blockAddr = (*instruction.sourceAddress) & 0x1FFFFFFFu;
-                    if (!emittedStartCases.insert(blockAddr).second)
+                    emitter.writeLine("};");
+                    emitter.writeLine("static constexpr BlockId kBlockIds[] = {");
+                    for (const auto& entry : blockStartDispatchEntries)
                     {
-                        continue;
+                        emitter.writeLine("    BlockId::" + entry.second + ",");
                     }
-                    std::ostringstream caseLine;
-                    caseLine << "case 0x" << std::hex << blockAddr
-                             << ": block = BlockId::" << blockIds[i]
-                             << "; resumeAddress = physical; break;";
-                    emitter.writeLine(caseLine.str());
+                    emitter.writeLine("};");
+                    emitter.writeLine("const Address* startsBegin = kBlockStarts;");
+                    emitter.writeLine("const Address* startsEnd = kBlockStarts + "
+                                      "sizeof(kBlockStarts) / sizeof(kBlockStarts[0]);");
+                    emitter.writeLine(
+                        "const Address* it = std::upper_bound(startsBegin, startsEnd, physical);");
+                    emitter.writeLine("if (it == startsBegin)");
+                    emitter.openBlock("");
+                    emitter.writeLine("return false;");
+                    emitter.closeBlock();
+                    emitter.writeLine(
+                        "const size_t idx = static_cast<size_t>((it - startsBegin) - 1);");
+                    emitter.writeLine("block = kBlockIds[idx];");
+                    emitter.writeLine("resumeAddress = physical;");
+                    emitter.closeBlock();
                 }
             }
-            emitter.writeLine("default: break;");
-            emitter.closeBlock();
-            emitter.closeBlock();
         }
 
         emitter.writeLine("BlockId previousBlock = block;");
@@ -144,7 +256,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 }
                 // Fallback: unknown predecessor resumes are treated as a
                 // normal function exit.
-                emitter.writeLine("return;");
+                emitter.writeLine("return true;");
                 emitter.closeBlock();
                 continue;
             }
@@ -198,14 +310,14 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 }
                 else
                 {
-                    emitter.writeLine("return;");
+                    emitter.writeLine("return true;");
                 }
             }
             emitter.closeBlock();
         }
         emitter.writeLine("default:");
         emitter.openBlock("");
-        emitter.writeLine("return;");
+        emitter.writeLine("return false;");
         emitter.closeBlock();
         emitter.closeBlock();
         emitter.closeBlock();

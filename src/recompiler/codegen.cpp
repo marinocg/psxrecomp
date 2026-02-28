@@ -146,6 +146,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     }
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
+    emitter.writeLine("#include <algorithm>");
     emitter.writeLine("#include <array>");
     emitter.writeLine("#include <chrono>");
     emitter.writeLine("#include <cstdlib>");
@@ -178,7 +179,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("u32 pendingCycles = 0;");
     emitter.writeLine("Address cachedRangeStart = 0;");
     emitter.writeLine("Address cachedRangeEndExclusive = 0;");
-    emitter.writeLine("void (*cachedRangeFn)(RecompilerContext&, Address) = nullptr;");
+    emitter.writeLine("bool (*cachedRangeFn)(RecompilerContext&, Address) = nullptr;");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.writeLine(
@@ -216,7 +217,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.openBlock("struct FnRange");
     emitter.writeLine("Address start;");
     emitter.writeLine("Address endExclusive;");
-    emitter.writeLine("void (*fn)(RecompilerContext&, Address);");
+    emitter.writeLine("bool (*fn)(RecompilerContext&, Address);");
     emitter.closeBlock(";");
     emitter.writeLine("static constexpr FnRange kFnRanges[] = {");
     for (const auto& range : functionRanges)
@@ -249,8 +250,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
                 caseLine << "case 0x" << std::hex << normalizedEntry << ":";
                 emitter.writeLine(caseLine.str());
                 emitter.openBlock("");
-                emitter.writeLine(entry.second + "(context);");
-                emitter.writeLine("return true;");
+                emitter.writeLine("return " + entry.second + "(context);");
                 emitter.closeBlock();
             }
         }
@@ -261,8 +261,13 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         emitter.writeLine("if (context.cachedRangeStart <= physical &&");
         emitter.writeLine("    physical < context.cachedRangeEndExclusive)");
         emitter.openBlock("");
-        emitter.writeLine("context.cachedRangeFn(context, physical);");
+        emitter.writeLine("if (context.cachedRangeFn(context, physical))");
+        emitter.openBlock("");
         emitter.writeLine("return true;");
+        emitter.closeBlock();
+        emitter.writeLine("context.cachedRangeStart = 0;");
+        emitter.writeLine("context.cachedRangeEndExclusive = 0;");
+        emitter.writeLine("context.cachedRangeFn = nullptr;");
         emitter.closeBlock();
         emitter.closeBlock();
         emitter.writeLine("// kFnRanges are non-overlapping (validated during generation).");
@@ -289,8 +294,13 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         emitter.writeLine("context.cachedRangeStart = range.start;");
         emitter.writeLine("context.cachedRangeEndExclusive = range.endExclusive;");
         emitter.writeLine("context.cachedRangeFn = range.fn;");
-        emitter.writeLine("range.fn(context, physical);");
+        emitter.writeLine("if (range.fn(context, physical))");
+        emitter.openBlock("");
         emitter.writeLine("return true;");
+        emitter.closeBlock();
+        emitter.writeLine("context.cachedRangeStart = 0;");
+        emitter.writeLine("context.cachedRangeEndExclusive = 0;");
+        emitter.writeLine("context.cachedRangeFn = nullptr;");
         emitter.closeBlock();
         emitter.closeBlock();
         emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");

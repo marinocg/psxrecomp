@@ -132,7 +132,7 @@ std::string CodeGenerator::generateFunctionDeclarations(const ir::Program& progr
     for (const auto& function : program.functions)
     {
         std::string name = uniquifyIdentifier(function.name, usedNames);
-        stream << "void " << name << "(RecompilerContext& context, Address startAddress = 0);\n";
+        stream << "bool " << name << "(RecompilerContext& context, Address startAddress = 0);\n";
     }
     return stream.str();
 }

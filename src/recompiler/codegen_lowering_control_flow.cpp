@@ -53,7 +53,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     emitter.writeLine("failUnsupportedJump(" + *externalTarget + ", " + sourcePc +
                                       ");");
                     emitter.closeBlock();
-                    emitter.writeLine("return;");
+                    emitter.writeLine("return true;");
                     return;
                 }
 
@@ -72,11 +72,11 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     emitter.writeLine("failUnsupportedJump(" + targetLiteral + ", " + sourcePc +
                                       ");");
                     emitter.closeBlock();
-                    emitter.writeLine("return;");
+                    emitter.writeLine("return true;");
                     return;
                 }
 
-                emitter.writeLine("return;");
+                emitter.writeLine("return false;");
             };
 
             // Detect self-loop spin-waits: on PSX, BEQ $zero,$zero,self is an
@@ -119,7 +119,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
                     emitter.closeBlock();
                     emitter.openBlock("else");
-                    emitter.writeLine("return;");
+                    emitter.writeLine("return true;");
                     emitter.closeBlock();
                 }
             }
@@ -139,7 +139,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             }
             emitter.writeLine("const Address jumpTargetPhysical = " + target + " & 0x1FFFFFFF;");
             emitter.openBlock("if (jumpTargetPhysical == 0)");
-            emitter.writeLine("return;");
+            emitter.writeLine("return true;");
             emitter.closeBlock();
 
             emitter.writeLine("switch (jumpTargetPhysical)");
@@ -174,7 +174,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.closeBlock();
-            emitter.writeLine("return;");
+            emitter.writeLine("return true;");
         }
         else if (!block.successors.empty())
         {
@@ -197,7 +197,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
                 emitter.closeBlock();
                 emitter.closeBlock();
-                emitter.writeLine("return;");
+                emitter.writeLine("return true;");
             }
             else
             {
