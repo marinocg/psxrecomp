@@ -107,6 +107,15 @@ int main()
     assert(source.find("restoreCalleeSaved") != std::string::npos);
     assert(source.find("context.regs[Registers::S0] = preservedS0;") != std::string::npos);
     assert(source.find("failUnsupportedCall") != std::string::npos);
+    assert(source.find("struct FnRange") != std::string::npos);
+    assert(source.find("static constexpr FnRange kFnRanges[]") != std::string::npos);
+    assert(source.find("const size_t rangeCount = sizeof(kFnRanges) / sizeof(kFnRanges[0]);") !=
+           std::string::npos);
+    assert(source.find("range.fn(context, physical);") != std::string::npos);
+    assert(source.find("main_func(context, 0x10004);") == std::string::npos);
+    assert(source.find("main_func(context, 0x10006);") == std::string::npos);
+    assert(source.find("main_func(context, 0x10008);") == std::string::npos);
+    assert(source.find("main_func(context, 0x1000c);") == std::string::npos);
     assert(source.find("kModuleEntryAddress") != std::string::npos);
     assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
            std::string::npos);
