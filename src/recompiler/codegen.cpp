@@ -4,7 +4,9 @@
 #include "codegen_runtime_helpers.h"
 #include "cpp_emitter.h"
 
+#include <algorithm>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_set>
 
 namespace psxrecomp
@@ -63,14 +65,78 @@ std::string CodeGenerator::generateHeader(const ir::Program& program, const std:
 std::string CodeGenerator::generateSource(const ir::Program& program, const std::string& moduleName,
                                           const ModuleMetadata& metadata)
 {
+    struct FunctionDispatchRange
+    {
+        Address start = 0;
+        Address endExclusive = 0;
+        std::string functionSymbol;
+    };
+
     CppEmitter emitter;
     std::vector<std::pair<Address, std::string>> functionSymbols;
+    std::vector<FunctionDispatchRange> functionRanges;
     functionSymbols.reserve(program.functions.size());
+    functionRanges.reserve(program.functions.size());
     std::unordered_set<std::string> usedFunctionNames;
     for (const auto& function : program.functions)
     {
-        functionSymbols.emplace_back(function.entryAddress,
-                                     uniquifyIdentifier(function.name, usedFunctionNames));
+        std::string functionSymbol = uniquifyIdentifier(function.name, usedFunctionNames);
+        functionSymbols.emplace_back(function.entryAddress, functionSymbol);
+
+        const Address start = function.entryAddress & 0x1FFFFFFFu;
+        Address end = start;
+        for (const auto& block : function.blocks)
+        {
+            for (const auto& instruction : block.instructions)
+            {
+                if (!instruction.sourceAddress.has_value())
+                {
+                    continue;
+                }
+                end = std::max(end, *instruction.sourceAddress & 0x1FFFFFFFu);
+            }
+        }
+
+        functionRanges.push_back({start, end + 4u, functionSymbol});
+    }
+    std::stable_sort(functionRanges.begin(), functionRanges.end(),
+                     [](const FunctionDispatchRange& left, const FunctionDispatchRange& right)
+                     {
+                         if (left.start != right.start)
+                         {
+                             return left.start < right.start;
+                         }
+                         return left.endExclusive < right.endExclusive;
+                     });
+    std::vector<FunctionDispatchRange> deduplicatedRanges;
+    deduplicatedRanges.reserve(functionRanges.size());
+    for (const auto& range : functionRanges)
+    {
+        if (!deduplicatedRanges.empty())
+        {
+            const auto& previous = deduplicatedRanges.back();
+            if (range.start == previous.start && range.endExclusive == previous.endExclusive)
+            {
+                continue;
+            }
+        }
+        deduplicatedRanges.push_back(range);
+    }
+    functionRanges = std::move(deduplicatedRanges);
+
+    for (size_t index = 1; index < functionRanges.size(); ++index)
+    {
+        const auto& previous = functionRanges[index - 1];
+        const auto& current = functionRanges[index];
+        if (current.start < previous.endExclusive)
+        {
+            std::ostringstream stream;
+            stream << "Overlapping function dispatch ranges: " << previous.functionSymbol << " [0x"
+                   << std::hex << previous.start << ", 0x" << previous.endExclusive << ") and "
+                   << current.functionSymbol << " [0x" << current.start << ", 0x"
+                   << current.endExclusive << ").";
+            throw std::runtime_error(stream.str());
+        }
     }
 
     Address moduleEntryAddress = metadata.entryAddress;
@@ -110,6 +176,9 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("u32 hi = 0;");
     emitter.writeLine("u32 lo = 0;");
     emitter.writeLine("u32 pendingCycles = 0;");
+    emitter.writeLine("Address cachedRangeStart = 0;");
+    emitter.writeLine("Address cachedRangeEndExclusive = 0;");
+    emitter.writeLine("void (*cachedRangeFn)(RecompilerContext&, Address) = nullptr;");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.writeLine(
@@ -144,6 +213,22 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     }
     emitter.writeBlank();
 
+    emitter.openBlock("struct FnRange");
+    emitter.writeLine("Address start;");
+    emitter.writeLine("Address endExclusive;");
+    emitter.writeLine("void (*fn)(RecompilerContext&, Address);");
+    emitter.closeBlock(";");
+    emitter.writeLine("static constexpr FnRange kFnRanges[] = {");
+    for (const auto& range : functionRanges)
+    {
+        std::ostringstream line;
+        line << "    {0x" << std::hex << range.start << ", 0x" << range.endExclusive << ", "
+             << range.functionSymbol << "},";
+        emitter.writeLine(line.str());
+    }
+    emitter.writeLine("};");
+    emitter.writeBlank();
+
     auto emitRecompiledDispatchSwitch = [&](const std::string& recurseHelper)
     {
         emitter.writeLine("switch (physical)");
@@ -168,46 +253,46 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
                 emitter.writeLine("return true;");
                 emitter.closeBlock();
             }
-
-            // Second: emit cases for every instruction source address so that
-            // JALR/JR targets to a mid-function address can enter at the
-            // correct point via the startAddress parameter.
-            {
-                std::unordered_set<std::string> usedNames2;
-                for (const auto& function : program.functions)
-                {
-                    std::string funcName = uniquifyIdentifier(function.name, usedNames2);
-                    for (const auto& block : function.blocks)
-                    {
-                        for (const auto& instruction : block.instructions)
-                        {
-                            if (!instruction.sourceAddress.has_value())
-                            {
-                                continue;
-                            }
-                            const Address instructionAddr =
-                                (*instruction.sourceAddress) & 0x1FFFFFFFu;
-                            if (!emittedEntries.insert(instructionAddr).second)
-                            {
-                                continue;
-                            }
-                            std::ostringstream caseLine;
-                            caseLine << "case 0x" << std::hex << instructionAddr << ":";
-                            emitter.writeLine(caseLine.str());
-                            emitter.openBlock("");
-                            std::ostringstream callLine;
-                            callLine << funcName << "(context, 0x" << std::hex << instructionAddr
-                                     << ");";
-                            emitter.writeLine(callLine.str());
-                            emitter.writeLine("return true;");
-                            emitter.closeBlock();
-                        }
-                    }
-                }
-            }
         }
         emitter.writeLine("default:");
         emitter.openBlock("");
+        emitter.writeLine("if (context.cachedRangeFn != nullptr)");
+        emitter.openBlock("");
+        emitter.writeLine("if (context.cachedRangeStart <= physical &&");
+        emitter.writeLine("    physical < context.cachedRangeEndExclusive)");
+        emitter.openBlock("");
+        emitter.writeLine("context.cachedRangeFn(context, physical);");
+        emitter.writeLine("return true;");
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.writeLine("// kFnRanges are non-overlapping (validated during generation).");
+        emitter.writeLine("const size_t rangeCount = sizeof(kFnRanges) / sizeof(kFnRanges[0]);");
+        emitter.writeLine("size_t low = 0;");
+        emitter.writeLine("size_t high = rangeCount;");
+        emitter.writeLine("while (low < high)");
+        emitter.openBlock("");
+        emitter.writeLine("const size_t mid = low + ((high - low) / 2);");
+        emitter.writeLine("if (kFnRanges[mid].start <= physical)");
+        emitter.openBlock("");
+        emitter.writeLine("low = mid + 1;");
+        emitter.closeBlock();
+        emitter.writeLine("else");
+        emitter.openBlock("");
+        emitter.writeLine("high = mid;");
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.writeLine("if (low > 0)");
+        emitter.openBlock("");
+        emitter.writeLine("const FnRange& range = kFnRanges[low - 1];");
+        emitter.writeLine("if (physical < range.endExclusive)");
+        emitter.openBlock("");
+        emitter.writeLine("context.cachedRangeStart = range.start;");
+        emitter.writeLine("context.cachedRangeEndExclusive = range.endExclusive;");
+        emitter.writeLine("context.cachedRangeFn = range.fn;");
+        emitter.writeLine("range.fn(context, physical);");
+        emitter.writeLine("return true;");
+        emitter.closeBlock();
+        emitter.closeBlock();
         emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
         emitter.openBlock("");
         emitter.writeLine(

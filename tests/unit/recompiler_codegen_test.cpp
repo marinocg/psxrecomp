@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 int main()
@@ -107,6 +108,22 @@ int main()
     assert(source.find("restoreCalleeSaved") != std::string::npos);
     assert(source.find("context.regs[Registers::S0] = preservedS0;") != std::string::npos);
     assert(source.find("failUnsupportedCall") != std::string::npos);
+    assert(source.find("struct FnRange") != std::string::npos);
+    assert(source.find("static constexpr FnRange kFnRanges[]") != std::string::npos);
+    assert(source.find("const size_t rangeCount = sizeof(kFnRanges) / sizeof(kFnRanges[0]);") !=
+           std::string::npos);
+    assert(source.find("if (context.cachedRangeFn != nullptr)") != std::string::npos);
+    assert(source.find("context.cachedRangeFn(context, physical);") != std::string::npos);
+    assert(source.find("context.cachedRangeStart = range.start;") != std::string::npos);
+    assert(source.find("context.cachedRangeEndExclusive = range.endExclusive;") !=
+           std::string::npos);
+    assert(source.find("context.cachedRangeFn = range.fn;") != std::string::npos);
+    assert(source.find("range.fn(context, physical);") != std::string::npos);
+    assert(source.find("main_func(context, 0x10004);") == std::string::npos);
+    assert(source.find("main_func(context, 0x10007);") == std::string::npos);
+    assert(source.find("main_func(context, 0x10006);") == std::string::npos);
+    assert(source.find("main_func(context, 0x10008);") == std::string::npos);
+    assert(source.find("main_func(context, 0x1000c);") == std::string::npos);
     assert(source.find("kModuleEntryAddress") != std::string::npos);
     assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
            std::string::npos);
@@ -145,6 +162,37 @@ int main()
     assert(runner.find("decodeLogLevel") != std::string::npos);
     assert(runner.find("const auto& exVramWords = system.gpu().vramWords();") != std::string::npos);
     assert(runner.find("exPixels[y * exWidth + x] = pixel;") != std::string::npos);
+
+    Program overlappingProgram;
+    Builder overlappingBuilder(overlappingProgram);
+    auto& outerFunction = overlappingBuilder.createFunction("outer_func", 0x80010000);
+    auto& outerBlock = overlappingBuilder.createBlock(outerFunction, "entry");
+    outerBlock.instructions.push_back(
+        overlappingBuilder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(1)},
+                                           {overlappingBuilder.createTemporary()}, 0x80010000));
+    outerBlock.instructions.push_back(
+        overlappingBuilder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(2)},
+                                           {overlappingBuilder.createTemporary()}, 0x80010010));
+    outerBlock.instructions.push_back(overlappingBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+
+    auto& innerFunction = overlappingBuilder.createFunction("inner_func", 0x80010008);
+    auto& innerBlock = overlappingBuilder.createBlock(innerFunction, "entry");
+    innerBlock.instructions.push_back(
+        overlappingBuilder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(3)},
+                                           {overlappingBuilder.createTemporary()}, 0x80010008));
+    innerBlock.instructions.push_back(overlappingBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+
+    bool overlapDetected = false;
+    try
+    {
+        (void)generator.generateSource(overlappingProgram, "module_overlap");
+    }
+    catch (const std::runtime_error& error)
+    {
+        overlapDetected = std::string(error.what()).find("Overlapping function dispatch ranges") !=
+                          std::string::npos;
+    }
+    assert(overlapDetected);
 
 #if defined(_MSC_VER)
     std::cerr << "Skipping compile-and-run check on MSVC toolchain.\n";
