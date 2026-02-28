@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_set>
 
 namespace psxrecomp
@@ -98,19 +99,45 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
 
         functionRanges.push_back({start, end + 4u, functionSymbol});
     }
-    std::sort(functionRanges.begin(), functionRanges.end(),
-              [](const FunctionDispatchRange& left, const FunctionDispatchRange& right)
-              {
-                  if (left.start != right.start)
-                  {
-                      return left.start < right.start;
-                  }
-                  if (left.endExclusive != right.endExclusive)
-                  {
-                      return left.endExclusive < right.endExclusive;
-                  }
-                  return left.functionSymbol < right.functionSymbol;
-              });
+    std::stable_sort(functionRanges.begin(), functionRanges.end(),
+                     [](const FunctionDispatchRange& left, const FunctionDispatchRange& right)
+                     {
+                         if (left.start != right.start)
+                         {
+                             return left.start < right.start;
+                         }
+                         return left.endExclusive < right.endExclusive;
+                     });
+    std::vector<FunctionDispatchRange> deduplicatedRanges;
+    deduplicatedRanges.reserve(functionRanges.size());
+    for (const auto& range : functionRanges)
+    {
+        if (!deduplicatedRanges.empty())
+        {
+            const auto& previous = deduplicatedRanges.back();
+            if (range.start == previous.start && range.endExclusive == previous.endExclusive)
+            {
+                continue;
+            }
+        }
+        deduplicatedRanges.push_back(range);
+    }
+    functionRanges = std::move(deduplicatedRanges);
+
+    for (size_t index = 1; index < functionRanges.size(); ++index)
+    {
+        const auto& previous = functionRanges[index - 1];
+        const auto& current = functionRanges[index];
+        if (current.start < previous.endExclusive)
+        {
+            std::ostringstream stream;
+            stream << "Overlapping function dispatch ranges: " << previous.functionSymbol << " [0x"
+                   << std::hex << previous.start << ", 0x" << previous.endExclusive << ") and "
+                   << current.functionSymbol << " [0x" << current.start << ", 0x"
+                   << current.endExclusive << ").";
+            throw std::runtime_error(stream.str());
+        }
+    }
 
     Address moduleEntryAddress = metadata.entryAddress;
     if (moduleEntryAddress == 0 && !functionSymbols.empty())
@@ -149,6 +176,9 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("u32 hi = 0;");
     emitter.writeLine("u32 lo = 0;");
     emitter.writeLine("u32 pendingCycles = 0;");
+    emitter.writeLine("Address cachedRangeStart = 0;");
+    emitter.writeLine("Address cachedRangeEndExclusive = 0;");
+    emitter.writeLine("void (*cachedRangeFn)(RecompilerContext&, Address) = nullptr;");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.writeLine(
@@ -226,6 +256,16 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         }
         emitter.writeLine("default:");
         emitter.openBlock("");
+        emitter.writeLine("if (context.cachedRangeFn != nullptr)");
+        emitter.openBlock("");
+        emitter.writeLine("if (context.cachedRangeStart <= physical &&");
+        emitter.writeLine("    physical < context.cachedRangeEndExclusive)");
+        emitter.openBlock("");
+        emitter.writeLine("context.cachedRangeFn(context, physical);");
+        emitter.writeLine("return true;");
+        emitter.closeBlock();
+        emitter.closeBlock();
+        emitter.writeLine("// kFnRanges are non-overlapping (validated during generation).");
         emitter.writeLine("const size_t rangeCount = sizeof(kFnRanges) / sizeof(kFnRanges[0]);");
         emitter.writeLine("size_t low = 0;");
         emitter.writeLine("size_t high = rangeCount;");
@@ -246,6 +286,9 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         emitter.writeLine("const FnRange& range = kFnRanges[low - 1];");
         emitter.writeLine("if (physical < range.endExclusive)");
         emitter.openBlock("");
+        emitter.writeLine("context.cachedRangeStart = range.start;");
+        emitter.writeLine("context.cachedRangeEndExclusive = range.endExclusive;");
+        emitter.writeLine("context.cachedRangeFn = range.fn;");
         emitter.writeLine("range.fn(context, physical);");
         emitter.writeLine("return true;");
         emitter.closeBlock();
