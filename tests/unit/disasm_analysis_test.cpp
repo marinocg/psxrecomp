@@ -126,25 +126,21 @@ int main()
     // ---------------------------------------------------------------
     {
         std::vector<Instruction> unknownSeedInstructions;
-        unknownSeedInstructions.push_back(Instruction{
-            0x80011000, encodeI(0x09, 0, 8, 1), Opcode::ADDIU, InstructionType::I_TYPE,
-            0,          0,                     8,              1,
-            0,          0,                     false,          std::nullopt});
-        unknownSeedInstructions.push_back(Instruction{
-            0x80011004, 0xFFFFFFFFu, Opcode::UNKNOWN, InstructionType::UNKNOWN,
-            0,          0,          0,               0,
-            0,          0,          false,           std::nullopt});
-        unknownSeedInstructions.push_back(Instruction{
-            0x80011008, encodeI(0x09, 0, 9, 2), Opcode::ADDIU, InstructionType::I_TYPE,
-            0,          0,                     9,              2,
-            0,          0,                     false,          std::nullopt});
-        unknownSeedInstructions.push_back(Instruction{
-            0x8001100C, encodeI(0x09, 0, 10, 3), Opcode::ADDIU, InstructionType::I_TYPE,
-            0,          0,                      10,             3,
-            0,          0,                      false,          std::nullopt});
+        unknownSeedInstructions.push_back(Instruction{0x80011000, encodeI(0x09, 0, 8, 1),
+                                                      Opcode::ADDIU, InstructionType::I_TYPE, 0, 0,
+                                                      8, 1, 0, 0, false, std::nullopt});
+        unknownSeedInstructions.push_back(Instruction{0x80011004, 0xFFFFFFFFu, Opcode::UNKNOWN,
+                                                      InstructionType::UNKNOWN, 0, 0, 0, 0, 0, 0,
+                                                      false, std::nullopt});
+        unknownSeedInstructions.push_back(Instruction{0x80011008, encodeI(0x09, 0, 9, 2),
+                                                      Opcode::ADDIU, InstructionType::I_TYPE, 0, 0,
+                                                      9, 2, 0, 0, false, std::nullopt});
+        unknownSeedInstructions.push_back(Instruction{0x8001100C, encodeI(0x09, 0, 10, 3),
+                                                      Opcode::ADDIU, InstructionType::I_TYPE, 0, 0,
+                                                      10, 3, 0, 0, false, std::nullopt});
 
-        CodeDataSegmentation unknownSeedSegmentation = segmentCodeAndData(
-            unknownSeedInstructions, {0x80011004}, std::vector<JumpTableInfo>{});
+        CodeDataSegmentation unknownSeedSegmentation =
+            segmentCodeAndData(unknownSeedInstructions, {0x80011004}, std::vector<JumpTableInfo>{});
 
         assert(unknownSeedSegmentation.codeRanges.size() == 1);
         assert(unknownSeedSegmentation.codeRanges[0].start == 0x80011004);
