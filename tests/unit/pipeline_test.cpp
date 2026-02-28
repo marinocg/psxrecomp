@@ -58,6 +58,25 @@ std::vector<psxrecomp::u8> buildExeWithCodeAndAsciiData()
     return buffer;
 }
 
+std::vector<psxrecomp::u8> buildExeWithSeparateEntryAndBaseVector()
+{
+    constexpr psxrecomp::u32 loadSize = 64;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010020); // initial PC (main entry)
+    writeLe32(buffer, 0x14, 0x80010000); // GP
+    writeLe32(buffer, 0x18, 0x80010000); // load address
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004008); // j 0x80010020 (vector trampoline at base)
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop delay slot
+    writeLe32(buffer, codeOffset + 0x20, 0x08004008); // j 0x80010020 (main loop)
+    writeLe32(buffer, codeOffset + 0x24, 0x00000000); // nop delay slot
+
+    return buffer;
+}
+
 } // namespace
 
 int main()
@@ -145,6 +164,27 @@ int main()
     assert(manifestContentA.find("\"runtimeInclude\"") != std::string::npos);
     assert(manifestContentA.find("\"runtimeSource\"") != std::string::npos);
 
+    std::filesystem::path vectorExePath =
+        tempDir / ("psxrecomp_pipeline_vector_" + suffix + ".psx");
+    guard.exe = vectorExePath;
+    auto vectorBuffer = buildExeWithSeparateEntryAndBaseVector();
+    std::ofstream vectorFile(vectorExePath, std::ios::binary);
+    vectorFile.write(reinterpret_cast<const char*>(vectorBuffer.data()),
+                     static_cast<std::streamsize>(vectorBuffer.size()));
+    vectorFile.close();
+    auto vectorResult = pipeline.run(vectorExePath.string());
+    assert(vectorResult.success);
+    bool hasBaseVectorFunction = false;
+    for (const auto& function : vectorResult.functions)
+    {
+        if (function.entryAddress == 0x80010000)
+        {
+            hasBaseVectorFunction = true;
+            break;
+        }
+    }
+    assert(hasBaseVectorFunction);
+
     std::filesystem::path mixedExePath = tempDir / ("psxrecomp_pipeline_mixed_" + suffix + ".psx");
     guard.exe = mixedExePath;
     auto mixedBuffer = buildExeWithCodeAndAsciiData();
@@ -154,10 +194,23 @@ int main()
     mixedFile.close();
     auto mixedResult = pipeline.run(mixedExePath.string());
     assert(mixedResult.success);
-    // NOTE: Code/data segmentation classifies some data regions correctly,
-    // but code-pointer harvesting may pull in additional regions.  The
-    // important thing is that the pipeline succeeds and produces valid
-    // output artifacts.
+    const auto isUnsupportedFromAsciiData = [](const std::string& message)
+    {
+        if (message.find("Unsupported opcode:") == std::string::npos)
+        {
+            return false;
+        }
+        return message.find("0x80010008") != std::string::npos ||
+               message.find("0x8001000c") != std::string::npos;
+    };
+    for (const auto& warning : mixedResult.warnings)
+    {
+        assert(!isUnsupportedFromAsciiData(warning));
+    }
+    for (const auto& diagnostic : mixedResult.diagnostics)
+    {
+        assert(!isUnsupportedFromAsciiData(diagnostic.message));
+    }
 
     {
         std::ofstream ecmFile(ecmPath, std::ios::binary);
