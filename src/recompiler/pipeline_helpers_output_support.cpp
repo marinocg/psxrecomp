@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -185,6 +186,68 @@ std::string toHex(const std::array<u8, kSha1DigestSize>& digest)
     return value;
 }
 
+std::string computeSha1Hex(const u8* data, size_t size)
+{
+    Sha1Hasher hasher;
+    hasher.update(data, size);
+    return toHex(hasher.finalize());
+}
+
+bool validateSha1Implementation(std::string& outError)
+{
+    struct TestVector
+    {
+        std::string input;
+        std::string expectedSha1;
+    };
+
+    const std::array<TestVector, 4> testVectors = {{
+        {"", "da39a3ee5e6b4b0d3255bfef95601890afd80709"},
+        {"abc", "a9993e364706816aba3e25717850c26c9cd0d89d"},
+        {"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+         "84983e441c3bd26ebaae4aa1f95129e5e54670f1"},
+        {std::string(1000000, 'a'), "34aa973cd4c4daa4f61eeb2bdbad27316534016f"},
+    }};
+
+    for (const auto& vector : testVectors)
+    {
+        const auto* bytes = reinterpret_cast<const u8*>(vector.input.data());
+        const std::string digest = computeSha1Hex(bytes, vector.input.size());
+        if (digest != vector.expectedSha1)
+        {
+            outError = "Expected " + vector.expectedSha1 + " but got " + digest + ".";
+            return false;
+        }
+    }
+
+    outError.clear();
+    return true;
+}
+
+bool ensureSha1SelfTest(std::string& outError)
+{
+    struct SelfTestState
+    {
+        bool passed = false;
+        std::string error;
+    };
+
+    static const SelfTestState state = []
+    {
+        SelfTestState result;
+        result.passed = validateSha1Implementation(result.error);
+        return result;
+    }();
+
+    if (!state.passed)
+    {
+        outError = "SHA-1 self-test failed: " + state.error;
+        return false;
+    }
+    outError.clear();
+    return true;
+}
+
 bool computeSha1AndPrefix(const std::filesystem::path& path, std::string& outSha1, u64& outSize,
                           std::vector<u8>& outPrefix, std::string& outError)
 {
@@ -337,6 +400,11 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
                                 const std::string& timestamp, const std::string& pipelineVersion,
                                 std::string& outError)
 {
+    if (!ensureSha1SelfTest(outError))
+    {
+        return false;
+    }
+
     iso::IsoParser parser(activeDiscPath);
     if (!(parser.open() && parser.isValid()))
     {

@@ -57,6 +57,22 @@ bool catalogEntryHasType(const std::string& catalog, const std::string& isoPath,
     return entrySlice.find("\"" + type + "\"") != std::string::npos;
 }
 
+bool catalogEntryHasSha1(const std::string& catalog, const std::string& isoPath,
+                         const std::string& sha1)
+{
+    const std::string isoMarker = "\"isoPath\": \"" + isoPath + "\"";
+    const size_t isoPos = catalog.find(isoMarker);
+    if (isoPos == std::string::npos)
+    {
+        return false;
+    }
+
+    const size_t nextIso = catalog.find("\"isoPath\": \"", isoPos + isoMarker.size());
+    const std::string entrySlice =
+        catalog.substr(isoPos, nextIso == std::string::npos ? std::string::npos : nextIso - isoPos);
+    return entrySlice.find("\"sha1\": \"" + sha1 + "\"") != std::string::npos;
+}
+
 std::filesystem::path createIsoWithExecutables(const std::string& label,
                                                const std::string& systemCnfContents)
 {
@@ -395,6 +411,10 @@ int main()
         assert(catalog.find("\"isoPath\": \"GAMEA.EXE\"") != std::string::npos);
         assert(catalog.find("\"isoPath\": \"GAMEB.EXE\"") != std::string::npos);
         assert(catalog.find("\"sha1\": \"") != std::string::npos);
+        assert(
+            catalogEntryHasSha1(catalog, "GAMEA.EXE", "c81ef78add2542090c4124b515612c2b5b42b5a2"));
+        assert(
+            catalogEntryHasSha1(catalog, "GAMEB.EXE", "071bd5165a34451b85d3c0835f990394eec29a44"));
         assert(catalogEntryHasType(catalog, "GAMEA.EXE", "psx_exe"));
         assert(catalogEntryHasType(catalog, "GAMEB.EXE", "psx_exe"));
     }
