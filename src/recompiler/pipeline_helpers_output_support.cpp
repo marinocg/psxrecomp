@@ -174,9 +174,10 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
             continue;
         }
 
-        iso::PsxExeImage executableImage{};
+        iso::PsxExeHeader executableHeader{};
         iso::PsxExeDiagnostics executableDiagnostics;
-        if (!iso::PsxExeLoader::loadImage(executableData, executableImage, &executableDiagnostics))
+        if (!iso::PsxExeLoader::parseHeader(executableData, executableHeader,
+                                            &executableDiagnostics))
         {
             const std::string warning = "Recomp inputs metadata skipped for executable '" +
                                         executablePath + "' because PS-X EXE parsing failed.";
@@ -185,17 +186,24 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
             continue;
         }
 
+        u32 effectiveLoadSize = executableHeader.loadSize;
+        if (effectiveLoadSize == 0 && executableData.size() >= iso::PsxExeLoader::kHeaderSize)
+        {
+            effectiveLoadSize =
+                static_cast<u32>(executableData.size() - iso::PsxExeLoader::kHeaderSize);
+        }
+
         RecompInputExecutable entry;
         entry.isoPath = executablePath;
         entry.exportedPath = findExportedPath(executablePath);
-        entry.loadAddress = executableImage.header.loadAddress;
-        entry.loadSize = executableImage.header.loadSize;
-        entry.entryPoint = executableImage.entryPoint.pc;
-        entry.gp = executableImage.entryPoint.gp;
-        entry.bssAddress = executableImage.header.bssAddress;
-        entry.bssSize = executableImage.header.bssSize;
-        entry.stackAddress = executableImage.header.stackAddress;
-        entry.stackSize = executableImage.header.stackSize;
+        entry.loadAddress = executableHeader.loadAddress;
+        entry.loadSize = effectiveLoadSize;
+        entry.entryPoint = executableHeader.initialPc;
+        entry.gp = executableHeader.initialGp;
+        entry.bssAddress = executableHeader.bssAddress;
+        entry.bssSize = executableHeader.bssSize;
+        entry.stackAddress = executableHeader.stackAddress;
+        entry.stackSize = executableHeader.stackSize;
         recompInputExecutables.push_back(std::move(entry));
     }
 
