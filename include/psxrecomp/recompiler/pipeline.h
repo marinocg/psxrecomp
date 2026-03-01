@@ -80,6 +80,8 @@ struct PipelineOptions
         bool alwaysExportAllExe = true;
         std::vector<std::string> allowPrefixes;
         std::vector<std::string> denyPrefixes;
+
+        bool enableEmbeddedScan = false;
     };
 
     std::string outputDirectory;

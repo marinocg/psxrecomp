@@ -51,6 +51,7 @@ set(ISO_SOURCES
     src/iso/iso_boot.cpp
     src/iso/iso_parser_directory.cpp
     src/iso/iso_parser_filesystem.cpp
+    src/iso/iso_parser_metadata.cpp
     src/iso/iso_parser_pvd.cpp
     src/iso/iso_parser_resources.cpp
     src/iso/iso_parser_stream.cpp
@@ -106,6 +107,8 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_helpers_output_plan.cpp
     src/recompiler/pipeline_helpers_output_serialize.cpp
     src/recompiler/pipeline_helpers_output_support.cpp
+    src/recompiler/pipeline_helpers_output_support_hash.cpp
+    src/recompiler/pipeline_helpers_output_support_embedded.cpp
     src/recompiler/pipeline_selection_helpers.cpp
     src/recompiler/pipeline.cpp
 )
@@ -300,6 +303,7 @@ if(BUILD_TESTS)
 
     add_executable(pipeline_candidate_test
         tests/unit/pipeline_candidate_test.cpp
+        tests/unit/pipeline_candidate_test_helpers.cpp
         ${ISO_SOURCES}
         ${DISASM_SOURCES}
         ${IR_SOURCES}

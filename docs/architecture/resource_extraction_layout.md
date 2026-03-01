@@ -23,6 +23,11 @@ resources/
     resources_manifest.json
   fs/
     ... exported ISO-relative files (policy-driven)
+  embedded/
+    by_container/
+      <container id>/
+        tim/
+          <offset>_<size>_<hash8>.tim
 ```
 
 Notes:
@@ -50,6 +55,7 @@ For CLI use, environment variables are supported:
 - `PSXRECOMP_RES_ALWAYS_EXPORT_ALL_EXE`
 - `PSXRECOMP_RES_ALLOW_PREFIXES` (comma-separated)
 - `PSXRECOMP_RES_DENY_PREFIXES` (comma-separated)
+- `PSXRECOMP_RES_EMBEDDED_SCAN=true|false`
 
 ## Index Files
 
@@ -200,6 +206,8 @@ Unified per-resource catalog for exported filesystem files (`resources/fs/**`).
 - One deterministic entry per exported file (`id: "discfile:<isoPath>"`).
 - Includes ISO source path, exported path, original ISO extents, exported size, and SHA-1.
 - Includes conservative content classification (`psx_exe`, `tim`, `str`, `xa`, `xa_maybe`).
+- Embedded carved assets are included with `sourceKind: "embedded"` and `source.containerIsoPath`
+  + `source.offset`.
 
 Schema summary:
 
@@ -209,11 +217,16 @@ Schema summary:
   "entries": [
     {
       "id": "discfile:DATA/TEX.BIN",
+      "sourceKind": "disc_file",
       "isoPath": "DATA/TEX.BIN",
       "exportedPath": "fs/DATA/TEX.BIN",
       "size": 4096,
       "hashes": {
         "sha1": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "source": {
+        "containerIsoPath": "",
+        "offset": 0
       },
       "extents": [
         { "lba": 1234, "bytes": 2048, "continues": true },

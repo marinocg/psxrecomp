@@ -10,6 +10,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -268,267 +269,145 @@ bool IsoParser::exportFileTo(const std::string& isoPath, const std::filesystem::
     return true;
 }
 
-std::string IsoParser::findExecutable()
+bool IsoParser::readRangeFromIsoFile(const std::string& isoPath, u64 offset, size_t size,
+                                     std::vector<u8>& outData, std::string* outError)
 {
-    if (!m_isOpen)
+    auto setError = [&](const std::string& message)
     {
-        return "";
-    }
-
-    auto systemCnf = extractFile("SYSTEM.CNF");
-    auto bootPath = detail::parseBootPathFromSystemCnf(systemCnf);
-    if (!bootPath.empty())
-    {
-        return bootPath;
-    }
-
-    auto executables = listExecutables();
-    if (!executables.empty())
-    {
-        return executables.front();
-    }
-
-    return "";
-}
-
-std::string IsoParser::getVolumeLabel() const
-{
-    std::string label(m_pvd.volumeId, m_pvd.volumeId + sizeof(m_pvd.volumeId));
-    auto nullPos = label.find('\0');
-    if (nullPos != std::string::npos)
-    {
-        label.erase(nullPos);
-    }
-    return detail::trimSpaces(label);
-}
-
-u32 IsoParser::getLogicalBlockSize() const
-{
-    return m_logicalBlockSize;
-}
-
-u32 IsoParser::getRawSectorSize() const
-{
-    return m_rawSectorSize;
-}
-
-bool IsoParser::isUsingJoliet() const
-{
-    return m_useJoliet;
-}
-
-u32 IsoParser::getTotalSectors() const
-{
-    return m_totalSectors;
-}
-
-const std::vector<TrackInfo>& IsoParser::getTracks() const
-{
-    return m_tracks;
-}
-
-std::optional<TrackInfo> IsoParser::getDataTrack() const
-{
-    const auto* track = selectPrimaryDataTrack();
-    if (!track)
-    {
-        return std::nullopt;
-    }
-    return *track;
-}
-
-const std::vector<std::string>& IsoParser::getErrors() const
-{
-    return m_errors;
-}
-
-std::string IsoParser::getLastError() const
-{
-    if (m_errors.empty())
-    {
-        return "";
-    }
-    return m_errors.back();
-}
-
-bool IsoParser::isValid() const
-{
-    return m_isValid;
-}
-
-std::vector<std::string> IsoParser::listExecutables()
-{
-    return listFilesByExtension({".EXE"}, false);
-}
-
-std::vector<IsoFileEntry> IsoParser::listAllFilesRecursive()
-{
-    std::vector<IsoFileEntry> allEntries;
-    if (!m_isOpen)
-    {
-        return allEntries;
-    }
-
-    struct PendingDirectory
-    {
-        std::string path;
-        u32 extent = 0;
-        u32 size = 0;
+        addError(message);
+        if (outError)
+        {
+            *outError = message;
+        }
+        return false;
     };
 
-    struct FileVersionRecords
+    if (!m_isOpen)
     {
-        int bestVersion = -1;
-        std::vector<DirectoryRecord> records;
-    };
+        return setError("ISO parser is not open.");
+    }
 
-    auto directoryKey = [](u32 extent, u32 size) -> u64
-    { return (static_cast<u64>(extent) << 32) | static_cast<u64>(size); };
-
-    std::deque<PendingDirectory> pendingDirectories;
-    pendingDirectories.push_back(PendingDirectory{"", m_rootExtent, m_rootSize});
-
-    std::unordered_set<u64> visitedDirectories;
-    std::unordered_map<std::string, IsoFileEntry> directoriesByPath;
-    std::unordered_map<std::string, FileVersionRecords> filesByPath;
-
-    while (!pendingDirectories.empty())
+    if (!isIsoRelativePath(isoPath))
     {
-        PendingDirectory current = pendingDirectories.front();
-        pendingDirectories.pop_front();
+        return setError("ISO path must be relative and must not contain traversal segments.");
+    }
 
-        if (current.size == 0)
+    DirectoryRecord target{};
+    std::vector<DirectoryRecord> targetExtents;
+    if (!findFileExtents(isoPath, target, targetExtents))
+    {
+        return setError("Failed to locate ISO file: " + isoPath);
+    }
+
+    std::sort(targetExtents.begin(), targetExtents.end(),
+              [](const DirectoryRecord& lhs, const DirectoryRecord& rhs)
+              { return lhs.extentLocation < rhs.extentLocation; });
+
+    u64 totalLength = 0;
+    if (targetExtents.size() == 1)
+    {
+        totalLength = static_cast<u64>(targetExtents.front().dataLength);
+    }
+    else
+    {
+        bool hasMultiExtent = false;
+        for (const auto& extent : targetExtents)
         {
-            continue;
+            hasMultiExtent = hasMultiExtent || ((extent.flags & 0x80) != 0);
+            if (totalLength > std::numeric_limits<u64>::max() - static_cast<u64>(extent.dataLength))
+            {
+                return setError("ISO read range file size overflow: " + isoPath);
+            }
+            totalLength += static_cast<u64>(extent.dataLength);
         }
-
-        if (!visitedDirectories.insert(directoryKey(current.extent, current.size)).second)
+        if (!hasMultiExtent && !targetExtents.empty())
         {
-            continue;
-        }
-
-        std::vector<DirectoryRecord> records;
-        if (!readDirectory(current.extent, current.size, records))
-        {
-            continue;
-        }
-
-        for (const auto& record : records)
-        {
-            if (record.name.empty() || record.name == "." || record.name == "..")
-            {
-                continue;
-            }
-
-            const bool isDirectory = (record.flags & 0x02) != 0;
-            const std::string normalizedName =
-                detail::normalizeIsoName(detail::baseIsoName(record.name));
-            if (normalizedName.empty())
-            {
-                continue;
-            }
-
-            std::string fullPath = current.path;
-            if (!fullPath.empty())
-            {
-                fullPath += "/";
-            }
-            fullPath += normalizedName;
-
-            if (isDirectory)
-            {
-                auto [it, inserted] = directoriesByPath.emplace(fullPath, IsoFileEntry{});
-                if (inserted)
-                {
-                    it->second.path = fullPath;
-                    it->second.size = record.dataLength;
-                    it->second.flags = record.flags;
-                    it->second.isDirectory = true;
-                    it->second.extents.push_back(
-                        IsoFileExtent{record.extentLocation, record.dataLength, false});
-                }
-                if (record.extentLocation != 0 && record.dataLength != 0)
-                {
-                    pendingDirectories.push_back(
-                        PendingDirectory{fullPath, record.extentLocation, record.dataLength});
-                }
-                continue;
-            }
-
-            const int version = detail::isoVersionNumber(record.name);
-            auto& versionRecords = filesByPath[fullPath];
-            if (version > versionRecords.bestVersion)
-            {
-                versionRecords.bestVersion = version;
-                versionRecords.records.clear();
-            }
-            if (version == versionRecords.bestVersion)
-            {
-                versionRecords.records.push_back(record);
-            }
+            totalLength = static_cast<u64>(targetExtents.front().dataLength);
+            targetExtents = {targetExtents.front()};
         }
     }
 
-    allEntries.reserve(directoriesByPath.size() + filesByPath.size());
-    for (const auto& [path, entry] : directoriesByPath)
+    if (offset > totalLength)
     {
-        (void)path;
-        allEntries.push_back(entry);
+        return setError("ISO read range offset exceeds file size: " + isoPath);
+    }
+    const u64 requestedSize = static_cast<u64>(size);
+    if (requestedSize > totalLength - offset)
+    {
+        return setError("ISO read range exceeds file size: " + isoPath);
     }
 
-    for (auto& [path, versionRecords] : filesByPath)
+    if (outError)
     {
-        (void)path;
-        auto& records = versionRecords.records;
-        if (records.empty())
+        outError->clear();
+    }
+    outData.clear();
+    outData.resize(size);
+    if (size == 0)
+    {
+        return true;
+    }
+
+    u64 remainingSkip = offset;
+    size_t writeOffset = 0;
+    u64 remaining = requestedSize;
+
+    for (const auto& extent : targetExtents)
+    {
+        if (remaining == 0)
         {
+            break;
+        }
+
+        if (remainingSkip >= static_cast<u64>(extent.dataLength))
+        {
+            remainingSkip -= static_cast<u64>(extent.dataLength);
             continue;
         }
+        u64 extentOffset = remainingSkip;
+        remainingSkip = 0;
 
-        std::sort(records.begin(), records.end(),
-                  [](const DirectoryRecord& lhs, const DirectoryRecord& rhs)
-                  { return lhs.extentLocation < rhs.extentLocation; });
-
-        const bool hasMultiExtent =
-            std::any_of(records.begin(), records.end(),
-                        [](const DirectoryRecord& record) { return (record.flags & 0x80) != 0; });
-
-        IsoFileEntry entry;
-        entry.path = path;
-        entry.isDirectory = false;
-
-        if (hasMultiExtent || records.size() == 1)
+        while (extentOffset < static_cast<u64>(extent.dataLength) && remaining > 0)
         {
-            for (const auto& record : records)
+            const u64 sectorAdvance = extentOffset / kUserDataSize;
+            const u32 sector = extent.extentLocation + static_cast<u32>(sectorAdvance);
+            const auto sectorData = readSector(sector);
+            if (sectorData.empty())
             {
-                entry.extents.push_back(IsoFileExtent{record.extentLocation, record.dataLength,
-                                                      (record.flags & 0x80) != 0});
-                entry.size += record.dataLength;
-                entry.flags |= record.flags;
+                return setError("Failed to read ISO sector while extracting range: " + isoPath);
             }
-        }
-        else
-        {
-            const auto& record = records.front();
-            entry.size = record.dataLength;
-            entry.flags = record.flags;
-            entry.extents.push_back(IsoFileExtent{record.extentLocation, record.dataLength, false});
-        }
 
-        allEntries.push_back(std::move(entry));
+            const size_t sectorOffset = static_cast<size_t>(extentOffset % kUserDataSize);
+            if (sectorOffset >= sectorData.size())
+            {
+                return setError("Unexpected ISO sector offset while extracting range: " + isoPath);
+            }
+
+            const u64 availableInExtent = static_cast<u64>(extent.dataLength) - extentOffset;
+            const size_t availableInSector = sectorData.size() - sectorOffset;
+            const u64 toCopy =
+                std::min<u64>({remaining, availableInExtent, static_cast<u64>(availableInSector)});
+            if (toCopy == 0)
+            {
+                return setError("Failed to progress while extracting range: " + isoPath);
+            }
+
+            std::memcpy(outData.data() + static_cast<std::ptrdiff_t>(writeOffset),
+                        sectorData.data() + static_cast<std::ptrdiff_t>(sectorOffset),
+                        static_cast<size_t>(toCopy));
+
+            writeOffset += static_cast<size_t>(toCopy);
+            remaining -= toCopy;
+            extentOffset += toCopy;
+        }
     }
 
-    std::sort(allEntries.begin(), allEntries.end(),
-              [](const IsoFileEntry& lhs, const IsoFileEntry& rhs)
-              {
-                  if (lhs.path == rhs.path)
-                  {
-                      return lhs.isDirectory && !rhs.isDirectory;
-                  }
-                  return lhs.path < rhs.path;
-              });
+    if (remaining != 0)
+    {
+        return setError("Failed to satisfy full ISO read range: " + isoPath);
+    }
 
-    return allEntries;
+    return true;
 }
 
 } // namespace iso

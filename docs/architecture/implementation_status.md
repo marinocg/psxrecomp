@@ -53,6 +53,10 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Recursive ISO tree enumeration now walks directory records from root (independent of path table), and pipeline output emits `resources/index/{disc_tree,disc_meta,resources_manifest}.json` plus policy-driven `resources/fs/` exports (minimal/smart/full), with streaming file export (no full-file buffering).
 - Resource index now includes `resources/index/recomp_inputs.json` with boot executable mapping, exported `SYSTEM.CNF`, and metadata for the discovered executable set to support no-ISO recompilation reruns.
 - Resource index now includes `resources/index/catalog.json` as a unified exported-file truth table with deterministic IDs, ISO extents, SHA-1 hashes, and conservative content sniffing (`psx_exe`, `tim`, `str`, `xa`/`xa_maybe`).
+- Optional embedded TIM carving now scans bounded large container files (`.BIN/.DAT/...`) via
+  ISO range reads and emits deterministic outputs under
+  `resources/embedded/by_container/<containerId>/tim/`, with extracted-hit metadata merged into
+  `resources/index/catalog.json`.
 
 **Missing**
 

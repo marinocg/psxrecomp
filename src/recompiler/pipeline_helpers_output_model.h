@@ -46,13 +46,23 @@ struct RecompInputExecutable
     u32 stackSize = 0;
 };
 
+struct EmbeddedScanSummary
+{
+    bool enabled = false;
+    size_t containersScanned = 0;
+    size_t hitsExtracted = 0;
+};
+
 struct CatalogEntry
 {
     std::string id;
+    std::string sourceKind = "disc_file";
     std::string isoPath;
     std::string exportedPath;
     u64 size = 0;
     std::string sha1;
+    std::string containerIsoPath;
+    u64 containerOffset = 0;
     std::vector<iso::IsoFileExtent> extents;
     std::vector<std::string> detectedTypes;
 };
@@ -72,6 +82,7 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
                                        const iso::IsoParser& parser,
                                        const std::vector<iso::IsoFileEntry>& entries,
                                        const FilesystemExportSummary& filesystemSummary,
+                                       const EmbeddedScanSummary& embeddedScanSummary,
                                        const std::vector<std::string>& extraWarnings);
 std::string serializeRecompInputs(const std::string& bootIsoPath,
                                   const std::string& bootExportedPath,

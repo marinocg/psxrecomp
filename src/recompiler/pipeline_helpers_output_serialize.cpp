@@ -194,6 +194,7 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
                                        const iso::IsoParser& parser,
                                        const std::vector<iso::IsoFileEntry>& entries,
                                        const FilesystemExportSummary& filesystemSummary,
+                                       const EmbeddedScanSummary& embeddedScanSummary,
                                        const std::vector<std::string>& extraWarnings)
 {
     std::vector<const iso::IsoFileEntry*> files;
@@ -261,10 +262,10 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     stream << "      }\n";
     stream << "    },\n";
     stream << "    \"embeddedScan\": {\n";
-    stream << "      \"enabled\": false,\n";
+    stream << "      \"enabled\": " << (embeddedScanSummary.enabled ? "true" : "false") << ",\n";
     stream << "      \"result\": {\n";
-    stream << "        \"containersScanned\": 0,\n";
-    stream << "        \"hitsExtracted\": 0\n";
+    stream << "        \"containersScanned\": " << embeddedScanSummary.containersScanned << ",\n";
+    stream << "        \"hitsExtracted\": " << embeddedScanSummary.hitsExtracted << "\n";
     stream << "      }\n";
     stream << "    },\n";
     stream << "    \"derived\": {\n";
@@ -275,8 +276,8 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     stream << "  \"runtimeSummary\": {\n";
     stream << "    \"filesystemEnabled\": true,\n";
     stream << "    \"filesystemMode\": \"" << escapeJson(filesystemSummary.mode) << "\",\n";
-    stream << "    \"containersScanned\": 0,\n";
-    stream << "    \"hitsExtracted\": 0\n";
+    stream << "    \"containersScanned\": " << embeddedScanSummary.containersScanned << ",\n";
+    stream << "    \"hitsExtracted\": " << embeddedScanSummary.hitsExtracted << "\n";
     stream << "  },\n";
     stream << "  \"stats\": {\n";
     stream << "    \"discFiles\": " << discFileCount << ",\n";
@@ -324,11 +325,17 @@ std::string serializeCatalog(const std::vector<CatalogEntry>& entries)
         const auto& entry = entries[index];
         stream << "    {\n";
         stream << "      \"id\": \"" << escapeJson(entry.id) << "\",\n";
+        stream << "      \"sourceKind\": \"" << escapeJson(entry.sourceKind) << "\",\n";
         stream << "      \"isoPath\": \"" << escapeJson(entry.isoPath) << "\",\n";
         stream << "      \"exportedPath\": \"" << escapeJson(entry.exportedPath) << "\",\n";
         stream << "      \"size\": " << entry.size << ",\n";
         stream << "      \"hashes\": {\n";
         stream << "        \"sha1\": \"" << escapeJson(entry.sha1) << "\"\n";
+        stream << "      },\n";
+        stream << "      \"source\": {\n";
+        stream << "        \"containerIsoPath\": \"" << escapeJson(entry.containerIsoPath)
+               << "\",\n";
+        stream << "        \"offset\": " << entry.containerOffset << "\n";
         stream << "      },\n";
         stream << "      \"extents\": [\n";
         for (size_t extentIndex = 0; extentIndex < entry.extents.size(); ++extentIndex)
