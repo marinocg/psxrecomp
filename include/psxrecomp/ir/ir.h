@@ -118,6 +118,7 @@ struct Instruction
     std::vector<Value> outputs;
     std::optional<Address> sourceAddress = std::nullopt;
     std::optional<std::string> sourceAsm = std::nullopt;
+    std::optional<Address> sourceAsmAddress = std::nullopt;
 
     std::string toString() const;
 };
@@ -188,7 +189,8 @@ class Builder
     Instruction makeInstruction(Opcode opcode, std::vector<Value> inputs,
                                 std::vector<Value> outputs,
                                 std::optional<Address> sourceAddress = std::nullopt,
-                                std::optional<std::string> sourceAsm = std::nullopt);
+                                std::optional<std::string> sourceAsm = std::nullopt,
+                                std::optional<Address> sourceAsmAddress = std::nullopt);
 
   private:
     Program& m_program;

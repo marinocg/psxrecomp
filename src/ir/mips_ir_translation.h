@@ -26,7 +26,8 @@ class MipsIrTranslator
                           std::optional<Address> sourceAddressOverride = std::nullopt);
     void translateWithDelay(const disasm::Instruction& instr, const disasm::Instruction* delaySlot);
     void emitInstruction(Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs,
-                         Address sourceAddress, const std::string& sourceAsm);
+                         Address sourceAddress, std::optional<std::string> sourceAsm,
+                         std::optional<Address> sourceAsmAddress);
     void addWarning(const disasm::Instruction& instruction, const std::string& message);
     void addError(const disasm::Instruction& instruction, const std::string& message);
     static bool isMipsNop(const disasm::Instruction& instruction);

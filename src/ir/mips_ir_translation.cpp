@@ -90,9 +90,15 @@ void MipsIrTranslator::translate(const std::vector<disasm::Instruction>& instruc
 void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
                                           const disasm::Instruction* delaySlot)
 {
-    const std::string sourceAsm = instr.toString();
+    const std::optional<std::string> sourceAsm =
+        m_options.captureSourceAsm ? std::make_optional(instr.toString()) : std::nullopt;
+    const std::optional<Address> sourceAsmAddress =
+        m_options.captureSourceAsm ? std::make_optional(instr.address) : std::nullopt;
     auto emit = [&](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs)
-    { emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address, sourceAsm); };
+    {
+        emitInstruction(opcode, std::move(inputs), std::move(outputs), instr.address, sourceAsm,
+                        sourceAsmAddress);
+    };
     auto emitLinkRegister = [&](Register linkRegister)
     {
         emit(Opcode::MOVE, {Value::makeImmediate(static_cast<s32>(linkAddressForJump(instr)))},
@@ -317,10 +323,12 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
 
 void MipsIrTranslator::emitInstruction(Opcode opcode, std::vector<Value> inputs,
                                        std::vector<Value> outputs, Address sourceAddress,
-                                       const std::string& sourceAsm)
+                                       std::optional<std::string> sourceAsm,
+                                       std::optional<Address> sourceAsmAddress)
 {
-    m_result.instructions.push_back(m_builder.makeInstruction(
-        opcode, std::move(inputs), std::move(outputs), sourceAddress, sourceAsm));
+    m_result.instructions.push_back(
+        m_builder.makeInstruction(opcode, std::move(inputs), std::move(outputs), sourceAddress,
+                                  std::move(sourceAsm), sourceAsmAddress));
 }
 
 void MipsIrTranslator::addWarning(const disasm::Instruction& instruction,

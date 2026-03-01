@@ -45,9 +45,15 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
                                         std::optional<Address> sourceAddressOverride)
 {
     const Address sourceAddress = sourceAddressOverride.value_or(instr.address);
-    const std::string sourceAsm = instr.toString();
+    const std::optional<std::string> sourceAsm =
+        m_options.captureSourceAsm ? std::make_optional(instr.toString()) : std::nullopt;
+    const std::optional<Address> sourceAsmAddress =
+        m_options.captureSourceAsm ? std::make_optional(instr.address) : std::nullopt;
     auto emit = [&](Opcode opcode, std::vector<Value> inputs, std::vector<Value> outputs)
-    { emitInstruction(opcode, std::move(inputs), std::move(outputs), sourceAddress, sourceAsm); };
+    {
+        emitInstruction(opcode, std::move(inputs), std::move(outputs), sourceAddress, sourceAsm,
+                        sourceAsmAddress);
+    };
     auto emitLinkRegister = [&](Register linkRegister)
     {
         emit(Opcode::MOVE, {Value::makeImmediate(static_cast<s32>(linkAddressForJump(instr)))},

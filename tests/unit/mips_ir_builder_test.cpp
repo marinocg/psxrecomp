@@ -73,6 +73,8 @@ int main()
     assert(result.instructions[2].sourceAsm.has_value());
     assert(result.instructions[0].sourceAsm.value() == instructions[0].toString());
     assert(result.instructions[2].sourceAsm.value() == instructions[2].toString());
+    assert(result.instructions[3].sourceAddress.value_or(0) == 0x80010008);
+    assert(result.instructions[3].sourceAsmAddress.value_or(0) == 0x8001000C);
 
     const Address branchAddress = result.instructions[2].sourceAddress.value_or(0);
     assert(branchAddress == 0x80010008);
@@ -180,6 +182,17 @@ int main()
     assert(foundCop0Mtc);
     assert(foundCop0Mfc);
     assert(foundCop0Rfe);
+
+    psxrecomp::ir::MipsIrBuildOptions noSourceAsmOptions;
+    noSourceAsmOptions.captureSourceAsm = false;
+    auto noSourceAsmResult = buildIrFromMips(instructions, noSourceAsmOptions);
+    assert(noSourceAsmResult.errors.empty());
+    assert(!noSourceAsmResult.instructions.empty());
+    for (const auto& instruction : noSourceAsmResult.instructions)
+    {
+        assert(!instruction.sourceAsm.has_value());
+        assert(!instruction.sourceAsmAddress.has_value());
+    }
 
     return 0;
 }

@@ -16,16 +16,22 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     if (context.generateComments)
     {
         std::string comment;
-        if (instruction.sourceAsm.has_value() && instruction.sourceAddress.has_value())
+        if (instruction.sourceAsm.has_value())
         {
-            std::ostringstream stream;
-            stream << "// 0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
-                   << *instruction.sourceAddress << ": " << *instruction.sourceAsm;
-            comment = stream.str();
-        }
-        else if (instruction.sourceAsm.has_value())
-        {
-            comment = "// " + *instruction.sourceAsm;
+            const std::optional<Address> asmAddress = instruction.sourceAsmAddress.has_value()
+                                                          ? instruction.sourceAsmAddress
+                                                          : instruction.sourceAddress;
+            if (asmAddress.has_value())
+            {
+                std::ostringstream stream;
+                stream << "// 0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
+                       << *asmAddress << ": " << *instruction.sourceAsm;
+                comment = stream.str();
+            }
+            else
+            {
+                comment = "// " + *instruction.sourceAsm;
+            }
         }
         else
         {
