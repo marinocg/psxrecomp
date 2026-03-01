@@ -17,6 +17,7 @@ namespace ir
 struct MipsIrBuildOptions
 {
     bool emitUnknownAsNop = true;
+    bool captureSourceAsm = true;
 };
 
 /**
