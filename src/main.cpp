@@ -1,9 +1,14 @@
+#include <algorithm>
+#include <cctype>
+#include <cerrno>
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "psxrecomp/recompiler/pipeline.h"
 
@@ -51,6 +56,131 @@ std::string escapeJson(const std::string& value)
         }
     }
     return escaped;
+}
+
+std::string toLowerCopy(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+std::optional<uint64_t> parseUint64Env(const char* name)
+{
+    const char* raw = std::getenv(name);
+    if (!raw || raw[0] == '\0')
+    {
+        return std::nullopt;
+    }
+    if (raw[0] == '+' || raw[0] == '-')
+    {
+        return std::nullopt;
+    }
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long long value = std::strtoull(raw, &end, 10);
+    if (errno != 0 || end == raw || (end && *end != '\0'))
+    {
+        return std::nullopt;
+    }
+    return static_cast<uint64_t>(value);
+}
+
+std::optional<bool> parseBoolEnv(const char* name)
+{
+    const char* raw = std::getenv(name);
+    if (!raw || raw[0] == '\0')
+    {
+        return std::nullopt;
+    }
+    const std::string value = toLowerCopy(raw);
+    if (value == "1" || value == "true" || value == "yes" || value == "on")
+    {
+        return true;
+    }
+    if (value == "0" || value == "false" || value == "no" || value == "off")
+    {
+        return false;
+    }
+    return std::nullopt;
+}
+
+std::vector<std::string> parsePrefixListEnv(const char* name)
+{
+    std::vector<std::string> values;
+    const char* raw = std::getenv(name);
+    if (!raw || raw[0] == '\0')
+    {
+        return values;
+    }
+
+    std::string token;
+    std::istringstream stream(raw);
+    while (std::getline(stream, token, ','))
+    {
+        const auto start = token.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos)
+        {
+            continue;
+        }
+        const auto end = token.find_last_not_of(" \t\r\n");
+        values.push_back(token.substr(start, end - start + 1));
+    }
+    return values;
+}
+
+void applyResourceExportEnv(psxrecomp::recompiler::PipelineOptions& options)
+{
+    auto& resourceOptions = options.resourceExport;
+    if (const char* mode = std::getenv("PSXRECOMP_RES_FS_MODE"))
+    {
+        const std::string normalized = toLowerCopy(mode);
+        if (normalized == "minimal")
+        {
+            resourceOptions.fsMode =
+                psxrecomp::recompiler::PipelineOptions::ResourceExportOptions::FsMode::Minimal;
+        }
+        else if (normalized == "smart")
+        {
+            resourceOptions.fsMode =
+                psxrecomp::recompiler::PipelineOptions::ResourceExportOptions::FsMode::Smart;
+        }
+        else if (normalized == "full")
+        {
+            resourceOptions.fsMode =
+                psxrecomp::recompiler::PipelineOptions::ResourceExportOptions::FsMode::Full;
+        }
+    }
+
+    if (const auto maxTotal = parseUint64Env("PSXRECOMP_RES_MAX_TOTAL_BYTES"))
+    {
+        resourceOptions.maxTotalBytes = *maxTotal;
+    }
+    if (const auto maxSingle = parseUint64Env("PSXRECOMP_RES_MAX_SINGLE_FILE_BYTES"))
+    {
+        resourceOptions.maxSingleFileBytes = *maxSingle;
+    }
+    if (const auto alwaysSystem = parseBoolEnv("PSXRECOMP_RES_ALWAYS_EXPORT_SYSTEM_CNF"))
+    {
+        resourceOptions.alwaysExportSystemCnf = *alwaysSystem;
+    }
+    if (const auto alwaysBoot = parseBoolEnv("PSXRECOMP_RES_ALWAYS_EXPORT_BOOT_EXE"))
+    {
+        resourceOptions.alwaysExportBootExe = *alwaysBoot;
+    }
+    if (const auto alwaysAllExe = parseBoolEnv("PSXRECOMP_RES_ALWAYS_EXPORT_ALL_EXE"))
+    {
+        resourceOptions.alwaysExportAllExe = *alwaysAllExe;
+    }
+
+    if (std::getenv("PSXRECOMP_RES_ALLOW_PREFIXES") != nullptr)
+    {
+        resourceOptions.allowPrefixes = parsePrefixListEnv("PSXRECOMP_RES_ALLOW_PREFIXES");
+    }
+    if (std::getenv("PSXRECOMP_RES_DENY_PREFIXES") != nullptr)
+    {
+        resourceOptions.denyPrefixes = parsePrefixListEnv("PSXRECOMP_RES_DENY_PREFIXES");
+    }
 }
 
 void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
@@ -277,6 +407,7 @@ int main(int argc, char* argv[])
     options.enableOptimizations = optimize;
     options.preserveSymbols = preserveSymbols;
     options.verbose = verbose;
+    applyResourceExportEnv(options);
 
     psxrecomp::recompiler::RecompilationPipeline pipeline(options);
     auto result = pipeline.run(inputFile);

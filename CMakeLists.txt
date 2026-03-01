@@ -103,6 +103,9 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_helpers.cpp
     src/recompiler/pipeline_helpers_manifest.cpp
     src/recompiler/pipeline_helpers_output.cpp
+    src/recompiler/pipeline_helpers_output_plan.cpp
+    src/recompiler/pipeline_helpers_output_serialize.cpp
+    src/recompiler/pipeline_helpers_output_support.cpp
     src/recompiler/pipeline_selection_helpers.cpp
     src/recompiler/pipeline.cpp
 )

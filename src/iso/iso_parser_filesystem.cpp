@@ -5,8 +5,11 @@
 #include "psxrecomp/iso/iso_boot.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <deque>
+#include <filesystem>
+#include <fstream>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -19,6 +22,34 @@ namespace
 {
 
 constexpr u32 kUserDataSize = detail::kUserDataSize;
+
+bool isIsoRelativePath(const std::string& path)
+{
+    if (path.empty())
+    {
+        return false;
+    }
+
+    std::filesystem::path fsPath(path);
+    if (fsPath.is_absolute())
+    {
+        return false;
+    }
+
+    const std::vector<std::string> components = detail::splitPath(path);
+    if (components.empty())
+    {
+        return false;
+    }
+    for (const auto& component : components)
+    {
+        if (component.empty() || component == "." || component == "..")
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
 } // namespace
 
@@ -81,6 +112,160 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
     }
 
     return data;
+}
+
+bool IsoParser::exportFileTo(const std::string& isoPath, const std::filesystem::path& destination,
+                             std::string* outError)
+{
+    std::ofstream out;
+    bool wroteTempFile = false;
+    std::filesystem::path tempDestination;
+    auto cleanupTemp = [&]()
+    {
+        if (out.is_open())
+        {
+            out.close();
+        }
+        if (wroteTempFile)
+        {
+            std::error_code cleanupError;
+            std::filesystem::remove(tempDestination, cleanupError);
+        }
+    };
+
+    auto setError = [&](const std::string& message)
+    {
+        cleanupTemp();
+        addError(message);
+        if (outError)
+        {
+            *outError = message;
+        }
+        return false;
+    };
+
+    if (!m_isOpen)
+    {
+        return setError("ISO parser is not open.");
+    }
+
+    if (!isIsoRelativePath(isoPath))
+    {
+        return setError("ISO path must be relative and must not contain traversal segments.");
+    }
+
+    if (destination.empty())
+    {
+        return setError("Destination path is empty.");
+    }
+
+    DirectoryRecord target{};
+    std::vector<DirectoryRecord> targetExtents;
+    if (!findFileExtents(isoPath, target, targetExtents))
+    {
+        return setError("Failed to locate ISO file: " + isoPath);
+    }
+
+    std::sort(targetExtents.begin(), targetExtents.end(),
+              [](const DirectoryRecord& lhs, const DirectoryRecord& rhs)
+              { return lhs.extentLocation < rhs.extentLocation; });
+
+    u32 totalLength = 0;
+    if (targetExtents.size() == 1)
+    {
+        totalLength = targetExtents.front().dataLength;
+    }
+    else
+    {
+        bool hasMultiExtent = false;
+        for (const auto& extent : targetExtents)
+        {
+            hasMultiExtent = hasMultiExtent || ((extent.flags & 0x80) != 0);
+            totalLength += extent.dataLength;
+        }
+        if (!hasMultiExtent && !targetExtents.empty())
+        {
+            totalLength = targetExtents.front().dataLength;
+            targetExtents = {targetExtents.front()};
+        }
+    }
+
+    if (outError)
+    {
+        outError->clear();
+    }
+
+    std::error_code fsError;
+    const std::filesystem::path parent = destination.parent_path();
+    if (!parent.empty())
+    {
+        std::filesystem::create_directories(parent, fsError);
+        if (fsError)
+        {
+            return setError("Failed to create destination directory: " + parent.string() + ": " +
+                            fsError.message());
+        }
+    }
+
+    tempDestination = destination;
+    tempDestination +=
+        ".tmp." + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    out.open(tempDestination, std::ios::binary);
+    if (!out)
+    {
+        return setError("Failed to open temporary destination file: " + tempDestination.string());
+    }
+    wroteTempFile = true;
+
+    u32 remainingTotal = totalLength;
+    for (const auto& extent : targetExtents)
+    {
+        u32 remainingExtent = extent.dataLength;
+        u32 sector = extent.extentLocation;
+        while (remainingExtent > 0 && remainingTotal > 0)
+        {
+            const auto sectorData = readSector(sector);
+            if (sectorData.empty())
+            {
+                return setError("Failed to read ISO sector while exporting: " + isoPath);
+            }
+
+            const u32 toWrite = std::min<u32>(
+                {remainingExtent, remainingTotal, static_cast<u32>(sectorData.size())});
+            out.write(reinterpret_cast<const char*>(sectorData.data()),
+                      static_cast<std::streamsize>(toWrite));
+            if (!out.good())
+            {
+                return setError("Failed to write destination file: " + destination.string());
+            }
+
+            remainingExtent -= toWrite;
+            remainingTotal -= toWrite;
+            ++sector;
+        }
+    }
+
+    out.flush();
+    if (!out.good())
+    {
+        return setError("Failed to flush destination file: " + destination.string());
+    }
+
+    out.close();
+    if (!out.good())
+    {
+        return setError("Failed to close temporary destination file: " + tempDestination.string());
+    }
+
+    std::filesystem::rename(tempDestination, destination, fsError);
+    if (fsError)
+    {
+        return setError("Failed to finalize destination file: " + destination.string() + ": " +
+                        fsError.message());
+    }
+    wroteTempFile = false;
+
+    return true;
 }
 
 std::string IsoParser::findExecutable()

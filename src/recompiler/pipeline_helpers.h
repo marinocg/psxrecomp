@@ -54,6 +54,7 @@ std::string serializeManifest(const PipelineResult& result, const std::string& i
  * @param buildFile Generated CMakeLists.txt content.
  * @param activeDiscPath Path to the active disc image.
  * @param inputFsPath Input path (used to decide whether to export resources).
+ * @param resourceExportOptions Filesystem resource export policy.
  * @param warnings Mutable warnings list.
  * @param diagnostics Mutable diagnostics list.
  * @param manifestTimestamp Override for manifest timestamp.
@@ -66,6 +67,7 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
                           const std::string& source, const std::string& runnerSource,
                           const std::string& buildFile, const std::string& activeDiscPath,
                           const std::filesystem::path& inputFsPath,
+                          const PipelineOptions::ResourceExportOptions& resourceExportOptions,
                           std::vector<std::string>& warnings,
                           std::vector<PipelineDiagnostic>& diagnostics,
                           const std::string& manifestTimestamp, const std::string& pipelineVersion,
