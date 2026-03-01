@@ -19,8 +19,8 @@ struct FunctionDispatchRange
     std::string functionSymbol;
 };
 
-void emitGeneratedSourceBody(CppEmitter& emitter, const ir::Program& program,
-                             const ModuleMetadata& metadata, Address moduleEntryAddress,
+void emitGeneratedSourceBody(CppEmitter& emitter, const ModuleMetadata& metadata,
+                             Address moduleEntryAddress,
                              const std::vector<std::pair<Address, std::string>>& functionSymbols);
 
 } // namespace recompiler

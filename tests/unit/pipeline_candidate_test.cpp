@@ -230,6 +230,8 @@ int main()
                                    "disc_tree.json"));
     assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "index" /
                                    "disc_meta.json"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "index" /
+                                   "recomp_inputs.json"));
     assert(std::find(result.artifacts.exportedResources.begin(),
                      result.artifacts.exportedResources.end(),
                      "index/resources_manifest.json") != result.artifacts.exportedResources.end());
@@ -239,6 +241,9 @@ int main()
     assert(std::find(result.artifacts.exportedResources.begin(),
                      result.artifacts.exportedResources.end(),
                      "index/disc_meta.json") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "index/recomp_inputs.json") != result.artifacts.exportedResources.end());
     {
         std::ifstream manifestFile(result.artifacts.resourceManifestPath);
         const std::string resourceManifest((std::istreambuf_iterator<char>(manifestFile)),
@@ -247,7 +252,21 @@ int main()
                std::string::npos);
         assert(resourceManifest.find("\"discMetaPath\": \"index/disc_meta.json\"") !=
                std::string::npos);
+        assert(resourceManifest.find("\"recompInputsPath\": \"index/recomp_inputs.json\"") !=
+               std::string::npos);
         assert(resourceManifest.find("\"filesystemEnabled\": true") != std::string::npos);
+    }
+    {
+        std::ifstream recompInputsFile(std::filesystem::path(result.artifacts.resourcesPath) /
+                                       "index" / "recomp_inputs.json");
+        const std::string recompInputs((std::istreambuf_iterator<char>(recompInputsFile)),
+                                       std::istreambuf_iterator<char>());
+        assert(recompInputs.find("\"isoPath\": \"GAMEB.EXE\"") != std::string::npos);
+        assert(recompInputs.find("\"exportedPath\": \"fs/GAMEB.EXE\"") != std::string::npos);
+        assert(recompInputs.find("\"isoPath\": \"GAMEA.EXE\"") != std::string::npos);
+        assert(recompInputs.find("\"exportedPath\": \"fs/GAMEA.EXE\"") != std::string::npos);
+        assert(recompInputs.find("\"loadAddr\": \"0x80010000\"") != std::string::npos);
+        assert(recompInputs.find("\"loadAddr\": \"0x80020000\"") != std::string::npos);
     }
     {
         std::ifstream pipelineManifest(result.artifacts.manifestPath);

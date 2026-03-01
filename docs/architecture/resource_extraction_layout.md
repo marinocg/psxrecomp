@@ -18,6 +18,7 @@ resources/
   index/
     disc_tree.json
     disc_meta.json
+    recomp_inputs.json
     resources_manifest.json
   fs/
     ... exported ISO-relative files (policy-driven)
@@ -114,6 +115,7 @@ Schema summary:
   "index": {
     "discTreePath": "index/disc_tree.json",
     "discMetaPath": "index/disc_meta.json",
+    "recompInputsPath": "index/recomp_inputs.json",
     "resourcesManifestPath": "index/resources_manifest.json"
   },
   "exports": {
@@ -156,6 +158,36 @@ Schema summary:
     ]
   },
   "warnings": []
+}
+```
+
+### `resources/index/recomp_inputs.json`
+
+Recompilation input descriptor for no-ISO reruns.
+
+- Captures the selected boot executable path and exported filesystem path.
+- Captures exported `SYSTEM.CNF` path.
+- Enumerates all discovered executables (`findExecutable()` + `listExecutables()` set) and
+  includes parsed PS-X EXE metadata from `PsxExeLoader`.
+
+Schema summary:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "boot": { "isoPath": "GAMEB.EXE", "exportedPath": "fs/GAMEB.EXE" },
+  "systemCnf": { "exportedPath": "fs/SYSTEM.CNF" },
+  "executables": [
+    {
+      "isoPath": "GAMEA.EXE",
+      "exportedPath": "fs/GAMEA.EXE",
+      "psxExe": {
+        "loadAddr": "0x80010000",
+        "entry": "0x80010000",
+        "size": 16
+      }
+    }
+  ]
 }
 ```
 
