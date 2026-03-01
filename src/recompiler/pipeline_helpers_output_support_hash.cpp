@@ -15,8 +15,6 @@ namespace detail
 namespace
 {
 
-constexpr size_t kSha1BlockSize = 64;
-constexpr size_t kSha1DigestSize = 20;
 constexpr size_t kSniffPrefixBytes = 4096;
 
 u32 rotateLeft(u32 value, u32 amount)
@@ -24,160 +22,11 @@ u32 rotateLeft(u32 value, u32 amount)
     return (value << amount) | (value >> (32 - amount));
 }
 
-class Sha1Hasher
-{
-  public:
-    Sha1Hasher()
-    {
-        m_state = {0x67452301U, 0xEFCDAB89U, 0x98BADCFEU, 0x10325476U, 0xC3D2E1F0U};
-        m_totalBytes = 0;
-        m_bufferSize = 0;
-    }
-
-    void update(const u8* data, size_t size)
-    {
-        if (size == 0)
-        {
-            return;
-        }
-
-        m_totalBytes += static_cast<u64>(size);
-        size_t offset = 0;
-        while (offset < size)
-        {
-            const size_t toCopy = std::min(kSha1BlockSize - m_bufferSize, size - offset);
-            std::memcpy(m_buffer.data() + m_bufferSize, data + offset, toCopy);
-            m_bufferSize += toCopy;
-            offset += toCopy;
-
-            if (m_bufferSize == kSha1BlockSize)
-            {
-                processBlock(m_buffer.data());
-                m_bufferSize = 0;
-            }
-        }
-    }
-
-    std::array<u8, kSha1DigestSize> finalize()
-    {
-        const u64 bitLength = m_totalBytes * 8ULL;
-
-        m_buffer[m_bufferSize++] = 0x80;
-        if (m_bufferSize > 56)
-        {
-            std::fill(m_buffer.begin() + static_cast<std::ptrdiff_t>(m_bufferSize), m_buffer.end(),
-                      0);
-            processBlock(m_buffer.data());
-            m_bufferSize = 0;
-        }
-
-        std::fill(m_buffer.begin() + static_cast<std::ptrdiff_t>(m_bufferSize),
-                  m_buffer.begin() + static_cast<std::ptrdiff_t>(56), 0);
-        for (size_t i = 0; i < 8; ++i)
-        {
-            m_buffer[56 + i] = static_cast<u8>((bitLength >> ((7 - i) * 8)) & 0xFFULL);
-        }
-        processBlock(m_buffer.data());
-        m_bufferSize = 0;
-
-        std::array<u8, kSha1DigestSize> digest{};
-        for (size_t i = 0; i < m_state.size(); ++i)
-        {
-            digest[i * 4] = static_cast<u8>((m_state[i] >> 24) & 0xFFU);
-            digest[i * 4 + 1] = static_cast<u8>((m_state[i] >> 16) & 0xFFU);
-            digest[i * 4 + 2] = static_cast<u8>((m_state[i] >> 8) & 0xFFU);
-            digest[i * 4 + 3] = static_cast<u8>(m_state[i] & 0xFFU);
-        }
-        return digest;
-    }
-
-  private:
-    void processBlock(const u8* block)
-    {
-        std::array<u32, 80> words{};
-        for (size_t i = 0; i < 16; ++i)
-        {
-            const size_t offset = i * 4;
-            words[i] = (static_cast<u32>(block[offset]) << 24) |
-                       (static_cast<u32>(block[offset + 1]) << 16) |
-                       (static_cast<u32>(block[offset + 2]) << 8) |
-                       static_cast<u32>(block[offset + 3]);
-        }
-        for (size_t i = 16; i < words.size(); ++i)
-        {
-            words[i] = rotateLeft(words[i - 3] ^ words[i - 8] ^ words[i - 14] ^ words[i - 16], 1);
-        }
-
-        u32 a = m_state[0];
-        u32 b = m_state[1];
-        u32 c = m_state[2];
-        u32 d = m_state[3];
-        u32 e = m_state[4];
-
-        for (size_t i = 0; i < words.size(); ++i)
-        {
-            u32 f = 0;
-            u32 k = 0;
-            if (i < 20)
-            {
-                f = (b & c) | ((~b) & d);
-                k = 0x5A827999U;
-            }
-            else if (i < 40)
-            {
-                f = b ^ c ^ d;
-                k = 0x6ED9EBA1U;
-            }
-            else if (i < 60)
-            {
-                f = (b & c) | (b & d) | (c & d);
-                k = 0x8F1BBCDCU;
-            }
-            else
-            {
-                f = b ^ c ^ d;
-                k = 0xCA62C1D6U;
-            }
-
-            const u32 temp = rotateLeft(a, 5) + f + e + k + words[i];
-            e = d;
-            d = c;
-            c = rotateLeft(b, 30);
-            b = a;
-            a = temp;
-        }
-
-        m_state[0] += a;
-        m_state[1] += b;
-        m_state[2] += c;
-        m_state[3] += d;
-        m_state[4] += e;
-    }
-
-    std::array<u32, 5> m_state{};
-    std::array<u8, kSha1BlockSize> m_buffer{};
-    u64 m_totalBytes = 0;
-    size_t m_bufferSize = 0;
-};
-
-std::string toHex(const std::array<u8, kSha1DigestSize>& digest)
-{
-    static const char* kHex = "0123456789abcdef";
-    std::string value;
-    value.reserve(kSha1DigestSize * 2);
-    for (u8 byte : digest)
-    {
-        value.push_back(kHex[(byte >> 4) & 0x0F]);
-        value.push_back(kHex[byte & 0x0F]);
-    }
-    return value;
-}
-
 std::string computeSha1Hex(const u8* data, size_t size)
 {
     Sha1Hasher hasher;
     hasher.update(data, size);
-    return toHex(hasher.finalize());
+    return sha1DigestToHex(hasher.finalize());
 }
 
 bool validateSha1Implementation(std::string& outError)
@@ -213,6 +62,143 @@ bool validateSha1Implementation(std::string& outError)
 
 } // namespace
 
+Sha1Hasher::Sha1Hasher()
+{
+    m_state = {0x67452301U, 0xEFCDAB89U, 0x98BADCFEU, 0x10325476U, 0xC3D2E1F0U};
+    m_totalBytes = 0;
+    m_bufferSize = 0;
+}
+
+void Sha1Hasher::update(const u8* data, size_t size)
+{
+    if (size == 0)
+    {
+        return;
+    }
+
+    m_totalBytes += static_cast<u64>(size);
+    size_t offset = 0;
+    while (offset < size)
+    {
+        const size_t toCopy = std::min(kBlockSize - m_bufferSize, size - offset);
+        std::memcpy(m_buffer.data() + m_bufferSize, data + offset, toCopy);
+        m_bufferSize += toCopy;
+        offset += toCopy;
+
+        if (m_bufferSize == kBlockSize)
+        {
+            processBlock(m_buffer.data());
+            m_bufferSize = 0;
+        }
+    }
+}
+
+std::array<u8, Sha1Hasher::kDigestSize> Sha1Hasher::finalize()
+{
+    const u64 bitLength = m_totalBytes * 8ULL;
+
+    m_buffer[m_bufferSize++] = 0x80;
+    if (m_bufferSize > 56)
+    {
+        std::fill(m_buffer.begin() + static_cast<std::ptrdiff_t>(m_bufferSize), m_buffer.end(), 0);
+        processBlock(m_buffer.data());
+        m_bufferSize = 0;
+    }
+
+    std::fill(m_buffer.begin() + static_cast<std::ptrdiff_t>(m_bufferSize),
+              m_buffer.begin() + static_cast<std::ptrdiff_t>(56), 0);
+    for (size_t i = 0; i < 8; ++i)
+    {
+        m_buffer[56 + i] = static_cast<u8>((bitLength >> ((7 - i) * 8)) & 0xFFULL);
+    }
+    processBlock(m_buffer.data());
+    m_bufferSize = 0;
+
+    std::array<u8, kDigestSize> digest{};
+    for (size_t i = 0; i < m_state.size(); ++i)
+    {
+        digest[i * 4] = static_cast<u8>((m_state[i] >> 24) & 0xFFU);
+        digest[i * 4 + 1] = static_cast<u8>((m_state[i] >> 16) & 0xFFU);
+        digest[i * 4 + 2] = static_cast<u8>((m_state[i] >> 8) & 0xFFU);
+        digest[i * 4 + 3] = static_cast<u8>(m_state[i] & 0xFFU);
+    }
+    return digest;
+}
+
+void Sha1Hasher::processBlock(const u8* block)
+{
+    std::array<u32, 80> words{};
+    for (size_t i = 0; i < 16; ++i)
+    {
+        const size_t offset = i * 4;
+        words[i] = (static_cast<u32>(block[offset]) << 24) |
+                   (static_cast<u32>(block[offset + 1]) << 16) |
+                   (static_cast<u32>(block[offset + 2]) << 8) | static_cast<u32>(block[offset + 3]);
+    }
+    for (size_t i = 16; i < words.size(); ++i)
+    {
+        words[i] = rotateLeft(words[i - 3] ^ words[i - 8] ^ words[i - 14] ^ words[i - 16], 1);
+    }
+
+    u32 a = m_state[0];
+    u32 b = m_state[1];
+    u32 c = m_state[2];
+    u32 d = m_state[3];
+    u32 e = m_state[4];
+
+    for (size_t i = 0; i < words.size(); ++i)
+    {
+        u32 f = 0;
+        u32 k = 0;
+        if (i < 20)
+        {
+            f = (b & c) | ((~b) & d);
+            k = 0x5A827999U;
+        }
+        else if (i < 40)
+        {
+            f = b ^ c ^ d;
+            k = 0x6ED9EBA1U;
+        }
+        else if (i < 60)
+        {
+            f = (b & c) | (b & d) | (c & d);
+            k = 0x8F1BBCDCU;
+        }
+        else
+        {
+            f = b ^ c ^ d;
+            k = 0xCA62C1D6U;
+        }
+
+        const u32 temp = rotateLeft(a, 5) + f + e + k + words[i];
+        e = d;
+        d = c;
+        c = rotateLeft(b, 30);
+        b = a;
+        a = temp;
+    }
+
+    m_state[0] += a;
+    m_state[1] += b;
+    m_state[2] += c;
+    m_state[3] += d;
+    m_state[4] += e;
+}
+
+std::string sha1DigestToHex(const std::array<u8, Sha1Hasher::kDigestSize>& digest)
+{
+    static const char* kHex = "0123456789abcdef";
+    std::string value;
+    value.reserve(Sha1Hasher::kDigestSize * 2);
+    for (u8 byte : digest)
+    {
+        value.push_back(kHex[(byte >> 4) & 0x0F]);
+        value.push_back(kHex[byte & 0x0F]);
+    }
+    return value;
+}
+
 bool ensureSha1SelfTest(std::string& outError)
 {
     struct SelfTestState
@@ -243,6 +229,7 @@ bool computeSha1AndPrefix(const std::filesystem::path& path, std::string& outSha
     outSha1.clear();
     outSize = 0;
     outPrefix.clear();
+    outError.clear();
 
     std::ifstream input(path, std::ios::binary);
     if (!input)
@@ -280,7 +267,7 @@ bool computeSha1AndPrefix(const std::filesystem::path& path, std::string& outSha
         return false;
     }
 
-    outSha1 = toHex(hasher.finalize());
+    outSha1 = sha1DigestToHex(hasher.finalize());
     return true;
 }
 

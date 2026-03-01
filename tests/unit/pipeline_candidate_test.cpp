@@ -202,7 +202,9 @@ int main()
         std::ifstream manifestFile(embeddedResult.artifacts.resourceManifestPath);
         const std::string manifest((std::istreambuf_iterator<char>(manifestFile)),
                                    std::istreambuf_iterator<char>());
-        assert(manifest.find("\"embeddedScan\": {\n      \"enabled\": true") != std::string::npos);
+        const size_t embeddedScanPos = manifest.find("\"embeddedScan\"");
+        assert(embeddedScanPos != std::string::npos);
+        assert(manifest.find("\"enabled\": true", embeddedScanPos) != std::string::npos);
         assert(findJsonIntegerField(manifest, "containersScanned") >= 1);
         assert(findJsonIntegerField(manifest, "hitsExtracted") >= 1);
     }

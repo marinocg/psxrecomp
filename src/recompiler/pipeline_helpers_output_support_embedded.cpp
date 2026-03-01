@@ -185,6 +185,8 @@ bool carveRangeToFileAndHash(iso::IsoParser& parser, const std::string& isoPath,
         return false;
     }
 
+    Sha1Hasher hasher;
+    u64 hashedBytes = 0;
     u64 remaining = size;
     u64 cursor = offset;
     while (remaining > 0)
@@ -210,6 +212,8 @@ bool carveRangeToFileAndHash(iso::IsoParser& parser, const std::string& isoPath,
             return false;
         }
 
+        hasher.update(chunk.data(), chunk.size());
+        hashedBytes += static_cast<u64>(chunk.size());
         cursor += static_cast<u64>(chunk.size());
         remaining -= static_cast<u64>(chunk.size());
     }
@@ -221,17 +225,13 @@ bool carveRangeToFileAndHash(iso::IsoParser& parser, const std::string& isoPath,
         return false;
     }
 
-    u64 hashedSize = 0;
-    std::vector<u8> prefix;
-    if (!computeSha1AndPrefix(destination, outSha1, hashedSize, prefix, outError))
-    {
-        return false;
-    }
-    if (hashedSize != size)
+    if (hashedBytes != size)
     {
         outError = "Embedded carve hash size mismatch for file: " + destination.string();
         return false;
     }
+
+    outSha1 = sha1DigestToHex(hasher.finalize());
     return true;
 }
 

@@ -10,6 +10,7 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -302,10 +303,10 @@ bool IsoParser::readRangeFromIsoFile(const std::string& isoPath, u64 offset, siz
               [](const DirectoryRecord& lhs, const DirectoryRecord& rhs)
               { return lhs.extentLocation < rhs.extentLocation; });
 
-    u32 totalLength = 0;
+    u64 totalLength = 0;
     if (targetExtents.size() == 1)
     {
-        totalLength = targetExtents.front().dataLength;
+        totalLength = static_cast<u64>(targetExtents.front().dataLength);
     }
     else
     {
@@ -313,20 +314,25 @@ bool IsoParser::readRangeFromIsoFile(const std::string& isoPath, u64 offset, siz
         for (const auto& extent : targetExtents)
         {
             hasMultiExtent = hasMultiExtent || ((extent.flags & 0x80) != 0);
-            totalLength += extent.dataLength;
+            if (totalLength > std::numeric_limits<u64>::max() - static_cast<u64>(extent.dataLength))
+            {
+                return setError("ISO read range file size overflow: " + isoPath);
+            }
+            totalLength += static_cast<u64>(extent.dataLength);
         }
         if (!hasMultiExtent && !targetExtents.empty())
         {
-            totalLength = targetExtents.front().dataLength;
+            totalLength = static_cast<u64>(targetExtents.front().dataLength);
             targetExtents = {targetExtents.front()};
         }
     }
 
-    if (offset > static_cast<u64>(totalLength))
+    if (offset > totalLength)
     {
         return setError("ISO read range offset exceeds file size: " + isoPath);
     }
-    if (size > 0 && offset + static_cast<u64>(size) > static_cast<u64>(totalLength))
+    const u64 requestedSize = static_cast<u64>(size);
+    if (requestedSize > totalLength - offset)
     {
         return setError("ISO read range exceeds file size: " + isoPath);
     }
@@ -342,7 +348,6 @@ bool IsoParser::readRangeFromIsoFile(const std::string& isoPath, u64 offset, siz
         return true;
     }
 
-    const u64 requestedSize = static_cast<u64>(size);
     u64 remainingSkip = offset;
     size_t writeOffset = 0;
     u64 remaining = requestedSize;
