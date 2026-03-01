@@ -4,10 +4,8 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <map>
 #include <optional>
 #include <sstream>
-#include <unordered_set>
 #include <utility>
 
 namespace psxrecomp
@@ -526,6 +524,13 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
                 outError = "Failed to create resources directory: " + artifacts.resourcesPath;
                 return false;
             }
+            std::filesystem::remove_all(resourcesFs, dirError);
+            if (dirError)
+            {
+                outError =
+                    "Failed to clear filesystem resources directory: " + resourcesFs.string();
+                return false;
+            }
             std::filesystem::create_directories(resourcesFs, dirError);
             if (dirError)
             {
@@ -552,37 +557,14 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
             artifacts.exportedResources.push_back("index/disc_tree.json");
             artifacts.exportedResources.push_back("index/disc_meta.json");
 
-            std::map<std::string, u32> fileSizesByPath;
-            for (const auto& entry : isoTreeEntries)
-            {
-                if (!entry.isDirectory)
-                {
-                    fileSizesByPath[entry.path] = entry.size;
-                }
-            }
-
             std::vector<std::pair<iso::ResourceType, std::string>> resourceTypes = {
                 {iso::ResourceType::TimTexture, "TIM"},
                 {iso::ResourceType::StrVideo, "STR"},
                 {iso::ResourceType::XaAudio, "XA"},
             };
-            std::unordered_set<std::string> filesystemResources;
-            u64 exportedResourceBytes = 0;
             std::vector<std::string> resourceManifestWarnings;
             for (const auto& [type, label] : resourceTypes)
             {
-                auto listed = parser.listResources(type);
-                for (const auto& resourcePath : listed)
-                {
-                    const std::string fsRelative = "fs/" + resourcePath;
-                    artifacts.exportedResources.push_back(fsRelative);
-                    filesystemResources.insert(resourcePath);
-                    auto sizeIt = fileSizesByPath.find(resourcePath);
-                    if (sizeIt != fileSizesByPath.end())
-                    {
-                        exportedResourceBytes += sizeIt->second;
-                    }
-                }
                 if (!parser.exportResources(type, resourcesFs.string()))
                 {
                     const std::string warning =
@@ -592,11 +574,39 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
                 }
             }
 
+            size_t filesystemExportedCount = 0;
+            u64 exportedResourceBytes = 0;
+            try
+            {
+                for (const auto& exportedEntry :
+                     std::filesystem::recursive_directory_iterator(resourcesFs))
+                {
+                    if (!exportedEntry.is_regular_file())
+                    {
+                        continue;
+                    }
+
+                    const auto relativePath =
+                        std::filesystem::relative(exportedEntry.path(), resourcesRoot);
+                    artifacts.exportedResources.push_back(relativePath.generic_string());
+                    ++filesystemExportedCount;
+                    exportedResourceBytes += static_cast<u64>(exportedEntry.file_size());
+                }
+            }
+            catch (const std::filesystem::filesystem_error& error)
+            {
+                const std::string warning =
+                    std::string("Failed to enumerate exported filesystem resources: ") +
+                    error.what();
+                warnings.push_back(warning);
+                resourceManifestWarnings.push_back(warning);
+            }
+
             const auto resourcesManifestPath = resourcesIndex / "resources_manifest.json";
             if (!writeFile(
                     resourcesManifestPath,
                     serializeResourcesManifest(activeDiscPath, timestamp, pipelineVersion, parser,
-                                               isoTreeEntries, filesystemResources.size(),
+                                               isoTreeEntries, filesystemExportedCount,
                                                exportedResourceBytes, resourceManifestWarnings),
                     outError))
             {

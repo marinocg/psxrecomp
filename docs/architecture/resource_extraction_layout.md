@@ -120,7 +120,12 @@ Schema summary:
   },
   "stats": {
     "discFiles": 100,
-    "discDirs": 10
+    "discDirs": 10,
+    "largestFiles": [
+      { "path": "DATA/MAIN.DAT", "bytes": 104857600 },
+      { "path": "DATA/ARCHIVE.BIN", "bytes": 52428800 },
+      { "path": "VOICE/JP.VB", "bytes": 8388608 }
+    ]
   },
   "warnings": []
 }

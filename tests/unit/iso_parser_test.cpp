@@ -187,6 +187,112 @@ std::filesystem::path createIsoWithBrokenPathTableAndNestedTim()
     return path;
 }
 
+struct SplitCueImage
+{
+    std::filesystem::path cuePath;
+    std::filesystem::path dataTrackPath;
+    std::filesystem::path audioTrackPath;
+    uint32_t totalDiscSectors = 0;
+};
+
+SplitCueImage createSplitCueWithGlobalVolumeSpace()
+{
+    constexpr uint32_t dataTrackSectors = 64;
+    constexpr uint32_t audioTrackSectors = 128;
+    const uint32_t totalDiscSectors = dataTrackSectors + audioTrackSectors;
+    std::vector<uint8_t> dataImage(dataTrackSectors * iso_test::kRawSectorSize, 0);
+
+    const uint32_t rootDirSector = 20;
+    const uint32_t rootDirSize = kSectorSize;
+    const uint32_t systemCnfSector = 21;
+    const uint32_t exeSector = 22;
+
+    std::vector<uint8_t> pvd(kSectorSize, 0);
+    pvd[0] = 1;
+    std::memcpy(pvd.data() + 1, "CD001", 5);
+    pvd[6] = 1;
+    std::memcpy(pvd.data() + 8, "PLAYSTATION", 11);
+    std::memcpy(pvd.data() + 40, "SPLIT_TRACK_DISC", 16);
+    iso_test::writeLe32(pvd, 80, totalDiscSectors);
+    iso_test::writeLe16(pvd, 120, 1);
+    iso_test::writeLe16(pvd, 124, 1);
+    iso_test::writeLe16(pvd, 128, kSectorSize);
+    iso_test::writeLe32(pvd, 132, 0);
+    size_t rootRecordOffset = 156;
+    pvd[rootRecordOffset] = 34;
+    iso_test::writeLe32(pvd, rootRecordOffset + 2, rootDirSector);
+    iso_test::writeLe32(pvd, rootRecordOffset + 10, rootDirSize);
+    pvd[rootRecordOffset + 25] = 0x02;
+    iso_test::writeLe16(pvd, rootRecordOffset + 28, 1);
+    pvd[rootRecordOffset + 32] = 1;
+    pvd[rootRecordOffset + 33] = 0;
+    iso_test::writeMode2FormSector(dataImage, 16, pvd, false);
+
+    std::vector<uint8_t> terminator(kSectorSize, 0);
+    terminator[0] = 255;
+    std::memcpy(terminator.data() + 1, "CD001", 5);
+    terminator[6] = 1;
+    iso_test::writeMode2FormSector(dataImage, 17, terminator, false);
+
+    std::vector<uint8_t> rootDir(kSectorSize, 0);
+    size_t cursor = 0;
+    cursor += iso_test::writeDirectoryRecord(rootDir, cursor, std::string("\0", 1), rootDirSector,
+                                             rootDirSize, 0x02);
+    cursor += iso_test::writeDirectoryRecord(rootDir, cursor, std::string("\1", 1), rootDirSector,
+                                             rootDirSize, 0x02);
+    cursor +=
+        iso_test::writeDirectoryRecord(rootDir, cursor, "SYSTEM.CNF;1", systemCnfSector, 40, 0x00);
+    iso_test::writeDirectoryRecord(rootDir, cursor, "GAME.EXE;1", exeSector, 16, 0x00);
+    iso_test::writeMode2FormSector(dataImage, rootDirSector, rootDir, false);
+
+    const std::string systemCnf = "BOOT = cdrom:\\GAME.EXE;1\n";
+    std::vector<uint8_t> systemData(systemCnf.begin(), systemCnf.end());
+    iso_test::writeMode2FormSector(dataImage, systemCnfSector, systemData, false);
+
+    const std::string exeData = "PS-X EXE";
+    std::vector<uint8_t> exeBytes(exeData.begin(), exeData.end());
+    iso_test::writeMode2FormSector(dataImage, exeSector, exeBytes, false);
+
+    std::vector<uint8_t> audioImage(audioTrackSectors * iso_test::kRawSectorSize, 0);
+
+    const auto uniqueSuffix = iso_test::generateUniqueSuffix();
+    auto tempDir = std::filesystem::temp_directory_path();
+    const auto dataTrackPath =
+        tempDir / ("psxrecomp_split_track_data_" + std::to_string(uniqueSuffix) + ".bin");
+    const auto audioTrackPath =
+        tempDir / ("psxrecomp_split_track_audio_" + std::to_string(uniqueSuffix) + ".bin");
+    const auto cuePath =
+        tempDir / ("psxrecomp_split_track_" + std::to_string(uniqueSuffix) + ".cue");
+
+    {
+        std::ofstream dataOut(dataTrackPath, std::ios::binary);
+        dataOut.write(reinterpret_cast<const char*>(dataImage.data()),
+                      static_cast<std::streamsize>(dataImage.size()));
+    }
+    {
+        std::ofstream audioOut(audioTrackPath, std::ios::binary);
+        audioOut.write(reinterpret_cast<const char*>(audioImage.data()),
+                       static_cast<std::streamsize>(audioImage.size()));
+    }
+    {
+        std::ofstream cueOut(cuePath);
+        cueOut << "FILE \"" << dataTrackPath.filename().string() << "\" BINARY\n";
+        cueOut << "  TRACK 01 MODE2/2352\n";
+        cueOut << "    INDEX 01 00:00:00\n";
+        cueOut << "FILE \"" << audioTrackPath.filename().string() << "\" BINARY\n";
+        cueOut << "  TRACK 02 AUDIO\n";
+        cueOut << "    INDEX 00 00:00:00\n";
+        cueOut << "    INDEX 01 00:02:00\n";
+    }
+
+    SplitCueImage image{};
+    image.cuePath = cuePath;
+    image.dataTrackPath = dataTrackPath;
+    image.audioTrackPath = audioTrackPath;
+    image.totalDiscSectors = totalDiscSectors;
+    return image;
+}
+
 int main()
 {
     auto isoPath = createTestIso();
@@ -342,6 +448,26 @@ int main()
 
     std::filesystem::remove(cuePath);
     std::filesystem::remove(binPath);
+
+    auto splitCue = createSplitCueWithGlobalVolumeSpace();
+    psxrecomp::iso::IsoParser splitCueParser(splitCue.cuePath.string());
+    assert(splitCueParser.open());
+    assert(splitCueParser.isValid());
+    assert(splitCueParser.findExecutable() == "GAME.EXE");
+    assert(splitCueParser.getTotalSectors() == splitCue.totalDiscSectors);
+    bool hasVolumeSizeError = false;
+    for (const auto& error : splitCueParser.getErrors())
+    {
+        if (error.find("Volume space size exceeds image size.") != std::string::npos)
+        {
+            hasVolumeSizeError = true;
+            break;
+        }
+    }
+    assert(!hasVolumeSizeError);
+    std::filesystem::remove(splitCue.cuePath);
+    std::filesystem::remove(splitCue.dataTrackPath);
+    std::filesystem::remove(splitCue.audioTrackPath);
 
     std::filesystem::path multiCuePath;
     std::filesystem::path sessionTwoBin;

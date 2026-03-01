@@ -87,8 +87,12 @@ void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
         std::cout << "    \"manifest\": \"" << escapeJson(result.artifacts.manifestPath) << "\",\n";
         std::cout << "    \"resources\": \"" << escapeJson(result.artifacts.resourcesPath)
                   << "\",\n";
-        std::cout << "    \"resourceRoot\": \"" << escapeJson(result.artifacts.resourceRootPath)
-                  << "\",\n";
+        if (!result.artifacts.resourceRootPath.empty() &&
+            result.artifacts.resourceRootPath != result.artifacts.resourcesPath)
+        {
+            std::cout << "    \"resourceRoot\": \"" << escapeJson(result.artifacts.resourceRootPath)
+                      << "\",\n";
+        }
         std::cout << "    \"resourceManifest\": \""
                   << escapeJson(result.artifacts.resourceManifestPath) << "\",\n";
         std::cout << "    \"runtimeInclude\": \"" << escapeJson(result.artifacts.runtimeIncludePath)

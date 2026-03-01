@@ -50,11 +50,18 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
     emitter.writeLine("bool filesystemEnabled = false;");
     emitter.writeLine("psxrecomp::u64 containersScanned = 0;");
     emitter.writeLine("psxrecomp::u64 hitsExtracted = 0;");
+    emitter.writeLine("std::string runtimeSummaryJson;");
+    emitter.writeLine("const std::string* summaryJson = &(*manifestText);");
     emitter.writeLine(
-        "extractJsonBoolField(*manifestText, \"filesystemEnabled\", &filesystemEnabled);");
+        "if (extractJsonObjectField(*manifestText, \"runtimeSummary\", &runtimeSummaryJson))");
+    emitter.openBlock("");
+    emitter.writeLine("summaryJson = &runtimeSummaryJson;");
+    emitter.closeBlock();
     emitter.writeLine(
-        "extractJsonU64Field(*manifestText, \"containersScanned\", &containersScanned);");
-    emitter.writeLine("extractJsonU64Field(*manifestText, \"hitsExtracted\", &hitsExtracted);");
+        "extractJsonBoolField(*summaryJson, \"filesystemEnabled\", &filesystemEnabled);");
+    emitter.writeLine(
+        "extractJsonU64Field(*summaryJson, \"containersScanned\", &containersScanned);");
+    emitter.writeLine("extractJsonU64Field(*summaryJson, \"hitsExtracted\", &hitsExtracted);");
     emitter.writeLine("std::cout << \"[psxrecomp] Resource index: fs.enabled=\"");
     emitter.writeLine("          << (filesystemEnabled ? \"true\" : \"false\")");
     emitter.writeLine("          << \", embedded.containersScanned=\" << containersScanned");
