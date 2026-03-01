@@ -137,6 +137,8 @@ For ISO-like inputs, the pipeline now emits a stable resource index under `resou
 - `resources_manifest.json` (tooling entrypoint + export summary + export policy metadata)
 
 Filesystem exports are written under `resources/fs/` using ISO-relative paths.
+Optional embedded carving outputs are written under `resources/embedded/by_container/...` when
+`PSXRECOMP_RES_EMBEDDED_SCAN=1` (or `true`) is enabled.
 
 Export policy is controlled by `PipelineOptions::ResourceExportOptions`:
 

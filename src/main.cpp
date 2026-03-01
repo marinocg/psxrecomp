@@ -181,6 +181,10 @@ void applyResourceExportEnv(psxrecomp::recompiler::PipelineOptions& options)
     {
         resourceOptions.denyPrefixes = parsePrefixListEnv("PSXRECOMP_RES_DENY_PREFIXES");
     }
+    if (const auto embeddedScan = parseBoolEnv("PSXRECOMP_RES_EMBEDDED_SCAN"))
+    {
+        resourceOptions.enableEmbeddedScan = *embeddedScan;
+    }
 }
 
 void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,

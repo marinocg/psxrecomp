@@ -128,6 +128,18 @@ class IsoParser
                       std::string* outError);
 
     /**
+     * @brief Read a byte range from an ISO file without materializing the full file.
+     * @param isoPath ISO-relative path to the file.
+     * @param offset Start offset within the file.
+     * @param size Number of bytes to read.
+     * @param outData Output buffer containing exactly @p size bytes on success.
+     * @param outError Optional error output string.
+     * @return true on success, false on failure.
+     */
+    bool readRangeFromIsoFile(const std::string& isoPath, u64 offset, size_t size,
+                              std::vector<u8>& outData, std::string* outError = nullptr);
+
+    /**
      * @brief Find the PSX executable (PSX-EXE)
      * @return Path to executable within ISO, or empty string if not found
      */
