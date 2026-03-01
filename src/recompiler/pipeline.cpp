@@ -399,10 +399,10 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
                                      result.discSet.setName, exeTag);
 
     std::string writeError;
-    if (!detail::writeOutputArtifacts(result, outputDir, moduleName, header, source, runnerSource,
-                                      buildFile, activeDiscPath, inputFsPath, warnings, diagnostics,
-                                      m_options.manifestTimestamp, m_options.pipelineVersion,
-                                      writeError))
+    if (!detail::writeOutputArtifacts(
+            result, outputDir, moduleName, header, source, runnerSource, buildFile, activeDiscPath,
+            inputFsPath, m_options.resourceExport, warnings, diagnostics,
+            m_options.manifestTimestamp, m_options.pipelineVersion, writeError))
     {
         return fail(writeError);
     }

@@ -132,9 +132,15 @@ For ISO-like inputs, the pipeline now emits a stable resource index under `resou
 
 - `disc_tree.json` (full recursive ISO tree + extents)
 - `disc_meta.json` (disc/track metadata)
-- `resources_manifest.json` (tooling entrypoint + export summary)
+- `resources_manifest.json` (tooling entrypoint + export summary + export policy metadata)
 
-Loose extracted assets (when found) are written under `resources/fs/`.
+Filesystem exports are written under `resources/fs/` using ISO-relative paths.
+
+Export policy is controlled by `PipelineOptions::ResourceExportOptions`:
+
+- `minimal`: always-included set only.
+- `smart`: always-included set + capped small-file export.
+- `full`: export full disc filesystem (default).
 
 The top-level pipeline `manifest.json` includes:
 

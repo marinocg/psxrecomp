@@ -168,6 +168,31 @@ int main()
                      ("psxrecomp_exports_" + std::to_string(iso_test::generateUniqueSuffix()));
     assert(cueParser.exportResources(psxrecomp::iso::ResourceType::TimTexture, exportDir.string()));
     assert(std::filesystem::exists(exportDir / "TEXTURE.TIM"));
+    {
+        const auto streamingExportPath = exportDir / "MULTI.BIN";
+        std::string exportError;
+        assert(cueParser.exportFileTo("MULTI.BIN", streamingExportPath, &exportError));
+        assert(std::filesystem::exists(streamingExportPath));
+        std::ifstream streamFile(streamingExportPath, std::ios::binary);
+        const std::vector<uint8_t> streamedData((std::istreambuf_iterator<char>(streamFile)),
+                                                std::istreambuf_iterator<char>());
+        assert(streamedData.size() == kSectorSize * 2);
+        assert(streamedData.front() == static_cast<uint8_t>('A'));
+        assert(streamedData[kSectorSize - 1] == static_cast<uint8_t>('A'));
+        assert(streamedData[kSectorSize] == static_cast<uint8_t>('B'));
+    }
+    {
+        const auto nestedExportPath = exportDir / "nested" / "dir" / "NESTED.TIM";
+        std::string exportError;
+        assert(
+            brokenPathTableParser.exportFileTo("DATA/NESTED.TIM", nestedExportPath, &exportError));
+        assert(std::filesystem::exists(nestedExportPath));
+        std::ifstream nestedFile(nestedExportPath, std::ios::binary);
+        const std::vector<uint8_t> nestedData((std::istreambuf_iterator<char>(nestedFile)),
+                                              std::istreambuf_iterator<char>());
+        assert(nestedData.size() == 64);
+        assert(nestedData[0] == static_cast<uint8_t>('T'));
+    }
 
     std::error_code cleanupError;
     std::filesystem::remove_all(exportDir, cleanupError);

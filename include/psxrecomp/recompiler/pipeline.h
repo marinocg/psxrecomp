@@ -63,6 +63,25 @@ struct DiscSetMetadata
  */
 struct PipelineOptions
 {
+    struct ResourceExportOptions
+    {
+        enum class FsMode
+        {
+            Minimal,
+            Smart,
+            Full
+        };
+
+        FsMode fsMode = FsMode::Full;
+        u64 maxTotalBytes = 512ULL * 1024ULL * 1024ULL;
+        u64 maxSingleFileBytes = 128ULL * 1024ULL * 1024ULL;
+        bool alwaysExportSystemCnf = true;
+        bool alwaysExportBootExe = true;
+        bool alwaysExportAllExe = true;
+        std::vector<std::string> allowPrefixes;
+        std::vector<std::string> denyPrefixes;
+    };
+
     std::string outputDirectory;
     bool enableOptimizations = true;
     bool preserveSymbols = false;
@@ -71,6 +90,7 @@ struct PipelineOptions
     size_t activeDiscIndex = 0;
     std::string manifestTimestamp;
     std::string pipelineVersion = "1.0.0";
+    ResourceExportOptions resourceExport;
 };
 
 /**

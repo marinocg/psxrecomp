@@ -20,13 +20,34 @@ resources/
     disc_meta.json
     resources_manifest.json
   fs/
-    ... exported loose resources (.TIM/.STR/.XA) when found
+    ... exported ISO-relative files (policy-driven)
 ```
 
 Notes:
 
 - `resources/index/*` is always generated when ISO parsing succeeds.
-- `resources/fs/` may be empty (for example when the disc only contains packed archives).
+- `resources/fs/` is now a real ISO-relative filesystem export.
+- By default (`full` mode), all disc files are exported under `resources/fs/<iso path>`.
+- `minimal` and `smart` modes still always include boot-critical files (policy-dependent).
+
+## Filesystem Export Policy
+
+Policy is configured with `PipelineOptions::ResourceExportOptions`:
+
+- `minimal`: export always-included set only (`SYSTEM.CNF`, boot executable, and optionally all `.EXE`).
+- `smart`: export always-included set plus small files first, honoring byte caps.
+- `full`: export all files (default behavior).
+
+For CLI use, environment variables are supported:
+
+- `PSXRECOMP_RES_FS_MODE=minimal|smart|full`
+- `PSXRECOMP_RES_MAX_TOTAL_BYTES`
+- `PSXRECOMP_RES_MAX_SINGLE_FILE_BYTES`
+- `PSXRECOMP_RES_ALWAYS_EXPORT_SYSTEM_CNF`
+- `PSXRECOMP_RES_ALWAYS_EXPORT_BOOT_EXE`
+- `PSXRECOMP_RES_ALWAYS_EXPORT_ALL_EXE`
+- `PSXRECOMP_RES_ALLOW_PREFIXES` (comma-separated)
+- `PSXRECOMP_RES_DENY_PREFIXES` (comma-separated)
 
 ## Index Files
 
@@ -99,10 +120,16 @@ Schema summary:
     "filesystem": {
       "enabled": true,
       "root": "fs",
+      "mode": "smart",
+      "caps": {
+        "maxTotalBytes": 536870912,
+        "maxSingleFileBytes": 134217728
+      },
+      "alwaysIncluded": ["systemCnf", "bootExecutable", "allExe"],
       "result": {
-        "filesExported": 0,
-        "bytesExported": 0,
-        "skippedDueToLimits": 0
+        "filesExported": 1234,
+        "bytesExported": 456789012,
+        "skippedDueToLimits": 27
       }
     },
     "embeddedScan": {
@@ -115,6 +142,7 @@ Schema summary:
   },
   "runtimeSummary": {
     "filesystemEnabled": true,
+    "filesystemMode": "smart",
     "containersScanned": 0,
     "hitsExtracted": 0
   },

@@ -2,6 +2,7 @@
 
 #include "psxrecomp/iso/track_info.h"
 #include "psxrecomp/types.h"
+#include <filesystem>
 #include <fstream>
 #include <list>
 #include <optional>
@@ -115,6 +116,16 @@ class IsoParser
      * @return File contents, or empty vector on failure
      */
     std::vector<u8> extractFile(const std::string& path);
+
+    /**
+     * @brief Export a file from the ISO to a destination path without buffering the full file.
+     * @param isoPath ISO-relative path to the file.
+     * @param destination Destination path on the host filesystem.
+     * @param outError Optional error output string.
+     * @return true on success, false on failure.
+     */
+    bool exportFileTo(const std::string& isoPath, const std::filesystem::path& destination,
+                      std::string* outError);
 
     /**
      * @brief Find the PSX executable (PSX-EXE)
