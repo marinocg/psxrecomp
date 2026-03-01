@@ -72,6 +72,10 @@ std::optional<uint64_t> parseUint64Env(const char* name)
     {
         return std::nullopt;
     }
+    if (raw[0] == '+' || raw[0] == '-')
+    {
+        return std::nullopt;
+    }
     char* end = nullptr;
     errno = 0;
     const unsigned long long value = std::strtoull(raw, &end, 10);
@@ -169,8 +173,14 @@ void applyResourceExportEnv(psxrecomp::recompiler::PipelineOptions& options)
         resourceOptions.alwaysExportAllExe = *alwaysAllExe;
     }
 
-    resourceOptions.allowPrefixes = parsePrefixListEnv("PSXRECOMP_RES_ALLOW_PREFIXES");
-    resourceOptions.denyPrefixes = parsePrefixListEnv("PSXRECOMP_RES_DENY_PREFIXES");
+    if (std::getenv("PSXRECOMP_RES_ALLOW_PREFIXES") != nullptr)
+    {
+        resourceOptions.allowPrefixes = parsePrefixListEnv("PSXRECOMP_RES_ALLOW_PREFIXES");
+    }
+    if (std::getenv("PSXRECOMP_RES_DENY_PREFIXES") != nullptr)
+    {
+        resourceOptions.denyPrefixes = parsePrefixListEnv("PSXRECOMP_RES_DENY_PREFIXES");
+    }
 }
 
 void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,

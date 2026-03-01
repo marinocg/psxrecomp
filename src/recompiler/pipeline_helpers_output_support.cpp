@@ -44,19 +44,22 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
     std::filesystem::create_directories(resourcesIndex, dirError);
     if (dirError)
     {
-        outError = "Failed to create resources directory: " + artifacts.resourcesPath;
+        outError = "Failed to create resources index directory: " + resourcesIndex.string() + ": " +
+                   dirError.message();
         return false;
     }
     std::filesystem::remove_all(resourcesFs, dirError);
     if (dirError)
     {
-        outError = "Failed to clear filesystem resources directory: " + resourcesFs.string();
+        outError = "Failed to clear filesystem resources directory: " + resourcesFs.string() +
+                   ": " + dirError.message();
         return false;
     }
     std::filesystem::create_directories(resourcesFs, dirError);
     if (dirError)
     {
-        outError = "Failed to create filesystem resources directory: " + resourcesFs.string();
+        outError = "Failed to create filesystem resources directory: " + resourcesFs.string() +
+                   ": " + dirError.message();
         return false;
     }
 

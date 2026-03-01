@@ -5,6 +5,7 @@
 #include "psxrecomp/iso/iso_boot.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <deque>
 #include <filesystem>
@@ -116,8 +117,25 @@ std::vector<u8> IsoParser::extractFile(const std::string& path)
 bool IsoParser::exportFileTo(const std::string& isoPath, const std::filesystem::path& destination,
                              std::string* outError)
 {
+    std::ofstream out;
+    bool wroteTempFile = false;
+    std::filesystem::path tempDestination;
+    auto cleanupTemp = [&]()
+    {
+        if (out.is_open())
+        {
+            out.close();
+        }
+        if (wroteTempFile)
+        {
+            std::error_code cleanupError;
+            std::filesystem::remove(tempDestination, cleanupError);
+        }
+    };
+
     auto setError = [&](const std::string& message)
     {
+        cleanupTemp();
         addError(message);
         if (outError)
         {
@@ -184,15 +202,20 @@ bool IsoParser::exportFileTo(const std::string& isoPath, const std::filesystem::
         std::filesystem::create_directories(parent, fsError);
         if (fsError)
         {
-            return setError("Failed to create destination directory: " + parent.string());
+            return setError("Failed to create destination directory: " + parent.string() + ": " +
+                            fsError.message());
         }
     }
 
-    std::ofstream out(destination, std::ios::binary);
+    tempDestination = destination;
+    tempDestination +=
+        ".tmp." + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    out.open(tempDestination, std::ios::binary);
     if (!out)
     {
-        return setError("Failed to open destination file: " + destination.string());
+        return setError("Failed to open temporary destination file: " + tempDestination.string());
     }
+    wroteTempFile = true;
 
     u32 remainingTotal = totalLength;
     for (const auto& extent : targetExtents)
@@ -227,6 +250,21 @@ bool IsoParser::exportFileTo(const std::string& isoPath, const std::filesystem::
     {
         return setError("Failed to flush destination file: " + destination.string());
     }
+
+    out.close();
+    if (!out.good())
+    {
+        return setError("Failed to close temporary destination file: " + tempDestination.string());
+    }
+
+    std::filesystem::rename(tempDestination, destination, fsError);
+    if (fsError)
+    {
+        return setError("Failed to finalize destination file: " + destination.string() + ": " +
+                        fsError.message());
+    }
+    wroteTempFile = false;
+
     return true;
 }
 
