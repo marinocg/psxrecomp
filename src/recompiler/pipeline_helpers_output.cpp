@@ -12,6 +12,24 @@ namespace recompiler
 {
 namespace detail
 {
+namespace
+{
+
+bool isPathWithin(const std::filesystem::path& root, const std::filesystem::path& candidate)
+{
+    auto rootIt = root.begin();
+    auto candidateIt = candidate.begin();
+    for (; rootIt != root.end(); ++rootIt, ++candidateIt)
+    {
+        if (candidateIt == candidate.end() || *rootIt != *candidateIt)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
 
 bool writeOutputArtifacts(
     PipelineResult& result, const std::filesystem::path& outputDir, const std::string& moduleName,
@@ -67,6 +85,36 @@ bool writeOutputArtifacts(
         const std::filesystem::path sourceWorkspace(resourceWorkspacePath);
         const std::filesystem::path destinationWorkspace(artifacts.resourcesPath);
         std::error_code resourceError;
+
+        const std::filesystem::path canonicalSourceWorkspace =
+            std::filesystem::weakly_canonical(sourceWorkspace, resourceError);
+        if (resourceError)
+        {
+            outError = "Failed to canonicalize source workspace path: " + sourceWorkspace.string() +
+                       ": " + resourceError.message();
+            return false;
+        }
+        resourceError.clear();
+        const std::filesystem::path canonicalDestinationWorkspace =
+            std::filesystem::weakly_canonical(destinationWorkspace, resourceError);
+        if (resourceError)
+        {
+            outError = "Failed to canonicalize destination workspace path: " +
+                       destinationWorkspace.string() + ": " + resourceError.message();
+            return false;
+        }
+
+        if (isPathWithin(canonicalSourceWorkspace, canonicalDestinationWorkspace) ||
+            isPathWithin(canonicalDestinationWorkspace, canonicalSourceWorkspace))
+        {
+            outError = "Source and destination workspace paths overlap; refusing recursive copy "
+                       "from '" +
+                       canonicalSourceWorkspace.string() + "' to '" +
+                       canonicalDestinationWorkspace.string() + "'.";
+            return false;
+        }
+
+        resourceError.clear();
         std::filesystem::remove_all(destinationWorkspace, resourceError);
         if (resourceError)
         {

@@ -161,6 +161,51 @@ int main()
                          "index/disc_meta.json") !=
                workspaceResult.artifacts.exportedResources.end());
     }
+    {
+        const std::filesystem::path maliciousWorkspace =
+            outputDir / "malicious_workspace_path_traversal";
+        std::error_code copyError;
+        std::filesystem::remove_all(maliciousWorkspace, copyError);
+        copyError.clear();
+        std::filesystem::copy(result.artifacts.resourcesPath, maliciousWorkspace,
+                              std::filesystem::copy_options::recursive, copyError);
+        assert(!copyError);
+
+        {
+            std::ofstream recompInputsFile(maliciousWorkspace / "index" / "recomp_inputs.json",
+                                           std::ios::binary | std::ios::trunc);
+            recompInputsFile << "{\n"
+                                "  \"schemaVersion\": \"1.0\",\n"
+                                "  \"boot\": {\n"
+                                "    \"isoPath\": \"GAMEB.EXE\",\n"
+                                "    \"exportedPath\": \"fs/GAMEB.EXE\"\n"
+                                "  },\n"
+                                "  \"executables\": [\n"
+                                "    {\n"
+                                "      \"isoPath\": \"GAMEB.EXE\",\n"
+                                "      \"exportedPath\": \"../outside/GAMEB.EXE\"\n"
+                                "    }\n"
+                                "  ]\n"
+                                "}\n";
+        }
+
+        auto maliciousOptions = options;
+        maliciousOptions.outputDirectory = (outputDir / "malicious_workspace_output").string();
+        psxrecomp::recompiler::RecompilationPipeline maliciousPipeline(maliciousOptions);
+        const auto maliciousResult = maliciousPipeline.run(maliciousWorkspace.string());
+        assert(!maliciousResult.success);
+        assert(maliciousResult.errorMessage.find("Failed to parse resources workspace:") !=
+               std::string::npos);
+    }
+    {
+        auto overlapOptions = options;
+        overlapOptions.outputDirectory =
+            (std::filesystem::path(result.artifacts.resourcesPath) / "overlap_out").string();
+        psxrecomp::recompiler::RecompilationPipeline overlapPipeline(overlapOptions);
+        const auto overlapResult = overlapPipeline.run(result.artifacts.resourcesPath);
+        assert(!overlapResult.success);
+        assert(overlapResult.errorMessage.find("overlap") != std::string::npos);
+    }
 
     std::filesystem::remove(isoPath);
 

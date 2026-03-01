@@ -212,9 +212,9 @@ Input resolution rules:
 
 Behavior:
 
-- Loads `resources/index/recomp_inputs.json`.
+- Loads `index/recomp_inputs.json` relative to the detected workspace root.
 - Selects the boot executable from `boot.isoPath` (or falls back to the first valid executable).
-- Loads executable bytes from `resources/fs/...` paths listed in `executables[*].exportedPath`.
+- Loads executable bytes from `fs/...` paths listed in `executables[*].exportedPath`.
 - Preserves existing workspace artifacts by copying the input workspace to the new output
   `resources/` directory (including `disc_tree.json` and `disc_meta.json`).
 

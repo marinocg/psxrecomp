@@ -476,10 +476,69 @@ std::string readStringField(const JsonValue& object, const std::string& key)
     return field->stringValue;
 }
 
-std::string normalizeRelativePathString(const std::string& rawPath)
+bool isPathWithin(const std::filesystem::path& root, const std::filesystem::path& candidate)
 {
-    std::filesystem::path path(rawPath);
-    return path.generic_string();
+    auto rootIt = root.begin();
+    auto candidateIt = candidate.begin();
+    for (; rootIt != root.end(); ++rootIt, ++candidateIt)
+    {
+        if (candidateIt == candidate.end() || *rootIt != *candidateIt)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool validateWorkspaceExportedPath(const std::string& rawPath, std::filesystem::path& outPath,
+                                   std::string& outError)
+{
+    std::filesystem::path normalized = std::filesystem::path(rawPath).lexically_normal();
+    if (normalized.empty())
+    {
+        outError = "Path is empty.";
+        return false;
+    }
+    if (normalized.has_root_name() || normalized.has_root_directory() || normalized.is_absolute())
+    {
+        outError = "Path must be relative to the workspace root.";
+        return false;
+    }
+
+    size_t componentCount = 0;
+    std::string firstComponent;
+    for (const auto& component : normalized)
+    {
+        const std::string token = component.string();
+        if (token.empty())
+        {
+            continue;
+        }
+        if (token == "." || token == "..")
+        {
+            outError = "Path traversal segments are not allowed.";
+            return false;
+        }
+        if (componentCount == 0)
+        {
+            firstComponent = token;
+        }
+        ++componentCount;
+    }
+
+    if (componentCount < 2)
+    {
+        outError = "Path must reference a file under fs/.";
+        return false;
+    }
+    if (toLower(firstComponent) != "fs")
+    {
+        outError = "Path must be under fs/.";
+        return false;
+    }
+
+    outPath = normalized;
+    return true;
 }
 
 } // namespace
@@ -553,8 +612,20 @@ bool loadResourceWorkspaceInfo(const std::filesystem::path& workspaceRoot,
     if (bootObject)
     {
         outInfo.bootIsoPath = readStringField(*bootObject, "isoPath");
-        outInfo.bootExportedPath =
-            normalizeRelativePathString(readStringField(*bootObject, "exportedPath"));
+        outInfo.bootExportedPath = readStringField(*bootObject, "exportedPath");
+        if (!outInfo.bootExportedPath.empty())
+        {
+            std::filesystem::path normalizedBootPath;
+            std::string bootPathError;
+            if (!validateWorkspaceExportedPath(outInfo.bootExportedPath, normalizedBootPath,
+                                               bootPathError))
+            {
+                outError = "Invalid boot.exportedPath '" + outInfo.bootExportedPath +
+                           "': " + bootPathError;
+                return false;
+            }
+            outInfo.bootExportedPath = normalizedBootPath.generic_string();
+        }
     }
 
     const JsonValue* executableArray = expectArrayField(recompInputsRoot, "executables");
@@ -575,8 +646,7 @@ bool loadResourceWorkspaceInfo(const std::filesystem::path& workspaceRoot,
 
         WorkspaceExecutableInfo executableInfo;
         executableInfo.isoPath = readStringField(executableValue, "isoPath");
-        executableInfo.exportedPath =
-            normalizeRelativePathString(readStringField(executableValue, "exportedPath"));
+        executableInfo.exportedPath = readStringField(executableValue, "exportedPath");
         if (executableInfo.isoPath.empty())
         {
             outError = "Invalid recomp inputs JSON: executable entry at index " +
@@ -589,6 +659,17 @@ bool loadResourceWorkspaceInfo(const std::filesystem::path& workspaceRoot,
                 (std::filesystem::path("fs") / std::filesystem::path(executableInfo.isoPath))
                     .generic_string();
         }
+
+        std::filesystem::path normalizedExecutablePath;
+        std::string executablePathError;
+        if (!validateWorkspaceExportedPath(executableInfo.exportedPath, normalizedExecutablePath,
+                                           executablePathError))
+        {
+            outError = "Invalid executables[" + std::to_string(index) + "].exportedPath '" +
+                       executableInfo.exportedPath + "': " + executablePathError;
+            return false;
+        }
+        executableInfo.exportedPath = normalizedExecutablePath.generic_string();
         outInfo.executables.push_back(std::move(executableInfo));
     }
 
@@ -647,20 +728,44 @@ bool loadResourceWorkspaceInfo(const std::filesystem::path& workspaceRoot,
     return true;
 }
 
-std::filesystem::path
-resolveWorkspaceExecutableHostPath(const ResourceWorkspaceInfo& workspaceInfo,
-                                   const WorkspaceExecutableInfo& executableInfo)
+bool resolveWorkspaceExecutableHostPath(const ResourceWorkspaceInfo& workspaceInfo,
+                                        const WorkspaceExecutableInfo& executableInfo,
+                                        std::filesystem::path& outHostPath, std::string& outError)
 {
-    std::filesystem::path relativePath(executableInfo.exportedPath);
-    if (relativePath.empty())
+    std::filesystem::path relativePath;
+    if (!validateWorkspaceExportedPath(executableInfo.exportedPath, relativePath, outError))
     {
-        relativePath = std::filesystem::path("fs") / std::filesystem::path(executableInfo.isoPath);
+        return false;
     }
-    if (relativePath.is_absolute())
+
+    std::error_code error;
+    const std::filesystem::path canonicalWorkspaceRoot =
+        std::filesystem::weakly_canonical(workspaceInfo.workspaceRoot, error);
+    if (error)
     {
-        return relativePath;
+        outError = "Failed to canonicalize workspace root '" +
+                   workspaceInfo.workspaceRoot.string() + "': " + error.message();
+        return false;
     }
-    return workspaceInfo.workspaceRoot / relativePath;
+
+    const std::filesystem::path hostPath = canonicalWorkspaceRoot / relativePath;
+    const std::filesystem::path canonicalHostPath =
+        std::filesystem::weakly_canonical(hostPath, error);
+    if (error)
+    {
+        outError = "Failed to canonicalize executable path '" + hostPath.string() +
+                   "': " + error.message();
+        return false;
+    }
+
+    if (!isPathWithin(canonicalWorkspaceRoot, canonicalHostPath))
+    {
+        outError = "Resolved executable path escapes the workspace root.";
+        return false;
+    }
+
+    outHostPath = canonicalHostPath;
+    return true;
 }
 
 } // namespace detail

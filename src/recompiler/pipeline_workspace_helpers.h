@@ -35,9 +35,9 @@ bool detectResourceWorkspaceRoot(const std::filesystem::path& inputPath,
                                  std::filesystem::path& outWorkspaceRoot);
 bool loadResourceWorkspaceInfo(const std::filesystem::path& workspaceRoot,
                                ResourceWorkspaceInfo& outInfo, std::string& outError);
-std::filesystem::path
-resolveWorkspaceExecutableHostPath(const ResourceWorkspaceInfo& workspaceInfo,
-                                   const WorkspaceExecutableInfo& executableInfo);
+bool resolveWorkspaceExecutableHostPath(const ResourceWorkspaceInfo& workspaceInfo,
+                                        const WorkspaceExecutableInfo& executableInfo,
+                                        std::filesystem::path& outHostPath, std::string& outError);
 
 } // namespace detail
 } // namespace recompiler

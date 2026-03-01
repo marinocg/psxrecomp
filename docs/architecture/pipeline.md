@@ -17,8 +17,8 @@ Key responsibilities:
 - Locate SYSTEM.CNF configuration file
 - Extract PSX-EXE executable file
 - Handle multi-track and multi-session discs
-- Load `resources/index/recomp_inputs.json` when the input path is an exported
-  resources workspace and resolve `resources/fs/<boot exe>` without the original ISO
+- Load `index/recomp_inputs.json` when the detected workspace root is an exported
+  resources workspace and resolve `fs/<boot exe>` without the original ISO
 
 ### 2. Executable Loading
 **Input**: PSX-EXE file  
@@ -147,8 +147,9 @@ The pipeline also accepts an exported resources workspace as input:
 - `psxrecomp game.iso -o out/`
 - `psxrecomp out/<module>/<disc>/<tag>/resources -o out_rerun/`
 
-In workspace mode, executable selection is driven by `resources/index/recomp_inputs.json`, and
-existing resource index/filesystem artifacts are copied forward to the new output.
+In workspace mode, executable selection is driven by `index/recomp_inputs.json` (relative to the
+detected workspace root), and existing resource index/filesystem artifacts are copied forward to the
+new output.
 
 Export policy is controlled by `PipelineOptions::ResourceExportOptions`:
 

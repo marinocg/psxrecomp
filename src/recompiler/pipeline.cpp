@@ -122,8 +122,21 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
             ExeCandidateInfo candidate;
             candidate.path = executableInfo.isoPath;
-            const std::filesystem::path executableHostPath =
-                detail::resolveWorkspaceExecutableHostPath(*workspaceInfo, executableInfo);
+            std::filesystem::path executableHostPath;
+            std::string resolveError;
+            if (!detail::resolveWorkspaceExecutableHostPath(*workspaceInfo, executableInfo,
+                                                            executableHostPath, resolveError))
+            {
+                PipelineDiagnostic entry;
+                entry.code = "WorkspaceExecutablePathInvalid";
+                entry.severity = "error";
+                entry.message = "Invalid workspace executable path: " + resolveError;
+                entry.context.file = candidate.path;
+                diagnostics.push_back(entry);
+                candidate.diagnostics.push_back(std::move(entry));
+                result.exeCandidates.push_back(std::move(candidate));
+                continue;
+            }
             hostPathByIsoPath.emplace(isoPathKey, executableHostPath);
 
             std::error_code fileError;
