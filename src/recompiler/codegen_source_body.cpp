@@ -33,8 +33,8 @@ std::string escapeStringLiteral(const std::string& value)
 }
 } // namespace
 
-void emitGeneratedSourceBody(CppEmitter& emitter, const ir::Program& program,
-                             const ModuleMetadata& metadata, Address moduleEntryAddress,
+void emitGeneratedSourceBody(CppEmitter& emitter, const ModuleMetadata& metadata,
+                             Address moduleEntryAddress,
                              const std::vector<std::pair<Address, std::string>>& functionSymbols)
 {
     auto emitRecompiledDispatchSwitch = [&](const std::string& recurseHelper)

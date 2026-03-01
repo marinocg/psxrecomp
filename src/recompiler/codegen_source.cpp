@@ -198,7 +198,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("};");
     emitter.writeBlank();
 
-    emitGeneratedSourceBody(emitter, program, metadata, moduleEntryAddress, functionSymbols);
+    emitGeneratedSourceBody(emitter, metadata, moduleEntryAddress, functionSymbols);
     emitter.writeLines(generateFunctionDefinitions(program));
     emitter.closeBlock();
     emitter.closeBlock();
