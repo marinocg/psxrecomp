@@ -3,6 +3,7 @@
 #include "pipeline_analysis_helpers.h"
 #include "pipeline_helpers.h"
 #include "pipeline_selection_helpers.h"
+#include "pipeline_workspace_helpers.h"
 #include "psxrecomp/disasm/analysis.h"
 #include "psxrecomp/disasm/instruction.h"
 #include "psxrecomp/ir/control_flow.h"
@@ -18,6 +19,7 @@
 #include <numeric>
 #include <optional>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace psxrecomp
@@ -50,6 +52,7 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     const std::filesystem::path inputFsPath(activeDiscPath);
 
     iso::PsxExeImage exeImage{};
+    std::optional<detail::ResourceWorkspaceInfo> workspaceInfo;
     std::vector<std::string> warnings;
     std::vector<PipelineDiagnostic> diagnostics;
     PipelineResult result;
@@ -81,7 +84,132 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         return failed;
     };
 
-    if (detail::isIsoLikePath(inputFsPath))
+    std::filesystem::path workspaceRoot;
+    if (detail::detectResourceWorkspaceRoot(inputFsPath, workspaceRoot))
+    {
+        detail::ResourceWorkspaceInfo loadedWorkspaceInfo;
+        std::string workspaceError;
+        if (!detail::loadResourceWorkspaceInfo(workspaceRoot, loadedWorkspaceInfo, workspaceError))
+        {
+            return fail("Failed to parse resources workspace: " + workspaceError);
+        }
+        workspaceInfo = std::move(loadedWorkspaceInfo);
+        if (!workspaceInfo->discMetaVolumeLabel.empty())
+        {
+            result.discSet.setName = workspaceInfo->discMetaVolumeLabel;
+            if (!result.discSet.discs.empty())
+            {
+                result.discSet.discs.front().volumeLabel = workspaceInfo->discMetaVolumeLabel;
+            }
+        }
+        if (!workspaceInfo->discMetaInputPath.empty() && !result.discSet.discs.empty())
+        {
+            result.discSet.discs.front().path = workspaceInfo->discMetaInputPath;
+        }
+    }
+
+    if (workspaceInfo.has_value())
+    {
+        std::unordered_map<std::string, std::filesystem::path> hostPathByIsoPath;
+        std::unordered_set<std::string> seenIsoPaths;
+        for (const auto& executableInfo : workspaceInfo->executables)
+        {
+            const std::string isoPathKey = detail::toLower(executableInfo.isoPath);
+            if (!seenIsoPaths.insert(isoPathKey).second)
+            {
+                continue;
+            }
+
+            ExeCandidateInfo candidate;
+            candidate.path = executableInfo.isoPath;
+            std::filesystem::path executableHostPath;
+            std::string resolveError;
+            if (!detail::resolveWorkspaceExecutableHostPath(*workspaceInfo, executableInfo,
+                                                            executableHostPath, resolveError))
+            {
+                PipelineDiagnostic entry;
+                entry.code = "WorkspaceExecutablePathInvalid";
+                entry.severity = "error";
+                entry.message = "Invalid workspace executable path: " + resolveError;
+                entry.context.file = candidate.path;
+                diagnostics.push_back(entry);
+                candidate.diagnostics.push_back(std::move(entry));
+                result.exeCandidates.push_back(std::move(candidate));
+                continue;
+            }
+            hostPathByIsoPath.emplace(isoPathKey, executableHostPath);
+
+            std::error_code fileError;
+            if (!std::filesystem::is_regular_file(executableHostPath, fileError) || fileError)
+            {
+                PipelineDiagnostic entry;
+                entry.code = "WorkspaceExecutableMissing";
+                entry.severity = "error";
+                entry.message = "Workspace executable is missing: " + executableHostPath.string();
+                entry.context.file = candidate.path;
+                diagnostics.push_back(entry);
+                candidate.diagnostics.push_back(std::move(entry));
+                result.exeCandidates.push_back(std::move(candidate));
+                continue;
+            }
+
+            iso::PsxExeDiagnostics exeDiagnostics;
+            iso::PsxExeImage image{};
+            if (!iso::PsxExeLoader::loadFromFile(executableHostPath.string(), image,
+                                                 &exeDiagnostics))
+            {
+                detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, candidate.path);
+                for (const auto& entry : exeDiagnostics.entries)
+                {
+                    candidate.diagnostics.push_back(
+                        detail::toPipelineDiagnostic(entry, candidate.path));
+                }
+                result.exeCandidates.push_back(std::move(candidate));
+                continue;
+            }
+
+            candidate.valid = true;
+            candidate.loadAddress = image.header.loadAddress;
+            candidate.loadSize = image.header.loadSize;
+            candidate.entryPoint = image.entryPoint.pc;
+            candidate.hash = detail::formatHex(detail::fnv1a64(image.programData), 16);
+            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, candidate.path);
+            for (const auto& entry : exeDiagnostics.entries)
+            {
+                candidate.diagnostics.push_back(
+                    detail::toPipelineDiagnostic(entry, candidate.path));
+            }
+            result.exeCandidates.push_back(std::move(candidate));
+        }
+
+        std::sort(result.exeCandidates.begin(), result.exeCandidates.end(),
+                  detail::exeCandidateLess);
+        const std::string bootPath = workspaceInfo->bootIsoPath;
+        std::optional<size_t> selectedIndex = detail::selectExeCandidateIndex(
+            result.exeCandidates, bootPath, result.selectionInfo.reason);
+        if (!selectedIndex.has_value())
+        {
+            return fail("No valid PSX executable candidate found in resources workspace.");
+        }
+
+        const auto& selected = result.exeCandidates[selectedIndex.value()];
+        result.selectionInfo.selectedPath = selected.path;
+        auto hostPathIt = hostPathByIsoPath.find(detail::toLower(selected.path));
+        if (hostPathIt == hostPathByIsoPath.end())
+        {
+            return fail("Selected workspace executable mapping was not found.");
+        }
+
+        iso::PsxExeDiagnostics exeDiagnostics;
+        if (!iso::PsxExeLoader::loadFromFile(hostPathIt->second.string(), exeImage,
+                                             &exeDiagnostics))
+        {
+            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, selected.path);
+            return fail("Failed to parse selected PSX executable from resources workspace.");
+        }
+        detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, selected.path);
+    }
+    else if (detail::isIsoLikePath(inputFsPath))
     {
         iso::IsoParser parser(activeDiscPath);
         if (!parser.open() || !parser.isValid())
@@ -352,8 +480,20 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     codegenOptions.preserveSymbols = m_options.preserveSymbols;
     CodeGenerator codeGenerator(codegenOptions);
 
+    std::filesystem::path inputStemPath = inputFsPath;
+    if (workspaceInfo.has_value())
+    {
+        if (!workspaceInfo->discMetaInputPath.empty())
+        {
+            inputStemPath = std::filesystem::path(workspaceInfo->discMetaInputPath);
+        }
+        else if (!result.selectionInfo.selectedPath.empty())
+        {
+            inputStemPath = std::filesystem::path(result.selectionInfo.selectedPath);
+        }
+    }
     const std::string inputStem =
-        inputFsPath.stem().string().empty() ? "psx_module" : inputFsPath.stem().string();
+        inputStemPath.stem().string().empty() ? "psx_module" : inputStemPath.stem().string();
     const std::string exeHash = detail::formatHex(detail::fnv1a64(exeImage.programData), 16);
     const std::string exeTag = detail::makeDeterministicTag(exeImage.header.loadAddress, exeHash);
     const std::string moduleName =
@@ -398,10 +538,12 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         detail::buildOutputDirectory(std::filesystem::path(m_options.outputDirectory), inputStem,
                                      result.discSet.setName, exeTag);
 
+    const std::string resourceWorkspacePath =
+        workspaceInfo.has_value() ? workspaceInfo->workspaceRoot.string() : "";
     std::string writeError;
     if (!detail::writeOutputArtifacts(
             result, outputDir, moduleName, header, source, runnerSource, buildFile, activeDiscPath,
-            inputFsPath, m_options.resourceExport, warnings, diagnostics,
+            inputFsPath, resourceWorkspacePath, m_options.resourceExport, warnings, diagnostics,
             m_options.manifestTimestamp, m_options.pipelineVersion, writeError))
     {
         return fail(writeError);

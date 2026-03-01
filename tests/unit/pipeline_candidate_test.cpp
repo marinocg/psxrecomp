@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
 
 using namespace pipeline_candidate_test_support;
@@ -100,6 +101,110 @@ int main()
                                                std::istreambuf_iterator<char>());
         assert(pipelineManifestText.find("\"resourceRoot\"") != std::string::npos);
         assert(pipelineManifestText.find("\"resourceManifest\"") != std::string::npos);
+    }
+    {
+        auto rerunOptions = options;
+        rerunOptions.outputDirectory = (outputDir / "from_resources_workspace").string();
+        psxrecomp::recompiler::RecompilationPipeline workspacePipeline(rerunOptions);
+        const auto workspaceResult = workspacePipeline.run(result.artifacts.resourcesPath);
+        assert(workspaceResult.success);
+        assert(workspaceResult.selectionInfo.selectedPath == result.selectionInfo.selectedPath);
+
+        const auto findCandidateByPath =
+            [](const psxrecomp::recompiler::PipelineResult& runResult,
+               const std::string& path) -> const psxrecomp::recompiler::ExeCandidateInfo*
+        {
+            for (const auto& candidate : runResult.exeCandidates)
+            {
+                if (candidate.path == path)
+                {
+                    return &candidate;
+                }
+            }
+            return nullptr;
+        };
+        const auto* baselineCandidate =
+            findCandidateByPath(result, result.selectionInfo.selectedPath);
+        const auto* workspaceCandidate =
+            findCandidateByPath(workspaceResult, workspaceResult.selectionInfo.selectedPath);
+        assert(baselineCandidate != nullptr);
+        assert(workspaceCandidate != nullptr);
+        assert(workspaceCandidate->hash == baselineCandidate->hash);
+        assert(workspaceCandidate->loadAddress == baselineCandidate->loadAddress);
+        assert(workspaceCandidate->loadSize == baselineCandidate->loadSize);
+        assert(workspaceCandidate->entryPoint == baselineCandidate->entryPoint);
+
+        const auto buildFunctionSignature =
+            [](const psxrecomp::recompiler::PipelineResult& runResult)
+        {
+            std::ostringstream stream;
+            for (const auto& function : runResult.functions)
+            {
+                stream << function.entryAddress << ":" << function.endAddress << ":"
+                       << function.directCalls.size() << ":" << function.indirectCallCount << ";";
+            }
+            return stream.str();
+        };
+        assert(buildFunctionSignature(workspaceResult) == buildFunctionSignature(result));
+        assert(
+            std::filesystem::exists(std::filesystem::path(workspaceResult.artifacts.resourcesPath) /
+                                    "index" / "disc_tree.json"));
+        assert(
+            std::filesystem::exists(std::filesystem::path(workspaceResult.artifacts.resourcesPath) /
+                                    "index" / "disc_meta.json"));
+        assert(std::find(workspaceResult.artifacts.exportedResources.begin(),
+                         workspaceResult.artifacts.exportedResources.end(),
+                         "index/disc_tree.json") !=
+               workspaceResult.artifacts.exportedResources.end());
+        assert(std::find(workspaceResult.artifacts.exportedResources.begin(),
+                         workspaceResult.artifacts.exportedResources.end(),
+                         "index/disc_meta.json") !=
+               workspaceResult.artifacts.exportedResources.end());
+    }
+    {
+        const std::filesystem::path maliciousWorkspace =
+            outputDir / "malicious_workspace_path_traversal";
+        std::error_code copyError;
+        std::filesystem::remove_all(maliciousWorkspace, copyError);
+        copyError.clear();
+        std::filesystem::copy(result.artifacts.resourcesPath, maliciousWorkspace,
+                              std::filesystem::copy_options::recursive, copyError);
+        assert(!copyError);
+
+        {
+            std::ofstream recompInputsFile(maliciousWorkspace / "index" / "recomp_inputs.json",
+                                           std::ios::binary | std::ios::trunc);
+            recompInputsFile << "{\n"
+                                "  \"schemaVersion\": \"1.0\",\n"
+                                "  \"boot\": {\n"
+                                "    \"isoPath\": \"GAMEB.EXE\",\n"
+                                "    \"exportedPath\": \"fs/GAMEB.EXE\"\n"
+                                "  },\n"
+                                "  \"executables\": [\n"
+                                "    {\n"
+                                "      \"isoPath\": \"GAMEB.EXE\",\n"
+                                "      \"exportedPath\": \"../outside/GAMEB.EXE\"\n"
+                                "    }\n"
+                                "  ]\n"
+                                "}\n";
+        }
+
+        auto maliciousOptions = options;
+        maliciousOptions.outputDirectory = (outputDir / "malicious_workspace_output").string();
+        psxrecomp::recompiler::RecompilationPipeline maliciousPipeline(maliciousOptions);
+        const auto maliciousResult = maliciousPipeline.run(maliciousWorkspace.string());
+        assert(!maliciousResult.success);
+        assert(maliciousResult.errorMessage.find("Failed to parse resources workspace:") !=
+               std::string::npos);
+    }
+    {
+        auto overlapOptions = options;
+        overlapOptions.outputDirectory =
+            (std::filesystem::path(result.artifacts.resourcesPath) / "overlap_out").string();
+        psxrecomp::recompiler::RecompilationPipeline overlapPipeline(overlapOptions);
+        const auto overlapResult = overlapPipeline.run(result.artifacts.resourcesPath);
+        assert(!overlapResult.success);
+        assert(overlapResult.errorMessage.find("overlap") != std::string::npos);
     }
 
     std::filesystem::remove(isoPath);

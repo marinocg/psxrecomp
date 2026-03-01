@@ -6,9 +6,9 @@ PSXRecomp uses a multi-stage pipeline to convert PlayStation 1 games into native
 
 ## Pipeline Stages
 
-### 1. ISO Parsing
-**Input**: PSX ISO/BIN file  
-**Output**: Extracted PSX-EXE executable
+### 1. Disc Or Workspace Input
+**Input**: PSX ISO/BIN/CUE image, exported `resources/` workspace, or direct PS-X EXE  
+**Output**: Selected PS-X EXE bytes for analysis
 
 The ISO parser reads PlayStation CD-ROM images using the ISO 9660 filesystem format. It handles PSX-specific extensions like Mode 2 sectors and XA data.
 
@@ -17,6 +17,8 @@ Key responsibilities:
 - Locate SYSTEM.CNF configuration file
 - Extract PSX-EXE executable file
 - Handle multi-track and multi-session discs
+- Load `index/recomp_inputs.json` when the detected workspace root is an exported
+  resources workspace and resolve `fs/<boot exe>` without the original ISO
 
 ### 2. Executable Loading
 **Input**: PSX-EXE file  
@@ -139,6 +141,15 @@ For ISO-like inputs, the pipeline now emits a stable resource index under `resou
 Filesystem exports are written under `resources/fs/` using ISO-relative paths.
 Optional embedded carving outputs are written under `resources/embedded/by_container/...` when
 `PSXRECOMP_RES_EMBEDDED_SCAN=1` (or `true`) is enabled.
+
+The pipeline also accepts an exported resources workspace as input:
+
+- `psxrecomp game.iso -o out/`
+- `psxrecomp out/<module>/<disc>/<tag>/resources -o out_rerun/`
+
+In workspace mode, executable selection is driven by `index/recomp_inputs.json` (relative to the
+detected workspace root), and existing resource index/filesystem artifacts are copied forward to the
+new output.
 
 Export policy is controlled by `PipelineOptions::ResourceExportOptions`:
 
