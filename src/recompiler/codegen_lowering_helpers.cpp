@@ -2,6 +2,7 @@
 
 #include "codegen_helpers.h"
 
+#include <array>
 #include <set>
 #include <sstream>
 #include <unordered_set>
@@ -10,6 +11,25 @@ namespace psxrecomp
 {
 namespace recompiler
 {
+
+namespace
+{
+
+constexpr std::array<const char*, Registers::NUM_REGISTERS> kRegisterNameTable = {
+    "ZERO", "AT", "V0", "V1", "A0", "A1", "A2", "A3", "T0", "T1", "T2",
+    "T3",   "T4", "T5", "T6", "T7", "S0", "S1", "S2", "S3", "S4", "S5",
+    "S6",   "S7", "T8", "T9", "K0", "K1", "GP", "SP", "FP", "RA"};
+
+std::string registerValueToExpr(Register reg)
+{
+    if (reg < kRegisterNameTable.size())
+    {
+        return "context.regs[Registers::" + std::string(kRegisterNameTable[reg]) + "]";
+    }
+    return "context.regs[" + std::to_string(reg) + "]";
+}
+
+} // namespace
 
 std::string valueToExpr(const ir::Value& value, LoweringContext& context)
 {
@@ -24,7 +44,7 @@ std::string valueToExpr(const ir::Value& value, LoweringContext& context)
         return stream.str();
     }
     case ir::ValueKind::REGISTER:
-        return "context.regs[" + std::to_string(value.reg) + "]";
+        return registerValueToExpr(value.reg);
     case ir::ValueKind::TEMPORARY:
     {
         auto it = context.temporaries.find(value.temporaryId);

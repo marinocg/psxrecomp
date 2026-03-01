@@ -420,11 +420,13 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "jump_reg_fallback_module");
 
-        const std::string intrinsicProbe = "if (!callIntrinsic(context.system, context.regs[9], "
-                                           "context.regs))";
+        const std::string intrinsicProbe =
+            "if (!callIntrinsic(context.system, context.regs[Registers::T1], "
+            "context.regs))";
         const std::string recompiledProbe =
-            "if (!jumpRecompiledFunction(context, context.regs[9]))";
-        const std::string failProbe = "failUnsupportedJump(context.regs[9], 0x80090000);";
+            "if (!jumpRecompiledFunction(context, context.regs[Registers::T1]))";
+        const std::string failProbe =
+            "failUnsupportedJump(context.regs[Registers::T1], 0x80090000);";
 
         assert(source.find(intrinsicProbe) != std::string::npos);
         assert(source.find(recompiledProbe) != std::string::npos);
