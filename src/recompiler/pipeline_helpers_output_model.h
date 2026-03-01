@@ -32,6 +32,20 @@ struct FilesystemExportSummary
     std::vector<std::string> alwaysIncludedRules;
 };
 
+struct RecompInputExecutable
+{
+    std::string isoPath;
+    std::string exportedPath;
+    u32 loadAddress = 0;
+    u32 loadSize = 0;
+    u32 entryPoint = 0;
+    u32 gp = 0;
+    u32 bssAddress = 0;
+    u32 bssSize = 0;
+    u32 stackAddress = 0;
+    u32 stackSize = 0;
+};
+
 std::string fsModeToString(PipelineOptions::ResourceExportOptions::FsMode mode);
 FilesystemExportPlan
 buildFilesystemExportPlan(const std::vector<iso::IsoFileEntry>& entries,
@@ -48,6 +62,10 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
                                        const std::vector<iso::IsoFileEntry>& entries,
                                        const FilesystemExportSummary& filesystemSummary,
                                        const std::vector<std::string>& extraWarnings);
+std::string serializeRecompInputs(const std::string& bootIsoPath,
+                                  const std::string& bootExportedPath,
+                                  const std::string& systemCnfExportedPath,
+                                  const std::vector<RecompInputExecutable>& executables);
 
 } // namespace detail
 } // namespace recompiler

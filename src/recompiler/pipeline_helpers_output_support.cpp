@@ -1,6 +1,7 @@
 #include "pipeline_helpers_output_support.h"
 
 #include "pipeline_helpers_output_model.h"
+#include "pipeline_selection_helpers.h"
 
 #include <algorithm>
 #include <filesystem>
@@ -85,6 +86,7 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
     filesystemSummary.maxTotalBytes = resourceExportOptions.maxTotalBytes;
     filesystemSummary.maxSingleFileBytes = resourceExportOptions.maxSingleFileBytes;
     std::vector<std::string> resourceManifestWarnings;
+    std::unordered_map<std::string, std::string> exportedPathByIsoPath;
 
     std::unordered_map<std::string, u32> fileSizeByPath;
     for (const auto& entry : isoTreeEntries)
@@ -115,9 +117,10 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
             continue;
         }
 
-        artifacts.exportedResources.push_back(
-            (std::filesystem::path("fs") / std::filesystem::path(isoRelativePath))
-                .generic_string());
+        const std::string exportedPath =
+            (std::filesystem::path("fs") / std::filesystem::path(isoRelativePath)).generic_string();
+        artifacts.exportedResources.push_back(exportedPath);
+        exportedPathByIsoPath.emplace(toLower(isoRelativePath), exportedPath);
         ++filesystemSummary.filesExported;
         const auto sizeIt = fileSizeByPath.find(isoRelativePath);
         if (sizeIt != fileSizeByPath.end())
@@ -133,6 +136,90 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
         warnings.push_back(warning);
         resourceManifestWarnings.push_back(warning);
     }
+
+    auto findExportedPath = [&](const std::string& isoPath) -> std::string
+    {
+        if (isoPath.empty())
+        {
+            return "";
+        }
+        const auto it = exportedPathByIsoPath.find(toLower(isoPath));
+        if (it == exportedPathByIsoPath.end())
+        {
+            return "";
+        }
+        return it->second;
+    };
+
+    std::vector<std::string> executablePaths = parser.listExecutables();
+    if (!bootExecutable.empty())
+    {
+        executablePaths.push_back(bootExecutable);
+    }
+    const std::vector<std::string> uniqueExecutablePaths =
+        deduplicatePathsCaseInsensitive(executablePaths);
+
+    std::vector<RecompInputExecutable> recompInputExecutables;
+    recompInputExecutables.reserve(uniqueExecutablePaths.size());
+
+    for (const auto& executablePath : uniqueExecutablePaths)
+    {
+        const std::vector<u8> executableData = parser.extractFile(executablePath);
+        if (executableData.empty())
+        {
+            const std::string warning = "Recomp inputs metadata skipped for executable '" +
+                                        executablePath + "' because extraction failed.";
+            warnings.push_back(warning);
+            resourceManifestWarnings.push_back(warning);
+            continue;
+        }
+
+        iso::PsxExeImage executableImage{};
+        iso::PsxExeDiagnostics executableDiagnostics;
+        if (!iso::PsxExeLoader::loadImage(executableData, executableImage, &executableDiagnostics))
+        {
+            const std::string warning = "Recomp inputs metadata skipped for executable '" +
+                                        executablePath + "' because PS-X EXE parsing failed.";
+            warnings.push_back(warning);
+            resourceManifestWarnings.push_back(warning);
+            continue;
+        }
+
+        RecompInputExecutable entry;
+        entry.isoPath = executablePath;
+        entry.exportedPath = findExportedPath(executablePath);
+        entry.loadAddress = executableImage.header.loadAddress;
+        entry.loadSize = executableImage.header.loadSize;
+        entry.entryPoint = executableImage.entryPoint.pc;
+        entry.gp = executableImage.entryPoint.gp;
+        entry.bssAddress = executableImage.header.bssAddress;
+        entry.bssSize = executableImage.header.bssSize;
+        entry.stackAddress = executableImage.header.stackAddress;
+        entry.stackSize = executableImage.header.stackSize;
+        recompInputExecutables.push_back(std::move(entry));
+    }
+
+    std::sort(recompInputExecutables.begin(), recompInputExecutables.end(),
+              [](const RecompInputExecutable& lhs, const RecompInputExecutable& rhs)
+              {
+                  const std::string lhsKey = toLower(lhs.isoPath);
+                  const std::string rhsKey = toLower(rhs.isoPath);
+                  if (lhsKey != rhsKey)
+                  {
+                      return lhsKey < rhsKey;
+                  }
+                  return lhs.isoPath < rhs.isoPath;
+              });
+
+    const auto recompInputsPath = resourcesIndex / "recomp_inputs.json";
+    if (!writeFile(recompInputsPath,
+                   serializeRecompInputs(bootExecutable, findExportedPath(bootExecutable),
+                                         findExportedPath("SYSTEM.CNF"), recompInputExecutables),
+                   outError))
+    {
+        return false;
+    }
+    artifacts.exportedResources.push_back("index/recomp_inputs.json");
 
     const auto resourcesManifestPath = resourcesIndex / "resources_manifest.json";
     if (!writeFile(resourcesManifestPath,

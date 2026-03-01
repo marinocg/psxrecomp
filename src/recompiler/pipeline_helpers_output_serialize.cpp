@@ -230,6 +230,7 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     stream << "  \"index\": {\n";
     stream << "    \"discTreePath\": \"index/disc_tree.json\",\n";
     stream << "    \"discMetaPath\": \"index/disc_meta.json\",\n";
+    stream << "    \"recompInputsPath\": \"index/recomp_inputs.json\",\n";
     stream << "    \"resourcesManifestPath\": \"index/resources_manifest.json\"\n";
     stream << "  },\n";
     stream << "  \"exports\": {\n";
@@ -301,6 +302,64 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     {
         stream << "    \"" << escapeJson(warnings[i]) << "\"";
         if (i + 1 < warnings.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ]\n";
+    stream << "}\n";
+    return stream.str();
+}
+
+std::string serializeRecompInputs(const std::string& bootIsoPath,
+                                  const std::string& bootExportedPath,
+                                  const std::string& systemCnfExportedPath,
+                                  const std::vector<RecompInputExecutable>& executables)
+{
+    std::ostringstream stream;
+    stream << "{\n";
+    stream << "  \"schemaVersion\": \"1.0\",\n";
+    stream << "  \"boot\": {\n";
+    stream << "    \"isoPath\": \"" << escapeJson(bootIsoPath) << "\",\n";
+    stream << "    \"exportedPath\": \"" << escapeJson(bootExportedPath) << "\"\n";
+    stream << "  },\n";
+    stream << "  \"systemCnf\": {\n";
+    stream << "    \"exportedPath\": \"" << escapeJson(systemCnfExportedPath) << "\"\n";
+    stream << "  },\n";
+    stream << "  \"executables\": [\n";
+    for (size_t index = 0; index < executables.size(); ++index)
+    {
+        const auto& executable = executables[index];
+        stream << "    {\n";
+        stream << "      \"isoPath\": \"" << escapeJson(executable.isoPath) << "\",\n";
+        stream << "      \"exportedPath\": \"" << escapeJson(executable.exportedPath) << "\",\n";
+        stream << "      \"psxExe\": {\n";
+        stream << "        \"loadAddr\": \"0x" << formatHex(executable.loadAddress, 8) << "\",\n";
+        stream << "        \"entry\": \"0x" << formatHex(executable.entryPoint, 8) << "\",\n";
+        stream << "        \"size\": " << executable.loadSize;
+        if (executable.gp != 0)
+        {
+            stream << ",\n";
+            stream << "        \"gp\": \"0x" << formatHex(executable.gp, 8) << "\"";
+        }
+        if (executable.bssSize != 0)
+        {
+            stream << ",\n";
+            stream << "        \"bssAddr\": \"0x" << formatHex(executable.bssAddress, 8) << "\",\n";
+            stream << "        \"bssSize\": " << executable.bssSize;
+        }
+        if (executable.stackSize != 0 || executable.stackAddress != 0)
+        {
+            stream << ",\n";
+            stream << "        \"stackAddr\": \"0x" << formatHex(executable.stackAddress, 8)
+                   << "\",\n";
+            stream << "        \"stackSize\": " << executable.stackSize;
+        }
+        stream << "\n";
+        stream << "      }\n";
+        stream << "    }";
+        if (index + 1 < executables.size())
         {
             stream << ",";
         }

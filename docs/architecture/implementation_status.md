@@ -51,6 +51,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - XA Mode 2 validation, robust raw-sector PVD probing (Mode 1 + Mode 2 offsets), plus improved CUE parsing (sessions/pregaps).
 - XA resource discovery fallback for 2048-byte ISO images (extent-based when raw subheaders are unavailable).
 - Recursive ISO tree enumeration now walks directory records from root (independent of path table), and pipeline output emits `resources/index/{disc_tree,disc_meta,resources_manifest}.json` plus policy-driven `resources/fs/` exports (minimal/smart/full), with streaming file export (no full-file buffering).
+- Resource index now includes `resources/index/recomp_inputs.json` with boot executable mapping, exported `SYSTEM.CNF`, and metadata for the discovered executable set to support no-ISO recompilation reruns.
 
 **Missing**
 
