@@ -462,6 +462,35 @@ int main()
         std::cerr << "[PASS] COP0 lowering emits runtime COP0 helpers\n";
     }
 
+    // ---------------------------------------------------------------
+    // Test 11: Source MIPS comments are emitted only when enabled
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+        auto& function = builder.createFunction("test_source_asm_comments", 0x8001234C);
+        auto& entry = builder.createBlock(function, "entry");
+        Value temp = builder.createTemporary();
+
+        entry.instructions.push_back(
+            builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(1)}, {temp}, 0x8001234C,
+                                    std::string("addiu sp, sp, -0x20")));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80012350));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "source_asm_comments_module");
+        assert(source.find("// 0x8001234C: addiu sp, sp, -0x20") != std::string::npos);
+
+        psxrecomp::recompiler::CodeGenOptions noCommentOptions;
+        noCommentOptions.generateComments = false;
+        CodeGenerator noCommentGenerator(noCommentOptions);
+        std::string sourceNoComments =
+            noCommentGenerator.generateSource(program, "source_asm_comments_module_no_comments");
+        assert(sourceNoComments.find("// 0x8001234C: addiu sp, sp, -0x20") == std::string::npos);
+
+        std::cerr << "[PASS] source MIPS comments respect generateComments option\n";
+    }
+
     std::cerr << "All codegen lowering tests passed.\n";
     return 0;
 }

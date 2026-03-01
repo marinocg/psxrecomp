@@ -251,9 +251,10 @@ Value Builder::createTemporary()
 
 Instruction Builder::makeInstruction(Opcode opcode, std::vector<Value> inputs,
                                      std::vector<Value> outputs,
-                                     std::optional<Address> sourceAddress)
+                                     std::optional<Address> sourceAddress,
+                                     std::optional<std::string> sourceAsm)
 {
-    return {opcode, std::move(inputs), std::move(outputs), sourceAddress};
+    return {opcode, std::move(inputs), std::move(outputs), sourceAddress, std::move(sourceAsm)};
 }
 
 } // namespace ir

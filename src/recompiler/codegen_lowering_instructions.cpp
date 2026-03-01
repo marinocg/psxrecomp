@@ -1,5 +1,6 @@
 #include "codegen_lowering_helpers.h"
 
+#include <iomanip>
 #include <optional>
 #include <sstream>
 
@@ -14,12 +15,27 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
 {
     if (context.generateComments)
     {
-        std::string comment = "// " + opcodeToComment(instruction.opcode);
-        if (instruction.sourceAddress.has_value())
+        std::string comment;
+        if (instruction.sourceAsm.has_value() && instruction.sourceAddress.has_value())
         {
             std::ostringstream stream;
-            stream << comment << " @0x" << std::hex << *instruction.sourceAddress;
+            stream << "// 0x" << std::hex << std::uppercase << std::setw(8) << std::setfill('0')
+                   << *instruction.sourceAddress << ": " << *instruction.sourceAsm;
             comment = stream.str();
+        }
+        else if (instruction.sourceAsm.has_value())
+        {
+            comment = "// " + *instruction.sourceAsm;
+        }
+        else
+        {
+            comment = "// " + opcodeToComment(instruction.opcode);
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream stream;
+                stream << comment << " @0x" << std::hex << *instruction.sourceAddress;
+                comment = stream.str();
+            }
         }
         emitter.writeLine(comment);
     }

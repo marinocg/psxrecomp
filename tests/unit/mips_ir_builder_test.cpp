@@ -69,6 +69,10 @@ int main()
     assert(result.instructions[6].opcode == Opcode::LOAD);
     assert(result.instructions[7].opcode == Opcode::ADD);
     assert(result.instructions[8].opcode == Opcode::STORE);
+    assert(result.instructions[0].sourceAsm.has_value());
+    assert(result.instructions[2].sourceAsm.has_value());
+    assert(result.instructions[0].sourceAsm.value() == instructions[0].toString());
+    assert(result.instructions[2].sourceAsm.value() == instructions[2].toString());
 
     const Address branchAddress = result.instructions[2].sourceAddress.value_or(0);
     assert(branchAddress == 0x80010008);
