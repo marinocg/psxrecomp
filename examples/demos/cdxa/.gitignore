@@ -1,0 +1,6 @@
+build/
+assets/STRESS.XA
+*.EXE
+*.iso
+*.cue
+CDXA

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iso_project image_name="CDXA" cue_sheet="CDXA.cue">
+  <track type="data" source=".">
+    <identifiers
+      application="PLAYSTATION"
+      publisher="psxrecomp"
+      data_preparer="psnoobs"
+    />
+
+    <directory_tree>
+      <file name="SYSTEM.CNF" source="system.cnf" />
+      <file name="CDXA.EXE" source="CDXA.EXE" />
+      <file name="README.TXT" source="README.md" />
+      <file name="STRESS.XA" type="mixed" source="assets/STRESS.XA" />
+      <dummy sectors="512"/>
+    </directory_tree>
+  </track>
+</iso_project>
