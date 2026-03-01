@@ -9,6 +9,8 @@ namespace psxrecomp
 namespace recompiler
 {
 
+void emitRunnerSupportCommon(CppEmitter& emitter);
+void emitRunnerSupportPresenter(CppEmitter& emitter);
 void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName);
 
 } // namespace recompiler

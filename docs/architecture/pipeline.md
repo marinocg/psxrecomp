@@ -126,6 +126,23 @@ void main() {
 
 The generated C++ is compiled using standard compilers (GCC, Clang, MSVC) with the runtime library.
 
+## Resource Extraction Index (REX1)
+
+For ISO-like inputs, the pipeline now emits a stable resource index under `resources/index/`:
+
+- `disc_tree.json` (full recursive ISO tree + extents)
+- `disc_meta.json` (disc/track metadata)
+- `resources_manifest.json` (tooling entrypoint + export summary)
+
+Loose extracted assets (when found) are written under `resources/fs/`.
+
+The top-level pipeline `manifest.json` includes:
+
+- `output.resourceRoot`
+- `output.resourceManifest`
+
+See [Resource Extraction Layout 1.0](resource_extraction_layout.md) for schemas and examples.
+
 ## Memory Model
 
 PSXRecomp maintains the PSX memory layout:

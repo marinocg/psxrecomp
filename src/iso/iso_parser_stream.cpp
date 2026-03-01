@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <limits>
+#include <unordered_set>
 
 namespace psxrecomp
 {
@@ -214,19 +216,41 @@ bool IsoParser::openStream()
 
     if (isCue)
     {
-        std::error_code error;
-        auto fileSize = std::filesystem::file_size(m_filename, error);
-        if (error)
+        m_totalSectors = 0;
+        std::unordered_set<std::string> uniqueTrackFiles;
+        for (const auto& track : m_tracks)
         {
-            addError("Failed to determine image file size.");
-        }
-        else if (m_rawSectorSize != 0)
-        {
-            m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
-            if (fileSize % m_rawSectorSize != 0)
+            if (track.file.empty() || track.sectorSize == 0)
             {
-                addError("Image file size is not aligned to sector size.");
+                continue;
             }
+            if (!uniqueTrackFiles.insert(track.file).second)
+            {
+                continue;
+            }
+
+            std::error_code trackError;
+            const auto trackFileSize = std::filesystem::file_size(track.file, trackError);
+            if (trackError)
+            {
+                addError("Failed to determine track file size: " + track.file);
+                continue;
+            }
+
+            if (trackFileSize % static_cast<u64>(track.sectorSize) != 0)
+            {
+                addError("Track file size is not aligned to sector size: " + track.file);
+            }
+
+            const u64 trackSectors = trackFileSize / static_cast<u64>(track.sectorSize);
+            if (trackSectors > static_cast<u64>(std::numeric_limits<u32>::max()) -
+                                   static_cast<u64>(m_totalSectors))
+            {
+                addError("Total cue sector count exceeds supported range.");
+                m_totalSectors = std::numeric_limits<u32>::max();
+                break;
+            }
+            m_totalSectors += static_cast<u32>(trackSectors);
         }
     }
     else

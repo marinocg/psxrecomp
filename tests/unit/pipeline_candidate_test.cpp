@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <vector>
 
 namespace
@@ -123,6 +124,38 @@ int main()
     auto result = pipeline.run(isoPath.string());
     assert(result.success);
     assert(result.selectionInfo.selectedPath == "GAMEB.EXE");
+    assert(!result.artifacts.resourceManifestPath.empty());
+    assert(std::filesystem::exists(result.artifacts.resourceManifestPath));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "index" /
+                                   "disc_tree.json"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "index" /
+                                   "disc_meta.json"));
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "index/resources_manifest.json") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "index/disc_tree.json") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "index/disc_meta.json") != result.artifacts.exportedResources.end());
+    {
+        std::ifstream manifestFile(result.artifacts.resourceManifestPath);
+        const std::string resourceManifest((std::istreambuf_iterator<char>(manifestFile)),
+                                           std::istreambuf_iterator<char>());
+        assert(resourceManifest.find("\"discTreePath\": \"index/disc_tree.json\"") !=
+               std::string::npos);
+        assert(resourceManifest.find("\"discMetaPath\": \"index/disc_meta.json\"") !=
+               std::string::npos);
+        assert(resourceManifest.find("\"filesystemEnabled\": true") != std::string::npos);
+    }
+    {
+        std::ifstream pipelineManifest(result.artifacts.manifestPath);
+        const std::string pipelineManifestText((std::istreambuf_iterator<char>(pipelineManifest)),
+                                               std::istreambuf_iterator<char>());
+        assert(pipelineManifestText.find("\"resourceRoot\"") != std::string::npos);
+        assert(pipelineManifestText.find("\"resourceManifest\"") != std::string::npos);
+    }
 
     std::filesystem::remove(isoPath);
 

@@ -1,0 +1,1 @@
+DIRB/FILEB.TXT content

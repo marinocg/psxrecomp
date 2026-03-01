@@ -217,7 +217,11 @@ bool IsoParser::readPVD()
 
             m_pvd = *pvd;
             m_logicalBlockSize = m_pvd.logicalBlockSize;
-            m_totalSectors = static_cast<u32>(fileSize / m_rawSectorSize);
+            const u32 selectedImageSectors = static_cast<u32>(fileSize / m_rawSectorSize);
+            if (m_totalSectors == 0)
+            {
+                m_totalSectors = selectedImageSectors;
+            }
             if (fileSize % m_rawSectorSize != 0)
             {
                 addError("Image file size is not aligned to sector size.");

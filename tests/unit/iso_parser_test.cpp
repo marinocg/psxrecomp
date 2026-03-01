@@ -17,100 +17,7 @@ using iso_test::createTestIso;
 using iso_test::createTestIsoWithLabel;
 using iso_test::kSectorSize;
 
-std::filesystem::path createRawIsoFromPlain(const std::filesystem::path& plainIsoPath,
-                                            uint32_t rawSectorSize, uint32_t userDataOffset,
-                                            uint8_t modeByte)
-{
-    std::ifstream in(plainIsoPath, std::ios::binary);
-    std::vector<uint8_t> plain((std::istreambuf_iterator<char>(in)),
-                               std::istreambuf_iterator<char>());
-    assert(!plain.empty());
-    assert(plain.size() % kSectorSize == 0);
-    size_t totalSectors = plain.size() / kSectorSize;
-    std::vector<uint8_t> raw(totalSectors * rawSectorSize, 0);
-
-    for (size_t sector = 0; sector < totalSectors; ++sector)
-    {
-        size_t rawBase = sector * rawSectorSize;
-        if (modeByte != 0 && rawSectorSize >= 16)
-        {
-            raw[rawBase + 15] = modeByte;
-        }
-        std::memcpy(raw.data() + rawBase + userDataOffset, plain.data() + sector * kSectorSize,
-                    kSectorSize);
-    }
-
-    auto path = std::filesystem::temp_directory_path() /
-                ("psxrecomp_raw_" + std::to_string(rawSectorSize) + "_" +
-                 std::to_string(iso_test::generateUniqueSuffix()) + ".bin");
-    std::ofstream out(path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(raw.data()), static_cast<std::streamsize>(raw.size()));
-    out.close();
-    return path;
-}
-
-std::filesystem::path createPlainIsoWithXaExtension()
-{
-    const uint32_t totalSectors = 32;
-    std::vector<uint8_t> image(totalSectors * kSectorSize, 0);
-
-    const uint32_t rootDirSector = 20;
-    const uint32_t rootDirSize = kSectorSize;
-    const uint32_t xaSector = 21;
-    const uint32_t pathTableSector = 18;
-
-    size_t pvdOffset = 16 * kSectorSize;
-    image[pvdOffset] = 1;
-    std::memcpy(image.data() + pvdOffset + 1, "CD001", 5);
-    image[pvdOffset + 6] = 1;
-    std::memcpy(image.data() + pvdOffset + 8, "PLAYSTATION", 11);
-    std::memcpy(image.data() + pvdOffset + 40, "XA_EXT_TEST", 11);
-    iso_test::writeLe32(image, pvdOffset + 80, totalSectors);
-    iso_test::writeLe16(image, pvdOffset + 120, 1);
-    iso_test::writeLe16(image, pvdOffset + 124, 1);
-    iso_test::writeLe16(image, pvdOffset + 128, kSectorSize);
-
-    size_t pathTableOffset = pathTableSector * kSectorSize;
-    size_t pathTableCursor = pathTableOffset;
-    pathTableCursor = iso_test::writePathTableEntry(image, pathTableCursor, std::string("\0", 1),
-                                                    rootDirSector, 1);
-    uint32_t pathTableSize = static_cast<uint32_t>(pathTableCursor - pathTableOffset);
-    iso_test::writeLe32(image, pvdOffset + 132, pathTableSize);
-    iso_test::writeLe32(image, pvdOffset + 140, pathTableSector);
-
-    size_t rootRecordOffset = pvdOffset + 156;
-    image[rootRecordOffset] = 34;
-    iso_test::writeLe32(image, rootRecordOffset + 2, rootDirSector);
-    iso_test::writeLe32(image, rootRecordOffset + 10, rootDirSize);
-    image[rootRecordOffset + 25] = 0x02;
-    iso_test::writeLe16(image, rootRecordOffset + 28, 1);
-    image[rootRecordOffset + 32] = 1;
-    image[rootRecordOffset + 33] = 0;
-
-    size_t terminatorOffset = 17 * kSectorSize;
-    image[terminatorOffset] = 255;
-    std::memcpy(image.data() + terminatorOffset + 1, "CD001", 5);
-    image[terminatorOffset + 6] = 1;
-
-    size_t rootDirOffset = rootDirSector * kSectorSize;
-    size_t cursor = rootDirOffset;
-    cursor += iso_test::writeDirectoryRecord(image, cursor, std::string("\0", 1), rootDirSector,
-                                             rootDirSize, 0x02);
-    cursor += iso_test::writeDirectoryRecord(image, cursor, std::string("\1", 1), rootDirSector,
-                                             rootDirSize, 0x02);
-    iso_test::writeDirectoryRecord(image, cursor, "AUDIO.XA;1", xaSector, 512, 0x00);
-
-    std::string xaData = "NOT_RAW_XA_BUT_RESOURCE";
-    std::memcpy(image.data() + xaSector * kSectorSize, xaData.data(), xaData.size());
-
-    auto path = std::filesystem::temp_directory_path() /
-                ("psxrecomp_xa_ext_" + std::to_string(iso_test::generateUniqueSuffix()) + ".iso");
-    std::ofstream out(path, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(image.data()),
-              static_cast<std::streamsize>(image.size()));
-    out.close();
-    return path;
-}
+#include "iso_parser_test_helpers_extra.h"
 
 int main()
 {
@@ -130,6 +37,17 @@ int main()
     auto executableList = parser.listExecutables();
     assert(std::find(executableList.begin(), executableList.end(), exeName) !=
            executableList.end());
+    auto flatTree = parser.listAllFilesRecursive();
+    auto dataDirEntry =
+        std::find_if(flatTree.begin(), flatTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+                     { return entry.path == "DATA" && entry.isDirectory; });
+    assert(dataDirEntry != flatTree.end());
+    auto gameExeEntry =
+        std::find_if(flatTree.begin(), flatTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+                     { return entry.path == "DATA/GAME.EXE" && !entry.isDirectory; });
+    assert(gameExeEntry != flatTree.end());
+    assert(gameExeEntry->size == 16);
+    assert(gameExeEntry->extents.size() == 1);
 
     auto tracks = parser.getTracks();
     assert(tracks.size() == 1);
@@ -174,6 +92,15 @@ int main()
     auto xaResources = cueParser.listResources(psxrecomp::iso::ResourceType::XaAudio);
     assert(xaResources.size() == 1);
     assert(xaResources.front() == "AUDIO.XA");
+    auto cueTree = cueParser.listAllFilesRecursive();
+    auto multiEntry =
+        std::find_if(cueTree.begin(), cueTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+                     { return entry.path == "MULTI.BIN" && !entry.isDirectory; });
+    assert(multiEntry != cueTree.end());
+    assert(multiEntry->size == kSectorSize * 2);
+    assert(multiEntry->extents.size() == 2);
+    assert(multiEntry->extents.front().continues);
+    assert(!multiEntry->extents.back().continues);
 
     auto plainXaIso = createPlainIsoWithXaExtension();
     psxrecomp::iso::IsoParser plainXaParser(plainXaIso.string());
@@ -183,6 +110,32 @@ int main()
     assert(plainXaResources.size() == 1);
     assert(plainXaResources.front() == "AUDIO.XA");
     std::filesystem::remove(plainXaIso);
+
+    auto brokenPathTableIso = createIsoWithBrokenPathTableAndNestedTim();
+    psxrecomp::iso::IsoParser brokenPathTableParser(brokenPathTableIso.string());
+    assert(brokenPathTableParser.open());
+    assert(brokenPathTableParser.isValid());
+    auto brokenTimResources =
+        brokenPathTableParser.listResources(psxrecomp::iso::ResourceType::TimTexture);
+    assert(brokenTimResources.size() == 1);
+    assert(brokenTimResources.front() == "DATA/NESTED.TIM");
+    auto brokenTree = brokenPathTableParser.listAllFilesRecursive();
+    auto nestedTimEntry = std::find_if(
+        brokenTree.begin(), brokenTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+        { return entry.path == "DATA/NESTED.TIM" && !entry.isDirectory; });
+    assert(nestedTimEntry != brokenTree.end());
+    bool hasPathTableError = false;
+    for (const auto& error : brokenPathTableParser.getErrors())
+    {
+        if (error.find("path table") != std::string::npos ||
+            error.find("Path table") != std::string::npos)
+        {
+            hasPathTableError = true;
+            break;
+        }
+    }
+    assert(hasPathTableError);
+    std::filesystem::remove(brokenPathTableIso);
 
     auto plainForRaw2352Mode1 = createTestIso();
     auto raw2352Mode1 = createRawIsoFromPlain(plainForRaw2352Mode1, 2352, 16, 1);
@@ -221,6 +174,26 @@ int main()
 
     std::filesystem::remove(cuePath);
     std::filesystem::remove(binPath);
+
+    auto splitCue = createSplitCueWithGlobalVolumeSpace();
+    psxrecomp::iso::IsoParser splitCueParser(splitCue.cuePath.string());
+    assert(splitCueParser.open());
+    assert(splitCueParser.isValid());
+    assert(splitCueParser.findExecutable() == "GAME.EXE");
+    assert(splitCueParser.getTotalSectors() == splitCue.totalDiscSectors);
+    bool hasVolumeSizeError = false;
+    for (const auto& error : splitCueParser.getErrors())
+    {
+        if (error.find("Volume space size exceeds image size.") != std::string::npos)
+        {
+            hasVolumeSizeError = true;
+            break;
+        }
+    }
+    assert(!hasVolumeSizeError);
+    std::filesystem::remove(splitCue.cuePath);
+    std::filesystem::remove(splitCue.dataTrackPath);
+    std::filesystem::remove(splitCue.audioTrackPath);
 
     std::filesystem::path multiCuePath;
     std::filesystem::path sessionTwoBin;

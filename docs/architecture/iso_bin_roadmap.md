@@ -27,6 +27,7 @@ image formats needed by the recompiler pipeline.
 - [x] Parse and use ISO 9660 path tables for faster lookups.
 - [x] Handle multi-extent files and continuation records.
 - [x] Add Joliet directory entries for long filenames when present.
+- [x] Add recursive root-directory traversal for full file tree listing (path table optional).
 
 ## Phase 3: Robustness & Tooling
 - [x] Add explicit error reporting/logging for malformed images.
@@ -46,4 +47,6 @@ image formats needed by the recompiler pipeline.
 - [x] Validate XA audio sector metadata for runtime streaming.
 - [x] XA resource fallback for 2048-byte ISO images when raw subheaders are unavailable.
 - [x] Add fixture tooling for malformed/good/rich ISO generation and validation scripts.
+- [x] Emit stable resource index artifacts: `resources/index/disc_tree.json`,
+  `resources/index/disc_meta.json`, and `resources/index/resources_manifest.json`.
 - [ ] Integrate multi-disc set with runtime disc swap workflows.

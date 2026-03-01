@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iso_project image_name="CDBROWSE" cue_sheet="CDBROWSE.cue">
+  <track type="data" source=".">
+    <identifiers
+      application="PLAYSTATION"
+      publisher="psxrecomp"
+      data_preparer="psnoobs"
+    />
+
+    <directory_tree>
+      <file name="SYSTEM.CNF" source="system.cnf" />
+      <file name="CDBROWSE.EXE" source="CDBROWSE.EXE" />
+      <file name="README.TXT" source="assets/README.TXT" />
+
+      <dir name="DIRA">
+        <file name="FILEA.TXT" source="assets/FILEA.TXT" />
+        <dir name="DIRAA">
+          <file name="DEEP.TXT" source="assets/DEEP.TXT" />
+        </dir>
+      </dir>
+
+      <dir name="DIRB">
+        <file name="FILEB.TXT" source="assets/FILEB.TXT" />
+      </dir>
+
+      <dummy sectors="256"/>
+    </directory_tree>
+  </track>
+</iso_project>

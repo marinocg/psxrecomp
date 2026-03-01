@@ -23,12 +23,50 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
     emitter.writeLine(
         "std::filesystem::path exeDir = std::filesystem::path(argv[0]).parent_path();");
     emitter.writeLine("std::filesystem::path resourcesDir = exeDir / \"resources\";");
+    emitter.writeLine("std::filesystem::path resourceManifestPath =");
+    emitter.writeLine("    resourcesDir / \"index\" / \"resources_manifest.json\";");
     emitter.writeLine("if (!std::filesystem::exists(resourcesDir))");
     emitter.openBlock("");
     emitter.writeLine("std::cerr << \"[psxrecomp][warn] resources directory not found near "
                       "executable: \" << resourcesDir.string() << \"\\n\";");
     emitter.writeLine("std::cerr << \"[psxrecomp][warn] Missing assets can result in a black "
                       "screen or silent startup.\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else if (!std::filesystem::exists(resourceManifestPath))");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] resources manifest not found: \"");
+    emitter.writeLine("          << resourceManifestPath.string() << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("auto manifestText = readTextFile(resourceManifestPath);");
+    emitter.writeLine("if (!manifestText.has_value())");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Failed to read resources manifest: \"");
+    emitter.writeLine("          << resourceManifestPath.string() << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("bool filesystemEnabled = false;");
+    emitter.writeLine("psxrecomp::u64 containersScanned = 0;");
+    emitter.writeLine("psxrecomp::u64 hitsExtracted = 0;");
+    emitter.writeLine("std::string runtimeSummaryJson;");
+    emitter.writeLine("const std::string* summaryJson = &(*manifestText);");
+    emitter.writeLine(
+        "if (extractJsonObjectField(*manifestText, \"runtimeSummary\", &runtimeSummaryJson))");
+    emitter.openBlock("");
+    emitter.writeLine("summaryJson = &runtimeSummaryJson;");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "extractJsonBoolField(*summaryJson, \"filesystemEnabled\", &filesystemEnabled);");
+    emitter.writeLine(
+        "extractJsonU64Field(*summaryJson, \"containersScanned\", &containersScanned);");
+    emitter.writeLine("extractJsonU64Field(*summaryJson, \"hitsExtracted\", &hitsExtracted);");
+    emitter.writeLine("std::cout << \"[psxrecomp] Resource index: fs.enabled=\"");
+    emitter.writeLine("          << (filesystemEnabled ? \"true\" : \"false\")");
+    emitter.writeLine("          << \", embedded.containersScanned=\" << containersScanned");
+    emitter.writeLine("          << \", embedded.hitsExtracted=\" << hitsExtracted << \"\\n\";");
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();

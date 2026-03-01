@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iso_project image_name="CDCRC" cue_sheet="CDCRC.cue">
+  <track type="data" source=".">
+    <identifiers
+      application="PLAYSTATION"
+      publisher="psxrecomp"
+      data_preparer="psnoobs"
+    />
+
+    <directory_tree>
+      <file name="SYSTEM.CNF" source="system.cnf" />
+      <file name="CDCRC.EXE" source="CDCRC.EXE" />
+      <file name="README.TXT" source="README.md" />
+      <file name="CRCSEED.BIN" source="assets/CRCSEED.BIN" />
+      <dummy sectors="256"/>
+    </directory_tree>
+  </track>
+</iso_project>

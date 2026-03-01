@@ -49,6 +49,7 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 set(ISO_SOURCES
     src/iso/cue_sheet.cpp
     src/iso/iso_boot.cpp
+    src/iso/iso_parser_directory.cpp
     src/iso/iso_parser_filesystem.cpp
     src/iso/iso_parser_pvd.cpp
     src/iso/iso_parser_resources.cpp
@@ -87,6 +88,10 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen.cpp
     src/recompiler/codegen_build.cpp
     src/recompiler/codegen_runner.cpp
+    src/recompiler/codegen_runner_support_common.cpp
+    src/recompiler/codegen_runner_support_presenter.cpp
+    src/recompiler/codegen_source.cpp
+    src/recompiler/codegen_source_body.cpp
     src/recompiler/codegen_runner_main.cpp
     src/recompiler/codegen_lowering.cpp
     src/recompiler/codegen_lowering_helpers.cpp
@@ -96,6 +101,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/cpp_emitter.cpp
     src/recompiler/pipeline_analysis_helpers.cpp
     src/recompiler/pipeline_helpers.cpp
+    src/recompiler/pipeline_helpers_manifest.cpp
     src/recompiler/pipeline_helpers_output.cpp
     src/recompiler/pipeline_selection_helpers.cpp
     src/recompiler/pipeline.cpp
@@ -164,6 +170,7 @@ if(BUILD_TESTS)
     enable_testing()
     add_executable(iso_parser_test
         tests/unit/iso_parser_test.cpp
+        tests/unit/iso_parser_test_helpers_extra.cpp
         ${ISO_SOURCES}
     )
     target_include_directories(iso_parser_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
@@ -301,6 +308,7 @@ if(BUILD_TESTS)
 
     add_executable(codegen_lowering_test
         tests/unit/codegen_lowering_test.cpp
+        tests/unit/codegen_lowering_source_comments_case.cpp
         ${IR_SOURCES}
         ${DISASM_SOURCES}
         ${RECOMPILER_SOURCES}
