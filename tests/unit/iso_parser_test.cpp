@@ -112,6 +112,81 @@ std::filesystem::path createPlainIsoWithXaExtension()
     return path;
 }
 
+std::filesystem::path createIsoWithBrokenPathTableAndNestedTim()
+{
+    const uint32_t totalSectors = 48;
+    std::vector<uint8_t> image(totalSectors * kSectorSize, 0);
+
+    const uint32_t rootDirSector = 20;
+    const uint32_t rootDirSize = kSectorSize;
+    const uint32_t dataDirSector = 21;
+    const uint32_t timSector = 22;
+    const uint32_t pathTableSector = 18;
+
+    size_t pvdOffset = 16 * kSectorSize;
+    image[pvdOffset] = 1;
+    std::memcpy(image.data() + pvdOffset + 1, "CD001", 5);
+    image[pvdOffset + 6] = 1;
+    std::memcpy(image.data() + pvdOffset + 8, "PLAYSTATION", 11);
+    std::memcpy(image.data() + pvdOffset + 40, "BROKEN_PATH_TABLE", 16);
+    iso_test::writeLe32(image, pvdOffset + 80, totalSectors);
+    iso_test::writeLe16(image, pvdOffset + 120, 1);
+    iso_test::writeLe16(image, pvdOffset + 124, 1);
+    iso_test::writeLe16(image, pvdOffset + 128, kSectorSize);
+
+    size_t pathTableOffset = pathTableSector * kSectorSize;
+    size_t pathTableCursor = pathTableOffset;
+    pathTableCursor = iso_test::writePathTableEntry(image, pathTableCursor, std::string("\0", 1),
+                                                    rootDirSector, 1);
+    pathTableCursor =
+        iso_test::writePathTableEntry(image, pathTableCursor, "DATA", dataDirSector, 99);
+    uint32_t pathTableSize = static_cast<uint32_t>(pathTableCursor - pathTableOffset);
+    iso_test::writeLe32(image, pvdOffset + 132, pathTableSize);
+    iso_test::writeLe32(image, pvdOffset + 140, pathTableSector);
+
+    size_t rootRecordOffset = pvdOffset + 156;
+    image[rootRecordOffset] = 34;
+    iso_test::writeLe32(image, rootRecordOffset + 2, rootDirSector);
+    iso_test::writeLe32(image, rootRecordOffset + 10, rootDirSize);
+    image[rootRecordOffset + 25] = 0x02;
+    iso_test::writeLe16(image, rootRecordOffset + 28, 1);
+    image[rootRecordOffset + 32] = 1;
+    image[rootRecordOffset + 33] = 0;
+
+    size_t terminatorOffset = 17 * kSectorSize;
+    image[terminatorOffset] = 255;
+    std::memcpy(image.data() + terminatorOffset + 1, "CD001", 5);
+    image[terminatorOffset + 6] = 1;
+
+    size_t rootDirOffset = rootDirSector * kSectorSize;
+    size_t rootCursor = rootDirOffset;
+    rootCursor += iso_test::writeDirectoryRecord(image, rootCursor, std::string("\0", 1),
+                                                 rootDirSector, rootDirSize, 0x02);
+    rootCursor += iso_test::writeDirectoryRecord(image, rootCursor, std::string("\1", 1),
+                                                 rootDirSector, rootDirSize, 0x02);
+    iso_test::writeDirectoryRecord(image, rootCursor, "DATA", dataDirSector, kSectorSize, 0x02);
+
+    size_t dataDirOffset = dataDirSector * kSectorSize;
+    size_t dataCursor = dataDirOffset;
+    dataCursor += iso_test::writeDirectoryRecord(image, dataCursor, std::string("\0", 1),
+                                                 dataDirSector, kSectorSize, 0x02);
+    dataCursor += iso_test::writeDirectoryRecord(image, dataCursor, std::string("\1", 1),
+                                                 rootDirSector, rootDirSize, 0x02);
+    iso_test::writeDirectoryRecord(image, dataCursor, "NESTED.TIM;1", timSector, 64, 0x00);
+
+    std::string timData = "TIMDATA";
+    std::memcpy(image.data() + timSector * kSectorSize, timData.data(), timData.size());
+
+    auto path = std::filesystem::temp_directory_path() /
+                ("psxrecomp_broken_path_table_" + std::to_string(iso_test::generateUniqueSuffix()) +
+                 ".iso");
+    std::ofstream out(path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(image.data()),
+              static_cast<std::streamsize>(image.size()));
+    out.close();
+    return path;
+}
+
 int main()
 {
     auto isoPath = createTestIso();
@@ -130,6 +205,17 @@ int main()
     auto executableList = parser.listExecutables();
     assert(std::find(executableList.begin(), executableList.end(), exeName) !=
            executableList.end());
+    auto flatTree = parser.listAllFilesRecursive();
+    auto dataDirEntry =
+        std::find_if(flatTree.begin(), flatTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+                     { return entry.path == "DATA" && entry.isDirectory; });
+    assert(dataDirEntry != flatTree.end());
+    auto gameExeEntry =
+        std::find_if(flatTree.begin(), flatTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+                     { return entry.path == "DATA/GAME.EXE" && !entry.isDirectory; });
+    assert(gameExeEntry != flatTree.end());
+    assert(gameExeEntry->size == 16);
+    assert(gameExeEntry->extents.size() == 1);
 
     auto tracks = parser.getTracks();
     assert(tracks.size() == 1);
@@ -174,6 +260,15 @@ int main()
     auto xaResources = cueParser.listResources(psxrecomp::iso::ResourceType::XaAudio);
     assert(xaResources.size() == 1);
     assert(xaResources.front() == "AUDIO.XA");
+    auto cueTree = cueParser.listAllFilesRecursive();
+    auto multiEntry =
+        std::find_if(cueTree.begin(), cueTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+                     { return entry.path == "MULTI.BIN" && !entry.isDirectory; });
+    assert(multiEntry != cueTree.end());
+    assert(multiEntry->size == kSectorSize * 2);
+    assert(multiEntry->extents.size() == 2);
+    assert(multiEntry->extents.front().continues);
+    assert(!multiEntry->extents.back().continues);
 
     auto plainXaIso = createPlainIsoWithXaExtension();
     psxrecomp::iso::IsoParser plainXaParser(plainXaIso.string());
@@ -183,6 +278,32 @@ int main()
     assert(plainXaResources.size() == 1);
     assert(plainXaResources.front() == "AUDIO.XA");
     std::filesystem::remove(plainXaIso);
+
+    auto brokenPathTableIso = createIsoWithBrokenPathTableAndNestedTim();
+    psxrecomp::iso::IsoParser brokenPathTableParser(brokenPathTableIso.string());
+    assert(brokenPathTableParser.open());
+    assert(brokenPathTableParser.isValid());
+    auto brokenTimResources =
+        brokenPathTableParser.listResources(psxrecomp::iso::ResourceType::TimTexture);
+    assert(brokenTimResources.size() == 1);
+    assert(brokenTimResources.front() == "DATA/NESTED.TIM");
+    auto brokenTree = brokenPathTableParser.listAllFilesRecursive();
+    auto nestedTimEntry = std::find_if(
+        brokenTree.begin(), brokenTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
+        { return entry.path == "DATA/NESTED.TIM" && !entry.isDirectory; });
+    assert(nestedTimEntry != brokenTree.end());
+    bool hasPathTableError = false;
+    for (const auto& error : brokenPathTableParser.getErrors())
+    {
+        if (error.find("path table") != std::string::npos ||
+            error.find("Path table") != std::string::npos)
+        {
+            hasPathTableError = true;
+            break;
+        }
+    }
+    assert(hasPathTableError);
+    std::filesystem::remove(brokenPathTableIso);
 
     auto plainForRaw2352Mode1 = createTestIso();
     auto raw2352Mode1 = createRawIsoFromPlain(plainForRaw2352Mode1, 2352, 16, 1);

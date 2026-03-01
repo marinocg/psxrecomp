@@ -121,6 +121,7 @@ See the consolidated roadmap and current status reports:
 - [Master Roadmap](docs/architecture/master_roadmap.md)
 - [Implementation Status](docs/architecture/implementation_status.md)
 - [Gap Analysis](docs/architecture/gaps_report.md)
+- [Resource Extraction Layout 1.0](docs/architecture/resource_extraction_layout.md)
 
 ## Resources
 

@@ -115,10 +115,6 @@ std::vector<std::string> IsoParser::listFilesByExtension(const std::vector<std::
                                                          bool requireXaAudio)
 {
     std::vector<std::string> matches;
-    if (!m_isOpen)
-    {
-        return matches;
-    }
 
     std::vector<std::string> normalizedExtensions;
     normalizedExtensions.reserve(extensions.size());
@@ -127,61 +123,30 @@ std::vector<std::string> IsoParser::listFilesByExtension(const std::vector<std::
         normalizedExtensions.push_back(normalizeExtension(extension));
     }
 
-    std::vector<std::pair<std::string, DirectoryInfo>> directories;
-    directories.emplace_back("", DirectoryInfo{m_rootExtent, m_rootSize});
-
-    if (!m_pathTable.empty())
+    const auto entries = listAllFilesRecursive();
+    for (const auto& entry : entries)
     {
-        directories.clear();
-        directories.reserve(m_pathTable.size());
-        for (const auto& entry : m_pathTable)
-        {
-            DirectoryInfo info{};
-            if (!getDirectoryInfo(entry.first, info))
-            {
-                continue;
-            }
-            directories.emplace_back(entry.first, info);
-        }
-    }
-
-    for (const auto& entry : directories)
-    {
-        std::vector<DirectoryRecord> records;
-        if (!readDirectory(entry.second.extent, entry.second.size, records))
+        if (entry.isDirectory)
         {
             continue;
         }
-        for (const auto& record : records)
+
+        auto dot = entry.path.find_last_of('.');
+        if (dot == std::string::npos)
         {
-            if ((record.flags & 0x02) != 0)
-            {
-                continue;
-            }
-            auto name = detail::normalizeIsoName(record.name);
-            auto dot = name.find_last_of('.');
-            if (dot == std::string::npos)
-            {
-                continue;
-            }
-            std::string extension = name.substr(dot);
-            if (std::find(normalizedExtensions.begin(), normalizedExtensions.end(), extension) ==
-                normalizedExtensions.end())
-            {
-                continue;
-            }
-            std::string path = entry.first;
-            if (!path.empty())
-            {
-                path += "/";
-            }
-            path += name;
-            if (requireXaAudio && !validateXaAudioFile(path))
-            {
-                continue;
-            }
-            matches.push_back(path);
+            continue;
         }
+        std::string extension = normalizeExtension(entry.path.substr(dot));
+        if (std::find(normalizedExtensions.begin(), normalizedExtensions.end(), extension) ==
+            normalizedExtensions.end())
+        {
+            continue;
+        }
+        if (requireXaAudio && !validateXaAudioFile(entry.path))
+        {
+            continue;
+        }
+        matches.push_back(entry.path);
     }
 
     std::sort(matches.begin(), matches.end());

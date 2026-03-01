@@ -84,6 +84,8 @@ struct PipelineArtifacts
     std::string buildPath;
     std::string manifestPath;
     std::string resourcesPath;
+    std::string resourceRootPath;
+    std::string resourceManifestPath;
     std::string runtimeIncludePath;
     std::string runtimeSourcePath;
     std::vector<std::string> exportedResources;

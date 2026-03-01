@@ -52,6 +52,28 @@ struct DirectoryRecord
 };
 
 /**
+ * @brief Extent segment metadata for a file or directory entry.
+ */
+struct IsoFileExtent
+{
+    u32 lba = 0;
+    u32 size = 0;
+    bool continues = false;
+};
+
+/**
+ * @brief Recursive ISO file tree entry.
+ */
+struct IsoFileEntry
+{
+    std::string path;
+    u32 size = 0;
+    u8 flags = 0;
+    bool isDirectory = false;
+    std::vector<IsoFileExtent> extents;
+};
+
+/**
  * @brief ISO non-code resource types.
  */
 enum class ResourceType
@@ -107,6 +129,30 @@ class IsoParser
     std::string getVolumeLabel() const;
 
     /**
+     * @brief Get parsed logical block size.
+     * @return Logical block size in bytes.
+     */
+    u32 getLogicalBlockSize() const;
+
+    /**
+     * @brief Get parsed raw sector size.
+     * @return Raw sector size in bytes.
+     */
+    u32 getRawSectorSize() const;
+
+    /**
+     * @brief Check whether the parser is using Joliet records.
+     * @return true when Joliet SVD is active, false otherwise.
+     */
+    bool isUsingJoliet() const;
+
+    /**
+     * @brief Get total sector count for the selected data image.
+     * @return Total sector count.
+     */
+    u32 getTotalSectors() const;
+
+    /**
      * @brief Get parsed track metadata.
      * @return Track list (empty if unavailable)
      */
@@ -141,6 +187,12 @@ class IsoParser
      * @return Paths to executables
      */
     std::vector<std::string> listExecutables();
+
+    /**
+     * @brief Recursively list all files/directories from the ISO root.
+     * @return Tree entries sorted by normalized full path.
+     */
+    std::vector<IsoFileEntry> listAllFilesRecursive();
 
     /**
      * @brief List resource files by type.
