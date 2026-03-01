@@ -231,6 +231,7 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     stream << "    \"discTreePath\": \"index/disc_tree.json\",\n";
     stream << "    \"discMetaPath\": \"index/disc_meta.json\",\n";
     stream << "    \"recompInputsPath\": \"index/recomp_inputs.json\",\n";
+    stream << "    \"catalogPath\": \"index/catalog.json\",\n";
     stream << "    \"resourcesManifestPath\": \"index/resources_manifest.json\"\n";
     stream << "  },\n";
     stream << "  \"exports\": {\n";
@@ -302,6 +303,62 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     {
         stream << "    \"" << escapeJson(warnings[i]) << "\"";
         if (i + 1 < warnings.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ]\n";
+    stream << "}\n";
+    return stream.str();
+}
+
+std::string serializeCatalog(const std::vector<CatalogEntry>& entries)
+{
+    std::ostringstream stream;
+    stream << "{\n";
+    stream << "  \"schemaVersion\": \"1.0\",\n";
+    stream << "  \"entries\": [\n";
+    for (size_t index = 0; index < entries.size(); ++index)
+    {
+        const auto& entry = entries[index];
+        stream << "    {\n";
+        stream << "      \"id\": \"" << escapeJson(entry.id) << "\",\n";
+        stream << "      \"isoPath\": \"" << escapeJson(entry.isoPath) << "\",\n";
+        stream << "      \"exportedPath\": \"" << escapeJson(entry.exportedPath) << "\",\n";
+        stream << "      \"size\": " << entry.size << ",\n";
+        stream << "      \"hashes\": {\n";
+        stream << "        \"sha1\": \"" << escapeJson(entry.sha1) << "\"\n";
+        stream << "      },\n";
+        stream << "      \"extents\": [\n";
+        for (size_t extentIndex = 0; extentIndex < entry.extents.size(); ++extentIndex)
+        {
+            const auto& extent = entry.extents[extentIndex];
+            stream << "        {\n";
+            stream << "          \"lba\": " << extent.lba << ",\n";
+            stream << "          \"bytes\": " << extent.size << ",\n";
+            stream << "          \"continues\": " << (extent.continues ? "true" : "false") << "\n";
+            stream << "        }";
+            if (extentIndex + 1 < entry.extents.size())
+            {
+                stream << ",";
+            }
+            stream << "\n";
+        }
+        stream << "      ],\n";
+        stream << "      \"detectedTypes\": [\n";
+        for (size_t typeIndex = 0; typeIndex < entry.detectedTypes.size(); ++typeIndex)
+        {
+            stream << "        \"" << escapeJson(entry.detectedTypes[typeIndex]) << "\"";
+            if (typeIndex + 1 < entry.detectedTypes.size())
+            {
+                stream << ",";
+            }
+            stream << "\n";
+        }
+        stream << "      ]\n";
+        stream << "    }";
+        if (index + 1 < entries.size())
         {
             stream << ",";
         }

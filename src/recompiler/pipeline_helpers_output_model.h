@@ -46,6 +46,17 @@ struct RecompInputExecutable
     u32 stackSize = 0;
 };
 
+struct CatalogEntry
+{
+    std::string id;
+    std::string isoPath;
+    std::string exportedPath;
+    u64 size = 0;
+    std::string sha1;
+    std::vector<iso::IsoFileExtent> extents;
+    std::vector<std::string> detectedTypes;
+};
+
 std::string fsModeToString(PipelineOptions::ResourceExportOptions::FsMode mode);
 FilesystemExportPlan
 buildFilesystemExportPlan(const std::vector<iso::IsoFileEntry>& entries,
@@ -66,6 +77,7 @@ std::string serializeRecompInputs(const std::string& bootIsoPath,
                                   const std::string& bootExportedPath,
                                   const std::string& systemCnfExportedPath,
                                   const std::vector<RecompInputExecutable>& executables);
+std::string serializeCatalog(const std::vector<CatalogEntry>& entries);
 
 } // namespace detail
 } // namespace recompiler

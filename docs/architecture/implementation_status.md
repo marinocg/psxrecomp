@@ -52,6 +52,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - XA resource discovery fallback for 2048-byte ISO images (extent-based when raw subheaders are unavailable).
 - Recursive ISO tree enumeration now walks directory records from root (independent of path table), and pipeline output emits `resources/index/{disc_tree,disc_meta,resources_manifest}.json` plus policy-driven `resources/fs/` exports (minimal/smart/full), with streaming file export (no full-file buffering).
 - Resource index now includes `resources/index/recomp_inputs.json` with boot executable mapping, exported `SYSTEM.CNF`, and metadata for the discovered executable set to support no-ISO recompilation reruns.
+- Resource index now includes `resources/index/catalog.json` as a unified exported-file truth table with deterministic IDs, ISO extents, SHA-1 hashes, and conservative content sniffing (`psx_exe`, `tim`, `str`, `xa`/`xa_maybe`).
 
 **Missing**
 

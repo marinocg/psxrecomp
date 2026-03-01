@@ -19,6 +19,7 @@ resources/
     disc_tree.json
     disc_meta.json
     recomp_inputs.json
+    catalog.json
     resources_manifest.json
   fs/
     ... exported ISO-relative files (policy-driven)
@@ -116,6 +117,7 @@ Schema summary:
     "discTreePath": "index/disc_tree.json",
     "discMetaPath": "index/disc_meta.json",
     "recompInputsPath": "index/recomp_inputs.json",
+    "catalogPath": "index/catalog.json",
     "resourcesManifestPath": "index/resources_manifest.json"
   },
   "exports": {
@@ -186,6 +188,38 @@ Schema summary:
         "entry": "0x80010000",
         "size": 16
       }
+    }
+  ]
+}
+```
+
+### `resources/index/catalog.json`
+
+Unified per-resource catalog for exported filesystem files (`resources/fs/**`).
+
+- One deterministic entry per exported file (`id: "discfile:<isoPath>"`).
+- Includes ISO source path, exported path, original ISO extents, exported size, and SHA-1.
+- Includes conservative content classification (`psx_exe`, `tim`, `str`, `xa`, `xa_maybe`).
+
+Schema summary:
+
+```json
+{
+  "schemaVersion": "1.0",
+  "entries": [
+    {
+      "id": "discfile:DATA/TEX.BIN",
+      "isoPath": "DATA/TEX.BIN",
+      "exportedPath": "fs/DATA/TEX.BIN",
+      "size": 4096,
+      "hashes": {
+        "sha1": "0123456789abcdef0123456789abcdef01234567"
+      },
+      "extents": [
+        { "lba": 1234, "bytes": 2048, "continues": true },
+        { "lba": 1235, "bytes": 2048, "continues": false }
+      ],
+      "detectedTypes": ["tim"]
     }
   ]
 }
