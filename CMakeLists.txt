@@ -110,6 +110,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_helpers_output_support_hash.cpp
     src/recompiler/pipeline_helpers_output_support_embedded.cpp
     src/recompiler/pipeline_selection_helpers.cpp
+    src/recompiler/pipeline_workspace_helpers.cpp
     src/recompiler/pipeline.cpp
 )
 

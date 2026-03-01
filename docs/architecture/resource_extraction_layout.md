@@ -199,6 +199,25 @@ Schema summary:
 }
 ```
 
+## Workspace Reuse Input Mode
+
+The pipeline accepts an exported workspace directory as input:
+
+- `psxrecomp out/<module>/<disc>/<tag>/resources -o out_rerun/`
+
+Input resolution rules:
+
+- If `inputPath/index/recomp_inputs.json` exists, `inputPath` is treated as the workspace root.
+- If `inputPath/resources/index/recomp_inputs.json` exists, `inputPath/resources` is used.
+
+Behavior:
+
+- Loads `resources/index/recomp_inputs.json`.
+- Selects the boot executable from `boot.isoPath` (or falls back to the first valid executable).
+- Loads executable bytes from `resources/fs/...` paths listed in `executables[*].exportedPath`.
+- Preserves existing workspace artifacts by copying the input workspace to the new output
+  `resources/` directory (including `disc_tree.json` and `disc_meta.json`).
+
 ### `resources/index/catalog.json`
 
 Unified per-resource catalog for exported filesystem files (`resources/fs/**`).

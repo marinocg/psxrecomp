@@ -2,7 +2,9 @@
 
 #include "pipeline_helpers_output_support.h"
 
+#include <algorithm>
 #include <filesystem>
+#include <vector>
 
 namespace psxrecomp
 {
@@ -11,16 +13,14 @@ namespace recompiler
 namespace detail
 {
 
-bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& outputDir,
-                          const std::string& moduleName, const std::string& header,
-                          const std::string& source, const std::string& runnerSource,
-                          const std::string& buildFile, const std::string& activeDiscPath,
-                          const std::filesystem::path& inputFsPath,
-                          const PipelineOptions::ResourceExportOptions& resourceExportOptions,
-                          std::vector<std::string>& warnings,
-                          std::vector<PipelineDiagnostic>& diagnostics,
-                          const std::string& manifestTimestamp, const std::string& pipelineVersion,
-                          std::string& outError)
+bool writeOutputArtifacts(
+    PipelineResult& result, const std::filesystem::path& outputDir, const std::string& moduleName,
+    const std::string& header, const std::string& source, const std::string& runnerSource,
+    const std::string& buildFile, const std::string& activeDiscPath,
+    const std::filesystem::path& inputFsPath, const std::string& resourceWorkspacePath,
+    const PipelineOptions::ResourceExportOptions& resourceExportOptions,
+    std::vector<std::string>& warnings, std::vector<PipelineDiagnostic>& diagnostics,
+    const std::string& manifestTimestamp, const std::string& pipelineVersion, std::string& outError)
 {
     std::error_code dirError;
     std::filesystem::create_directories(outputDir, dirError);
@@ -62,9 +62,55 @@ bool writeOutputArtifacts(PipelineResult& result, const std::filesystem::path& o
         return false;
     }
 
-    if (isIsoLikePath(inputFsPath) &&
-        !exportIsoResourceArtifacts(artifacts, activeDiscPath, resourceExportOptions, warnings,
-                                    diagnostics, timestamp, pipelineVersion, outError))
+    if (!resourceWorkspacePath.empty())
+    {
+        const std::filesystem::path sourceWorkspace(resourceWorkspacePath);
+        const std::filesystem::path destinationWorkspace(artifacts.resourcesPath);
+        std::error_code resourceError;
+        std::filesystem::remove_all(destinationWorkspace, resourceError);
+        if (resourceError)
+        {
+            outError =
+                "Failed to clear output resources directory: " + destinationWorkspace.string();
+            return false;
+        }
+        if (!copyDirectoryRecursive(sourceWorkspace, destinationWorkspace, outError))
+        {
+            return false;
+        }
+
+        std::vector<std::string> copiedResources;
+        for (const auto& entry :
+             std::filesystem::recursive_directory_iterator(destinationWorkspace))
+        {
+            resourceError.clear();
+            if (!entry.is_regular_file(resourceError) || resourceError)
+            {
+                continue;
+            }
+            std::filesystem::path relativePath =
+                std::filesystem::relative(entry.path(), destinationWorkspace, resourceError);
+            if (resourceError)
+            {
+                outError = "Failed to relativize copied resource path: " + entry.path().string();
+                return false;
+            }
+            copiedResources.push_back(relativePath.generic_string());
+        }
+        std::sort(copiedResources.begin(), copiedResources.end());
+        artifacts.exportedResources = std::move(copiedResources);
+
+        const std::filesystem::path resourceManifestPath =
+            destinationWorkspace / "index" / "resources_manifest.json";
+        resourceError.clear();
+        if (std::filesystem::is_regular_file(resourceManifestPath, resourceError) && !resourceError)
+        {
+            artifacts.resourceManifestPath = resourceManifestPath.string();
+        }
+    }
+    else if (isIsoLikePath(inputFsPath) &&
+             !exportIsoResourceArtifacts(artifacts, activeDiscPath, resourceExportOptions, warnings,
+                                         diagnostics, timestamp, pipelineVersion, outError))
     {
         return false;
     }

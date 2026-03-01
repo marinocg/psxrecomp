@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 #include <string>
 
 using namespace pipeline_candidate_test_support;
@@ -100,6 +101,65 @@ int main()
                                                std::istreambuf_iterator<char>());
         assert(pipelineManifestText.find("\"resourceRoot\"") != std::string::npos);
         assert(pipelineManifestText.find("\"resourceManifest\"") != std::string::npos);
+    }
+    {
+        auto rerunOptions = options;
+        rerunOptions.outputDirectory = (outputDir / "from_resources_workspace").string();
+        psxrecomp::recompiler::RecompilationPipeline workspacePipeline(rerunOptions);
+        const auto workspaceResult = workspacePipeline.run(result.artifacts.resourcesPath);
+        assert(workspaceResult.success);
+        assert(workspaceResult.selectionInfo.selectedPath == result.selectionInfo.selectedPath);
+
+        const auto findCandidateByPath =
+            [](const psxrecomp::recompiler::PipelineResult& runResult,
+               const std::string& path) -> const psxrecomp::recompiler::ExeCandidateInfo*
+        {
+            for (const auto& candidate : runResult.exeCandidates)
+            {
+                if (candidate.path == path)
+                {
+                    return &candidate;
+                }
+            }
+            return nullptr;
+        };
+        const auto* baselineCandidate =
+            findCandidateByPath(result, result.selectionInfo.selectedPath);
+        const auto* workspaceCandidate =
+            findCandidateByPath(workspaceResult, workspaceResult.selectionInfo.selectedPath);
+        assert(baselineCandidate != nullptr);
+        assert(workspaceCandidate != nullptr);
+        assert(workspaceCandidate->hash == baselineCandidate->hash);
+        assert(workspaceCandidate->loadAddress == baselineCandidate->loadAddress);
+        assert(workspaceCandidate->loadSize == baselineCandidate->loadSize);
+        assert(workspaceCandidate->entryPoint == baselineCandidate->entryPoint);
+
+        const auto buildFunctionSignature =
+            [](const psxrecomp::recompiler::PipelineResult& runResult)
+        {
+            std::ostringstream stream;
+            for (const auto& function : runResult.functions)
+            {
+                stream << function.entryAddress << ":" << function.endAddress << ":"
+                       << function.directCalls.size() << ":" << function.indirectCallCount << ";";
+            }
+            return stream.str();
+        };
+        assert(buildFunctionSignature(workspaceResult) == buildFunctionSignature(result));
+        assert(
+            std::filesystem::exists(std::filesystem::path(workspaceResult.artifacts.resourcesPath) /
+                                    "index" / "disc_tree.json"));
+        assert(
+            std::filesystem::exists(std::filesystem::path(workspaceResult.artifacts.resourcesPath) /
+                                    "index" / "disc_meta.json"));
+        assert(std::find(workspaceResult.artifacts.exportedResources.begin(),
+                         workspaceResult.artifacts.exportedResources.end(),
+                         "index/disc_tree.json") !=
+               workspaceResult.artifacts.exportedResources.end());
+        assert(std::find(workspaceResult.artifacts.exportedResources.begin(),
+                         workspaceResult.artifacts.exportedResources.end(),
+                         "index/disc_meta.json") !=
+               workspaceResult.artifacts.exportedResources.end());
     }
 
     std::filesystem::remove(isoPath);
