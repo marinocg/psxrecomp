@@ -145,6 +145,53 @@ bool IsoParser::readSectorInto(u32 sector, u8* buffer, size_t size)
     return true;
 }
 
+bool IsoParser::readUserDataSector(u32 lba, std::vector<u8>& outData)
+{
+    return readSectorUser2048(lba, outData);
+}
+
+bool IsoParser::canReadUser2048() const
+{
+    return m_isOpen;
+}
+
+bool IsoParser::canReadRaw2352() const
+{
+    return m_isOpen && m_rawSectorSize == kRawSectorSize;
+}
+
+bool IsoParser::readSectorUser2048(u32 lba, std::vector<u8>& out2048)
+{
+    out2048.assign(kUserDataSize, 0);
+    if (!readSectorInto(lba, out2048.data(), out2048.size()))
+    {
+        out2048.clear();
+        return false;
+    }
+    return true;
+}
+
+bool IsoParser::readSectorRaw2352(u32 lba, std::vector<u8>& out2352)
+{
+    out2352.clear();
+    if (!canReadRaw2352())
+    {
+        addError("Raw 2352-byte sector reads are unavailable for this image.");
+        return false;
+    }
+    if (!readRawSector(lba, out2352))
+    {
+        return false;
+    }
+    if (out2352.size() != kRawSectorSize)
+    {
+        addError("Unexpected raw sector size while reading 2352-byte sector.");
+        out2352.clear();
+        return false;
+    }
+    return true;
+}
+
 bool IsoParser::openStream()
 {
     if (m_stream.is_open())

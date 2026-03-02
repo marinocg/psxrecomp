@@ -52,6 +52,11 @@ u32 IsoParser::getLogicalBlockSize() const
     return m_logicalBlockSize;
 }
 
+u32 IsoParser::getVolumeSpaceSize() const
+{
+    return m_pvd.volumeSpaceSize;
+}
+
 u32 IsoParser::getRawSectorSize() const
 {
     return m_rawSectorSize;

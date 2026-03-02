@@ -1,3 +1,4 @@
+#include "psxrecomp/iso/iso_parser.h"
 #include "psxrecomp/recompiler/pipeline.h"
 
 #include "pipeline_candidate_test_helpers.h"
@@ -39,6 +40,12 @@ int main()
                                    "recomp_inputs.json"));
     assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "index" /
                                    "catalog.json"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "disc" /
+                                   "data_track.bin"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "disc" /
+                                   "disc_layout.json"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "disc" /
+                                   "disc_hashes.json"));
     assert(std::find(result.artifacts.exportedResources.begin(),
                      result.artifacts.exportedResources.end(),
                      "index/resources_manifest.json") != result.artifacts.exportedResources.end());
@@ -54,6 +61,15 @@ int main()
     assert(std::find(result.artifacts.exportedResources.begin(),
                      result.artifacts.exportedResources.end(),
                      "index/catalog.json") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "disc/data_track.bin") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "disc/disc_layout.json") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "disc/disc_hashes.json") != result.artifacts.exportedResources.end());
     {
         std::ifstream manifestFile(result.artifacts.resourceManifestPath);
         const std::string resourceManifest((std::istreambuf_iterator<char>(manifestFile)),
@@ -62,11 +78,101 @@ int main()
                std::string::npos);
         assert(resourceManifest.find("\"discMetaPath\": \"index/disc_meta.json\"") !=
                std::string::npos);
+        assert(resourceManifest.find("\"discLayoutPath\": \"disc/disc_layout.json\"") !=
+               std::string::npos);
+        assert(resourceManifest.find("\"discHashesPath\": \"disc/disc_hashes.json\"") !=
+               std::string::npos);
         assert(resourceManifest.find("\"recompInputsPath\": \"index/recomp_inputs.json\"") !=
                std::string::npos);
         assert(resourceManifest.find("\"catalogPath\": \"index/catalog.json\"") !=
                std::string::npos);
         assert(resourceManifest.find("\"filesystemEnabled\": true") != std::string::npos);
+        assert(resourceManifest.find("\"discBlobEnabled\": true") != std::string::npos);
+        assert(resourceManifest.find("\"discBlob\": {") != std::string::npos);
+        assert(resourceManifest.find("\"hashPath\": \"disc/disc_hashes.json\"") !=
+               std::string::npos);
+        assert(resourceManifest.find("\"discBlobSectorSize\": ") != std::string::npos);
+        assert(resourceManifest.find("\"discBlobBytes\": ") != std::string::npos);
+    }
+    {
+        const auto blobPath =
+            std::filesystem::path(result.artifacts.resourcesPath) / "disc" / "data_track.bin";
+        const auto layoutPath =
+            std::filesystem::path(result.artifacts.resourcesPath) / "disc" / "disc_layout.json";
+        const auto hashesPath =
+            std::filesystem::path(result.artifacts.resourcesPath) / "disc" / "disc_hashes.json";
+
+        std::ifstream layoutFile(layoutPath);
+        const std::string layout((std::istreambuf_iterator<char>(layoutFile)),
+                                 std::istreambuf_iterator<char>());
+        assert(layout.find("\"format\": \"data_track_") != std::string::npos);
+
+        std::ifstream hashesFile(hashesPath);
+        const std::string hashes((std::istreambuf_iterator<char>(hashesFile)),
+                                 std::istreambuf_iterator<char>());
+        assert(hashes.find("\"sha1\": \"") != std::string::npos);
+
+        const uint64_t sectorSize = findJsonIntegerField(layout, "sectorSize");
+        const uint64_t lbaStart = findJsonIntegerField(layout, "lbaStart");
+        const uint64_t lbaCount = findJsonIntegerField(layout, "lbaCount");
+        const uint64_t blobSize = std::filesystem::file_size(blobPath);
+        assert(sectorSize == 2048 || sectorSize == 2352);
+        assert(lbaCount > 0);
+        assert(blobSize > 0);
+        assert(lbaCount * sectorSize == blobSize);
+
+        std::ifstream blobFile(blobPath, std::ios::binary);
+        const std::vector<uint8_t> blobData((std::istreambuf_iterator<char>(blobFile)),
+                                            std::istreambuf_iterator<char>());
+        assert(blobData.size() == blobSize);
+
+        psxrecomp::iso::IsoParser lbaParser(isoPath.string());
+        assert(lbaParser.open());
+        assert(lbaParser.isValid());
+        std::vector<uint8_t> sectorData;
+        auto assertLbaMatches = [&](uint32_t lba)
+        {
+            assert(lba >= lbaStart);
+            assert(static_cast<uint64_t>(lba - lbaStart) < lbaCount);
+            const uint32_t relativeLba =
+                static_cast<uint32_t>(static_cast<uint64_t>(lba) - lbaStart);
+            if (sectorSize == 2352)
+            {
+                assert(lbaParser.canReadRaw2352());
+                assert(lbaParser.readSectorRaw2352(relativeLba, sectorData));
+            }
+            else
+            {
+                assert(lbaParser.canReadUser2048());
+                assert(lbaParser.readSectorUser2048(relativeLba, sectorData));
+            }
+            assert(sectorData.size() == sectorSize);
+            const size_t blobOffset =
+                static_cast<size_t>(lba - lbaStart) * static_cast<size_t>(sectorSize);
+            assert(blobOffset + sectorData.size() <= blobData.size());
+            assert(std::equal(sectorData.begin(), sectorData.end(), blobData.begin() + blobOffset));
+        };
+
+        const uint32_t startLba = static_cast<uint32_t>(lbaStart);
+        const uint32_t endLbaExclusive = static_cast<uint32_t>(lbaStart + lbaCount);
+        assertLbaMatches(startLba);
+        if (lbaCount > 1)
+        {
+            assertLbaMatches(startLba + 1);
+        }
+        assertLbaMatches(startLba + static_cast<uint32_t>(lbaCount / 2));
+        if (lbaCount > 1)
+        {
+            assertLbaMatches(endLbaExclusive - 2);
+        }
+        assertLbaMatches(endLbaExclusive - 1);
+        uint32_t seed = 0x12345678U;
+        for (int index = 0; index < 20; ++index)
+        {
+            seed = seed * 1664525U + 1013904223U;
+            const uint32_t randomLba = startLba + (seed % static_cast<uint32_t>(lbaCount));
+            assertLbaMatches(randomLba);
+        }
     }
     {
         std::ifstream recompInputsFile(std::filesystem::path(result.artifacts.resourcesPath) /

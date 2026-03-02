@@ -185,6 +185,48 @@ void applyResourceExportEnv(psxrecomp::recompiler::PipelineOptions& options)
     {
         resourceOptions.enableEmbeddedScan = *embeddedScan;
     }
+    if (const auto discBlobEnabled = parseBoolEnv("PSXRECOMP_RES_DISC_BLOB_ENABLED"))
+    {
+        resourceOptions.discBlob.enabled = *discBlobEnabled;
+    }
+    if (const char* mode = std::getenv("PSXRECOMP_RES_DISC_BLOB_MODE"))
+    {
+        const std::string normalized = toLowerCopy(mode);
+        if (normalized == "auto")
+        {
+            resourceOptions.discBlob.mode =
+                psxrecomp::recompiler::PipelineOptions::ResourceExportOptions::DiscBlobMode::Auto;
+        }
+        else if (normalized == "force2048")
+        {
+            resourceOptions.discBlob.mode = psxrecomp::recompiler::PipelineOptions::
+                ResourceExportOptions::DiscBlobMode::Force2048;
+        }
+        else if (normalized == "force2352")
+        {
+            resourceOptions.discBlob.mode = psxrecomp::recompiler::PipelineOptions::
+                ResourceExportOptions::DiscBlobMode::Force2352;
+        }
+        else if (normalized == "disabled")
+        {
+            resourceOptions.discBlob.mode = psxrecomp::recompiler::PipelineOptions::
+                ResourceExportOptions::DiscBlobMode::Disabled;
+            resourceOptions.discBlob.enabled = false;
+        }
+    }
+    if (const auto discBlobMaxBytes = parseUint64Env("PSXRECOMP_RES_DISC_BLOB_MAX_BYTES"))
+    {
+        resourceOptions.discBlob.maxBytes = *discBlobMaxBytes;
+    }
+
+    if (const auto exportDataTrackBlob = parseBoolEnv("PSXRECOMP_RES_EXPORT_DATA_TRACK_BLOB"))
+    {
+        resourceOptions.discBlob.enabled = *exportDataTrackBlob;
+    }
+    if (const auto maxBlobBytes = parseUint64Env("PSXRECOMP_RES_MAX_BLOB_BYTES"))
+    {
+        resourceOptions.discBlob.maxBytes = *maxBlobBytes;
+    }
 }
 
 void printJsonOutput(const psxrecomp::recompiler::PipelineResult& result,
