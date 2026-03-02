@@ -165,7 +165,6 @@ Schema summary:
       "blobPath": "disc/data_track.bin",
       "layoutPath": "disc/disc_layout.json",
       "hashPath": "disc/disc_hashes.json",
-      "hashesPath": "disc/disc_hashes.json",
       "caps": { "maxBytes": 0 },
       "result": {
         "lbaStart": 0,
@@ -208,6 +207,9 @@ Schema summary:
 }
 ```
 
+When `exports.discBlob.enabled` is `false`, `index.discLayoutPath` and `index.discHashesPath` are
+emitted as `null` and no `resources/disc/*` files are produced.
+
 ### `resources/index/recomp_inputs.json`
 
 Recompilation input descriptor for no-ISO reruns.
@@ -246,7 +248,7 @@ LBA-oriented metadata for the deterministic disc blob.
 - Includes `blob` metadata (`path`, `sectorSize`, `lbaStart`, `lbaCount`, `bytes`, `sha1`).
 - Includes volume metadata (label, logical block size, Joliet flag).
 - Includes file-to-LBA mapping using file extents:
-  - `lba`: extent start LBA
+  - `lba`: extent start LBA in the same coordinate space as `blob.lbaStart` (disc-relative)
   - `sectors`: number of 2048-byte sectors in the extent
   - `fileByteOffset`: byte offset inside the ISO file where that extent begins
 

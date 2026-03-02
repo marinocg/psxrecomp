@@ -2,16 +2,13 @@
 
 #include "pipeline_analysis_helpers.h"
 #include "pipeline_helpers.h"
+#include "pipeline_input_loader.h"
 #include "pipeline_selection_helpers.h"
-#include "pipeline_workspace_helpers.h"
 #include "psxrecomp/disasm/analysis.h"
 #include "psxrecomp/disasm/instruction.h"
 #include "psxrecomp/ir/control_flow.h"
 #include "psxrecomp/ir/mips_ir_builder.h"
 #include "psxrecomp/ir/optimizations.h"
-#include "psxrecomp/iso/iso_boot.h"
-#include "psxrecomp/iso/iso_parser.h"
-#include "psxrecomp/iso/psx_exe_loader.h"
 #include "psxrecomp/recompiler/codegen.h"
 
 #include <algorithm>
@@ -19,8 +16,6 @@
 #include <numeric>
 #include <optional>
 #include <sstream>
-#include <unordered_map>
-#include <unordered_set>
 
 namespace psxrecomp
 {
@@ -56,18 +51,6 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     std::vector<std::string> warnings;
     std::vector<PipelineDiagnostic> diagnostics;
     PipelineResult result;
-    auto appendIsoParserErrors = [&](const iso::IsoParser& parser, const std::string& context)
-    {
-        for (const auto& error : parser.getErrors())
-        {
-            PipelineDiagnostic entry;
-            entry.code = "IsoParserError";
-            entry.severity = "error";
-            entry.message = context + ": " + error;
-            entry.context.file = activeDiscPath;
-            diagnostics.push_back(entry);
-        }
-    };
     result.discSet = detail::buildDiscSetMetadata(discPaths, activeDiscIndex, warnings);
 
     const std::string selectionRule =
@@ -84,251 +67,11 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         return failed;
     };
 
-    std::filesystem::path workspaceRoot;
-    if (detail::detectResourceWorkspaceRoot(inputFsPath, workspaceRoot))
+    std::string loadError;
+    if (!detail::loadExecutableImageFromInput(activeDiscPath, inputFsPath, result, workspaceInfo,
+                                              warnings, diagnostics, exeImage, loadError))
     {
-        detail::ResourceWorkspaceInfo loadedWorkspaceInfo;
-        std::string workspaceError;
-        if (!detail::loadResourceWorkspaceInfo(workspaceRoot, loadedWorkspaceInfo, workspaceError))
-        {
-            return fail("Failed to parse resources workspace: " + workspaceError);
-        }
-        workspaceInfo = std::move(loadedWorkspaceInfo);
-        if (!workspaceInfo->discMetaVolumeLabel.empty())
-        {
-            result.discSet.setName = workspaceInfo->discMetaVolumeLabel;
-            if (!result.discSet.discs.empty())
-            {
-                result.discSet.discs.front().volumeLabel = workspaceInfo->discMetaVolumeLabel;
-            }
-        }
-        if (!workspaceInfo->discMetaInputPath.empty() && !result.discSet.discs.empty())
-        {
-            result.discSet.discs.front().path = workspaceInfo->discMetaInputPath;
-        }
-    }
-
-    if (workspaceInfo.has_value())
-    {
-        std::unordered_map<std::string, std::filesystem::path> hostPathByIsoPath;
-        std::unordered_set<std::string> seenIsoPaths;
-        for (const auto& executableInfo : workspaceInfo->executables)
-        {
-            const std::string isoPathKey = detail::toLower(executableInfo.isoPath);
-            if (!seenIsoPaths.insert(isoPathKey).second)
-            {
-                continue;
-            }
-
-            ExeCandidateInfo candidate;
-            candidate.path = executableInfo.isoPath;
-            std::filesystem::path executableHostPath;
-            std::string resolveError;
-            if (!detail::resolveWorkspaceExecutableHostPath(*workspaceInfo, executableInfo,
-                                                            executableHostPath, resolveError))
-            {
-                PipelineDiagnostic entry;
-                entry.code = "WorkspaceExecutablePathInvalid";
-                entry.severity = "error";
-                entry.message = "Invalid workspace executable path: " + resolveError;
-                entry.context.file = candidate.path;
-                diagnostics.push_back(entry);
-                candidate.diagnostics.push_back(std::move(entry));
-                result.exeCandidates.push_back(std::move(candidate));
-                continue;
-            }
-            hostPathByIsoPath.emplace(isoPathKey, executableHostPath);
-
-            std::error_code fileError;
-            if (!std::filesystem::is_regular_file(executableHostPath, fileError) || fileError)
-            {
-                PipelineDiagnostic entry;
-                entry.code = "WorkspaceExecutableMissing";
-                entry.severity = "error";
-                entry.message = "Workspace executable is missing: " + executableHostPath.string();
-                entry.context.file = candidate.path;
-                diagnostics.push_back(entry);
-                candidate.diagnostics.push_back(std::move(entry));
-                result.exeCandidates.push_back(std::move(candidate));
-                continue;
-            }
-
-            iso::PsxExeDiagnostics exeDiagnostics;
-            iso::PsxExeImage image{};
-            if (!iso::PsxExeLoader::loadFromFile(executableHostPath.string(), image,
-                                                 &exeDiagnostics))
-            {
-                detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, candidate.path);
-                for (const auto& entry : exeDiagnostics.entries)
-                {
-                    candidate.diagnostics.push_back(
-                        detail::toPipelineDiagnostic(entry, candidate.path));
-                }
-                result.exeCandidates.push_back(std::move(candidate));
-                continue;
-            }
-
-            candidate.valid = true;
-            candidate.loadAddress = image.header.loadAddress;
-            candidate.loadSize = image.header.loadSize;
-            candidate.entryPoint = image.entryPoint.pc;
-            candidate.hash = detail::formatHex(detail::fnv1a64(image.programData), 16);
-            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, candidate.path);
-            for (const auto& entry : exeDiagnostics.entries)
-            {
-                candidate.diagnostics.push_back(
-                    detail::toPipelineDiagnostic(entry, candidate.path));
-            }
-            result.exeCandidates.push_back(std::move(candidate));
-        }
-
-        std::sort(result.exeCandidates.begin(), result.exeCandidates.end(),
-                  detail::exeCandidateLess);
-        const std::string bootPath = workspaceInfo->bootIsoPath;
-        std::optional<size_t> selectedIndex = detail::selectExeCandidateIndex(
-            result.exeCandidates, bootPath, result.selectionInfo.reason);
-        if (!selectedIndex.has_value())
-        {
-            return fail("No valid PSX executable candidate found in resources workspace.");
-        }
-
-        const auto& selected = result.exeCandidates[selectedIndex.value()];
-        result.selectionInfo.selectedPath = selected.path;
-        auto hostPathIt = hostPathByIsoPath.find(detail::toLower(selected.path));
-        if (hostPathIt == hostPathByIsoPath.end())
-        {
-            return fail("Selected workspace executable mapping was not found.");
-        }
-
-        iso::PsxExeDiagnostics exeDiagnostics;
-        if (!iso::PsxExeLoader::loadFromFile(hostPathIt->second.string(), exeImage,
-                                             &exeDiagnostics))
-        {
-            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, selected.path);
-            return fail("Failed to parse selected PSX executable from resources workspace.");
-        }
-        detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, selected.path);
-    }
-    else if (detail::isIsoLikePath(inputFsPath))
-    {
-        iso::IsoParser parser(activeDiscPath);
-        if (!parser.open() || !parser.isValid())
-        {
-            appendIsoParserErrors(parser, "Failed to parse ISO image");
-            std::ostringstream error;
-            error << "Failed to open ISO image.";
-            if (!parser.getLastError().empty())
-            {
-                error << " Last parser error: " << parser.getLastError();
-            }
-            return fail(error.str());
-        }
-
-        std::vector<std::string> candidatePaths = parser.listExecutables();
-        auto systemCnf = parser.extractFile("SYSTEM.CNF");
-        const std::string bootPath = iso::detail::parseBootPathFromSystemCnf(systemCnf);
-        if (!bootPath.empty())
-        {
-            candidatePaths.push_back(bootPath);
-        }
-        const std::vector<std::string> uniquePaths =
-            detail::deduplicatePathsCaseInsensitive(candidatePaths);
-
-        if (uniquePaths.empty())
-        {
-            appendIsoParserErrors(parser, "Executable discovery failed");
-            return fail("No PSX executable found in ISO image.");
-        }
-
-        for (const auto& path : uniquePaths)
-        {
-            ExeCandidateInfo candidate;
-            candidate.path = path;
-            std::vector<u8> exeData = parser.extractFile(path);
-            if (exeData.empty())
-            {
-                PipelineDiagnostic entry;
-                entry.code = "ExeCandidateExtractFailed";
-                entry.severity = "error";
-                entry.message = "Failed to extract executable data.";
-                entry.context.file = path;
-                diagnostics.push_back(entry);
-                candidate.diagnostics.push_back(std::move(entry));
-                result.exeCandidates.push_back(std::move(candidate));
-                continue;
-            }
-
-            iso::PsxExeDiagnostics exeDiagnostics;
-            iso::PsxExeImage image{};
-            if (!iso::PsxExeLoader::loadImage(exeData, image, &exeDiagnostics))
-            {
-                detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, path);
-                for (const auto& entry : exeDiagnostics.entries)
-                {
-                    candidate.diagnostics.push_back(detail::toPipelineDiagnostic(entry, path));
-                }
-                result.exeCandidates.push_back(std::move(candidate));
-                continue;
-            }
-
-            candidate.valid = true;
-            candidate.loadAddress = image.header.loadAddress;
-            candidate.loadSize = image.header.loadSize;
-            candidate.entryPoint = image.entryPoint.pc;
-            candidate.hash = detail::formatHex(detail::fnv1a64(image.programData), 16);
-            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, path);
-            for (const auto& entry : exeDiagnostics.entries)
-            {
-                candidate.diagnostics.push_back(detail::toPipelineDiagnostic(entry, path));
-            }
-            result.exeCandidates.push_back(candidate);
-        }
-
-        std::sort(result.exeCandidates.begin(), result.exeCandidates.end(),
-                  detail::exeCandidateLess);
-        std::optional<size_t> selectedIndex = detail::selectExeCandidateIndex(
-            result.exeCandidates, bootPath, result.selectionInfo.reason);
-        if (!selectedIndex.has_value())
-        {
-            return fail("No valid PSX executable candidate found.");
-        }
-
-        const auto& selected = result.exeCandidates[selectedIndex.value()];
-        result.selectionInfo.selectedPath = selected.path;
-        std::vector<u8> exeData = parser.extractFile(selected.path);
-        if (!iso::PsxExeLoader::loadImage(exeData, exeImage, nullptr))
-        {
-            appendIsoParserErrors(parser, "Selected executable extraction failed");
-            return fail("Failed to parse selected PSX executable.");
-        }
-    }
-    else
-    {
-        iso::PsxExeDiagnostics exeDiagnostics;
-        if (!iso::PsxExeLoader::loadFromFile(activeDiscPath, exeImage, &exeDiagnostics))
-        {
-            detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
-            std::ostringstream errorStream;
-            errorStream << "Failed to load PSX executable.";
-            if (detail::toLower(inputFsPath.extension().string()) == ".ecm")
-            {
-                errorStream << " Input appears to be ECM-compressed. Decode the image/executable "
-                               "to BIN/ISO/EXE first, then retry.";
-            }
-            return fail(errorStream.str());
-        }
-        detail::appendDiagnostics(diagnostics, warnings, exeDiagnostics, activeDiscPath);
-
-        ExeCandidateInfo candidate;
-        candidate.path = activeDiscPath;
-        candidate.valid = true;
-        candidate.loadAddress = exeImage.header.loadAddress;
-        candidate.loadSize = exeImage.header.loadSize;
-        candidate.entryPoint = exeImage.entryPoint.pc;
-        candidate.hash = detail::formatHex(detail::fnv1a64(exeImage.programData), 16);
-        result.exeCandidates.push_back(candidate);
-        result.selectionInfo.selectedPath = activeDiscPath;
-        result.selectionInfo.reason = "Single executable input.";
+        return fail(loadError);
     }
 
     if (exeImage.programData.empty())

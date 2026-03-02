@@ -313,8 +313,26 @@ std::string serializeResourcesManifest(
     stream << "  \"index\": {\n";
     stream << "    \"discTreePath\": \"index/disc_tree.json\",\n";
     stream << "    \"discMetaPath\": \"index/disc_meta.json\",\n";
-    stream << "    \"discLayoutPath\": \"disc/disc_layout.json\",\n";
-    stream << "    \"discHashesPath\": \"disc/disc_hashes.json\",\n";
+    stream << "    \"discLayoutPath\": ";
+    if (discBlobSummary.enabled && !discBlobSummary.layoutPath.empty())
+    {
+        stream << "\"" << escapeJson(discBlobSummary.layoutPath) << "\"";
+    }
+    else
+    {
+        stream << "null";
+    }
+    stream << ",\n";
+    stream << "    \"discHashesPath\": ";
+    if (discBlobSummary.enabled && !discBlobSummary.hashesPath.empty())
+    {
+        stream << "\"" << escapeJson(discBlobSummary.hashesPath) << "\"";
+    }
+    else
+    {
+        stream << "null";
+    }
+    stream << ",\n";
     stream << "    \"recompInputsPath\": \"index/recomp_inputs.json\",\n";
     stream << "    \"catalogPath\": \"index/catalog.json\",\n";
     stream << "    \"resourcesManifestPath\": \"index/resources_manifest.json\"\n";
@@ -356,7 +374,6 @@ std::string serializeResourcesManifest(
     stream << "      \"blobPath\": \"" << escapeJson(discBlobSummary.blobPath) << "\",\n";
     stream << "      \"layoutPath\": \"" << escapeJson(discBlobSummary.layoutPath) << "\",\n";
     stream << "      \"hashPath\": \"" << escapeJson(discBlobSummary.hashesPath) << "\",\n";
-    stream << "      \"hashesPath\": \"" << escapeJson(discBlobSummary.hashesPath) << "\",\n";
     stream << "      \"caps\": {\n";
     stream << "        \"maxBytes\": " << discBlobSummary.maxBytes << "\n";
     stream << "      },\n";
@@ -417,126 +434,6 @@ std::string serializeResourcesManifest(
     {
         stream << "    \"" << escapeJson(warnings[i]) << "\"";
         if (i + 1 < warnings.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
-    }
-    stream << "  ]\n";
-    stream << "}\n";
-    return stream.str();
-}
-
-std::string serializeCatalog(const std::vector<CatalogEntry>& entries)
-{
-    std::ostringstream stream;
-    stream << "{\n";
-    stream << "  \"schemaVersion\": \"1.0\",\n";
-    stream << "  \"entries\": [\n";
-    for (size_t index = 0; index < entries.size(); ++index)
-    {
-        const auto& entry = entries[index];
-        stream << "    {\n";
-        stream << "      \"id\": \"" << escapeJson(entry.id) << "\",\n";
-        stream << "      \"sourceKind\": \"" << escapeJson(entry.sourceKind) << "\",\n";
-        stream << "      \"isoPath\": \"" << escapeJson(entry.isoPath) << "\",\n";
-        stream << "      \"exportedPath\": \"" << escapeJson(entry.exportedPath) << "\",\n";
-        stream << "      \"size\": " << entry.size << ",\n";
-        stream << "      \"hashes\": {\n";
-        stream << "        \"sha1\": \"" << escapeJson(entry.sha1) << "\"\n";
-        stream << "      },\n";
-        stream << "      \"source\": {\n";
-        stream << "        \"containerIsoPath\": \"" << escapeJson(entry.containerIsoPath)
-               << "\",\n";
-        stream << "        \"offset\": " << entry.containerOffset << "\n";
-        stream << "      },\n";
-        stream << "      \"extents\": [\n";
-        for (size_t extentIndex = 0; extentIndex < entry.extents.size(); ++extentIndex)
-        {
-            const auto& extent = entry.extents[extentIndex];
-            stream << "        {\n";
-            stream << "          \"lba\": " << extent.lba << ",\n";
-            stream << "          \"bytes\": " << extent.size << ",\n";
-            stream << "          \"continues\": " << (extent.continues ? "true" : "false") << "\n";
-            stream << "        }";
-            if (extentIndex + 1 < entry.extents.size())
-            {
-                stream << ",";
-            }
-            stream << "\n";
-        }
-        stream << "      ],\n";
-        stream << "      \"detectedTypes\": [\n";
-        for (size_t typeIndex = 0; typeIndex < entry.detectedTypes.size(); ++typeIndex)
-        {
-            stream << "        \"" << escapeJson(entry.detectedTypes[typeIndex]) << "\"";
-            if (typeIndex + 1 < entry.detectedTypes.size())
-            {
-                stream << ",";
-            }
-            stream << "\n";
-        }
-        stream << "      ]\n";
-        stream << "    }";
-        if (index + 1 < entries.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
-    }
-    stream << "  ]\n";
-    stream << "}\n";
-    return stream.str();
-}
-
-std::string serializeRecompInputs(const std::string& bootIsoPath,
-                                  const std::string& bootExportedPath,
-                                  const std::string& systemCnfExportedPath,
-                                  const std::vector<RecompInputExecutable>& executables)
-{
-    std::ostringstream stream;
-    stream << "{\n";
-    stream << "  \"schemaVersion\": \"1.0\",\n";
-    stream << "  \"boot\": {\n";
-    stream << "    \"isoPath\": \"" << escapeJson(bootIsoPath) << "\",\n";
-    stream << "    \"exportedPath\": \"" << escapeJson(bootExportedPath) << "\"\n";
-    stream << "  },\n";
-    stream << "  \"systemCnf\": {\n";
-    stream << "    \"exportedPath\": \"" << escapeJson(systemCnfExportedPath) << "\"\n";
-    stream << "  },\n";
-    stream << "  \"executables\": [\n";
-    for (size_t index = 0; index < executables.size(); ++index)
-    {
-        const auto& executable = executables[index];
-        stream << "    {\n";
-        stream << "      \"isoPath\": \"" << escapeJson(executable.isoPath) << "\",\n";
-        stream << "      \"exportedPath\": \"" << escapeJson(executable.exportedPath) << "\",\n";
-        stream << "      \"psxExe\": {\n";
-        stream << "        \"loadAddr\": \"0x" << formatHex(executable.loadAddress, 8) << "\",\n";
-        stream << "        \"entry\": \"0x" << formatHex(executable.entryPoint, 8) << "\",\n";
-        stream << "        \"size\": " << executable.loadSize;
-        if (executable.gp != 0)
-        {
-            stream << ",\n";
-            stream << "        \"gp\": \"0x" << formatHex(executable.gp, 8) << "\"";
-        }
-        if (executable.bssSize != 0)
-        {
-            stream << ",\n";
-            stream << "        \"bssAddr\": \"0x" << formatHex(executable.bssAddress, 8) << "\",\n";
-            stream << "        \"bssSize\": " << executable.bssSize;
-        }
-        if (executable.stackSize != 0 || executable.stackAddress != 0)
-        {
-            stream << ",\n";
-            stream << "        \"stackAddr\": \"0x" << formatHex(executable.stackAddress, 8)
-                   << "\",\n";
-            stream << "        \"stackSize\": " << executable.stackSize;
-        }
-        stream << "\n";
-        stream << "      }\n";
-        stream << "    }";
-        if (index + 1 < executables.size())
         {
             stream << ",";
         }

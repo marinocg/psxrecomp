@@ -162,7 +162,7 @@ bool IsoParser::canReadRaw2352() const
 
 bool IsoParser::readSectorUser2048(u32 lba, std::vector<u8>& out2048)
 {
-    out2048.assign(kUserDataSize, 0);
+    out2048.resize(kUserDataSize);
     if (!readSectorInto(lba, out2048.data(), out2048.size()))
     {
         out2048.clear();
