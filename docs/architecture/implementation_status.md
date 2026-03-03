@@ -60,6 +60,10 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
   ISO range reads and emits deterministic outputs under
   `resources/embedded/by_container/<containerId>/tim/`, with extracted-hit metadata merged into
   `resources/index/catalog.json`.
+- Deterministic data-track export now emits `resources/disc/data_track.bin` plus
+  `resources/disc/{disc_layout,disc_hashes}.json` (auto-selecting `2048` user sectors or
+  `2352` raw sectors), enabling LBA-addressable disc-less workflows while preserving
+  file-extent mapping and blob integrity metadata.
 
 **Missing**
 

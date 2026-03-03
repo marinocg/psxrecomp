@@ -130,7 +130,7 @@ The generated C++ is compiled using standard compilers (GCC, Clang, MSVC) with t
 
 ## Resource Extraction Index (REX1)
 
-For ISO-like inputs, the pipeline now emits a stable resource index under `resources/index/`:
+For ISO-like inputs, the pipeline emits a stable resource index under `resources/index/`:
 
 - `disc_tree.json` (full recursive ISO tree + extents)
 - `disc_meta.json` (disc/track metadata)
@@ -139,6 +139,12 @@ For ISO-like inputs, the pipeline now emits a stable resource index under `resou
 - `resources_manifest.json` (tooling entrypoint + export summary + export policy metadata)
 
 Filesystem exports are written under `resources/fs/` using ISO-relative paths.
+Data-track exports are written under `resources/disc/`:
+
+- `data_track.bin` (LBA-indexed sector stream; `2048` user-data or `2352` raw, based on mode)
+- `disc_layout.json`
+- `disc_hashes.json`
+
 Optional embedded carving outputs are written under `resources/embedded/by_container/...` when
 `PSXRECOMP_RES_EMBEDDED_SCAN=1` (or `true`) is enabled.
 
@@ -155,7 +161,7 @@ Export policy is controlled by `PipelineOptions::ResourceExportOptions`:
 
 - `minimal`: always-included set only.
 - `smart`: always-included set + capped small-file export.
-- `full`: export full disc filesystem (default).
+- `full`: export full disc filesystem.
 
 The top-level pipeline `manifest.json` includes:
 

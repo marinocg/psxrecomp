@@ -189,13 +189,95 @@ std::string serializeDiscMeta(const std::string& inputPath, const std::string& b
     return stream.str();
 }
 
-std::string serializeResourcesManifest(const std::string& inputPath, const std::string& timestamp,
-                                       const std::string& pipelineVersion,
-                                       const iso::IsoParser& parser,
-                                       const std::vector<iso::IsoFileEntry>& entries,
-                                       const FilesystemExportSummary& filesystemSummary,
-                                       const EmbeddedScanSummary& embeddedScanSummary,
-                                       const std::vector<std::string>& extraWarnings)
+std::string serializeDiscLayout(const iso::IsoParser& parser, const DiscBlobSummary& summary,
+                                const std::vector<DiscLayoutFile>& files)
+{
+    std::ostringstream stream;
+    stream << "{\n";
+    stream << "  \"schemaVersion\": \"1.0\",\n";
+    stream << "  \"format\": \"" << escapeJson(summary.format) << "\",\n";
+    stream << "  \"sectorSize\": " << summary.sectorSize << ",\n";
+    stream << "  \"blob\": {\n";
+    stream << "    \"path\": \"" << escapeJson(summary.blobPath) << "\",\n";
+    stream << "    \"sectorSize\": " << summary.sectorSize << ",\n";
+    stream << "    \"lbaStart\": " << summary.lbaStart << ",\n";
+    stream << "    \"lbaCount\": " << summary.lbaCount << ",\n";
+    stream << "    \"bytes\": " << summary.blobBytes << ",\n";
+    stream << "    \"sha1\": \"" << escapeJson(summary.blobSha1) << "\"\n";
+    stream << "  },\n";
+    stream << "  \"lbaRange\": {\n";
+    stream << "    \"start\": " << summary.lbaStart << ",\n";
+    stream << "    \"count\": " << summary.lbaCount << "\n";
+    stream << "  },\n";
+    stream << "  \"volume\": {\n";
+    stream << "    \"label\": \"" << escapeJson(parser.getVolumeLabel()) << "\",\n";
+    stream << "    \"logicalBlockSize\": " << parser.getLogicalBlockSize() << ",\n";
+    stream << "    \"isJoliet\": " << (parser.isUsingJoliet() ? "true" : "false") << "\n";
+    stream << "  },\n";
+    stream << "  \"files\": [\n";
+    for (size_t fileIndex = 0; fileIndex < files.size(); ++fileIndex)
+    {
+        const auto& file = files[fileIndex];
+        stream << "    {\n";
+        stream << "      \"path\": \"" << escapeJson(file.path) << "\",\n";
+        stream << "      \"bytes\": " << file.bytes << ",\n";
+        stream << "      \"extents\": [\n";
+        for (size_t extentIndex = 0; extentIndex < file.extents.size(); ++extentIndex)
+        {
+            const auto& extent = file.extents[extentIndex];
+            stream << "        {\n";
+            stream << "          \"lba\": " << extent.lba << ",\n";
+            stream << "          \"sectors\": " << extent.sectors << ",\n";
+            stream << "          \"fileByteOffset\": " << extent.fileByteOffset << "\n";
+            stream << "        }";
+            if (extentIndex + 1 < file.extents.size())
+            {
+                stream << ",";
+            }
+            stream << "\n";
+        }
+        stream << "      ]\n";
+        stream << "    }";
+        if (fileIndex + 1 < files.size())
+        {
+            stream << ",";
+        }
+        stream << "\n";
+    }
+    stream << "  ]\n";
+    stream << "}\n";
+    return stream.str();
+}
+
+std::string serializeDiscHashes(const DiscBlobSummary& summary)
+{
+    std::ostringstream stream;
+    stream << "{\n";
+    stream << "  \"schemaVersion\": \"1.0\",\n";
+    stream << "  \"format\": \"" << escapeJson(summary.format) << "\",\n";
+    stream << "  \"sectorSize\": " << summary.sectorSize << ",\n";
+    stream << "  \"lbaRange\": {\n";
+    stream << "    \"start\": " << summary.lbaStart << ",\n";
+    stream << "    \"count\": " << summary.lbaCount << "\n";
+    stream << "  },\n";
+    stream << "  \"blob\": {\n";
+    stream << "    \"path\": \"" << escapeJson(summary.blobPath) << "\",\n";
+    stream << "    \"sectorSize\": " << summary.sectorSize << ",\n";
+    stream << "    \"lbaStart\": " << summary.lbaStart << ",\n";
+    stream << "    \"lbaCount\": " << summary.lbaCount << ",\n";
+    stream << "    \"bytes\": " << summary.blobBytes << ",\n";
+    stream << "    \"sha1\": \"" << escapeJson(summary.blobSha1) << "\"\n";
+    stream << "  },\n";
+    stream << "  \"chunks\": []\n";
+    stream << "}\n";
+    return stream.str();
+}
+
+std::string serializeResourcesManifest(
+    const std::string& inputPath, const std::string& timestamp, const std::string& pipelineVersion,
+    const iso::IsoParser& parser, const std::vector<iso::IsoFileEntry>& entries,
+    const FilesystemExportSummary& filesystemSummary, const DiscBlobSummary& discBlobSummary,
+    const EmbeddedScanSummary& embeddedScanSummary, const std::vector<std::string>& extraWarnings)
 {
     std::vector<const iso::IsoFileEntry*> files;
     files.reserve(entries.size());
@@ -231,6 +313,26 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     stream << "  \"index\": {\n";
     stream << "    \"discTreePath\": \"index/disc_tree.json\",\n";
     stream << "    \"discMetaPath\": \"index/disc_meta.json\",\n";
+    stream << "    \"discLayoutPath\": ";
+    if (discBlobSummary.enabled && !discBlobSummary.layoutPath.empty())
+    {
+        stream << "\"" << escapeJson(discBlobSummary.layoutPath) << "\"";
+    }
+    else
+    {
+        stream << "null";
+    }
+    stream << ",\n";
+    stream << "    \"discHashesPath\": ";
+    if (discBlobSummary.enabled && !discBlobSummary.hashesPath.empty())
+    {
+        stream << "\"" << escapeJson(discBlobSummary.hashesPath) << "\"";
+    }
+    else
+    {
+        stream << "null";
+    }
+    stream << ",\n";
     stream << "    \"recompInputsPath\": \"index/recomp_inputs.json\",\n";
     stream << "    \"catalogPath\": \"index/catalog.json\",\n";
     stream << "    \"resourcesManifestPath\": \"index/resources_manifest.json\"\n";
@@ -261,6 +363,28 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     stream << "        \"skippedDueToLimits\": " << filesystemSummary.skippedDueToLimits << "\n";
     stream << "      }\n";
     stream << "    },\n";
+    stream << "    \"discBlob\": {\n";
+    stream << "      \"enabled\": " << (discBlobSummary.enabled ? "true" : "false") << ",\n";
+    stream << "      \"mode\": \"" << escapeJson(discBlobSummary.mode) << "\",\n";
+    stream << "      \"format\": \"" << escapeJson(discBlobSummary.format) << "\",\n";
+    stream << "      \"sectorSize\": " << discBlobSummary.sectorSize << ",\n";
+    stream << "      \"lbaCount\": " << discBlobSummary.lbaCount << ",\n";
+    stream << "      \"bytes\": " << discBlobSummary.blobBytes << ",\n";
+    stream << "      \"sha1\": \"" << escapeJson(discBlobSummary.blobSha1) << "\",\n";
+    stream << "      \"blobPath\": \"" << escapeJson(discBlobSummary.blobPath) << "\",\n";
+    stream << "      \"layoutPath\": \"" << escapeJson(discBlobSummary.layoutPath) << "\",\n";
+    stream << "      \"hashPath\": \"" << escapeJson(discBlobSummary.hashesPath) << "\",\n";
+    stream << "      \"caps\": {\n";
+    stream << "        \"maxBytes\": " << discBlobSummary.maxBytes << "\n";
+    stream << "      },\n";
+    stream << "      \"result\": {\n";
+    stream << "        \"lbaStart\": " << discBlobSummary.lbaStart << ",\n";
+    stream << "        \"lbaCount\": " << discBlobSummary.lbaCount << ",\n";
+    stream << "        \"blobBytes\": " << discBlobSummary.blobBytes << ",\n";
+    stream << "        \"truncated\": " << (discBlobSummary.truncated ? "true" : "false") << ",\n";
+    stream << "        \"sha1\": \"" << escapeJson(discBlobSummary.blobSha1) << "\"\n";
+    stream << "      }\n";
+    stream << "    },\n";
     stream << "    \"embeddedScan\": {\n";
     stream << "      \"enabled\": " << (embeddedScanSummary.enabled ? "true" : "false") << ",\n";
     stream << "      \"result\": {\n";
@@ -276,6 +400,12 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     stream << "  \"runtimeSummary\": {\n";
     stream << "    \"filesystemEnabled\": true,\n";
     stream << "    \"filesystemMode\": \"" << escapeJson(filesystemSummary.mode) << "\",\n";
+    stream << "    \"discBlobEnabled\": " << (discBlobSummary.enabled ? "true" : "false") << ",\n";
+    stream << "    \"discBlobSectorSize\": " << discBlobSummary.sectorSize << ",\n";
+    stream << "    \"discBlobPath\": \"" << escapeJson(discBlobSummary.blobPath) << "\",\n";
+    stream << "    \"discBlobHashPath\": \"" << escapeJson(discBlobSummary.hashesPath) << "\",\n";
+    stream << "    \"discBlobBytes\": " << discBlobSummary.blobBytes << ",\n";
+    stream << "    \"discBlobLbaCount\": " << discBlobSummary.lbaCount << ",\n";
     stream << "    \"containersScanned\": " << embeddedScanSummary.containersScanned << ",\n";
     stream << "    \"hitsExtracted\": " << embeddedScanSummary.hitsExtracted << "\n";
     stream << "  },\n";
@@ -304,126 +434,6 @@ std::string serializeResourcesManifest(const std::string& inputPath, const std::
     {
         stream << "    \"" << escapeJson(warnings[i]) << "\"";
         if (i + 1 < warnings.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
-    }
-    stream << "  ]\n";
-    stream << "}\n";
-    return stream.str();
-}
-
-std::string serializeCatalog(const std::vector<CatalogEntry>& entries)
-{
-    std::ostringstream stream;
-    stream << "{\n";
-    stream << "  \"schemaVersion\": \"1.0\",\n";
-    stream << "  \"entries\": [\n";
-    for (size_t index = 0; index < entries.size(); ++index)
-    {
-        const auto& entry = entries[index];
-        stream << "    {\n";
-        stream << "      \"id\": \"" << escapeJson(entry.id) << "\",\n";
-        stream << "      \"sourceKind\": \"" << escapeJson(entry.sourceKind) << "\",\n";
-        stream << "      \"isoPath\": \"" << escapeJson(entry.isoPath) << "\",\n";
-        stream << "      \"exportedPath\": \"" << escapeJson(entry.exportedPath) << "\",\n";
-        stream << "      \"size\": " << entry.size << ",\n";
-        stream << "      \"hashes\": {\n";
-        stream << "        \"sha1\": \"" << escapeJson(entry.sha1) << "\"\n";
-        stream << "      },\n";
-        stream << "      \"source\": {\n";
-        stream << "        \"containerIsoPath\": \"" << escapeJson(entry.containerIsoPath)
-               << "\",\n";
-        stream << "        \"offset\": " << entry.containerOffset << "\n";
-        stream << "      },\n";
-        stream << "      \"extents\": [\n";
-        for (size_t extentIndex = 0; extentIndex < entry.extents.size(); ++extentIndex)
-        {
-            const auto& extent = entry.extents[extentIndex];
-            stream << "        {\n";
-            stream << "          \"lba\": " << extent.lba << ",\n";
-            stream << "          \"bytes\": " << extent.size << ",\n";
-            stream << "          \"continues\": " << (extent.continues ? "true" : "false") << "\n";
-            stream << "        }";
-            if (extentIndex + 1 < entry.extents.size())
-            {
-                stream << ",";
-            }
-            stream << "\n";
-        }
-        stream << "      ],\n";
-        stream << "      \"detectedTypes\": [\n";
-        for (size_t typeIndex = 0; typeIndex < entry.detectedTypes.size(); ++typeIndex)
-        {
-            stream << "        \"" << escapeJson(entry.detectedTypes[typeIndex]) << "\"";
-            if (typeIndex + 1 < entry.detectedTypes.size())
-            {
-                stream << ",";
-            }
-            stream << "\n";
-        }
-        stream << "      ]\n";
-        stream << "    }";
-        if (index + 1 < entries.size())
-        {
-            stream << ",";
-        }
-        stream << "\n";
-    }
-    stream << "  ]\n";
-    stream << "}\n";
-    return stream.str();
-}
-
-std::string serializeRecompInputs(const std::string& bootIsoPath,
-                                  const std::string& bootExportedPath,
-                                  const std::string& systemCnfExportedPath,
-                                  const std::vector<RecompInputExecutable>& executables)
-{
-    std::ostringstream stream;
-    stream << "{\n";
-    stream << "  \"schemaVersion\": \"1.0\",\n";
-    stream << "  \"boot\": {\n";
-    stream << "    \"isoPath\": \"" << escapeJson(bootIsoPath) << "\",\n";
-    stream << "    \"exportedPath\": \"" << escapeJson(bootExportedPath) << "\"\n";
-    stream << "  },\n";
-    stream << "  \"systemCnf\": {\n";
-    stream << "    \"exportedPath\": \"" << escapeJson(systemCnfExportedPath) << "\"\n";
-    stream << "  },\n";
-    stream << "  \"executables\": [\n";
-    for (size_t index = 0; index < executables.size(); ++index)
-    {
-        const auto& executable = executables[index];
-        stream << "    {\n";
-        stream << "      \"isoPath\": \"" << escapeJson(executable.isoPath) << "\",\n";
-        stream << "      \"exportedPath\": \"" << escapeJson(executable.exportedPath) << "\",\n";
-        stream << "      \"psxExe\": {\n";
-        stream << "        \"loadAddr\": \"0x" << formatHex(executable.loadAddress, 8) << "\",\n";
-        stream << "        \"entry\": \"0x" << formatHex(executable.entryPoint, 8) << "\",\n";
-        stream << "        \"size\": " << executable.loadSize;
-        if (executable.gp != 0)
-        {
-            stream << ",\n";
-            stream << "        \"gp\": \"0x" << formatHex(executable.gp, 8) << "\"";
-        }
-        if (executable.bssSize != 0)
-        {
-            stream << ",\n";
-            stream << "        \"bssAddr\": \"0x" << formatHex(executable.bssAddress, 8) << "\",\n";
-            stream << "        \"bssSize\": " << executable.bssSize;
-        }
-        if (executable.stackSize != 0 || executable.stackAddress != 0)
-        {
-            stream << ",\n";
-            stream << "        \"stackAddr\": \"0x" << formatHex(executable.stackAddress, 8)
-                   << "\",\n";
-            stream << "        \"stackSize\": " << executable.stackSize;
-        }
-        stream << "\n";
-        stream << "      }\n";
-        stream << "    }";
-        if (index + 1 < executables.size())
         {
             stream << ",";
         }

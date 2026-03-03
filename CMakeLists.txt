@@ -106,11 +106,15 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_helpers_output.cpp
     src/recompiler/pipeline_helpers_output_plan.cpp
     src/recompiler/pipeline_helpers_output_serialize.cpp
+    src/recompiler/pipeline_helpers_output_serialize_catalog.cpp
     src/recompiler/pipeline_helpers_output_support.cpp
+    src/recompiler/pipeline_helpers_output_support_disc.cpp
     src/recompiler/pipeline_helpers_output_support_hash.cpp
     src/recompiler/pipeline_helpers_output_support_embedded.cpp
+    src/recompiler/pipeline_input_loader.cpp
     src/recompiler/pipeline_selection_helpers.cpp
     src/recompiler/pipeline_workspace_helpers.cpp
+    src/recompiler/pipeline_workspace_json.cpp
     src/recompiler/pipeline.cpp
 )
 
@@ -162,6 +166,7 @@ endif()
 if(BUILD_CLI)
     add_executable(psxrecomp
         src/main.cpp
+        src/main_json_output.cpp
         ${ISO_SOURCES}
         ${DISASM_SOURCES}
         ${IR_SOURCES}
@@ -305,6 +310,8 @@ if(BUILD_TESTS)
     add_executable(pipeline_candidate_test
         tests/unit/pipeline_candidate_test.cpp
         tests/unit/pipeline_candidate_test_helpers.cpp
+        tests/unit/pipeline_candidate_test_iso_builders.cpp
+        tests/unit/pipeline_candidate_test_sections.cpp
         ${ISO_SOURCES}
         ${DISASM_SOURCES}
         ${IR_SOURCES}

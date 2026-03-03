@@ -1,9 +1,13 @@
+#include "psxrecomp/iso/iso_parser.h"
 #include "psxrecomp/recompiler/pipeline.h"
 
 #include "pipeline_candidate_test_helpers.h"
+#include "pipeline_candidate_test_sections.h"
 
 #include <algorithm>
 #include <cassert>
+#include <cctype>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -39,6 +43,12 @@ int main()
                                    "recomp_inputs.json"));
     assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "index" /
                                    "catalog.json"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "disc" /
+                                   "data_track.bin"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "disc" /
+                                   "disc_layout.json"));
+    assert(std::filesystem::exists(std::filesystem::path(result.artifacts.resourcesPath) / "disc" /
+                                   "disc_hashes.json"));
     assert(std::find(result.artifacts.exportedResources.begin(),
                      result.artifacts.exportedResources.end(),
                      "index/resources_manifest.json") != result.artifacts.exportedResources.end());
@@ -54,6 +64,15 @@ int main()
     assert(std::find(result.artifacts.exportedResources.begin(),
                      result.artifacts.exportedResources.end(),
                      "index/catalog.json") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "disc/data_track.bin") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "disc/disc_layout.json") != result.artifacts.exportedResources.end());
+    assert(std::find(result.artifacts.exportedResources.begin(),
+                     result.artifacts.exportedResources.end(),
+                     "disc/disc_hashes.json") != result.artifacts.exportedResources.end());
     {
         std::ifstream manifestFile(result.artifacts.resourceManifestPath);
         const std::string resourceManifest((std::istreambuf_iterator<char>(manifestFile)),
@@ -62,11 +81,102 @@ int main()
                std::string::npos);
         assert(resourceManifest.find("\"discMetaPath\": \"index/disc_meta.json\"") !=
                std::string::npos);
+        assert(resourceManifest.find("\"discLayoutPath\": \"disc/disc_layout.json\"") !=
+               std::string::npos);
+        assert(resourceManifest.find("\"discHashesPath\": \"disc/disc_hashes.json\"") !=
+               std::string::npos);
         assert(resourceManifest.find("\"recompInputsPath\": \"index/recomp_inputs.json\"") !=
                std::string::npos);
         assert(resourceManifest.find("\"catalogPath\": \"index/catalog.json\"") !=
                std::string::npos);
         assert(resourceManifest.find("\"filesystemEnabled\": true") != std::string::npos);
+        assert(resourceManifest.find("\"discBlobEnabled\": true") != std::string::npos);
+        assert(resourceManifest.find("\"discBlob\": {") != std::string::npos);
+        assert(resourceManifest.find("\"hashPath\": \"disc/disc_hashes.json\"") !=
+               std::string::npos);
+        assert(resourceManifest.find("\"hashesPath\": ") == std::string::npos);
+        assert(resourceManifest.find("\"discBlobSectorSize\": ") != std::string::npos);
+        assert(resourceManifest.find("\"discBlobBytes\": ") != std::string::npos);
+    }
+    {
+        const auto blobPath =
+            std::filesystem::path(result.artifacts.resourcesPath) / "disc" / "data_track.bin";
+        const auto layoutPath =
+            std::filesystem::path(result.artifacts.resourcesPath) / "disc" / "disc_layout.json";
+        const auto hashesPath =
+            std::filesystem::path(result.artifacts.resourcesPath) / "disc" / "disc_hashes.json";
+
+        std::ifstream layoutFile(layoutPath);
+        const std::string layout((std::istreambuf_iterator<char>(layoutFile)),
+                                 std::istreambuf_iterator<char>());
+        assert(layout.find("\"format\": \"data_track_") != std::string::npos);
+
+        std::ifstream hashesFile(hashesPath);
+        const std::string hashes((std::istreambuf_iterator<char>(hashesFile)),
+                                 std::istreambuf_iterator<char>());
+        assert(hashes.find("\"sha1\": \"") != std::string::npos);
+
+        const uint64_t sectorSize = findJsonIntegerField(layout, "sectorSize");
+        const uint64_t lbaStart = findJsonIntegerField(layout, "lbaStart");
+        const uint64_t lbaCount = findJsonIntegerField(layout, "lbaCount");
+        const uint64_t blobSize = std::filesystem::file_size(blobPath);
+        assert(sectorSize == 2048 || sectorSize == 2352);
+        assert(lbaCount > 0);
+        assert(blobSize > 0);
+        assert(lbaCount * sectorSize == blobSize);
+
+        std::ifstream blobFile(blobPath, std::ios::binary);
+        const std::vector<uint8_t> blobData((std::istreambuf_iterator<char>(blobFile)),
+                                            std::istreambuf_iterator<char>());
+        assert(blobData.size() == blobSize);
+
+        psxrecomp::iso::IsoParser lbaParser(isoPath.string());
+        assert(lbaParser.open());
+        assert(lbaParser.isValid());
+        std::vector<uint8_t> sectorData;
+        auto assertLbaMatches = [&](uint32_t lba)
+        {
+            assert(lba >= lbaStart);
+            assert(static_cast<uint64_t>(lba - lbaStart) < lbaCount);
+            const uint32_t relativeLba =
+                static_cast<uint32_t>(static_cast<uint64_t>(lba) - lbaStart);
+            if (sectorSize == 2352)
+            {
+                assert(lbaParser.canReadRaw2352());
+                assert(lbaParser.readSectorRaw2352(relativeLba, sectorData));
+            }
+            else
+            {
+                assert(lbaParser.canReadUser2048());
+                assert(lbaParser.readSectorUser2048(relativeLba, sectorData));
+            }
+            assert(sectorData.size() == sectorSize);
+            const size_t blobOffset =
+                static_cast<size_t>(lba - lbaStart) * static_cast<size_t>(sectorSize);
+            assert(blobOffset + sectorData.size() <= blobData.size());
+            assert(std::equal(sectorData.begin(), sectorData.end(), blobData.begin() + blobOffset));
+        };
+
+        const uint32_t startLba = static_cast<uint32_t>(lbaStart);
+        const uint32_t endLbaExclusive = static_cast<uint32_t>(lbaStart + lbaCount);
+        assertLbaMatches(startLba);
+        if (lbaCount > 1)
+        {
+            assertLbaMatches(startLba + 1);
+        }
+        assertLbaMatches(startLba + static_cast<uint32_t>(lbaCount / 2));
+        if (lbaCount > 1)
+        {
+            assertLbaMatches(endLbaExclusive - 2);
+        }
+        assertLbaMatches(endLbaExclusive - 1);
+        uint32_t seed = 0x12345678U;
+        for (int index = 0; index < 20; ++index)
+        {
+            seed = seed * 1664525U + 1013904223U;
+            const uint32_t randomLba = startLba + (seed % static_cast<uint32_t>(lbaCount));
+            assertLbaMatches(randomLba);
+        }
     }
     {
         std::ifstream recompInputsFile(std::filesystem::path(result.artifacts.resourcesPath) /
@@ -278,7 +388,86 @@ int main()
     assert(hasExportedPath(fullResult, "fs/SYSTEM.CNF"));
     assert(hasExportedPath(fullResult, "fs/GAMEB.EXE"));
 
+    auto noBlobOptions = makeOptions();
+    noBlobOptions.outputDirectory = (outputDir / "no_disc_blob").string();
+    noBlobOptions.resourceExport.discBlob.enabled = false;
+    psxrecomp::recompiler::RecompilationPipeline noBlobPipeline(noBlobOptions);
+    const auto noBlobResult = noBlobPipeline.run(policyIsoPath.string());
+    assert(noBlobResult.success);
+    assert(!std::filesystem::exists(std::filesystem::path(noBlobResult.artifacts.resourcesPath) /
+                                    "disc" / "data_track.bin"));
+    assert(!std::filesystem::exists(std::filesystem::path(noBlobResult.artifacts.resourcesPath) /
+                                    "disc" / "disc_layout.json"));
+    assert(!std::filesystem::exists(std::filesystem::path(noBlobResult.artifacts.resourcesPath) /
+                                    "disc" / "disc_hashes.json"));
+    assert(std::find(noBlobResult.artifacts.exportedResources.begin(),
+                     noBlobResult.artifacts.exportedResources.end(),
+                     "disc/data_track.bin") == noBlobResult.artifacts.exportedResources.end());
+    assert(std::find(noBlobResult.artifacts.exportedResources.begin(),
+                     noBlobResult.artifacts.exportedResources.end(),
+                     "disc/disc_layout.json") == noBlobResult.artifacts.exportedResources.end());
+    assert(std::find(noBlobResult.artifacts.exportedResources.begin(),
+                     noBlobResult.artifacts.exportedResources.end(),
+                     "disc/disc_hashes.json") == noBlobResult.artifacts.exportedResources.end());
+    {
+        std::ifstream manifestFile(noBlobResult.artifacts.resourceManifestPath);
+        const std::string manifest((std::istreambuf_iterator<char>(manifestFile)),
+                                   std::istreambuf_iterator<char>());
+        assert(manifest.find("\"discLayoutPath\": null") != std::string::npos);
+        assert(manifest.find("\"discHashesPath\": null") != std::string::npos);
+        assert(manifest.find("\"discBlobEnabled\": false") != std::string::npos);
+        assert(manifest.find("\"blobPath\": \"\"") != std::string::npos);
+        assert(manifest.find("\"layoutPath\": \"\"") != std::string::npos);
+        assert(manifest.find("\"hashPath\": \"\"") != std::string::npos);
+        assert(manifest.find("\"hashesPath\": ") == std::string::npos);
+        assert(findJsonIntegerField(manifest, "discBlobLbaCount") == 0);
+        assert(findJsonIntegerField(manifest, "discBlobBytes") == 0);
+    }
+
     std::filesystem::remove(policyIsoPath);
+
+    auto offsetCueImage = createCueWithDataTrackOffset("DISC_OFFSET", 150);
+    auto offsetOptions = makeOptions();
+    offsetOptions.outputDirectory = (outputDir / "disc_offset_layout").string();
+    psxrecomp::recompiler::RecompilationPipeline offsetPipeline(offsetOptions);
+    const auto offsetResult = offsetPipeline.run(offsetCueImage.cuePath.string());
+    assert(offsetResult.success);
+    {
+        const auto layoutPath = std::filesystem::path(offsetResult.artifacts.resourcesPath) /
+                                "disc" / "disc_layout.json";
+        std::ifstream layoutFile(layoutPath);
+        const std::string layout((std::istreambuf_iterator<char>(layoutFile)),
+                                 std::istreambuf_iterator<char>());
+        const uint64_t lbaStart = findJsonIntegerField(layout, "lbaStart");
+        assert(lbaStart == 150);
+        const uint64_t lbaCount = findJsonIntegerField(layout, "lbaCount");
+        assert(lbaCount == 64);
+
+        auto findFirstExtentLbaForPath = [&](const std::string& path)
+        {
+            const std::string pathMarker = "\"path\": \"" + path + "\"";
+            const size_t pathPos = layout.find(pathMarker);
+            assert(pathPos != std::string::npos);
+            const std::string lbaMarker = "\"lba\": ";
+            const size_t lbaPos = layout.find(lbaMarker, pathPos);
+            assert(lbaPos != std::string::npos);
+            size_t valueStart = lbaPos + lbaMarker.size();
+            size_t valueEnd = valueStart;
+            while (valueEnd < layout.size() &&
+                   std::isdigit(static_cast<unsigned char>(layout[valueEnd])) != 0)
+            {
+                ++valueEnd;
+            }
+            assert(valueEnd > valueStart);
+            return static_cast<uint64_t>(std::strtoull(
+                layout.substr(valueStart, valueEnd - valueStart).c_str(), nullptr, 10));
+        };
+
+        assert(findFirstExtentLbaForPath("SYSTEM.CNF") == 171);
+        assert(findFirstExtentLbaForPath("GAME.EXE") == 172);
+    }
+    std::filesystem::remove(offsetCueImage.cuePath);
+    std::filesystem::remove(offsetCueImage.binPath);
 
     auto timIsoPath = createIsoWithTimBin("DISC_TIM_BIN");
     auto timResult = pipeline.run(timIsoPath.string());
@@ -293,57 +482,7 @@ int main()
     }
     std::filesystem::remove(timIsoPath);
 
-    auto embeddedIsoPath = createIsoWithEmbeddedTimContainer("DISC_EMBEDDED");
-    auto embeddedOptions = makeOptions();
-    embeddedOptions.outputDirectory = (outputDir / "embedded_scan_run1").string();
-    embeddedOptions.resourceExport.fsMode =
-        psxrecomp::recompiler::PipelineOptions::ResourceExportOptions::FsMode::Minimal;
-    embeddedOptions.resourceExport.enableEmbeddedScan = true;
-    psxrecomp::recompiler::RecompilationPipeline embeddedPipeline(embeddedOptions);
-    const auto embeddedResult = embeddedPipeline.run(embeddedIsoPath.string());
-    assert(embeddedResult.success);
-    std::string embeddedPathRun1;
-    {
-        std::ifstream manifestFile(embeddedResult.artifacts.resourceManifestPath);
-        const std::string manifest((std::istreambuf_iterator<char>(manifestFile)),
-                                   std::istreambuf_iterator<char>());
-        const size_t embeddedScanPos = manifest.find("\"embeddedScan\"");
-        assert(embeddedScanPos != std::string::npos);
-        assert(manifest.find("\"enabled\": true", embeddedScanPos) != std::string::npos);
-        assert(findJsonIntegerField(manifest, "containersScanned") >= 1);
-        assert(findJsonIntegerField(manifest, "hitsExtracted") >= 1);
-    }
-    {
-        std::ifstream catalogFile(std::filesystem::path(embeddedResult.artifacts.resourcesPath) /
-                                  "index" / "catalog.json");
-        const std::string catalog((std::istreambuf_iterator<char>(catalogFile)),
-                                  std::istreambuf_iterator<char>());
-        assert(catalog.find("\"sourceKind\": \"embedded\"") != std::string::npos);
-        assert(catalog.find("\"containerIsoPath\": \"CONTAINER.BIN\"") != std::string::npos);
-        assert(catalog.find("\"offset\": 4660") != std::string::npos);
-        assert(catalog.find("\"sha1\": \"8ba483b23059badb870684268fb7f7bc7153bcce\"") !=
-               std::string::npos);
-        embeddedPathRun1 = findEmbeddedExportedPath(catalog, "CONTAINER.BIN");
-        assert(!embeddedPathRun1.empty());
-    }
-    assert(std::filesystem::exists(std::filesystem::path(embeddedResult.artifacts.resourcesPath) /
-                                   embeddedPathRun1));
-
-    auto embeddedOptions2 = embeddedOptions;
-    embeddedOptions2.outputDirectory = (outputDir / "embedded_scan_run2").string();
-    psxrecomp::recompiler::RecompilationPipeline embeddedPipeline2(embeddedOptions2);
-    const auto embeddedResult2 = embeddedPipeline2.run(embeddedIsoPath.string());
-    assert(embeddedResult2.success);
-    {
-        std::ifstream catalogFile(std::filesystem::path(embeddedResult2.artifacts.resourcesPath) /
-                                  "index" / "catalog.json");
-        const std::string catalog((std::istreambuf_iterator<char>(catalogFile)),
-                                  std::istreambuf_iterator<char>());
-        const std::string embeddedPathRun2 = findEmbeddedExportedPath(catalog, "CONTAINER.BIN");
-        assert(!embeddedPathRun2.empty());
-        assert(embeddedPathRun2 == embeddedPathRun1);
-    }
-    std::filesystem::remove(embeddedIsoPath);
+    runEmbeddedScanDeterminismScenario(options, outputDir);
 
     std::error_code error;
     std::filesystem::remove_all(outputDir, error);

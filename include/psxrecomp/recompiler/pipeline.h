@@ -72,7 +72,22 @@ struct PipelineOptions
             Full
         };
 
-        FsMode fsMode = FsMode::Full;
+        enum class DiscBlobMode
+        {
+            Auto,
+            Force2048,
+            Force2352,
+            Disabled
+        };
+
+        struct DiscBlobOptions
+        {
+            bool enabled = true;
+            DiscBlobMode mode = DiscBlobMode::Auto;
+            u64 maxBytes = 0;
+        };
+
+        FsMode fsMode = FsMode::Smart;
         u64 maxTotalBytes = 512ULL * 1024ULL * 1024ULL;
         u64 maxSingleFileBytes = 128ULL * 1024ULL * 1024ULL;
         bool alwaysExportSystemCnf = true;
@@ -82,6 +97,7 @@ struct PipelineOptions
         std::vector<std::string> denyPrefixes;
 
         bool enableEmbeddedScan = false;
+        DiscBlobOptions discBlob;
     };
 
     std::string outputDirectory;

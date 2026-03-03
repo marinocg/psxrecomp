@@ -140,6 +140,42 @@ class IsoParser
                               std::vector<u8>& outData, std::string* outError = nullptr);
 
     /**
+     * @brief Read one 2048-byte logical sector by LBA from the active data track.
+     * @param lba Logical block address relative to the ISO volume.
+     * @param outData Output buffer containing exactly 2048 bytes on success.
+     * @return true on success, false on failure.
+     */
+    bool readUserDataSector(u32 lba, std::vector<u8>& outData);
+
+    /**
+     * @brief Check whether 2048-byte user-data sector reads are supported.
+     * @return true when user-data reads are available.
+     */
+    bool canReadUser2048() const;
+
+    /**
+     * @brief Check whether raw 2352-byte sector reads are supported.
+     * @return true when raw Mode 2/2352 reads are available.
+     */
+    bool canReadRaw2352() const;
+
+    /**
+     * @brief Read one 2048-byte user-data sector by LBA.
+     * @param lba Logical block address.
+     * @param out2048 Output sector bytes.
+     * @return true on success, false on failure.
+     */
+    bool readSectorUser2048(u32 lba, std::vector<u8>& out2048);
+
+    /**
+     * @brief Read one raw 2352-byte sector by LBA when available.
+     * @param lba Logical block address.
+     * @param out2352 Output sector bytes.
+     * @return true on success, false on failure.
+     */
+    bool readSectorRaw2352(u32 lba, std::vector<u8>& out2352);
+
+    /**
      * @brief Find the PSX executable (PSX-EXE)
      * @return Path to executable within ISO, or empty string if not found
      */
@@ -156,6 +192,12 @@ class IsoParser
      * @return Logical block size in bytes.
      */
     u32 getLogicalBlockSize() const;
+
+    /**
+     * @brief Get ISO-9660 volume space size in logical sectors.
+     * @return Volume space size from the active PVD.
+     */
+    u32 getVolumeSpaceSize() const;
 
     /**
      * @brief Get parsed raw sector size.

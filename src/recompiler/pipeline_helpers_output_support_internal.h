@@ -57,6 +57,14 @@ bool scanEmbeddedTimResources(iso::IsoParser& parser, const std::vector<iso::Iso
                               std::vector<std::string>& resourceManifestWarnings,
                               EmbeddedScanSummary& summary, std::vector<EmbeddedHit>& outHits,
                               std::string& outError);
+bool exportDiscDataTrackArtifacts(const std::filesystem::path& resourcesRoot,
+                                  iso::IsoParser& parser,
+                                  const std::vector<iso::IsoFileEntry>& isoTreeEntries,
+                                  const PipelineOptions::ResourceExportOptions& resourceOptions,
+                                  std::vector<std::string>& warnings,
+                                  std::vector<std::string>& manifestWarnings,
+                                  PipelineArtifacts& artifacts, DiscBlobSummary& outSummary,
+                                  std::string& outError);
 
 } // namespace detail
 } // namespace recompiler

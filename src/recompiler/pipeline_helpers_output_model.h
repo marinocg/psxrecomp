@@ -53,6 +53,37 @@ struct EmbeddedScanSummary
     size_t hitsExtracted = 0;
 };
 
+struct DiscLayoutExtent
+{
+    u32 lba = 0;
+    u32 sectors = 0;
+    u64 fileByteOffset = 0;
+};
+
+struct DiscLayoutFile
+{
+    std::string path;
+    u64 bytes = 0;
+    std::vector<DiscLayoutExtent> extents;
+};
+
+struct DiscBlobSummary
+{
+    bool enabled = false;
+    std::string mode = "auto";
+    std::string format = "data_track_user_2048";
+    u32 sectorSize = 2048;
+    u32 lbaStart = 0;
+    u32 lbaCount = 0;
+    u64 blobBytes = 0;
+    bool truncated = false;
+    u64 maxBytes = 0;
+    std::string blobPath = "disc/data_track.bin";
+    std::string layoutPath = "disc/disc_layout.json";
+    std::string hashesPath = "disc/disc_hashes.json";
+    std::string blobSha1;
+};
+
 struct CatalogEntry
 {
     std::string id;
@@ -77,13 +108,14 @@ std::string serializeDiscTree(const std::vector<iso::IsoFileEntry>& entries);
 std::string serializeDiscMeta(const std::string& inputPath, const std::string& bootExecutable,
                               const iso::IsoParser& parser,
                               const std::vector<iso::IsoFileEntry>& entries);
-std::string serializeResourcesManifest(const std::string& inputPath, const std::string& timestamp,
-                                       const std::string& pipelineVersion,
-                                       const iso::IsoParser& parser,
-                                       const std::vector<iso::IsoFileEntry>& entries,
-                                       const FilesystemExportSummary& filesystemSummary,
-                                       const EmbeddedScanSummary& embeddedScanSummary,
-                                       const std::vector<std::string>& extraWarnings);
+std::string serializeDiscLayout(const iso::IsoParser& parser, const DiscBlobSummary& summary,
+                                const std::vector<DiscLayoutFile>& files);
+std::string serializeDiscHashes(const DiscBlobSummary& summary);
+std::string serializeResourcesManifest(
+    const std::string& inputPath, const std::string& timestamp, const std::string& pipelineVersion,
+    const iso::IsoParser& parser, const std::vector<iso::IsoFileEntry>& entries,
+    const FilesystemExportSummary& filesystemSummary, const DiscBlobSummary& discBlobSummary,
+    const EmbeddedScanSummary& embeddedScanSummary, const std::vector<std::string>& extraWarnings);
 std::string serializeRecompInputs(const std::string& bootIsoPath,
                                   const std::string& bootExportedPath,
                                   const std::string& systemCnfExportedPath,

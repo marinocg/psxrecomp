@@ -89,11 +89,19 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
     artifacts.exportedResources.push_back("index/disc_tree.json");
     artifacts.exportedResources.push_back("index/disc_meta.json");
 
+    DiscBlobSummary discBlobSummary;
+    std::vector<std::string> resourceManifestWarnings;
+    if (!exportDiscDataTrackArtifacts(resourcesRoot, parser, isoTreeEntries, resourceExportOptions,
+                                      warnings, resourceManifestWarnings, artifacts,
+                                      discBlobSummary, outError))
+    {
+        return false;
+    }
+
     FilesystemExportSummary filesystemSummary;
     filesystemSummary.mode = fsModeToString(resourceExportOptions.fsMode);
     filesystemSummary.maxTotalBytes = resourceExportOptions.maxTotalBytes;
     filesystemSummary.maxSingleFileBytes = resourceExportOptions.maxSingleFileBytes;
-    std::vector<std::string> resourceManifestWarnings;
     std::unordered_map<std::string, std::string> exportedPathByIsoPath;
     std::unordered_map<std::string, const iso::IsoFileEntry*> fileEntryByPath;
     for (const auto& entry : isoTreeEntries)
@@ -344,7 +352,7 @@ bool exportIsoResourceArtifacts(PipelineArtifacts& artifacts, const std::string&
     const auto resourcesManifestPath = resourcesIndex / "resources_manifest.json";
     if (!writeFile(resourcesManifestPath,
                    serializeResourcesManifest(activeDiscPath, timestamp, pipelineVersion, parser,
-                                              isoTreeEntries, filesystemSummary,
+                                              isoTreeEntries, filesystemSummary, discBlobSummary,
                                               embeddedScanSummary, resourceManifestWarnings),
                    outError))
     {
