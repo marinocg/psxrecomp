@@ -148,7 +148,10 @@ touch src/iso/iso_parser.cpp
 touch tests/unit/iso_parser_test.cpp
 
 # Add to CMakeLists.txt
-# Add your source files to the appropriate source list
+# Add your source files to the appropriate *_SOURCES list and ensure
+# they are part of the corresponding component library target
+# (for example, psxrecomp_iso / psxrecomp_disasm / psxrecomp_ir /
+# psxrecomp_recompiler / psxrecomp_runtime).
 ```
 
 ### Running Individual Tests

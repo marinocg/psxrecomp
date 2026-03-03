@@ -16,21 +16,29 @@ option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
-#Compiler warnings
+#Shared build options (target-scoped)
+add_library(psxrecomp_build_options INTERFACE)
+target_compile_definitions(psxrecomp_build_options INTERFACE
+    PSXRECOMP_PROJECT_VERSION="${PROJECT_VERSION}"
+)
+
 if(ENABLE_WARNINGS)
-    if(MSVC)
-        add_compile_options(/W4 /WX-)
-    else()
-        add_compile_options(-Wall -Wextra -Wpedantic)
-    endif()
+    target_compile_options(psxrecomp_build_options INTERFACE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        $<$<CXX_COMPILER_ID:MSVC>:/WX->
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wall>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wextra>
+        $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-Wpedantic>
+    )
 endif()
+
+target_link_options(psxrecomp_build_options INTERFACE
+    $<$<AND:$<PLATFORM_ID:Windows>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-static-libgcc>
+    $<$<AND:$<PLATFORM_ID:Windows>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-static-libstdc++>
+)
 
 if(MSVC)
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-endif()
-
-if(WIN32 AND NOT MSVC)
-    add_link_options(-static-libgcc -static-libstdc++)
 endif()
 
 if(ENABLE_CLANG_TIDY)
@@ -41,9 +49,6 @@ if(ENABLE_CLANG_TIDY)
         message(WARNING "ENABLE_CLANG_TIDY is ON but clang-tidy was not found.")
     endif()
 endif()
-
-#Include directories
-include_directories(${CMAKE_SOURCE_DIR}/include)
 
 #Source files will be organized by component
 set(ISO_SOURCES
@@ -148,6 +153,39 @@ set(RUNTIME_SOURCES
     src/runtime/timers.cpp
 )
 
+set(PSXRECOMP_BUILD_COMPONENTS OFF)
+if(BUILD_CLI OR BUILD_TESTS)
+    set(PSXRECOMP_BUILD_COMPONENTS ON)
+endif()
+
+if(PSXRECOMP_BUILD_COMPONENTS)
+    add_library(psxrecomp_iso STATIC ${ISO_SOURCES})
+    target_include_directories(psxrecomp_iso PUBLIC ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(psxrecomp_iso PUBLIC psxrecomp_build_options)
+
+    add_library(psxrecomp_disasm STATIC ${DISASM_SOURCES})
+    target_include_directories(psxrecomp_disasm PUBLIC ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(psxrecomp_disasm PUBLIC psxrecomp_build_options)
+
+    add_library(psxrecomp_ir STATIC ${IR_SOURCES})
+    target_include_directories(psxrecomp_ir PUBLIC ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(psxrecomp_ir PUBLIC psxrecomp_build_options psxrecomp_disasm)
+
+    add_library(psxrecomp_recompiler STATIC ${RECOMPILER_SOURCES})
+    target_include_directories(psxrecomp_recompiler PUBLIC ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(psxrecomp_recompiler
+        PUBLIC
+            psxrecomp_build_options
+            psxrecomp_iso
+            psxrecomp_disasm
+            psxrecomp_ir
+    )
+
+    add_library(psxrecomp_runtime STATIC ${RUNTIME_SOURCES})
+    target_include_directories(psxrecomp_runtime PUBLIC ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(psxrecomp_runtime PUBLIC psxrecomp_build_options)
+endif()
+
 file(GLOB_RECURSE ALL_FORMAT_SOURCES CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/src/*.cpp
     ${CMAKE_SOURCE_DIR}/include/*.h
@@ -167,218 +205,167 @@ if(BUILD_CLI)
     add_executable(psxrecomp
         src/main.cpp
         src/main_json_output.cpp
-        ${ISO_SOURCES}
-        ${DISASM_SOURCES}
-        ${IR_SOURCES}
-        ${RECOMPILER_SOURCES}
-        ${RUNTIME_SOURCES}
     )
-
     target_include_directories(psxrecomp PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(psxrecomp
+        PRIVATE
+            psxrecomp_build_options
+            psxrecomp_iso
+            psxrecomp_disasm
+            psxrecomp_ir
+            psxrecomp_recompiler
+            psxrecomp_runtime
+    )
 endif()
 
 # Testing
 if(BUILD_TESTS)
     enable_testing()
-    add_executable(iso_parser_test
+
+    function(add_psxrecomp_unit_test target_name)
+        add_executable(${target_name} ${ARGN})
+        target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/include)
+        target_link_libraries(${target_name} PRIVATE psxrecomp_build_options)
+        add_test(NAME ${target_name} COMMAND ${target_name})
+    endfunction()
+
+    add_psxrecomp_unit_test(iso_parser_test
         tests/unit/iso_parser_test.cpp
         tests/unit/iso_parser_test_helpers_extra.cpp
-        ${ISO_SOURCES}
     )
-    target_include_directories(iso_parser_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME iso_parser_test COMMAND iso_parser_test)
+    target_link_libraries(iso_parser_test PRIVATE psxrecomp_iso)
 
-    add_executable(psx_exe_loader_test
+    add_psxrecomp_unit_test(psx_exe_loader_test
         tests/unit/psx_exe_loader_test.cpp
-        ${ISO_SOURCES}
     )
-    target_include_directories(psx_exe_loader_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME psx_exe_loader_test COMMAND psx_exe_loader_test)
+    target_link_libraries(psx_exe_loader_test PRIVATE psxrecomp_iso)
 
-    add_executable(disasm_test
+    add_psxrecomp_unit_test(disasm_test
         tests/unit/disasm_test.cpp
-        ${DISASM_SOURCES}
     )
-    target_include_directories(disasm_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME disasm_test COMMAND disasm_test)
+    target_link_libraries(disasm_test PRIVATE psxrecomp_disasm)
 
-    add_executable(disasm_analysis_test
+    add_psxrecomp_unit_test(disasm_analysis_test
         tests/unit/disasm_analysis_test.cpp
-        ${DISASM_SOURCES}
     )
-    target_include_directories(disasm_analysis_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME disasm_analysis_test COMMAND disasm_analysis_test)
+    target_link_libraries(disasm_analysis_test PRIVATE psxrecomp_disasm)
 
-    add_executable(ir_test
+    add_psxrecomp_unit_test(ir_test
         tests/unit/ir_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
     )
-    target_include_directories(ir_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME ir_test COMMAND ir_test)
+    target_link_libraries(ir_test PRIVATE psxrecomp_ir)
 
-    add_executable(ir_passes_test
+    add_psxrecomp_unit_test(ir_passes_test
         tests/unit/ir_passes_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
     )
-    target_include_directories(ir_passes_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME ir_passes_test COMMAND ir_passes_test)
+    target_link_libraries(ir_passes_test PRIVATE psxrecomp_ir)
 
-    add_executable(recompiler_codegen_test
+    add_psxrecomp_unit_test(recompiler_codegen_test
         tests/unit/recompiler_codegen_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
-        ${RECOMPILER_SOURCES}
-        ${ISO_SOURCES}
     )
-    target_include_directories(recompiler_codegen_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+    target_link_libraries(recompiler_codegen_test PRIVATE psxrecomp_recompiler)
     target_compile_definitions(
         recompiler_codegen_test
         PRIVATE PSXRECOMP_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
                 PSXRECOMP_TEST_CXX="${CMAKE_CXX_COMPILER}"
     )
-    add_test(NAME recompiler_codegen_test COMMAND recompiler_codegen_test)
 
-    add_executable(mips_ir_builder_test
+    add_psxrecomp_unit_test(mips_ir_builder_test
         tests/unit/mips_ir_builder_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
     )
-    target_include_directories(mips_ir_builder_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME mips_ir_builder_test COMMAND mips_ir_builder_test)
+    target_link_libraries(mips_ir_builder_test PRIVATE psxrecomp_ir)
 
-    add_executable(mips_ir_translation_diagnostics_test
+    add_psxrecomp_unit_test(mips_ir_translation_diagnostics_test
         tests/unit/mips_ir_translation_diagnostics_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
     )
-    target_include_directories(mips_ir_translation_diagnostics_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME mips_ir_translation_diagnostics_test COMMAND mips_ir_translation_diagnostics_test)
+    target_link_libraries(mips_ir_translation_diagnostics_test PRIVATE psxrecomp_ir)
 
-    add_executable(mips_ir_control_flow_test
+    add_psxrecomp_unit_test(mips_ir_control_flow_test
         tests/unit/mips_ir_control_flow_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
     )
-    target_include_directories(mips_ir_control_flow_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME mips_ir_control_flow_test COMMAND mips_ir_control_flow_test)
+    target_link_libraries(mips_ir_control_flow_test PRIVATE psxrecomp_ir)
 
-    add_executable(gpu_test
+    add_psxrecomp_unit_test(gpu_test
         tests/unit/gpu_test.cpp
-        src/runtime/gpu.cpp
-        src/runtime/gpu_transfer.cpp
-        src/runtime/gpu_commands.cpp
-        src/runtime/gpu_renderer.cpp
-        src/runtime/gpu_renderer_primitives.cpp
     )
-    target_include_directories(gpu_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME gpu_test COMMAND gpu_test)
-    add_executable(runtime_test
+    target_link_libraries(gpu_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(runtime_test
         tests/unit/runtime_test.cpp
         tests/unit/runtime_test_sections.cpp
-        ${RUNTIME_SOURCES}
     )
-    target_include_directories(runtime_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME runtime_test COMMAND runtime_test)
+    target_link_libraries(runtime_test PRIVATE psxrecomp_runtime)
 
-    add_executable(cop0_test
+    add_psxrecomp_unit_test(cop0_test
         tests/unit/cop0_test.cpp
-        src/runtime/cop0.cpp
     )
-    target_include_directories(cop0_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME cop0_test COMMAND cop0_test)
+    target_link_libraries(cop0_test PRIVATE psxrecomp_runtime)
 
-    add_executable(spu_test
+    add_psxrecomp_unit_test(spu_test
         tests/unit/spu_test.cpp
-        src/runtime/spu.cpp
     )
-    target_include_directories(spu_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME spu_test COMMAND spu_test)
+    target_link_libraries(spu_test PRIVATE psxrecomp_runtime)
 
-    add_executable(pipeline_test
+    add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp
-        ${ISO_SOURCES}
-        ${DISASM_SOURCES}
-        ${IR_SOURCES}
-        ${RECOMPILER_SOURCES}
-        ${RUNTIME_SOURCES}
     )
-    target_include_directories(pipeline_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME pipeline_test COMMAND pipeline_test)
+    target_link_libraries(pipeline_test
+        PRIVATE
+            psxrecomp_iso
+            psxrecomp_disasm
+            psxrecomp_ir
+            psxrecomp_recompiler
+            psxrecomp_runtime
+    )
 
-    add_executable(pipeline_candidate_test
+    add_psxrecomp_unit_test(pipeline_candidate_test
         tests/unit/pipeline_candidate_test.cpp
         tests/unit/pipeline_candidate_test_helpers.cpp
         tests/unit/pipeline_candidate_test_iso_builders.cpp
         tests/unit/pipeline_candidate_test_sections.cpp
-        ${ISO_SOURCES}
-        ${DISASM_SOURCES}
-        ${IR_SOURCES}
-        ${RECOMPILER_SOURCES}
-        ${RUNTIME_SOURCES}
     )
-    target_include_directories(pipeline_candidate_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME pipeline_candidate_test COMMAND pipeline_candidate_test)
+    target_link_libraries(pipeline_candidate_test
+        PRIVATE
+            psxrecomp_iso
+            psxrecomp_disasm
+            psxrecomp_ir
+            psxrecomp_recompiler
+            psxrecomp_runtime
+    )
 
-    add_executable(codegen_lowering_test
+    add_psxrecomp_unit_test(codegen_lowering_test
         tests/unit/codegen_lowering_test.cpp
         tests/unit/codegen_lowering_source_comments_case.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
-        ${RECOMPILER_SOURCES}
-        ${ISO_SOURCES}
     )
-    target_include_directories(codegen_lowering_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME codegen_lowering_test COMMAND codegen_lowering_test)
+    target_link_libraries(codegen_lowering_test PRIVATE psxrecomp_recompiler)
 
-    add_executable(codegen_metadata_test
+    add_psxrecomp_unit_test(codegen_metadata_test
         tests/unit/codegen_metadata_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
-        ${RECOMPILER_SOURCES}
-        ${ISO_SOURCES}
     )
-    target_include_directories(codegen_metadata_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME codegen_metadata_test COMMAND codegen_metadata_test)
+    target_link_libraries(codegen_metadata_test PRIVATE psxrecomp_recompiler)
 
-    add_executable(bios_vector_test
+    add_psxrecomp_unit_test(bios_vector_test
         tests/unit/bios_vector_test.cpp
         tests/unit/bios_vector_test_sections.cpp
         tests/unit/bios_vector_test_interrupts.cpp
-        ${RUNTIME_SOURCES}
     )
-    target_include_directories(bios_vector_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME bios_vector_test COMMAND bios_vector_test)
+    target_link_libraries(bios_vector_test PRIVATE psxrecomp_runtime)
 
-    add_executable(kernel_events_test
+    add_psxrecomp_unit_test(kernel_events_test
         tests/unit/kernel_events_test.cpp
-        src/runtime/kernel_events.cpp
-        src/runtime/interrupt_controller.cpp
     )
-    target_include_directories(kernel_events_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME kernel_events_test COMMAND kernel_events_test)
+    target_link_libraries(kernel_events_test PRIVATE psxrecomp_runtime)
 
-    add_executable(interrupt_dispatcher_test
+    add_psxrecomp_unit_test(interrupt_dispatcher_test
         tests/unit/interrupt_dispatcher_test.cpp
         tests/unit/interrupt_dispatcher_test_sections.cpp
-        src/runtime/interrupt_dispatcher.cpp
-        src/runtime/kernel_events.cpp
-        src/runtime/interrupt_controller.cpp
-        src/runtime/logger.cpp
     )
-    target_include_directories(interrupt_dispatcher_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME interrupt_dispatcher_test COMMAND interrupt_dispatcher_test)
+    target_link_libraries(interrupt_dispatcher_test PRIVATE psxrecomp_runtime)
 
-    add_executable(codegen_debug_test
+    add_psxrecomp_unit_test(codegen_debug_test
         tests/unit/codegen_debug_test.cpp
-        ${IR_SOURCES}
-        ${DISASM_SOURCES}
-        ${RECOMPILER_SOURCES}
-        ${ISO_SOURCES}
     )
-    target_include_directories(codegen_debug_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
-    add_test(NAME codegen_debug_test COMMAND codegen_debug_test)
+    target_link_libraries(codegen_debug_test PRIVATE psxrecomp_recompiler)
 endif()
 
 # Examples
