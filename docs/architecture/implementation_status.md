@@ -33,6 +33,9 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Stable EXE candidate selection with structured diagnostics.
 - Multi-disc metadata surfaced in pipeline output and runtime hooks.
 - Bundle output includes resources plus runtime source/include copies for standalone CMake builds.
+- Core build now compiles reusable component libraries (`psxrecomp_iso`, `psxrecomp_disasm`,
+  `psxrecomp_ir`, `psxrecomp_recompiler`, `psxrecomp_runtime`) once per build directory and links
+  them into CLI/test targets to avoid repeated recompilation per unit-test executable.
 - Fixture generator + validation scripts exist for malformed/good/rich ISO scenarios.
 - CI recompile-demos workflow builds generated C++ artifacts with SDL2 presenter support on Linux, macOS, and Windows.
 - Demo verification harness now emits per-demo render screenshots and a summary report (`out/recompiled-demos-ubuntu-latest/verification/reports/summary.csv`).
