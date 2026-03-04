@@ -52,8 +52,7 @@ class Cop0
     static constexpr u32 StatusCurrentModeMask = 0x3u;
     static constexpr u32 StatusModeBitsMask = 0x3Fu;
     static constexpr u32 StatusCurrentInterruptEnableBit = 0x1u;
-    static constexpr u32 StatusInterruptMaskHw0Bit = 1u << 10; // IM10
-    static constexpr u32 InterruptPendingMask = 0x0000FF00u;
+    static constexpr u32 StatusInterruptMaskIp2Bit = 1u << 10; // IM2 (masks Cause.IP2)
     static constexpr u32 CauseSoftwareInterruptPendingMask = 0x00000300u;
     static constexpr u32 CauseIrqControllerPendingBit = 1u << 10; // IP2
     static constexpr u32 CauseExcCodeMask = 0x7Cu;

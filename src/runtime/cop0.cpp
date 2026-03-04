@@ -61,19 +61,16 @@ bool Cop0::irqEnableHw0() const
 {
     const u32 status = m_registers[RegisterIndex::Status];
     return (status & StatusCurrentInterruptEnableBit) != 0u &&
-           (status & StatusInterruptMaskHw0Bit) != 0u;
+           (status & StatusInterruptMaskIp2Bit) != 0u;
 }
 
 bool Cop0::shouldTakeInterruptException() const
 {
-    const u32 status = m_registers[RegisterIndex::Status];
-    if ((status & StatusCurrentInterruptEnableBit) == 0u || isInExceptionMode())
+    if (!irqEnableHw0() || isInExceptionMode())
     {
         return false;
     }
-
-    const u32 cause = m_registers[RegisterIndex::Cause];
-    return ((cause & InterruptPendingMask) & (status & InterruptPendingMask)) != 0u;
+    return (m_registers[RegisterIndex::Cause] & CauseIrqControllerPendingBit) != 0u;
 }
 
 bool Cop0::isInExceptionMode() const

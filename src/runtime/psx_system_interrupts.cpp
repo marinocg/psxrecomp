@@ -105,9 +105,9 @@ void PsxSystem::serviceInterrupts()
     syncLevelInterruptSources();
 
     const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
-    const bool irqEnabledHw0 = m_cop0.irqEnableHw0();
+    const bool irqTakeEligible = m_cop0.shouldTakeInterruptException();
     const bool irqDeliveryEligible = pendingMasked != 0 && m_criticalSectionDepth == 0 &&
-                                     !m_inCallbackInvocation && irqEnabledHw0;
+                                     !m_inCallbackInvocation && irqTakeEligible;
     if (traceIrqFlowEnabled())
     {
         std::ostringstream msg;
@@ -115,7 +115,7 @@ void PsxSystem::serviceInterrupts()
             << " status=0x" << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
             << " critical_depth=" << std::dec << m_criticalSectionDepth
             << " in_callback=" << (m_inCallbackInvocation ? 1 : 0)
-            << " cop0_irq_hw0_enabled=" << (irqEnabledHw0 ? 1 : 0)
+            << " cop0_irq_take_eligible=" << (irqTakeEligible ? 1 : 0)
             << " irq_delivery_eligible=" << (irqDeliveryEligible ? 1 : 0);
         m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
@@ -143,8 +143,8 @@ void PsxSystem::serviceInterrupts()
 
     if (!irqDeliveryEligible)
     {
-        // Keep pending state visible via Cause.IP10, but do not dispatch
-        // BIOS/IRQ callbacks until Status.IEc + Status.IM10 allow it.
+        // Keep pending state visible via Cause.IP2, but do not dispatch
+        // BIOS/IRQ callbacks until Status.IEc + Status.IM2 allow it.
         syncCop0InterruptPending();
         return;
     }

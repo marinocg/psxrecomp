@@ -279,7 +279,7 @@ int main()
     system.callBiosVector(0xB0, cop0HookRegs.data(), cop0HookRegs.size());
     system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
 
-    // IRQ callback delivery must be gated by COP0 IEc + IM10.
+    // IRQ callback delivery must be gated by COP0 IEc + IM2 (Cause.IP2 mask).
     constexpr psxrecomp::u32 irqGateCallbackAddress = 0x80003100u;
     psxrecomp::u32 irqGateCallbackCount = 0;
     const psxrecomp::u32 irqGateEventHandle = system.events().openEvent(
@@ -299,12 +299,12 @@ int main()
 
     const psxrecomp::u32 vblankLine = static_cast<psxrecomp::u32>(InterruptLine::VBlank);
     system.interrupts().restoreState(vblankLine, vblankLine);
-    system.cop0().mtc0(Cop0::RegisterIndex::Status, 1u << 10); // IM10 only, IEc=0
+    system.cop0().mtc0(Cop0::RegisterIndex::Status, 1u << 10); // IM2 only, IEc=0
     system.serviceInterrupts();
     assert(irqGateCallbackCount == 0u);
     assert((system.interrupts().readStatus() & vblankLine) != 0u);
 
-    system.cop0().mtc0(Cop0::RegisterIndex::Status, (1u << 10) | (1u << 0)); // IM10 + IEc
+    system.cop0().mtc0(Cop0::RegisterIndex::Status, (1u << 10) | (1u << 0)); // IM2 + IEc
     system.serviceInterrupts();
     assert(irqGateCallbackCount == 1u);
     assert((system.interrupts().readStatus() & vblankLine) == 0u);

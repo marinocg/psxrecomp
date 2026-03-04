@@ -137,12 +137,13 @@ void PsxSystem::reset()
 void PsxSystem::boot()
 {
     // Emulate BIOS-ready COP0 defaults before handing control to the game:
-    // IEc=1 and IM10=1 (IRQ controller line), while remaining in kernel mode.
+    // IEc=1 and IM2=1 (mask for Cause.IP2 / IRQ controller line), while
+    // remaining in kernel mode.
     constexpr u32 StatusIEcBit = 1u << 0;
     constexpr u32 StatusKUcBit = 1u << 1;
-    constexpr u32 StatusIM10Bit = 1u << 10;
+    constexpr u32 StatusIM2Bit = 1u << 10;
     const u32 statusBefore = m_cop0.mfc0(Cop0::RegisterIndex::Status);
-    const u32 bootStatus = (statusBefore & ~StatusKUcBit) | StatusIEcBit | StatusIM10Bit;
+    const u32 bootStatus = (statusBefore & ~StatusKUcBit) | StatusIEcBit | StatusIM2Bit;
     m_cop0.mtc0(Cop0::RegisterIndex::Status, bootStatus);
 
     // Emulate the real PSX BIOS boot sequence: the kernel enables VBlank
@@ -190,6 +191,7 @@ void PsxSystem::tickCpuCycles(u32 cpuCycles)
                   [this](InterruptLine line)
                   {
                       m_interrupts.raise(line);
+                      syncCop0InterruptPending();
                       m_debugOverlay.incrementInterruptsRaised();
                   });
     syncLevelInterruptSources();
@@ -246,6 +248,8 @@ void PsxSystem::handleVBlankStart()
 {
     m_gpu.tickDisplayLine();
     m_interrupts.raise(InterruptLine::VBlank);
+    // Keep Cause.IP2 synchronized even before the next serviceInterrupts() call.
+    syncCop0InterruptPending();
     m_debugOverlay.incrementInterruptsRaised();
     m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
     m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
