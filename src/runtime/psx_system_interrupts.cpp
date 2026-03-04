@@ -105,18 +105,18 @@ void PsxSystem::serviceInterrupts()
     syncLevelInterruptSources();
 
     const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
-    if (pendingMasked != 0 && m_criticalSectionDepth == 0 && !m_inCallbackInvocation)
-    {
-        m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, m_debugOverlay.lastProgramCounter(),
-                              false);
-    }
+    const bool irqEnabledHw0 = m_cop0.irqEnableHw0();
+    const bool irqDeliveryEligible = pendingMasked != 0 && m_criticalSectionDepth == 0 &&
+                                     !m_inCallbackInvocation && irqEnabledHw0;
     if (traceIrqFlowEnabled())
     {
         std::ostringstream msg;
         msg << "event=service_interrupts pending_masked=0x" << std::hex << pendingMasked
             << " status=0x" << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
             << " critical_depth=" << std::dec << m_criticalSectionDepth
-            << " in_callback=" << (m_inCallbackInvocation ? 1 : 0);
+            << " in_callback=" << (m_inCallbackInvocation ? 1 : 0)
+            << " cop0_irq_hw0_enabled=" << (irqEnabledHw0 ? 1 : 0)
+            << " irq_delivery_eligible=" << (irqDeliveryEligible ? 1 : 0);
         m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
     if (pendingMasked == 0)
@@ -134,10 +134,24 @@ void PsxSystem::serviceInterrupts()
                 m_logger.log(LogLevel::Info, "irq_trace",
                              "event=return_from_exception source=dispatcher_empty_pending");
             }
+            syncCop0InterruptPending();
             return;
         }
+        syncCop0InterruptPending();
         return;
     }
+
+    if (!irqDeliveryEligible)
+    {
+        // Keep pending state visible via Cause.IP10, but do not dispatch
+        // BIOS/IRQ callbacks until Status.IEc + Status.IM10 allow it.
+        syncCop0InterruptPending();
+        return;
+    }
+
+    m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, m_debugOverlay.lastProgramCounter(),
+                          false);
+
     // HookEntryInt descriptor callback runs while IRQ status bits are visible.
     if (pendingMasked != 0 && m_criticalSectionDepth == 0 &&
         m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
@@ -160,9 +174,12 @@ void PsxSystem::serviceInterrupts()
                 m_logger.log(LogLevel::Info, "irq_trace",
                              "event=return_from_exception source=hook_entry_int");
             }
+            syncCop0InterruptPending();
             return;
         }
     }
+
+    syncCop0InterruptPending();
 
     // The hook callback may acknowledge IRQ bits. Recompute pending state
     // before running priority chains so we don't act on stale masks.
@@ -185,6 +202,7 @@ void PsxSystem::serviceInterrupts()
             m_logger.log(LogLevel::Info, "irq_trace",
                          "event=return_from_exception source=irq_chain_dispatch");
         }
+        syncCop0InterruptPending();
         return;
     }
 
@@ -201,8 +219,10 @@ void PsxSystem::serviceInterrupts()
             m_logger.log(LogLevel::Info, "irq_trace",
                          "event=return_from_exception source=dispatcher_pending");
         }
+        syncCop0InterruptPending();
         return;
     }
+    syncCop0InterruptPending();
 }
 
 u32 PsxSystem::resolveHookEntryIntCallback(u32 descriptorAddress) const

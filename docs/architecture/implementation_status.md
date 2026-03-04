@@ -143,6 +143,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 - Core PSX system scaffolding (memory, basic subsystems).
 - Minimal COP0 runtime device with `Status`/`Cause`/`EPC`/`BadVAddr` register backing, exception entry bookkeeping, and `RFE` mode restore behavior.
+- COP0 interrupt wiring now mirrors IRQ-controller pending state into `Cause.IP2`, gates IRQ exception entry with `Status.IEc` + (`Status.IM` & `Cause.IP`), and preserves hardware IP bits when software writes `Cause` via `mtc0`.
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
 - Structured runtime logging with per-category events and configurable verbosity.
 - Debug overlay counters for frame timing, DMA transfers, and interrupt activity.
@@ -162,7 +163,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 **Missing**
 
 - Cycle-exact timer edge behavior still needs hardware-trace validation.
-- COP0 interrupt-mask/pending wiring parity (`Status.IM` with `Cause.IP`) and precise exception-vector selection parity across all exception sources are still incomplete.
+- Precise exception-vector selection parity across all exception sources is still incomplete.
 - Reset/boot-state parity with reference emulators/hardware (initial COP0 snapshots and timing alignment) is not yet finalized.
 - Remaining BIOS function coverage (~168 functions still unimplemented); see [BIOS Functions Roadmap](bios_functions_roadmap.md).
 

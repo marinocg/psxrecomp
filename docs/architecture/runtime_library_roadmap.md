@@ -73,8 +73,8 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Wire COP0 into `PsxSystem` reset path and save-state serialization/deserialization.
 - [x] Validate minimal COP0 flow with runtime/unit tests and `examples/demos/cop0test`.
 - [x] Route recompiled non-BIOS syscall codes through COP0 exception entry and vector dispatch.
-- [ ] Gate IRQ exception delivery with COP0 status/pending model (`Status.IEc`, `Status.IM`, `Cause.IP`).
-- [ ] Restrict `mtc0 Cause` writes to software-interrupt bits without clobbering hardware pending bits.
+- [x] Gate IRQ exception delivery with COP0 status/pending model (`Status.IEc`, `Status.IM`, `Cause.IP`).
+- [x] Restrict `mtc0 Cause` writes to software-interrupt bits without clobbering hardware pending bits.
 - [ ] Unify BEV vector selection behavior across all exception/IRQ dispatch paths.
 - [ ] Implement precise reset/boot-time COP0 defaults to improve emulator/hardware numeric parity.
 - [ ] Add runtime trace hooks for COP0 reads/writes (`mfc0`/`mtc0`) keyed by current PC for debugging.

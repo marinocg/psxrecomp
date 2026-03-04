@@ -129,12 +129,22 @@ void PsxSystem::reset()
     m_gpuDrainCarry = 0;
     m_videoSchedulePrimed = false;
     primeVideoSchedule();
+    syncCop0InterruptPending();
 
     m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
 }
 
 void PsxSystem::boot()
 {
+    // Emulate BIOS-ready COP0 defaults before handing control to the game:
+    // IEc=1 and IM10=1 (IRQ controller line), while remaining in kernel mode.
+    constexpr u32 StatusIEcBit = 1u << 0;
+    constexpr u32 StatusKUcBit = 1u << 1;
+    constexpr u32 StatusIM10Bit = 1u << 10;
+    const u32 statusBefore = m_cop0.mfc0(Cop0::RegisterIndex::Status);
+    const u32 bootStatus = (statusBefore & ~StatusKUcBit) | StatusIEcBit | StatusIM10Bit;
+    m_cop0.mtc0(Cop0::RegisterIndex::Status, bootStatus);
+
     // Emulate the real PSX BIOS boot sequence: the kernel enables VBlank
     // and timer interrupts in I_MASK before calling the game's entry point.
     // Without this, serviceInterrupts() will never see pending IRQs and
@@ -143,6 +153,7 @@ void PsxSystem::boot()
         static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
         static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2);
     m_interrupts.writeMask(bootMask);
+    syncCop0InterruptPending();
 
     m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
 }
@@ -206,6 +217,14 @@ void PsxSystem::syncLevelInterruptSources()
     raiseIfRequested(m_cdrom.hasIrqRequest(), InterruptLine::Cdrom);
 
     raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
+    syncCop0InterruptPending();
+}
+
+void PsxSystem::syncCop0InterruptPending()
+{
+    // PSX interrupt controller output is routed to CPU interrupt line IP2.
+    // Mirror I_STAT&I_MASK aggregate state into Cause.IP2.
+    m_cop0.setHardwareInterruptPending(m_interrupts.isInterruptPending());
 }
 
 uint64_t PsxSystem::cpuCyclesElapsed() const

@@ -132,6 +132,7 @@ void PsxSystem::writeMmio32(Address address, u32 value)
     if (address == Mmio::INTERRUPT_MASK)
     {
         m_interrupts.writeMask(value);
+        syncCop0InterruptPending();
         return;
     }
     if (isInRange(address, Mmio::DMA_BASE, Mmio::DMA_SIZE))
@@ -181,6 +182,7 @@ void PsxSystem::writeMmio16(Address address, u16 value)
     {
         const u32 mergedMask = (m_interrupts.readMask() & 0xFFFF0000u) | static_cast<u32>(value);
         m_interrupts.writeMask(mergedMask);
+        syncCop0InterruptPending();
         return;
     }
     if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))

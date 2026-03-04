@@ -124,10 +124,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_gpu.reset();
     m_gpu.restoreStatus(gpuStatus);
     m_cop0.reset();
-    m_cop0.mtc0(Cop0::RegisterIndex::BadVAddr, badVaddr);
-    m_cop0.mtc0(Cop0::RegisterIndex::Status, cop0Status);
-    m_cop0.mtc0(Cop0::RegisterIndex::Cause, cop0Cause);
-    m_cop0.mtc0(Cop0::RegisterIndex::Epc, cop0Epc);
+    m_cop0.restoreState(badVaddr, cop0Status, cop0Cause, cop0Epc);
 
     m_cdrom.reset();
     m_input.reset();

@@ -250,7 +250,8 @@ int main()
             return 0;
         });
 
-    system.cop0().mtc0(Cop0::RegisterIndex::Status, 0x0Bu);
+    // Enable IEc and IM2 (CPU interrupt line fed by I_STAT&I_MASK).
+    system.cop0().mtc0(Cop0::RegisterIndex::Status, 0x040Bu);
     system.debugOverlay().setLastProgramCounter(0x80023456u);
     system.interrupts().restoreState(static_cast<psxrecomp::u32>(InterruptLine::VBlank),
                                      static_cast<psxrecomp::u32>(InterruptLine::VBlank));
@@ -260,9 +261,54 @@ int main()
     assert((system.cop0().mfc0(Cop0::RegisterIndex::Cause) & 0x7Cu) == 0u);
     assert((system.cop0().mfc0(Cop0::RegisterIndex::Status) & 0x3Fu) == 0x0Bu);
 
+    // Cause.IP2 should track I_STAT&I_MASK pending state (VBlank here).
+    constexpr psxrecomp::u32 kCauseIp2Bit = 1u << 10;
+    system.interrupts().restoreState(0u, static_cast<psxrecomp::u32>(InterruptLine::VBlank));
+    system.tickCpuCycles(1);
+    assert((system.cop0().mfc0(Cop0::RegisterIndex::Cause) & kCauseIp2Bit) == 0u);
+    system.interrupts().raise(InterruptLine::VBlank);
+    system.tickCpuCycles(1);
+    assert((system.cop0().mfc0(Cop0::RegisterIndex::Cause) & kCauseIp2Bit) != 0u);
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
+                                             ~static_cast<psxrecomp::u32>(InterruptLine::VBlank));
+    system.tickCpuCycles(1);
+    assert((system.cop0().mfc0(Cop0::RegisterIndex::Cause) & kCauseIp2Bit) == 0u);
+
     cop0HookRegs = {};
     cop0HookRegs[9] = 0x18; // ResetEntryInt
     system.callBiosVector(0xB0, cop0HookRegs.data(), cop0HookRegs.size());
+    system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
+
+    // IRQ callback delivery must be gated by COP0 IEc + IM10.
+    constexpr psxrecomp::u32 irqGateCallbackAddress = 0x80003100u;
+    psxrecomp::u32 irqGateCallbackCount = 0;
+    const psxrecomp::u32 irqGateEventHandle = system.events().openEvent(
+        psxrecomp::runtime::EventClass::VBlank, psxrecomp::runtime::EventSpec::Counter,
+        psxrecomp::runtime::EventMode::Callback, irqGateCallbackAddress);
+    assert(irqGateEventHandle != 0xFFFFFFFFu);
+    system.events().enableEvent(irqGateEventHandle);
+    system.setCallbackInvoker(
+        [&irqGateCallbackCount, irqGateCallbackAddress](psxrecomp::u32 address) -> psxrecomp::u32
+        {
+            if (address == irqGateCallbackAddress)
+            {
+                ++irqGateCallbackCount;
+            }
+            return 0;
+        });
+
+    const psxrecomp::u32 vblankLine = static_cast<psxrecomp::u32>(InterruptLine::VBlank);
+    system.interrupts().restoreState(vblankLine, vblankLine);
+    system.cop0().mtc0(Cop0::RegisterIndex::Status, 1u << 10); // IM10 only, IEc=0
+    system.serviceInterrupts();
+    assert(irqGateCallbackCount == 0u);
+    assert((system.interrupts().readStatus() & vblankLine) != 0u);
+
+    system.cop0().mtc0(Cop0::RegisterIndex::Status, (1u << 10) | (1u << 0)); // IM10 + IEc
+    system.serviceInterrupts();
+    assert(irqGateCallbackCount == 1u);
+    assert((system.interrupts().readStatus() & vblankLine) == 0u);
+    system.events().closeEvent(irqGateEventHandle);
     system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
 
     Address spuBase =
