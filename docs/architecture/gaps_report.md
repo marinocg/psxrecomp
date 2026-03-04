@@ -58,7 +58,8 @@ master roadmap.
 - Minimal COP0 runtime semantics are now implemented (`Status`/`Cause`/`EPC`/`BadVAddr`, exception entry mode stack, delay-slot EPC/BD bookkeeping, `RFE` restore).
 - BIOS vector framework now covers 50 functions (16 A0, 23 B0, 11 C0; ~23% of known BIOS surface), including GPU_init (A0:70h), GPU_sync (B0:46h), and `send_gpu_linked_list` (A0:4Bh) support.
 - BIOS trace support via `PSXRECOMP_TRACE_BIOS` env var aids debugging.
-- COP0 now gates IRQ exception entry on `Status.IEc` + (`Status.IM` & `Cause.IP`) and mirrors IRQ-controller pending state into `Cause.IP2` (with `mtc0 Cause` limited to software IP bits).
+- COP0 now mirrors IRQ-controller pending state into `Cause.IP2`, keeps `mtc0 Cause` limited to software IP bits, and gates IRQ delivery/exception entry on `Status.IEc` + `Status.IM10` (while preserving runtime callback/critical-section guards).
+- Boot now applies minimal COP0 defaults before handing control to the game (`Status.IEc=1`, `Status.IM10=1`, `Status.KUc=0`) so BIOS-style IRQ paths stay active in demos.
 - Remaining COP0 gap: BEV vector parity across all exception paths and closer reset/boot-state parity with emulator/hardware defaults.
 - Remaining gap: ~168 BIOS functions still unimplemented (printf, threading, CD-ROM init, memory card I/O).
 
