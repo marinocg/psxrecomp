@@ -331,6 +331,7 @@ class PsxSystem
 
     void handleVBlankStart();
     void syncLevelInterruptSources();
+    void syncCop0InterruptPending();
     void invokeHookEntryIntHandler();
     u32 resolveHookEntryIntCallback(u32 descriptorAddress) const;
 

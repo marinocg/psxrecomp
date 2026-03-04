@@ -30,13 +30,61 @@ void Cop0::mtc0(u8 rd, u32 value)
     {
     case RegisterIndex::BadVAddr:
     case RegisterIndex::Status:
-    case RegisterIndex::Cause:
     case RegisterIndex::Epc:
         m_registers[rd] = value;
+        break;
+    case RegisterIndex::Cause:
+        // MTC0 Cause only exposes software IP bits (IP0/IP1); keep
+        // hardware-pending and exception/BD state untouched.
+        m_registers[RegisterIndex::Cause] =
+            (m_registers[RegisterIndex::Cause] & ~CauseSoftwareInterruptPendingMask) |
+            (value & CauseSoftwareInterruptPendingMask);
         break;
     default:
         break;
     }
+}
+
+void Cop0::setHardwareInterruptPending(bool pending)
+{
+    if (pending)
+    {
+        m_registers[RegisterIndex::Cause] |= CauseIrqControllerPendingBit;
+    }
+    else
+    {
+        m_registers[RegisterIndex::Cause] &= ~CauseIrqControllerPendingBit;
+    }
+}
+
+bool Cop0::irqEnableHw0() const
+{
+    const u32 status = m_registers[RegisterIndex::Status];
+    return (status & StatusCurrentInterruptEnableBit) != 0u &&
+           (status & StatusInterruptMaskIp2Bit) != 0u;
+}
+
+bool Cop0::shouldTakeInterruptException() const
+{
+    if (!irqEnableHw0() || isInExceptionMode())
+    {
+        return false;
+    }
+    return (m_registers[RegisterIndex::Cause] & CauseIrqControllerPendingBit) != 0u;
+}
+
+bool Cop0::isInExceptionMode() const
+{
+    const u32 statusModeBits = m_registers[RegisterIndex::Status] & StatusModeBitsMask;
+    return (statusModeBits & StatusCurrentModeMask) == 0u && statusModeBits != 0u;
+}
+
+void Cop0::restoreState(u32 badVaddr, u32 status, u32 cause, u32 epc)
+{
+    m_registers[RegisterIndex::BadVAddr] = badVaddr;
+    m_registers[RegisterIndex::Status] = status;
+    m_registers[RegisterIndex::Cause] = cause;
+    m_registers[RegisterIndex::Epc] = epc;
 }
 
 void Cop0::exceptionEnter(ExceptionCode code, u32 pc, bool inDelaySlot, std::optional<u32> badVaddr)

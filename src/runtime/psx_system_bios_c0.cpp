@@ -27,6 +27,7 @@ bool PsxSystem::callBiosVectorC0(u32 functionId, u32* regs)
             static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
             static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2);
         m_interrupts.writeMask(currentMask | timerVblankBits);
+        syncCop0InterruptPending();
         m_logger.log(LogLevel::Debug, "bios", "EnqueueTimerAndVblankIrqs");
         return true;
     }

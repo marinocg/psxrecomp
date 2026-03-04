@@ -52,4 +52,4 @@ on the architecture pipeline stages and is intended to track near-term milestone
 ## Phase 7: COP0 Completion
 - [ ] Add IR lowering for `CFC0` and `CTC0` with deterministic semantics.
 - [ ] Add IR/control-flow support for COP0 conditional branches (`BC0F`/`BC0T`).
-- [ ] Expand exception modeling hooks needed for Status.IM/Cause.IP interrupt gating parity.
+- [x] Expand exception modeling hooks needed for Status.IM/Cause.IP interrupt gating parity.

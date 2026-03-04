@@ -5,6 +5,10 @@
 int main()
 {
     using psxrecomp::runtime::Cop0;
+    constexpr psxrecomp::u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
+    constexpr psxrecomp::u32 CAUSE_IP2_BIT = 1u << 10;
+    constexpr psxrecomp::u32 STATUS_IEC_BIT = 1u << 0;
+    constexpr psxrecomp::u32 STATUS_IM2_BIT = 1u << 10;
 
     Cop0 cop0;
     cop0.reset();
@@ -30,6 +34,35 @@ int main()
     // Unimplemented registers should read as zero and ignore writes.
     cop0.mtc0(15, 0xDEADBEEFu);
     assert(cop0.mfc0(15) == 0u);
+
+    // Hardware-pending IP bit should be controlled by runtime wiring.
+    cop0.setHardwareInterruptPending(true);
+    assert((cop0.mfc0(Cop0::RegisterIndex::Cause) & CAUSE_IP2_BIT) != 0u);
+    cop0.setHardwareInterruptPending(false);
+    assert((cop0.mfc0(Cop0::RegisterIndex::Cause) & CAUSE_IP2_BIT) == 0u);
+
+    // MTC0 Cause may only modify software-pending bits (IP0/IP1).
+    cop0.setHardwareInterruptPending(true);
+    const psxrecomp::u32 causeBefore = cop0.mfc0(Cop0::RegisterIndex::Cause);
+    cop0.mtc0(Cop0::RegisterIndex::Cause, 0xFFFFFFFFu);
+    const psxrecomp::u32 causeAfter = cop0.mfc0(Cop0::RegisterIndex::Cause);
+    assert((causeAfter & CAUSE_IP0_IP1_MASK) == CAUSE_IP0_IP1_MASK);
+    assert((causeAfter & CAUSE_IP2_BIT) != 0u);
+    assert((causeAfter & 0xFFFFFCFFu) == (causeBefore & 0xFFFFFCFFu));
+
+    // IRQ-take gating uses IEc + (Status.IM & Cause.IP) and exception mode.
+    cop0.mtc0(Cop0::RegisterIndex::Status, STATUS_IEC_BIT | STATUS_IM2_BIT);
+    cop0.mtc0(Cop0::RegisterIndex::Cause, 0u);
+    cop0.setHardwareInterruptPending(true);
+    assert(cop0.shouldTakeInterruptException());
+    cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, 0x80001000u, false);
+    assert(cop0.isInExceptionMode());
+    assert(!cop0.shouldTakeInterruptException());
+    cop0.rfe();
+    assert(!cop0.isInExceptionMode());
+    assert(cop0.shouldTakeInterruptException());
+    cop0.setHardwareInterruptPending(false);
+    assert(!cop0.shouldTakeInterruptException());
 
     return 0;
 }

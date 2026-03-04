@@ -126,7 +126,7 @@ Goal: basic compatibility with a subset of non-commercial or permissibly tested 
 **Deliverables**
 
 - [ ] Expanded instruction coverage (including edge cases).
-- [ ] COP0 compatibility hardening (Status.IM/Cause.IP gating, BEV vector selection, delay-slot exception parity, CFC0/CTC0 stubs, BC0F/BC0T support).
+- [ ] COP0 compatibility hardening (BEV vector selection, delay-slot exception parity, CFC0/CTC0 stubs, BC0F/BC0T support; `Status.IM`/`Cause.IP` gating is now wired).
 - [ ] Runtime correctness for GPU/SPU/CD-ROM interactions.
 - [ ] Instrumentation for tracing and regression testing.
 - [ ] Optional game metadata registry for reproducible builds and compatibility tracking.
