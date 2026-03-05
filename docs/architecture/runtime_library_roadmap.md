@@ -71,9 +71,10 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
   - optional `BadVAddr` capture.
 - [x] Implement `rfe` restore semantics for status mode stack pop.
 - [x] Wire COP0 into `PsxSystem` reset path and save-state serialization/deserialization.
-- [x] Validate minimal COP0 flow with runtime/unit tests and `examples/demos/cop0test`.
+- [x] Validate COP0 flow with runtime/unit tests and focused demos (`examples/demos/cop0test`, `examples/demos/cop0lab_auto`).
 - [x] Route recompiled non-BIOS syscall codes through COP0 exception entry and vector dispatch.
 - [x] Gate IRQ delivery/exception entry with COP0 status/pending model (`Status.IEc`, `Status.IM2`, `Cause.IP2`) while preserving runtime callback/critical-section guards.
+- [x] Make IRQ service own COP0 exception exit (`rfe`) so Status mode bits are restored even when IRQ callbacks return normally or abort via `ReturnFromException`.
 - [x] Restrict `mtc0 Cause` writes to software-interrupt bits without clobbering hardware pending bits.
 - [x] Seed minimal boot-time COP0 Status defaults for demos (`IEc=1`, `IM2=1`, `KUc=0`).
 - [ ] Unify BEV vector selection behavior across all exception/IRQ dispatch paths.

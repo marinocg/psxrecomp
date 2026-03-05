@@ -355,6 +355,26 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::COP0_RFE:
         emitter.writeLine("context.system.cop0().rfe();");
         break;
+    case ir::Opcode::CPU_EXCEPTION:
+    {
+        std::string code =
+            instruction.inputs.empty() ? "0" : valueToExpr(instruction.inputs.front(), context);
+        std::string inDelaySlot = "false";
+        if (instruction.inputs.size() >= 2)
+        {
+            inDelaySlot = "(" + valueToExpr(instruction.inputs[1], context) + " != 0)";
+        }
+        std::string sourcePc = "0";
+        if (instruction.sourceAddress.has_value())
+        {
+            std::ostringstream sourceStream;
+            sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+            sourcePc = sourceStream.str();
+        }
+        emitter.writeLine("raiseCpuException(context, " + code + ", " + sourcePc + ", " +
+                          inDelaySlot + ");");
+        break;
+    }
     case ir::Opcode::SYSCALL:
         if (!instruction.inputs.empty())
         {

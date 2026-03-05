@@ -18,7 +18,8 @@ class Cop0
         BadVAddr = 8,
         Status = 12,
         Cause = 13,
-        Epc = 14
+        Epc = 14,
+        PrId = 15
     };
 
     enum class ExceptionCode : u32
@@ -52,9 +53,11 @@ class Cop0
     static constexpr u32 StatusCurrentModeMask = 0x3u;
     static constexpr u32 StatusModeBitsMask = 0x3Fu;
     static constexpr u32 StatusCurrentInterruptEnableBit = 0x1u;
-    static constexpr u32 StatusInterruptMaskIp2Bit = 1u << 10; // IM2 (masks Cause.IP2)
+    static constexpr u32 StatusInterruptMaskIp0Ip2Bits = 0x00000700u; // IM0..IM2
+    static constexpr u32 StatusInterruptMaskIp2Bit = 1u << 10;        // IM2 (masks Cause.IP2)
     static constexpr u32 CauseSoftwareInterruptPendingMask = 0x00000300u;
-    static constexpr u32 CauseIrqControllerPendingBit = 1u << 10; // IP2
+    static constexpr u32 CauseIrqControllerPendingBit = 1u << 10;       // IP2
+    static constexpr u32 CauseInterruptPendingIp0Ip2Mask = 0x00000700u; // IP0..IP2
     static constexpr u32 CauseExcCodeMask = 0x7Cu;
     static constexpr u32 CauseBranchDelayBit = 0x80000000u;
 

@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <cstdlib>
+#include "irq_trace_utils.h"
+
 #include <sstream>
 #include <utility>
 
@@ -16,15 +17,6 @@ constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
 constexpr u32 VBLANK_CYCLES = CYCLES_PER_FRAME / 10u;
 constexpr u32 VBLANK_MID_CYCLES = VBLANK_CYCLES / 2u;
 constexpr u32 ACTIVE_CYCLES = CYCLES_PER_FRAME - VBLANK_CYCLES;
-
-bool traceIrqFlowEnabled()
-{
-    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
-    {
-        return env[0] == '1';
-    }
-    return false;
-}
 
 const char* interruptTraceKindName(InterruptController::TraceEvent::Kind kind)
 {

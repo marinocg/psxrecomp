@@ -1,26 +1,14 @@
 #include "psxrecomp/runtime/psx_system.h"
 
 #include "bios_helpers.h"
+#include "irq_trace_utils.h"
 
-#include <cstdlib>
 #include <sstream>
 
 namespace psxrecomp
 {
 namespace runtime
 {
-
-namespace
-{
-bool traceIrqFlowEnabled()
-{
-    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
-    {
-        return env[0] == '1';
-    }
-    return false;
-}
-} // namespace
 
 bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
 {
@@ -102,10 +90,10 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         return true;
     case 0x17: // ReturnFromException
         // In callback/IRQ context this exits the current callback and returns
-        // to the interrupted execution point.
+        // to the interrupted execution point. IRQ epilogue COP0 restoration
+        // is owned by PsxSystem::serviceInterrupts().
         if (m_inCallbackInvocation)
         {
-            m_cop0.rfe();
             if (traceIrqFlowEnabled())
             {
                 std::ostringstream msg;

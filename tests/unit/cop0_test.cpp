@@ -8,6 +8,7 @@ int main()
     constexpr psxrecomp::u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
     constexpr psxrecomp::u32 CAUSE_IP2_BIT = 1u << 10;
     constexpr psxrecomp::u32 STATUS_IEC_BIT = 1u << 0;
+    constexpr psxrecomp::u32 STATUS_IM0_BIT = 1u << 8;
     constexpr psxrecomp::u32 STATUS_IM2_BIT = 1u << 10;
 
     Cop0 cop0;
@@ -31,9 +32,9 @@ int main()
     assert(cop0.mfc0(Cop0::RegisterIndex::Epc) == 0x80012340u);
     assert(cop0.mfc0(Cop0::RegisterIndex::BadVAddr) == 0x0000FFFCu);
 
-    // Unimplemented registers should read as zero and ignore writes.
-    cop0.mtc0(15, 0xDEADBEEFu);
-    assert(cop0.mfc0(15) == 0u);
+    // PRID should expose a fixed PSX-ish ID and ignore writes.
+    cop0.mtc0(Cop0::RegisterIndex::PrId, 0xDEADBEEFu);
+    assert(cop0.mfc0(Cop0::RegisterIndex::PrId) == 0x00000002u);
 
     // Hardware-pending IP bit should be controlled by runtime wiring.
     cop0.setHardwareInterruptPending(true);
@@ -62,6 +63,14 @@ int main()
     assert(!cop0.isInExceptionMode());
     assert(cop0.shouldTakeInterruptException());
     cop0.setHardwareInterruptPending(false);
+    assert(!cop0.shouldTakeInterruptException());
+
+    // Software pending bits (Cause.IP0/IP1) should also trigger interrupts
+    // when the corresponding Status.IM bit and IEc are enabled.
+    cop0.mtc0(Cop0::RegisterIndex::Status, STATUS_IEC_BIT | STATUS_IM0_BIT);
+    cop0.mtc0(Cop0::RegisterIndex::Cause, 1u << 8);
+    assert(cop0.shouldTakeInterruptException());
+    cop0.mtc0(Cop0::RegisterIndex::Cause, 0u);
     assert(!cop0.shouldTakeInterruptException());
 
     return 0;

@@ -206,7 +206,7 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 ### Exception / Return
 
-- [x] `0x17` — `ReturnFromException()` — _Stub: no-op_
+- [x] `0x17` — `ReturnFromException()` — _Control-flow signal in callback/IRQ context; COP0 `rfe` handled by IRQ service epilogue_
 - [x] `0x18` — `SetDefaultExitFromException()` — _Stub: no-op_
 - [x] `0x19` — `SetCustomExitFromException(addr)` — _Stub: no-op_
 

@@ -19,6 +19,9 @@ u32 Cop0::mfc0(u8 rd) const
     case RegisterIndex::Cause:
     case RegisterIndex::Epc:
         return m_registers[rd];
+    case RegisterIndex::PrId:
+        // PSX CXD8606 Processor ID as documented by PSX-SPX.
+        return 0x00000002u;
     default:
         return 0;
     }
@@ -66,11 +69,21 @@ bool Cop0::irqEnableHw0() const
 
 bool Cop0::shouldTakeInterruptException() const
 {
-    if (!irqEnableHw0() || isInExceptionMode())
+    if (isInExceptionMode())
     {
         return false;
     }
-    return (m_registers[RegisterIndex::Cause] & CauseIrqControllerPendingBit) != 0u;
+
+    const u32 status = m_registers[RegisterIndex::Status];
+    if ((status & StatusCurrentInterruptEnableBit) == 0u)
+    {
+        return false;
+    }
+
+    const u32 cause = m_registers[RegisterIndex::Cause];
+    const u32 pendingEnabled =
+        (cause & CauseInterruptPendingIp0Ip2Mask) & (status & StatusInterruptMaskIp0Ip2Bits);
+    return pendingEnabled != 0u;
 }
 
 bool Cop0::isInExceptionMode() const

@@ -1,5 +1,6 @@
 #include "psxrecomp/disasm/instruction.h"
 #include "psxrecomp/ir/mips_ir_builder.h"
+#include "psxrecomp/runtime/cop0.h"
 
 #include <cassert>
 #include <vector>
@@ -144,9 +145,11 @@ int main()
     assert(foundConditionalLink);
 
     std::vector<psxrecomp::u8> cop0Buffer;
-    cop0Buffer.reserve(16);
+    cop0Buffer.reserve(24);
     appendLe32(cop0Buffer, encodeCop0(0x04, 2, 12));      // mtc0 $v0, $c12
     appendLe32(cop0Buffer, encodeCop0(0x00, 3, 12));      // mfc0 $v1, $c12
+    appendLe32(cop0Buffer, encodeCop0(0x06, 4, 12));      // ctc0 $a0, $c12
+    appendLe32(cop0Buffer, encodeCop0(0x02, 5, 12));      // cfc0 $a1, $c12
     appendLe32(cop0Buffer, encodeCop0(0x10, 0, 0, 0x10)); // rfe
     appendLe32(cop0Buffer, encodeR(0, 0, 0, 0, 0x00));    // nop
 
@@ -157,6 +160,8 @@ int main()
     assert(cop0Result.errors.empty());
     bool foundCop0Mtc = false;
     bool foundCop0Mfc = false;
+    bool foundCtc0Alias = false;
+    bool foundCfc0Alias = false;
     bool foundCop0Rfe = false;
     for (const auto& instruction : cop0Result.instructions)
     {
@@ -177,11 +182,72 @@ int main()
         {
             foundCop0Rfe = true;
         }
+        if (instruction.opcode == Opcode::COP0_MTC && instruction.inputs.size() == 2 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 12 &&
+            instruction.inputs[1].kind == psxrecomp::ir::ValueKind::REGISTER &&
+            instruction.inputs[1].reg == 4)
+        {
+            foundCtc0Alias = true;
+        }
+        if (instruction.opcode == Opcode::COP0_MFC && instruction.inputs.size() == 1 &&
+            instruction.outputs.size() == 1 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 12 &&
+            instruction.outputs[0].kind == psxrecomp::ir::ValueKind::REGISTER &&
+            instruction.outputs[0].reg == 5)
+        {
+            foundCfc0Alias = true;
+        }
     }
 
     assert(foundCop0Mtc);
     assert(foundCop0Mfc);
+    assert(foundCtc0Alias);
+    assert(foundCfc0Alias);
     assert(foundCop0Rfe);
+
+    std::vector<psxrecomp::u8> cop0ExceptionBuffer;
+    cop0ExceptionBuffer.reserve(12);
+    appendLe32(cop0ExceptionBuffer, encodeCop0(0x10, 0, 0, 0x02)); // tlbwi
+    appendLe32(cop0ExceptionBuffer, encodeI(0x30, 8, 2, 0x0010));  // lwc0 $c2, 0x10($t0)
+    appendLe32(cop0ExceptionBuffer, encodeR(0, 0, 0, 0, 0x00));    // nop
+
+    auto cop0ExceptionInstructions = MipsDisassembler::disassemble(
+        cop0ExceptionBuffer.data(), cop0ExceptionBuffer.size(), 0x80031000);
+    auto cop0ExceptionResult = buildIrFromMips(cop0ExceptionInstructions);
+    assert(cop0ExceptionResult.errors.empty());
+
+    bool foundTlbwiRi = false;
+    bool foundLwc0CpU = false;
+    for (const auto& instruction : cop0ExceptionResult.instructions)
+    {
+        if (instruction.opcode != Opcode::CPU_EXCEPTION || instruction.inputs.size() < 2 ||
+            instruction.inputs[0].kind != psxrecomp::ir::ValueKind::IMMEDIATE ||
+            instruction.inputs[1].kind != psxrecomp::ir::ValueKind::IMMEDIATE ||
+            !instruction.sourceAsmAddress.has_value())
+        {
+            continue;
+        }
+
+        if (instruction.sourceAsmAddress.value() == 0x80031000 &&
+            instruction.inputs[0].immediate ==
+                static_cast<psxrecomp::s32>(
+                    psxrecomp::runtime::Cop0::ExceptionCode::ReservedInstruction))
+        {
+            foundTlbwiRi = true;
+        }
+        if (instruction.sourceAsmAddress.value() == 0x80031004 &&
+            instruction.inputs[0].immediate ==
+                static_cast<psxrecomp::s32>(
+                    psxrecomp::runtime::Cop0::ExceptionCode::CoprocessorUnusable))
+        {
+            foundLwc0CpU = true;
+        }
+    }
+
+    assert(foundTlbwiRi);
+    assert(foundLwc0CpU);
 
     psxrecomp::ir::MipsIrBuildOptions noSourceAsmOptions;
     noSourceAsmOptions.captureSourceAsm = false;

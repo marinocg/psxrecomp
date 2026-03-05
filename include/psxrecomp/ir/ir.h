@@ -57,6 +57,7 @@ enum class Opcode
     COP0_MFC,
     COP0_MTC,
     COP0_RFE,
+    CPU_EXCEPTION,
     SYSCALL,
     TRAP,
     RETURN

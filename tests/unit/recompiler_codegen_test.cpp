@@ -57,7 +57,7 @@ int main()
     entry.successors = {"then", "else"};
 
     thenBlock.instructions.push_back(
-        builder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x80010010)}, {temp2}));
+        builder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x80010012)}, {temp2}));
     thenBlock.instructions.push_back(
         builder.makeInstruction(Opcode::STORE, {Value::makeAddress(0x80010014), temp2}, {}));
     thenBlock.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}));
@@ -261,23 +261,55 @@ int main()
     runtimeHeader << "#include <cstddef>\n";
     runtimeHeader << "#include <cstring>\n";
     runtimeHeader << "#include <functional>\n";
+    runtimeHeader << "#include <optional>\n";
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
     runtimeHeader << "class RuntimeDebugOverlay {\n";
     runtimeHeader << "  public:\n";
-    runtimeHeader << "    void setLastProgramCounter(u32) {}\n";
-    runtimeHeader << "    u32 lastProgramCounter() const { return 0; }\n";
+    runtimeHeader << "    void setLastProgramCounter(u32 pc) { m_pc = pc; }\n";
+    runtimeHeader << "    u32 lastProgramCounter() const { return m_pc; }\n";
     runtimeHeader << "    std::string renderText() const { return {}; }\n";
+    runtimeHeader << "  private:\n";
+    runtimeHeader << "    u32 m_pc = 0;\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class Cop0 {\n";
     runtimeHeader << "  public:\n";
-    runtimeHeader << "    enum RegisterIndex : u8 { Status = 12 };\n";
-    runtimeHeader << "    enum class ExceptionCode : u32 { Syscall = 8 };\n";
-    runtimeHeader << "    u32 mfc0(u8) const { return 0; }\n";
-    runtimeHeader << "    void mtc0(u8, u32) {}\n";
-    runtimeHeader << "    void exceptionEnter(ExceptionCode, u32, bool) {}\n";
-    runtimeHeader << "    void rfe() {}\n";
+    runtimeHeader
+        << "    enum RegisterIndex : u8 { BadVAddr = 8, Status = 12, Cause = 13, Epc = 14 };"
+        << "\n";
+    runtimeHeader << "    enum class ExceptionCode : u32 {\n";
+    runtimeHeader << "      AddressErrorLoad = 4,\n";
+    runtimeHeader << "      AddressErrorStore = 5,\n";
+    runtimeHeader << "      Syscall = 8,\n";
+    runtimeHeader << "      ReservedInstruction = 10,\n";
+    runtimeHeader << "      CoprocessorUnusable = 11\n";
+    runtimeHeader << "    };\n";
+    runtimeHeader << "    u32 mfc0(u8 rd) const { return m_regs[rd]; }\n";
+    runtimeHeader << "    void mtc0(u8 rd, u32 value) { m_regs[rd] = value; }\n";
+    runtimeHeader << "    void exceptionEnter(ExceptionCode code, u32 pc, bool inDelaySlot,\n";
+    runtimeHeader << "                        std::optional<u32> badVaddr = std::nullopt) {\n";
+    runtimeHeader << "      const u32 status = m_regs[Status];\n";
+    runtimeHeader
+        << "      m_regs[Status] = (status & ~0x3Fu) | (((status & 0x3Fu) << 2) & 0x3Fu);\n";
+    runtimeHeader << "      u32 cause = m_regs[Cause];\n";
+    runtimeHeader << "      cause &= ~(0x7Cu | 0x80000000u);\n";
+    runtimeHeader << "      cause |= (static_cast<u32>(code) & 0x1Fu) << 2;\n";
+    runtimeHeader << "      if (inDelaySlot) {\n";
+    runtimeHeader << "        cause |= 0x80000000u;\n";
+    runtimeHeader << "      }\n";
+    runtimeHeader << "      m_regs[Cause] = cause;\n";
+    runtimeHeader << "      m_regs[Epc] = inDelaySlot ? (pc - 4u) : pc;\n";
+    runtimeHeader << "      if (badVaddr.has_value()) {\n";
+    runtimeHeader << "        m_regs[BadVAddr] = *badVaddr;\n";
+    runtimeHeader << "      }\n";
+    runtimeHeader << "    }\n";
+    runtimeHeader << "    void rfe() {\n";
+    runtimeHeader << "      const u32 status = m_regs[Status];\n";
+    runtimeHeader << "      m_regs[Status] = (status & ~0x3Fu) | ((status & 0x3Fu) >> 2);\n";
+    runtimeHeader << "    }\n";
+    runtimeHeader << "  private:\n";
+    runtimeHeader << "    std::array<u32, 32> m_regs{};\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class PsxSystem {\n";
     runtimeHeader << "  public:\n";
@@ -323,11 +355,31 @@ int main()
     std::ofstream harnessFile(harnessPath);
     harnessFile << "#include \"module.h\"\n";
     harnessFile << "#include <array>\n";
+    harnessFile << "#include <stdexcept>\n";
     harnessFile << "int main() {\n";
     harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
     harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
-    harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
+    harnessFile << "  bool threw = false;\n";
+    harnessFile << "  try {\n";
+    harnessFile << "    psxrecomp::recompiler::RecompiledModule::run(system);\n";
+    harnessFile << "  } catch (const std::runtime_error&) {\n";
+    harnessFile << "    threw = true;\n";
+    harnessFile << "  }\n";
+    harnessFile << "#if PSXRECOMP_STRICT_ADDR_ERRORS\n";
+    harnessFile << "  if (!threw) { return 1; }\n";
+    harnessFile << "  const auto bad = system.cop0().mfc0(psxrecomp::runtime::Cop0::BadVAddr);\n";
+    harnessFile << "  const auto cause = system.cop0().mfc0(psxrecomp::runtime::Cop0::Cause);\n";
+    harnessFile << "  if (bad != 0x80010012u) { return 2; }\n";
+    harnessFile << "  if ((cause & 0x7Cu) !=\n";
+    harnessFile << "      (static_cast<psxrecomp::u32>(\n";
+    harnessFile << "           psxrecomp::runtime::Cop0::ExceptionCode::AddressErrorLoad)\n";
+    harnessFile << "       << 2)) {\n";
+    harnessFile << "    return 3;\n";
+    harnessFile << "  }\n";
+    harnessFile << "#else\n";
+    harnessFile << "  if (threw) { return 4; }\n";
+    harnessFile << "#endif\n";
     harnessFile << "  return 0;\n";
     harnessFile << "}\n";
     harnessFile.close();
@@ -339,15 +391,27 @@ int main()
     {
         compiler = "c++";
     }
-    std::string command = quote(compiler) + " -std=c++17 -I" + quote(outputDir / "include") +
-                          " -I" + quote(repoRoot / "include") + " -I" + quote(outputDir) + " " +
-                          quote(sourcePath) + " " + quote(harnessPath) + " -o " + quote(exePath);
+    const std::string baseCompileCommand = quote(compiler) + " -std=c++17 -I" +
+                                           quote(outputDir / "include") + " -I" +
+                                           quote(repoRoot / "include") + " -I" + quote(outputDir) +
+                                           " " + quote(sourcePath) + " " + quote(harnessPath);
+    std::string command = baseCompileCommand + " -o " + quote(exePath);
     int compileStatus = std::system(command.c_str());
     if (compileStatus != 0)
     {
         std::cerr << "Compile failed with status: " << compileStatus << "\n";
     }
     assert(compileStatus == 0);
+
+    const auto strictExePath = outputDir / "harness_strict.out";
+    std::string strictCommand =
+        baseCompileCommand + " -DPSXRECOMP_STRICT_ADDR_ERRORS=1 -o " + quote(strictExePath);
+    int strictCompileStatus = std::system(strictCommand.c_str());
+    if (strictCompileStatus != 0)
+    {
+        std::cerr << "Strict compile failed with status: " << strictCompileStatus << "\n";
+    }
+    assert(strictCompileStatus == 0);
 
     std::string runCommand = quote(exePath);
     int runStatus = std::system(runCommand.c_str());
@@ -356,6 +420,14 @@ int main()
         std::cerr << "Run failed with status: " << runStatus << "\n";
     }
     assert(runStatus == 0);
+
+    std::string strictRunCommand = quote(strictExePath);
+    int strictRunStatus = std::system(strictRunCommand.c_str());
+    if (strictRunStatus != 0)
+    {
+        std::cerr << "Strict run failed with status: " << strictRunStatus << "\n";
+    }
+    assert(strictRunStatus == 0);
 
     return 0;
 }
