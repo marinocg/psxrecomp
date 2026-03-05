@@ -41,6 +41,12 @@ std::string formatUnsupportedOpcodeMessage(const disasm::Instruction& instr)
 }
 } // namespace
 
+namespace
+{
+constexpr s32 EXCEPTION_CODE_RESERVED_INSTRUCTION = 10;
+constexpr s32 EXCEPTION_CODE_COPROCESSOR_UNUSABLE = 11;
+} // namespace
+
 void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
                                         std::optional<Address> sourceAddressOverride)
 {
@@ -58,6 +64,13 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
     {
         emit(Opcode::MOVE, {Value::makeImmediate(static_cast<s32>(linkAddressForJump(instr)))},
              {Value::makeRegister(linkRegister)});
+    };
+    auto emitCpuException = [&](s32 exceptionCode)
+    {
+        emit(Opcode::CPU_EXCEPTION,
+             {Value::makeImmediate(exceptionCode),
+              Value::makeImmediate(instr.isInDelaySlot ? 1 : 0)},
+             {});
     };
 
     if (isMipsNop(instr))
@@ -165,15 +178,29 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
              {Value::makeSpecial(SpecialRegister::LO)});
         break;
     case disasm::Opcode::MFC0:
+    case disasm::Opcode::CFC0:
         emit(Opcode::COP0_MFC, {Value::makeImmediate(static_cast<s32>(instr.rd))},
              {Value::makeRegister(instr.rt)});
         break;
     case disasm::Opcode::MTC0:
+    case disasm::Opcode::CTC0:
         emit(Opcode::COP0_MTC,
              {Value::makeImmediate(static_cast<s32>(instr.rd)), Value::makeRegister(instr.rt)}, {});
         break;
     case disasm::Opcode::RFE:
         emit(Opcode::COP0_RFE, {}, {});
+        break;
+    case disasm::Opcode::TLBR:
+    case disasm::Opcode::TLBWI:
+    case disasm::Opcode::TLBWR:
+    case disasm::Opcode::TLBP:
+    case disasm::Opcode::BC0F:
+    case disasm::Opcode::BC0T:
+        emitCpuException(EXCEPTION_CODE_RESERVED_INSTRUCTION);
+        break;
+    case disasm::Opcode::LWC0:
+    case disasm::Opcode::SWC0:
+        emitCpuException(EXCEPTION_CODE_COPROCESSOR_UNUSABLE);
         break;
     case disasm::Opcode::ADDI:
     case disasm::Opcode::ADDIU:

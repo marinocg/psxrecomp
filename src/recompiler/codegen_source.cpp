@@ -136,6 +136,9 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#ifndef PSXRECOMP_ENABLE_CHECKS");
     emitter.writeLine("#define PSXRECOMP_ENABLE_CHECKS 1");
     emitter.writeLine("#endif");
+    emitter.writeLine("#ifndef PSXRECOMP_STRICT_ADDR_ERRORS");
+    emitter.writeLine("#define PSXRECOMP_STRICT_ADDR_ERRORS 0");
+    emitter.writeLine("#endif");
     emitter.writeBlank();
     emitter.openBlock("namespace psxrecomp");
     emitter.openBlock("namespace recompiler");

@@ -464,7 +464,32 @@ int main()
         std::cerr << "[PASS] COP0 lowering emits runtime COP0 helpers\n";
     }
 
-    // Test 11 moved to a dedicated companion translation unit.
+    // ---------------------------------------------------------------
+    // Test 11: CPU_EXCEPTION lowering emits runtime exception helper
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_cpu_exception_lowering", 0x800A1000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::CPU_EXCEPTION, {Value::makeImmediate(10), Value::makeImmediate(0)}, {},
+            0x800A1000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x800A1004));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "cpu_exception_lowering_module");
+
+        assert(source.find("raiseCpuException(context, 10, 0x800a1000, (0 != 0));") !=
+               std::string::npos);
+        assert(source.find("context.system.cop0().exceptionEnter(") != std::string::npos);
+
+        std::cerr << "[PASS] CPU_EXCEPTION lowering emits runtime helper\n";
+    }
+
+    // Test 12 moved to a dedicated companion translation unit.
     runCodegenLoweringSourceCommentsCase();
 
     std::cerr << "All codegen lowering tests passed.\n";

@@ -144,6 +144,8 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "cop0_mtc";
     case ir::Opcode::COP0_RFE:
         return "cop0_rfe";
+    case ir::Opcode::CPU_EXCEPTION:
+        return "cpu_exception";
     case ir::Opcode::SYSCALL:
         return "syscall";
     case ir::Opcode::TRAP:

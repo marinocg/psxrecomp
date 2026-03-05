@@ -139,6 +139,7 @@ set(RUNTIME_SOURCES
     src/runtime/kernel_events.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
+    src/runtime/psx_system_callbacks.cpp
     src/runtime/psx_system_interrupts.cpp
     src/runtime/psx_system_bios.cpp
     src/runtime/psx_system_bios_a0.cpp

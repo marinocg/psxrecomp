@@ -89,6 +89,8 @@ std::string opcodeToString(Opcode opcode)
         return "cop0_mtc";
     case Opcode::COP0_RFE:
         return "cop0_rfe";
+    case Opcode::CPU_EXCEPTION:
+        return "cpu_exception";
     case Opcode::SYSCALL:
         return "syscall";
     case Opcode::TRAP:

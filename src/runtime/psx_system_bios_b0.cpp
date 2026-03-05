@@ -102,10 +102,10 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         return true;
     case 0x17: // ReturnFromException
         // In callback/IRQ context this exits the current callback and returns
-        // to the interrupted execution point.
+        // to the interrupted execution point. IRQ epilogue COP0 restoration
+        // is owned by PsxSystem::serviceInterrupts().
         if (m_inCallbackInvocation)
         {
-            m_cop0.rfe();
             if (traceIrqFlowEnabled())
             {
                 std::ostringstream msg;

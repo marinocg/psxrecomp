@@ -9,15 +9,52 @@ namespace recompiler
 
 void emitRuntimeSupportHelpers(CppEmitter& emitter)
 {
+    emitter.writeLine("inline bool strictAddrErrorsEnabled()");
+    emitter.openBlock("");
+    emitter.writeLine("#if PSXRECOMP_STRICT_ADDR_ERRORS");
+    emitter.writeLine("return true;");
+    emitter.writeLine("#else");
+    emitter.writeLine("if (const char* env = std::getenv(\"PSXRECOMP_STRICT_ADDR_ERRORS\"))");
+    emitter.openBlock("");
+    emitter.writeLine("return env[0] == '1';");
+    emitter.closeBlock();
+    emitter.writeLine("return false;");
+    emitter.writeLine("#endif");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("[[noreturn]] inline void raiseAddressError(runtime::PsxSystem& system,");
+    emitter.writeLine(
+        "                                               runtime::Cop0::ExceptionCode code,");
+    emitter.writeLine(
+        "                                               Address pc, Address badVaddr)");
+    emitter.openBlock("");
+    emitter.writeLine("system.cop0().exceptionEnter(code, pc, false, badVaddr);");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine(
+        "stream << \"Address error exception code=\" << std::dec << static_cast<u32>(code)");
+    emitter.writeLine("       << \" at PC 0x\" << std::hex << pc");
+    emitter.writeLine("       << \" badvaddr=0x\" << badVaddr;");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
+    emitter.closeBlock();
+    emitter.writeBlank();
+
     // readMemory32 — straightforward RAM read.
     emitter.writeLine("inline u32 readMemory32(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
+    emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x3u) != 0)");
+    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
+    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.closeBlock();
     emitter.writeLine("return system.read<u32>(address);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
         "inline void writeMemory32(runtime::PsxSystem& system, Address address, u32 value)");
     emitter.openBlock("");
+    emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x3u) != 0)");
+    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
+    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.closeBlock();
     emitter.writeLine("system.write<u32>(address, value);");
     emitter.closeBlock();
     emitter.writeBlank();
@@ -40,6 +77,10 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     // readMemory16 — unsigned halfword read.
     emitter.writeLine("inline u32 readMemory16(runtime::PsxSystem& system, Address address)");
     emitter.openBlock("");
+    emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x1u) != 0)");
+    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
+    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.closeBlock();
     emitter.writeLine("return static_cast<u32>(system.read<u16>(address));");
     emitter.closeBlock();
     emitter.writeBlank();
@@ -64,6 +105,10 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine(
         "inline void writeMemory16(runtime::PsxSystem& system, Address address, u32 value)");
     emitter.openBlock("");
+    emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x1u) != 0)");
+    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
+    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.closeBlock();
     emitter.writeLine("system.write<u16>(address, static_cast<u16>(value & 0xFFFF));");
     emitter.closeBlock();
     emitter.writeBlank();
@@ -103,6 +148,37 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
                       "<< value << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("system.writeMmioExplicit<u32>(address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline const char* cpuExceptionCodeToString(u32 code)");
+    emitter.openBlock("");
+    emitter.openBlock("switch (code)");
+    emitter.writeLine("case static_cast<u32>(runtime::Cop0::ExceptionCode::ReservedInstruction):");
+    emitter.writeLine("return \"ReservedInstruction\";");
+    emitter.writeLine("case static_cast<u32>(runtime::Cop0::ExceptionCode::CoprocessorUnusable):");
+    emitter.writeLine("return \"CoprocessorUnusable\";");
+    emitter.writeLine("case static_cast<u32>(runtime::Cop0::ExceptionCode::Syscall):");
+    emitter.writeLine("return \"Syscall\";");
+    emitter.writeLine("default:");
+    emitter.writeLine("return \"Unknown\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "[[noreturn]] inline void raiseCpuException(RecompilerContext& context, u32 code, "
+        "Address pc, bool inDelaySlot)");
+    emitter.openBlock("");
+    emitter.writeLine("context.system.cop0().exceptionEnter(");
+    emitter.writeLine("    static_cast<runtime::Cop0::ExceptionCode>(code), pc, inDelaySlot);");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine("stream << \"CPU exception \" << cpuExceptionCodeToString(code)");
+    emitter.writeLine("       << \" (code=\" << std::dec << code << \") at PC 0x\" << std::hex");
+    emitter.writeLine("       << pc;");
+    emitter.writeLine("if (inDelaySlot)");
+    emitter.openBlock("");
+    emitter.writeLine("stream << \" (delay slot)\";");
+    emitter.closeBlock();
+    emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void callSyscall(RecompilerContext& context, u32 code, Address pc)");

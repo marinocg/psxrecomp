@@ -87,6 +87,26 @@ constexpr size_t REG_GP = 28;
 constexpr size_t REG_SP = 29;
 constexpr size_t REG_FP = 30;
 constexpr size_t REG_RA = 31;
+constexpr u32 STATUS_IEC_BIT = 1u << 0;
+constexpr u32 STATUS_IM0_IM1_MASK = 0x00000300u;
+constexpr u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
+
+class IrqExceptionExitGuard
+{
+  public:
+    explicit IrqExceptionExitGuard(Cop0& cop0) : m_cop0(cop0) {}
+
+    IrqExceptionExitGuard(const IrqExceptionExitGuard&) = delete;
+    IrqExceptionExitGuard& operator=(const IrqExceptionExitGuard&) = delete;
+
+    ~IrqExceptionExitGuard()
+    {
+        m_cop0.rfe();
+    }
+
+  private:
+    Cop0& m_cop0;
+};
 } // namespace
 
 void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
@@ -105,21 +125,29 @@ void PsxSystem::serviceInterrupts()
     syncLevelInterruptSources();
 
     const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
+    const u32 cop0Status = m_cop0.mfc0(Cop0::RegisterIndex::Status);
+    const u32 cop0Cause = m_cop0.mfc0(Cop0::RegisterIndex::Cause);
+    const u32 swPendingMasked =
+        (cop0Cause & CAUSE_IP0_IP1_MASK) & (cop0Status & STATUS_IM0_IM1_MASK);
+    const bool swPending = (cop0Status & STATUS_IEC_BIT) != 0u && swPendingMasked != 0u;
+    const bool cop0IrqPending = pendingMasked != 0u || swPending;
     const bool irqTakeEligible = m_cop0.shouldTakeInterruptException();
-    const bool irqDeliveryEligible = pendingMasked != 0 && m_criticalSectionDepth == 0 &&
-                                     !m_inCallbackInvocation && irqTakeEligible;
+    const bool irqDeliveryEligible =
+        cop0IrqPending && m_criticalSectionDepth == 0 && !m_inCallbackInvocation && irqTakeEligible;
     if (traceIrqFlowEnabled())
     {
         std::ostringstream msg;
         msg << "event=service_interrupts pending_masked=0x" << std::hex << pendingMasked
-            << " status=0x" << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
+            << " sw_pending_masked=0x" << swPendingMasked << " status=0x"
+            << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
             << " critical_depth=" << std::dec << m_criticalSectionDepth
             << " in_callback=" << (m_inCallbackInvocation ? 1 : 0)
+            << " cop0_sw_pending=" << (swPending ? 1 : 0)
             << " cop0_irq_take_eligible=" << (irqTakeEligible ? 1 : 0)
             << " irq_delivery_eligible=" << (irqDeliveryEligible ? 1 : 0);
         m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
-    if (pendingMasked == 0)
+    if (!cop0IrqPending)
     {
         // Still allow the event dispatcher to flush deferred callbacks.
         try
@@ -143,14 +171,15 @@ void PsxSystem::serviceInterrupts()
 
     if (!irqDeliveryEligible)
     {
-        // Keep pending state visible via Cause.IP2, but do not dispatch
-        // BIOS/IRQ callbacks until Status.IEc + Status.IM2 allow it.
+        // Keep pending state visible via Cause.IP bits, but do not dispatch
+        // BIOS/IRQ callbacks until COP0 interrupt masks allow delivery.
         syncCop0InterruptPending();
         return;
     }
 
     m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, m_debugOverlay.lastProgramCounter(),
                           false);
+    IrqExceptionExitGuard irqExitGuard(m_cop0);
 
     // HookEntryInt descriptor callback runs while IRQ status bits are visible.
     if (pendingMasked != 0 && m_criticalSectionDepth == 0 &&
@@ -208,6 +237,7 @@ void PsxSystem::serviceInterrupts()
 
     // Kernel event delivery (OpenEvent/EnableEvent model).
     // A callback may execute ReturnFromException to abort further handling.
+    // COP0 Status restore is handled by this function's IRQ epilogue.
     try
     {
         m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth, &m_logger);
@@ -302,88 +332,6 @@ void PsxSystem::invokeHookEntryIntHandler()
     m_hasPendingCallbackRegisters = false;
     m_pendingCallbackRegisterMask.fill(false);
     m_inHookEntryIntHandler = false;
-}
-
-void PsxSystem::invokeCallback(u32 address)
-{
-    if (address == 0)
-    {
-        return;
-    }
-    if (m_callbackInvoker)
-    {
-        if (traceIrqFlowEnabled())
-        {
-            std::ostringstream msg;
-            msg << "event=callback_invoke mode=void addr=0x" << std::hex << address << " pc=0x"
-                << m_debugOverlay.lastProgramCounter();
-            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-        }
-        const bool previousInCallbackInvocation = m_inCallbackInvocation;
-        m_inCallbackInvocation = true;
-        try
-        {
-            (void)m_callbackInvoker(address);
-        }
-        catch (const ReturnFromExceptionSignal&)
-        {
-            if (traceIrqFlowEnabled())
-            {
-                std::ostringstream msg;
-                msg << "event=return_from_exception source=callback_invoke addr=0x" << std::hex
-                    << address;
-                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-            }
-            m_inCallbackInvocation = previousInCallbackInvocation;
-            return;
-        }
-        catch (...)
-        {
-            m_inCallbackInvocation = previousInCallbackInvocation;
-            throw;
-        }
-        m_inCallbackInvocation = previousInCallbackInvocation;
-    }
-}
-
-u32 PsxSystem::invokeCallbackRaw(u32 address)
-{
-    if (address == 0)
-    {
-        return 0;
-    }
-    if (!m_callbackInvoker)
-    {
-        return 0;
-    }
-
-    const bool previousInCallbackInvocation = m_inCallbackInvocation;
-    m_inCallbackInvocation = true;
-    try
-    {
-        if (traceIrqFlowEnabled())
-        {
-            std::ostringstream msg;
-            msg << "event=callback_invoke mode=raw addr=0x" << std::hex << address << " pc=0x"
-                << m_debugOverlay.lastProgramCounter();
-            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-        }
-        const u32 result = m_callbackInvoker(address);
-        if (traceIrqFlowEnabled())
-        {
-            std::ostringstream msg;
-            msg << "event=callback_return mode=raw addr=0x" << std::hex << address << " v0=0x"
-                << result;
-            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-        }
-        m_inCallbackInvocation = previousInCallbackInvocation;
-        return result;
-    }
-    catch (...)
-    {
-        m_inCallbackInvocation = previousInCallbackInvocation;
-        throw;
-    }
 }
 
 bool PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)

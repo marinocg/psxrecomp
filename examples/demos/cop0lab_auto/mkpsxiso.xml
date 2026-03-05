@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<iso_project image_name="COP0LAB" cue_sheet="COP0LAB.cue">
+  <track type="data" source=".">
+    <identifiers
+      application="PLAYSTATION"
+      publisher="psxrecomp"
+      data_preparer="psnoobs"
+    />
+    <directory_tree>
+      <file name="SYSTEM.CNF" source="system.cnf" />
+      <file name="COP0LAB.EXE" source="COP0LAB.EXE" />
+    </directory_tree>
+  </track>
+</iso_project>
