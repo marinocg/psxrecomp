@@ -1,24 +1,13 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <cstdlib>
+#include "irq_trace_utils.h"
+
 #include <sstream>
 
 namespace psxrecomp
 {
 namespace runtime
 {
-
-namespace
-{
-bool traceIrqFlowEnabled()
-{
-    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
-    {
-        return env[0] == '1';
-    }
-    return false;
-}
-} // namespace
 
 void PsxSystem::invokeCallback(u32 address)
 {

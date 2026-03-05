@@ -60,6 +60,8 @@ static volatile uint32_t g_last_exception_status;
 static volatile uint32_t g_resume_advance = 4;
 static volatile uint32_t g_delay_slot_branch_pc;
 static volatile uint32_t g_autoclear_sw_irq;
+static volatile uint32_t g_passthrough_irq_exceptions = 1;
+static volatile uint32_t g_original_exception_entry;
 
 extern void cop0lab_exception_handler(void);
 extern void cop0lab_trigger_syscall(void);
@@ -100,6 +102,16 @@ __asm__(".set push\n"
         "  lw    $k0, %lo(g_irq_exception_count)($k1)\n"
         "  addiu $k0, $k0, 1\n"
         "  sw    $k0, %lo(g_irq_exception_count)($k1)\n"
+        "  lui   $k0, %hi(g_passthrough_irq_exceptions)\n"
+        "  lw    $k0, %lo(g_passthrough_irq_exceptions)($k0)\n"
+        "  beqz  $k0, 1f\n"
+        "  nop\n"
+        "  lui   $k0, %hi(g_original_exception_entry)\n"
+        "  lw    $k0, %lo(g_original_exception_entry)($k0)\n"
+        "  beqz  $k0, 1f\n"
+        "  nop\n"
+        "  jr    $k0\n"
+        "  nop\n"
         "1:\n"
         "  lui   $k0, %hi(g_autoclear_sw_irq)\n"
         "  lw    $k0, %lo(g_autoclear_sw_irq)($k0)\n"
@@ -416,7 +428,22 @@ static bool installExceptionVector(void)
     {
         g_savedExceptionVector[0] = vector[0];
         g_savedExceptionVector[1] = vector[1];
+
+        // Keep hardware IRQs on BIOS' original path to avoid IRQ livelocks
+        // in environments where we patch the generic exception vector.
+        g_original_exception_entry = 0u;
+        if ((g_savedExceptionVector[0] & 0xFC000000u) == 0x08000000u)
+        {
+            g_original_exception_entry =
+                0x80000000u | ((g_savedExceptionVector[0] & 0x03FFFFFFu) << 2);
+        }
         g_exceptionVectorSaved = true;
+    }
+
+    if (g_original_exception_entry == 0u)
+    {
+        g_exceptionVectorInstalled = false;
+        return false;
     }
 
     vector[0] = jumpInsn;
@@ -492,8 +519,9 @@ static TestOutcome runT01(int* frameBudget, char* detail, size_t detailSize)
     }
 
     g_exceptionSuiteEnabled = true;
-    formatDetail(detail, detailSize, "handler online at 0x%08lx",
-                 (unsigned long)(uintptr_t)&cop0lab_exception_handler);
+    formatDetail(detail, detailSize, "handler=0x%08lx irq_passthru=0x%08lx",
+                 (unsigned long)(uintptr_t)&cop0lab_exception_handler,
+                 (unsigned long)g_original_exception_entry);
     return TEST_PASS;
 #else
     g_exceptionSuiteEnabled = false;

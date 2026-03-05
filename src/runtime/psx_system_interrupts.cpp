@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <cstdlib>
+#include "irq_trace_utils.h"
+
 #include <sstream>
 #include <utility>
 
@@ -11,15 +12,6 @@ namespace runtime
 
 namespace
 {
-bool traceIrqFlowEnabled()
-{
-    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
-    {
-        return env[0] == '1';
-    }
-    return false;
-}
-
 const char* interruptLineName(InterruptLine line)
 {
     switch (line)

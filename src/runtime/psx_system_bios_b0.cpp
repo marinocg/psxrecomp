@@ -1,26 +1,14 @@
 #include "psxrecomp/runtime/psx_system.h"
 
 #include "bios_helpers.h"
+#include "irq_trace_utils.h"
 
-#include <cstdlib>
 #include <sstream>
 
 namespace psxrecomp
 {
 namespace runtime
 {
-
-namespace
-{
-bool traceIrqFlowEnabled()
-{
-    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
-    {
-        return env[0] == '1';
-    }
-    return false;
-}
-} // namespace
 
 bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
 {

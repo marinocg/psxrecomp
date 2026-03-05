@@ -1,7 +1,8 @@
 #include "psxrecomp/runtime/interrupt_dispatcher.h"
 #include "psxrecomp/runtime/logger.h"
 
-#include <cstdlib>
+#include "irq_trace_utils.h"
+
 #include <sstream>
 
 namespace psxrecomp
@@ -19,14 +20,6 @@ constexpr InterruptLine ALL_LINES[] = {
 };
 constexpr size_t NUM_LINES = sizeof(ALL_LINES) / sizeof(ALL_LINES[0]);
 
-bool traceIrqFlowEnabled()
-{
-    if (const char* env = std::getenv("PSXRECOMP_TRACE_IRQ_FLOW"))
-    {
-        return env[0] == '1';
-    }
-    return false;
-}
 } // namespace
 
 InterruptDispatcher::InterruptDispatcher()

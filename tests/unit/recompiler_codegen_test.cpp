@@ -355,21 +355,18 @@ int main()
     std::ofstream harnessFile(harnessPath);
     harnessFile << "#include \"module.h\"\n";
     harnessFile << "#include <array>\n";
-    harnessFile << "#include <cstdlib>\n";
     harnessFile << "#include <stdexcept>\n";
     harnessFile << "int main() {\n";
     harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
     harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
-    harnessFile << "  setenv(\"PSXRECOMP_STRICT_ADDR_ERRORS\", \"0\", 1);\n";
-    harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
-    harnessFile << "  setenv(\"PSXRECOMP_STRICT_ADDR_ERRORS\", \"1\", 1);\n";
     harnessFile << "  bool threw = false;\n";
     harnessFile << "  try {\n";
     harnessFile << "    psxrecomp::recompiler::RecompiledModule::run(system);\n";
     harnessFile << "  } catch (const std::runtime_error&) {\n";
     harnessFile << "    threw = true;\n";
     harnessFile << "  }\n";
+    harnessFile << "#if PSXRECOMP_STRICT_ADDR_ERRORS\n";
     harnessFile << "  if (!threw) { return 1; }\n";
     harnessFile << "  const auto bad = system.cop0().mfc0(psxrecomp::runtime::Cop0::BadVAddr);\n";
     harnessFile << "  const auto cause = system.cop0().mfc0(psxrecomp::runtime::Cop0::Cause);\n";
@@ -380,6 +377,9 @@ int main()
     harnessFile << "       << 2)) {\n";
     harnessFile << "    return 3;\n";
     harnessFile << "  }\n";
+    harnessFile << "#else\n";
+    harnessFile << "  if (threw) { return 4; }\n";
+    harnessFile << "#endif\n";
     harnessFile << "  return 0;\n";
     harnessFile << "}\n";
     harnessFile.close();
@@ -391,15 +391,27 @@ int main()
     {
         compiler = "c++";
     }
-    std::string command = quote(compiler) + " -std=c++17 -I" + quote(outputDir / "include") +
-                          " -I" + quote(repoRoot / "include") + " -I" + quote(outputDir) + " " +
-                          quote(sourcePath) + " " + quote(harnessPath) + " -o " + quote(exePath);
+    const std::string baseCompileCommand = quote(compiler) + " -std=c++17 -I" +
+                                           quote(outputDir / "include") + " -I" +
+                                           quote(repoRoot / "include") + " -I" + quote(outputDir) +
+                                           " " + quote(sourcePath) + " " + quote(harnessPath);
+    std::string command = baseCompileCommand + " -o " + quote(exePath);
     int compileStatus = std::system(command.c_str());
     if (compileStatus != 0)
     {
         std::cerr << "Compile failed with status: " << compileStatus << "\n";
     }
     assert(compileStatus == 0);
+
+    const auto strictExePath = outputDir / "harness_strict.out";
+    std::string strictCommand =
+        baseCompileCommand + " -DPSXRECOMP_STRICT_ADDR_ERRORS=1 -o " + quote(strictExePath);
+    int strictCompileStatus = std::system(strictCommand.c_str());
+    if (strictCompileStatus != 0)
+    {
+        std::cerr << "Strict compile failed with status: " << strictCompileStatus << "\n";
+    }
+    assert(strictCompileStatus == 0);
 
     std::string runCommand = quote(exePath);
     int runStatus = std::system(runCommand.c_str());
@@ -408,6 +420,14 @@ int main()
         std::cerr << "Run failed with status: " << runStatus << "\n";
     }
     assert(runStatus == 0);
+
+    std::string strictRunCommand = quote(strictExePath);
+    int strictRunStatus = std::system(strictRunCommand.c_str());
+    if (strictRunStatus != 0)
+    {
+        std::cerr << "Strict run failed with status: " << strictRunStatus << "\n";
+    }
+    assert(strictRunStatus == 0);
 
     return 0;
 }

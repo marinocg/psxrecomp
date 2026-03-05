@@ -14,11 +14,15 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("#if PSXRECOMP_STRICT_ADDR_ERRORS");
     emitter.writeLine("return true;");
     emitter.writeLine("#else");
+    emitter.writeLine("static const bool strictAddrErrors = []()");
+    emitter.openBlock("");
     emitter.writeLine("if (const char* env = std::getenv(\"PSXRECOMP_STRICT_ADDR_ERRORS\"))");
     emitter.openBlock("");
     emitter.writeLine("return env[0] == '1';");
     emitter.closeBlock();
     emitter.writeLine("return false;");
+    emitter.closeBlock("();");
+    emitter.writeLine("return strictAddrErrors;");
     emitter.writeLine("#endif");
     emitter.closeBlock();
     emitter.writeBlank();
