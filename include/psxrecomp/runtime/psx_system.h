@@ -5,6 +5,7 @@
 #include "psxrecomp/runtime/debug_overlay.h"
 #include "psxrecomp/runtime/dma.h"
 #include "psxrecomp/runtime/gpu.h"
+#include "psxrecomp/runtime/gte.h"
 #include "psxrecomp/runtime/input.h"
 #include "psxrecomp/runtime/interrupt_controller.h"
 #include "psxrecomp/runtime/interrupt_dispatcher.h"
@@ -167,6 +168,7 @@ class PsxSystem
     RuntimeDebugOverlay& debugOverlay();
     TimerController& timers();
     Cop0& cop0();
+    Gte& gte();
 
     void setDisc(std::shared_ptr<Disc> disc);
 
@@ -282,6 +284,8 @@ class PsxSystem
     {
     };
 
+    void bindGteRuntimeHooks();
+
     std::vector<u8> m_ram;        // 2MB main RAM
     std::vector<u8> m_scratchpad; // 1KB scratchpad
     std::vector<u8> m_bios;       // 512KB BIOS
@@ -302,6 +306,7 @@ class PsxSystem
     RuntimeDebugOverlay m_debugOverlay;
     TimerController m_timers;
     Cop0 m_cop0;
+    Gte m_gte;
     std::shared_ptr<Disc> m_disc;
     DiscSwapInfo m_discSwapInfo;
     bool m_discSwapInfoInitialized = false;

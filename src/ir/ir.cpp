@@ -89,6 +89,20 @@ std::string opcodeToString(Opcode opcode)
         return "cop0_mtc";
     case Opcode::COP0_RFE:
         return "cop0_rfe";
+    case Opcode::GTE_MFC2:
+        return "gte_mfc2";
+    case Opcode::GTE_MTC2:
+        return "gte_mtc2";
+    case Opcode::GTE_CFC2:
+        return "gte_cfc2";
+    case Opcode::GTE_CTC2:
+        return "gte_ctc2";
+    case Opcode::GTE_LWC2:
+        return "gte_lwc2";
+    case Opcode::GTE_SWC2:
+        return "gte_swc2";
+    case Opcode::GTE_EXEC:
+        return "gte_exec";
     case Opcode::CPU_EXCEPTION:
         return "cpu_exception";
     case Opcode::SYSCALL:

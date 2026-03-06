@@ -274,6 +274,74 @@ int main()
     assert(keptCop0Mtc);
     assert(keptCop0Rfe);
 
+    Function gteEffects{"gte_effects", 0x6200, {}};
+    gteEffects.blocks.push_back(BasicBlock{"entry", {}, {}, {}});
+    gteEffects.blocks[0].instructions.push_back(Instruction{
+        Opcode::GTE_MFC2, {Value::makeImmediate(6)}, {Value::makeTemporary(10)}, 0x6200});
+    gteEffects.blocks[0].instructions.push_back(Instruction{
+        Opcode::GTE_MTC2, {Value::makeImmediate(6), Value::makeRegister(r1)}, {}, 0x6204});
+    gteEffects.blocks[0].instructions.push_back(Instruction{
+        Opcode::GTE_CFC2, {Value::makeImmediate(7)}, {Value::makeTemporary(11)}, 0x6208});
+    gteEffects.blocks[0].instructions.push_back(Instruction{
+        Opcode::GTE_CTC2, {Value::makeImmediate(7), Value::makeRegister(r1)}, {}, 0x620C});
+    gteEffects.blocks[0].instructions.push_back(Instruction{
+        Opcode::GTE_LWC2, {Value::makeImmediate(8), Value::makeTemporary(12)}, {}, 0x6210});
+    gteEffects.blocks[0].instructions.push_back(Instruction{
+        Opcode::GTE_SWC2, {Value::makeImmediate(8), Value::makeTemporary(13)}, {}, 0x6214});
+    gteEffects.blocks[0].instructions.push_back(
+        Instruction{Opcode::GTE_EXEC,
+                    {Value::makeImmediate(static_cast<psxrecomp::s32>(0x4A280030u))},
+                    {},
+                    0x6218});
+    gteEffects.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x621C});
+
+    psxrecomp::ir::runOptimizations(gteEffects);
+    bool keptGteMfc2 = false;
+    bool keptGteMtc2 = false;
+    bool keptGteCfc2 = false;
+    bool keptGteCtc2 = false;
+    bool keptGteLwc2 = false;
+    bool keptGteSwc2 = false;
+    bool keptGteExec = false;
+    for (const auto& instruction : gteEffects.blocks[0].instructions)
+    {
+        if (instruction.opcode == Opcode::GTE_MFC2)
+        {
+            keptGteMfc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_MTC2)
+        {
+            keptGteMtc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_CFC2)
+        {
+            keptGteCfc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_CTC2)
+        {
+            keptGteCtc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_LWC2)
+        {
+            keptGteLwc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_SWC2)
+        {
+            keptGteSwc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_EXEC)
+        {
+            keptGteExec = true;
+        }
+    }
+    assert(keptGteMfc2);
+    assert(keptGteMtc2);
+    assert(keptGteCfc2);
+    assert(keptGteCtc2);
+    assert(keptGteLwc2);
+    assert(keptGteSwc2);
+    assert(keptGteExec);
+
     Function crossBlockDce{"cross_block_dce", 0x7000, {}};
     crossBlockDce.blocks.push_back(BasicBlock{"entry", {}, {"use"}, {}});
     crossBlockDce.blocks.push_back(BasicBlock{"use", {}, {}, {}});

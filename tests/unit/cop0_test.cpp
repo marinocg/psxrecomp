@@ -10,6 +10,7 @@ int main()
     constexpr psxrecomp::u32 STATUS_IEC_BIT = 1u << 0;
     constexpr psxrecomp::u32 STATUS_IM0_BIT = 1u << 8;
     constexpr psxrecomp::u32 STATUS_IM2_BIT = 1u << 10;
+    constexpr psxrecomp::u32 STATUS_CU2_BIT = 1u << 30;
 
     Cop0 cop0;
     cop0.reset();
@@ -35,6 +36,13 @@ int main()
     // PRID should expose a fixed PSX-ish ID and ignore writes.
     cop0.mtc0(Cop0::RegisterIndex::PrId, 0xDEADBEEFu);
     assert(cop0.mfc0(Cop0::RegisterIndex::PrId) == 0x00000002u);
+
+    // COP2 access is gated by Status.CU2.
+    assert(!cop0.cop2Enabled());
+    cop0.mtc0(Cop0::RegisterIndex::Status, STATUS_CU2_BIT);
+    assert(cop0.cop2Enabled());
+    cop0.mtc0(Cop0::RegisterIndex::Status, 0u);
+    assert(!cop0.cop2Enabled());
 
     // Hardware-pending IP bit should be controlled by runtime wiring.
     cop0.setHardwareInterruptPending(true);

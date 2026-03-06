@@ -10,6 +10,14 @@
 
 namespace MemoryMap = psxrecomp::MemoryMap;
 
+namespace
+{
+constexpr psxrecomp::u32 encodeGteCommand(psxrecomp::u32 bits)
+{
+    return 0x4A000000u | (bits & 0x01FFFFFFu);
+}
+} // namespace
+
 void runRuntimeStateSerializationChecks(psxrecomp::runtime::PsxSystem& system)
 {
     using psxrecomp::runtime::InterruptController;
@@ -55,6 +63,22 @@ void runRuntimeStateSerializationChecks(psxrecomp::runtime::PsxSystem& system)
     stateWithJunk.push_back(0x99);
     assert(!system.deserializeState(stateWithJunk));
     assert(system.read<psxrecomp::u8>(MemoryMap::RAM_BASE) == firstRamByteBeforeFailedLoad);
+
+    system.gte().mtc2(6, 0x11223344u);
+    system.gte().ctc2(24, 0x55667788u);
+    system.gte().exec(encodeGteCommand(0x00002Du));
+    const auto gteState = system.serializeState();
+
+    system.tickCpuCycles(5);
+    system.gte().mtc2(6, 0xAABBCCDDu);
+    system.gte().ctc2(24, 0xEEFF0011u);
+
+    assert(system.deserializeState(gteState));
+    assert(system.gte().busyCyclesRemaining() == 5u);
+    const auto gteCpuBeforeRead = system.cpuCyclesElapsed();
+    assert(system.gte().mfc2(6) == 0x11223344u);
+    assert(system.cpuCyclesElapsed() == gteCpuBeforeRead + 5u);
+    assert(system.gte().cfc2(24) == 0x55667788u);
 }
 
 void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)

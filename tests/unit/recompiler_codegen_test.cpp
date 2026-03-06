@@ -166,8 +166,13 @@ int main()
     assert(runner.find("extractDisplayPixels") != std::string::npos);
     assert(runner.find("appendSuffixBeforeExtension") != std::string::npos);
     assert(runner.find("countNonZeroPixels") != std::string::npos);
+    assert(runner.find("captureBestDisplayPixels") != std::string::npos);
     assert(runner.find("presentFramebufferLive") != std::string::npos);
     assert(runner.find("displayWindow()") != std::string::npos);
+    assert(runner.find("SDL_TEXTUREACCESS_STREAMING, static_cast<int>(displayWidth)") !=
+           std::string::npos);
+    assert(runner.find("auto framebuffer = captureBestDisplayPixels(system.gpu(),") !=
+           std::string::npos);
     assert(runner.find("using alternate display page") != std::string::npos);
     assert(runner.find("std::thread presenterThread") != std::string::npos);
     assert(runner.find("#if defined(_WIN32)") != std::string::npos);
@@ -272,6 +277,7 @@ int main()
     runtimeHeader << "#include <functional>\n";
     runtimeHeader << "#include <optional>\n";
     runtimeHeader << "#include <string>\n";
+    runtimeHeader << "#include <type_traits>\n";
     runtimeHeader << "#include <vector>\n";
     runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
     runtimeHeader << "class RuntimeDebugOverlay {\n";
@@ -313,12 +319,24 @@ int main()
     runtimeHeader << "        m_regs[BadVAddr] = *badVaddr;\n";
     runtimeHeader << "      }\n";
     runtimeHeader << "    }\n";
+    runtimeHeader
+        << "    bool cop2Enabled() const { return (m_regs[Status] & (1u << 30)) != 0u; }\n";
     runtimeHeader << "    void rfe() {\n";
     runtimeHeader << "      const u32 status = m_regs[Status];\n";
     runtimeHeader << "      m_regs[Status] = (status & ~0x3Fu) | ((status & 0x3Fu) >> 2);\n";
     runtimeHeader << "    }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    std::array<u32, 32> m_regs{};\n";
+    runtimeHeader << "};\n";
+    runtimeHeader << "class Gte {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    u32 mfc2(u8 rd) const { return m_data[rd & 31u]; }\n";
+    runtimeHeader << "    void mtc2(u8 rd, u32 value) { m_data[rd & 31u] = value; }\n";
+    runtimeHeader << "    u32 cfc2(u8 rd) const { return m_ctrl[rd & 31u]; }\n";
+    runtimeHeader << "    void ctc2(u8 rd, u32 value) { m_ctrl[rd & 31u] = value; }\n";
+    runtimeHeader << "  private:\n";
+    runtimeHeader << "    std::array<u32, 32> m_data{};\n";
+    runtimeHeader << "    std::array<u32, 32> m_ctrl{};\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class PsxSystem {\n";
     runtimeHeader << "  public:\n";
@@ -334,8 +352,20 @@ int main()
     runtimeHeader << "    };\n";
     runtimeHeader << "    explicit PsxSystem(u8* ram) : m_ram(ram) {}\n";
     runtimeHeader << "    u8* getRam() { return m_ram; }\n";
-    runtimeHeader << "    template <typename T> T read(Address) { return {}; }\n";
-    runtimeHeader << "    template <typename T> void write(Address, T) {}\n";
+    runtimeHeader << "    template <typename T> T read(Address address) {\n";
+    runtimeHeader << "      T value{};\n";
+    runtimeHeader << "      const std::size_t offset = static_cast<std::size_t>(address);\n";
+    runtimeHeader << "      if (offset + sizeof(T) <= psxrecomp::MemoryMap::RAM_SIZE) {\n";
+    runtimeHeader << "        std::memcpy(&value, m_ram + offset, sizeof(T));\n";
+    runtimeHeader << "      }\n";
+    runtimeHeader << "      return value;\n";
+    runtimeHeader << "    }\n";
+    runtimeHeader << "    template <typename T> void write(Address address, T value) {\n";
+    runtimeHeader << "      const std::size_t offset = static_cast<std::size_t>(address);\n";
+    runtimeHeader << "      if (offset + sizeof(T) <= psxrecomp::MemoryMap::RAM_SIZE) {\n";
+    runtimeHeader << "        std::memcpy(m_ram + offset, &value, sizeof(T));\n";
+    runtimeHeader << "      }\n";
+    runtimeHeader << "    }\n";
     runtimeHeader << "    template <typename T> T readMmioExplicit(Address) { return {}; }\n";
     runtimeHeader << "    template <typename T> void writeMmioExplicit(Address, T) {}\n";
     runtimeHeader << "    void callBiosSyscall(u32, u32*, std::size_t) {}\n";
@@ -353,10 +383,12 @@ int main()
     runtimeHeader << "    void setCallbackInvoker(std::function<u32(u32)>) {}\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "    Cop0& cop0() { return m_cop0; }\n";
+    runtimeHeader << "    Gte& gte() { return m_gte; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
     runtimeHeader << "    RuntimeDebugOverlay m_overlay;\n";
     runtimeHeader << "    Cop0 m_cop0;\n";
+    runtimeHeader << "    Gte m_gte;\n";
     runtimeHeader << "};\n";
     runtimeHeader << "} }\n";
     runtimeHeader.close();
@@ -437,6 +469,106 @@ int main()
         std::cerr << "Strict run failed with status: " << strictRunStatus << "\n";
     }
     assert(strictRunStatus == 0);
+
+    Program cop2Program;
+    Builder cop2Builder(cop2Program);
+    auto& cop2Function = cop2Builder.createFunction("cop2_guard_func", 0x80020000);
+    auto& cop2Entry = cop2Builder.createBlock(cop2Function, "entry");
+    cop2Entry.instructions.push_back(cop2Builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(0x12345678)}, {Value::makeRegister(2)}, 0x80020000));
+    cop2Entry.instructions.push_back(cop2Builder.makeInstruction(
+        Opcode::GTE_MTC2, {Value::makeImmediate(6), Value::makeRegister(2)}, {}, 0x80020004));
+    cop2Entry.instructions.push_back(cop2Builder.makeInstruction(
+        Opcode::GTE_MFC2, {Value::makeImmediate(6)}, {Value::makeRegister(3)}, 0x80020008));
+    cop2Entry.instructions.push_back(cop2Builder.makeInstruction(
+        Opcode::GTE_LWC2, {Value::makeImmediate(7), Value::makeAddress(0x100)}, {}, 0x8002000C));
+    cop2Entry.instructions.push_back(cop2Builder.makeInstruction(
+        Opcode::GTE_SWC2, {Value::makeImmediate(6), Value::makeAddress(0x104)}, {}, 0x80020010));
+    cop2Entry.instructions.push_back(cop2Builder.makeInstruction(
+        Opcode::GTE_SWC2, {Value::makeImmediate(7), Value::makeAddress(0x108)}, {}, 0x80020014));
+    cop2Entry.instructions.push_back(
+        cop2Builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80020018));
+
+    const std::string cop2Header = generator.generateHeader(cop2Program, "cop2_module");
+    const std::string cop2Source = generator.generateSource(cop2Program, "cop2_module");
+
+    const auto cop2HeaderPath = outputDir / "cop2_module.h";
+    const auto cop2SourcePath = outputDir / "cop2_module.cpp";
+    const auto cop2HarnessPath = outputDir / "cop2_harness.cpp";
+    const auto cop2ExePath = outputDir / "cop2_test";
+
+    std::ofstream cop2HeaderFile(cop2HeaderPath);
+    cop2HeaderFile << cop2Header;
+    cop2HeaderFile.close();
+
+    std::ofstream cop2SourceFile(cop2SourcePath);
+    cop2SourceFile << cop2Source;
+    cop2SourceFile.close();
+
+    std::ofstream cop2HarnessFile(cop2HarnessPath);
+    cop2HarnessFile << "#include \"cop2_module.h\"\n";
+    cop2HarnessFile << "#include <array>\n";
+    cop2HarnessFile << "#include <cstring>\n";
+    cop2HarnessFile << "#include <stdexcept>\n";
+    cop2HarnessFile << "int main() {\n";
+    cop2HarnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
+    cop2HarnessFile << "  const psxrecomp::u32 sourceWord = 0x89ABCDEFu;\n";
+    cop2HarnessFile << "  std::memcpy(ram.data() + 0x100, &sourceWord, sizeof(sourceWord));\n";
+    cop2HarnessFile << "  psxrecomp::runtime::PsxSystem disabledSystem(ram.data());\n";
+    cop2HarnessFile << "  bool disabledThrew = false;\n";
+    cop2HarnessFile << "  try {\n";
+    cop2HarnessFile << "    psxrecomp::recompiler::RecompiledModule::run(disabledSystem);\n";
+    cop2HarnessFile << "  } catch (const std::runtime_error&) {\n";
+    cop2HarnessFile << "    disabledThrew = true;\n";
+    cop2HarnessFile << "  }\n";
+    cop2HarnessFile << "  if (!disabledThrew) { return 1; }\n";
+    cop2HarnessFile << "  const auto disabledCause = disabledSystem.cop0().mfc0(\n";
+    cop2HarnessFile << "      psxrecomp::runtime::Cop0::Cause);\n";
+    cop2HarnessFile << "  if ((disabledCause & 0x7Cu) !=\n";
+    cop2HarnessFile << "      (static_cast<psxrecomp::u32>(\n";
+    cop2HarnessFile << "           psxrecomp::runtime::Cop0::ExceptionCode::CoprocessorUnusable)\n";
+    cop2HarnessFile << "       << 2)) {\n";
+    cop2HarnessFile << "    return 2;\n";
+    cop2HarnessFile << "  }\n";
+    cop2HarnessFile << "  if (disabledSystem.gte().mfc2(6) != 0u) { return 3; }\n";
+    cop2HarnessFile << "  if (disabledSystem.gte().mfc2(7) != 0u) { return 4; }\n";
+    cop2HarnessFile << "  psxrecomp::runtime::PsxSystem enabledSystem(ram.data());\n";
+    cop2HarnessFile << "  enabledSystem.cop0().mtc0(psxrecomp::runtime::Cop0::Status, 1u << 30);\n";
+    cop2HarnessFile << "  try {\n";
+    cop2HarnessFile << "    psxrecomp::recompiler::RecompiledModule::run(enabledSystem);\n";
+    cop2HarnessFile << "  } catch (const std::runtime_error&) {\n";
+    cop2HarnessFile << "    return 5;\n";
+    cop2HarnessFile << "  }\n";
+    cop2HarnessFile << "  psxrecomp::u32 storedReg6 = 0;\n";
+    cop2HarnessFile << "  psxrecomp::u32 storedReg7 = 0;\n";
+    cop2HarnessFile << "  std::memcpy(&storedReg6, ram.data() + 0x104, sizeof(storedReg6));\n";
+    cop2HarnessFile << "  std::memcpy(&storedReg7, ram.data() + 0x108, sizeof(storedReg7));\n";
+    cop2HarnessFile << "  if (enabledSystem.gte().mfc2(6) != 0x12345678u) { return 6; }\n";
+    cop2HarnessFile << "  if (enabledSystem.gte().mfc2(7) != sourceWord) { return 7; }\n";
+    cop2HarnessFile << "  if (storedReg6 != 0x12345678u) { return 8; }\n";
+    cop2HarnessFile << "  if (storedReg7 != sourceWord) { return 9; }\n";
+    cop2HarnessFile << "  return 0;\n";
+    cop2HarnessFile << "}\n";
+    cop2HarnessFile.close();
+
+    const std::string cop2CompileCommand =
+        quote(compiler) + " -std=c++17 -I" + quote(outputDir / "include") + " -I" +
+        quote(repoRoot / "include") + " -I" + quote(outputDir) + " " + quote(cop2SourcePath) + " " +
+        quote(cop2HarnessPath) + " -o " + quote(cop2ExePath);
+    int cop2CompileStatus = std::system(cop2CompileCommand.c_str());
+    if (cop2CompileStatus != 0)
+    {
+        std::cerr << "COP2 compile failed with status: " << cop2CompileStatus << "\n";
+    }
+    assert(cop2CompileStatus == 0);
+
+    const std::string cop2RunCommand = quote(cop2ExePath);
+    int cop2RunStatus = std::system(cop2RunCommand.c_str());
+    if (cop2RunStatus != 0)
+    {
+        std::cerr << "COP2 run failed with status: " << cop2RunStatus << "\n";
+    }
+    assert(cop2RunStatus == 0);
 
     return 0;
 }

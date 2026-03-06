@@ -51,6 +51,7 @@ PsxSystem::PsxSystem()
     : m_ram(MemoryMap::RAM_SIZE), m_scratchpad(MemoryMap::SCRATCHPAD_SIZE),
       m_bios(MemoryMap::BIOS_SIZE)
 {
+    bindGteRuntimeHooks();
 }
 
 PsxSystem::~PsxSystem() = default;
@@ -92,6 +93,8 @@ void PsxSystem::reset()
     m_debugOverlay.reset();
     m_timers.reset();
     m_cop0.reset();
+    m_gte.reset();
+    bindGteRuntimeHooks();
     m_criticalSectionDepth = 0;
     m_hookEntryInt = {};
     m_callbackInvoker = CallbackInvoker{};
@@ -127,6 +130,18 @@ void PsxSystem::reset()
     syncCop0InterruptPending();
 
     m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
+}
+
+void PsxSystem::bindGteRuntimeHooks()
+{
+    m_gte.setCpuStallCallback(
+        [this](u32 cycles)
+        {
+            if (cycles > 0)
+            {
+                tickCpuCycles(cycles);
+            }
+        });
 }
 
 void PsxSystem::boot()
@@ -182,6 +197,7 @@ void PsxSystem::tickCpuCycles(u32 cpuCycles)
 
     m_spu.tick(cpuCycles);
     m_cdrom.tick(cpuCycles);
+    m_gte.tickCpuCycles(cpuCycles);
     m_timers.tick(cpuCycles,
                   [this](InterruptLine line)
                   {
@@ -368,6 +384,11 @@ TimerController& PsxSystem::timers()
 Cop0& PsxSystem::cop0()
 {
     return m_cop0;
+}
+
+Gte& PsxSystem::gte()
+{
+    return m_gte;
 }
 
 void PsxSystem::setDisc(std::shared_ptr<Disc> disc)

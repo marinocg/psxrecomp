@@ -9,6 +9,27 @@ namespace psxrecomp
 namespace recompiler
 {
 
+namespace
+{
+bool instructionIsInDelaySlot(const ir::Instruction& instruction)
+{
+    return instruction.sourceAsmAddress.has_value() && instruction.sourceAddress.has_value() &&
+           instruction.sourceAsmAddress.value() != instruction.sourceAddress.value();
+}
+
+std::string instructionSourcePcExpr(const ir::Instruction& instruction)
+{
+    if (!instruction.sourceAddress.has_value())
+    {
+        return "0";
+    }
+
+    std::ostringstream stream;
+    stream << "0x" << std::hex << instruction.sourceAddress.value();
+    return stream.str();
+}
+} // namespace
+
 void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
                      const std::unordered_map<std::string, std::string>& blockNames,
                      LoweringContext& context, CppEmitter& emitter)
@@ -94,6 +115,16 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         std::string rhsB = valueToExpr(instruction.inputs[1], context);
         emitter.writeLine(lhs + " = (static_cast<s32>(" + rhsA + ") " + op + " static_cast<s32>(" +
                           rhsB + "));");
+    };
+    auto writeGteGuardPrefix = [&]()
+    {
+        emitter.openBlock("if (!context.system.cop0().cop2Enabled())");
+        emitter.writeLine("raiseCpuException(context, "
+                          "static_cast<u32>(runtime::Cop0::ExceptionCode::CoprocessorUnusable), " +
+                          instructionSourcePcExpr(instruction) + ", " +
+                          std::string(instructionIsInDelaySlot(instruction) ? "true" : "false") +
+                          ");");
+        emitter.closeBlock();
     };
 
     if (emitControlFlowInstruction(instruction, block, blockNames, context, emitter))
@@ -354,6 +385,78 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         break;
     case ir::Opcode::COP0_RFE:
         emitter.writeLine("context.system.cop0().rfe();");
+        break;
+    case ir::Opcode::GTE_MFC2:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty() &&
+            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
+        {
+            const std::string dest = valueToExpr(instruction.outputs.front(), context);
+            const std::string rd = valueToExpr(instruction.inputs[0], context);
+            writeGteGuardPrefix();
+            emitter.writeLine(dest + " = context.system.gte().mfc2(static_cast<u8>(" + rd + "));");
+        }
+        break;
+    case ir::Opcode::GTE_MTC2:
+        if (instruction.inputs.size() >= 2 &&
+            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
+        {
+            const std::string rd = valueToExpr(instruction.inputs[0], context);
+            const std::string source = valueToExpr(instruction.inputs[1], context);
+            writeGteGuardPrefix();
+            emitter.writeLine("context.system.gte().mtc2(static_cast<u8>(" + rd + "), " + source +
+                              ");");
+        }
+        break;
+    case ir::Opcode::GTE_CFC2:
+        if (!instruction.outputs.empty() && !instruction.inputs.empty() &&
+            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
+        {
+            const std::string dest = valueToExpr(instruction.outputs.front(), context);
+            const std::string rd = valueToExpr(instruction.inputs[0], context);
+            writeGteGuardPrefix();
+            emitter.writeLine(dest + " = context.system.gte().cfc2(static_cast<u8>(" + rd + "));");
+        }
+        break;
+    case ir::Opcode::GTE_CTC2:
+        if (instruction.inputs.size() >= 2 &&
+            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
+        {
+            const std::string rd = valueToExpr(instruction.inputs[0], context);
+            const std::string source = valueToExpr(instruction.inputs[1], context);
+            writeGteGuardPrefix();
+            emitter.writeLine("context.system.gte().ctc2(static_cast<u8>(" + rd + "), " + source +
+                              ");");
+        }
+        break;
+    case ir::Opcode::GTE_LWC2:
+        if (instruction.inputs.size() >= 2 &&
+            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
+        {
+            const std::string rd = valueToExpr(instruction.inputs[0], context);
+            const std::string address = valueToExpr(instruction.inputs[1], context);
+            writeGteGuardPrefix();
+            emitter.writeLine("context.system.gte().mtc2(static_cast<u8>(" + rd +
+                              "), readMemory32(context.system, " + address + "));");
+        }
+        break;
+    case ir::Opcode::GTE_SWC2:
+        if (instruction.inputs.size() >= 2 &&
+            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
+        {
+            const std::string rd = valueToExpr(instruction.inputs[0], context);
+            const std::string address = valueToExpr(instruction.inputs[1], context);
+            writeGteGuardPrefix();
+            emitter.writeLine("writeMemory32(context.system, " + address +
+                              ", context.system.gte().mfc2(static_cast<u8>(" + rd + ")));");
+        }
+        break;
+    case ir::Opcode::GTE_EXEC:
+        if (!instruction.inputs.empty())
+        {
+            const std::string rawEncoding = valueToExpr(instruction.inputs[0], context);
+            writeGteGuardPrefix();
+            emitter.writeLine("context.system.gte().exec(static_cast<u32>(" + rawEncoding + "));");
+        }
         break;
     case ir::Opcode::CPU_EXCEPTION:
     {
