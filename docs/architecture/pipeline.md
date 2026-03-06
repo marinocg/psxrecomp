@@ -145,6 +145,9 @@ Data-track exports are written under `resources/disc/`:
 - `disc_layout.json`
 - `disc_hashes.json`
 
+Generated runners consume this exported blob directly (`resources/disc/data_track.bin`) instead of
+opening the original ISO/BIN at runtime.
+
 Optional embedded carving outputs are written under `resources/embedded/by_container/...` when
 `PSXRECOMP_RES_EMBEDDED_SCAN=1` (or `true`) is enabled.
 

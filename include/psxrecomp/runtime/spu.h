@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <vector>
 
@@ -116,6 +117,8 @@ class Spu
     const std::vector<u32>& ramWords() const;
     const std::array<Voice, VoiceCount>& voices() const;
     const std::vector<int16_t>& mixedAudioBuffer() const;
+    void pushCdAudioSamples(const std::vector<int16_t>& interleavedStereoPcm);
+    size_t queuedCdAudioSamples() const;
 
     void setAudioBackend(std::shared_ptr<SpuAudioBackend> backend);
 
@@ -151,6 +154,7 @@ class Spu
     std::vector<int16_t> m_mixedAudioBuffer;
     std::vector<int16_t> m_reverbRing;
     size_t m_reverbIndex = 0;
+    std::deque<int16_t> m_cdAudioRing;
 
     std::shared_ptr<SpuAudioBackend> m_audioBackend;
 };

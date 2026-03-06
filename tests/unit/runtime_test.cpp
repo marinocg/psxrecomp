@@ -185,10 +185,12 @@ int main()
     xaSector2[26] = 0xCC;
     xaSector2[27] = 0xDD;
     system.cdrom().enqueueDataSector(xaSector2);
-    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x01);
-    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x40);
-    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0x0E);
-    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0x06);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 1u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x01);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x40);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x0E);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
     system.runFrame();
 
     Address cdromBase =
@@ -200,13 +202,18 @@ int main()
     system.write<psxrecomp::u32>(cdromBase + 0x8, 0x01000000);
     assert(system.read<psxrecomp::u32>(cdromDmaOut) == 0x44332211u);
 
-    // A second frame should queue another sector without dropping bytes when FIFO fills.
+    // A second frame should queue another sector without dropping boundaries.
     system.runFrame();
-    for (int i = 0; i < 581; ++i)
+    bool reachedSecondSector = false;
+    for (int i = 0; i < 2048; ++i)
     {
-        (void)system.cdrom().readDma();
+        if (system.cdrom().readDma() == 0xDDCCBBAAu)
+        {
+            reachedSecondSector = true;
+            break;
+        }
     }
-    assert(system.cdrom().readDma() == 0xDDCCBBAAu);
+    assert(reachedSecondSector);
 
     // CD-ROM queued sectors are bounded to avoid unbounded memory growth.
     PsxSystem boundedQueueSystem;
@@ -217,13 +224,74 @@ int main()
         sector[0] = static_cast<psxrecomp::u8>(i);
         boundedQueueSystem.cdrom().enqueueDataSector(sector);
     }
-    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
+                                                        1u);
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2,
                                                         0x01);
     boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
+                                                        0u);
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1,
                                                         0x06);
     boundedQueueSystem.runFrame();
     const psxrecomp::u32 boundedWord = boundedQueueSystem.cdrom().readDma();
     assert((boundedWord & 0xFFu) == 16u);
+
+    // CD-ROM DMA loops without CPU data-port reads should preserve sector boundaries.
+    PsxSystem dmaLoopSystem;
+    assert(dmaLoopSystem.initialize());
+    for (psxrecomp::u32 sectorIndex = 0; sectorIndex < 3; ++sectorIndex)
+    {
+        std::vector<psxrecomp::u8> sector(2048, 0);
+        for (psxrecomp::u32 wordIndex = 0; wordIndex < 512; ++wordIndex)
+        {
+            const psxrecomp::u32 value = 0xA0000000u | (sectorIndex << 16) | wordIndex;
+            const size_t base = static_cast<size_t>(wordIndex) * sizeof(psxrecomp::u32);
+            sector[base + 0] = static_cast<psxrecomp::u8>(value & 0xFFu);
+            sector[base + 1] = static_cast<psxrecomp::u8>((value >> 8) & 0xFFu);
+            sector[base + 2] = static_cast<psxrecomp::u8>((value >> 16) & 0xFFu);
+            sector[base + 3] = static_cast<psxrecomp::u8>((value >> 24) & 0xFFu);
+        }
+        dmaLoopSystem.cdrom().enqueueDataSector(sector);
+    }
+
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x00);
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x02);
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x00);
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x02);
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
+
+    const Address dmaLoopCdromBase =
+        psxrecomp::runtime::DmaController::ChannelBase +
+        psxrecomp::runtime::DmaController::ChannelStride * static_cast<Address>(DmaPort::Cdrom);
+    constexpr Address dmaLoopOutBase = 0x00018000;
+    constexpr psxrecomp::u32 dmaWordsPerChunk = 0x100u; // 1024 bytes/chunk
+    constexpr psxrecomp::u32 bytesPerChunk = dmaWordsPerChunk * sizeof(psxrecomp::u32);
+    for (psxrecomp::u32 chunk = 0; chunk < 6; ++chunk)
+    {
+        const Address chunkDest = dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
+        dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x0,
+                                            static_cast<psxrecomp::u32>(chunkDest));
+        dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x4, dmaWordsPerChunk);
+        dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x8, 0x01000000u);
+    }
+
+    for (psxrecomp::u32 chunk = 0; chunk < 6; ++chunk)
+    {
+        const Address chunkDest = dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
+        const psxrecomp::u32 firstWordGlobal = chunk * dmaWordsPerChunk;
+        const psxrecomp::u32 firstSector = firstWordGlobal / 512u;
+        const psxrecomp::u32 firstWordInSector = firstWordGlobal % 512u;
+        const psxrecomp::u32 expectedFirst = 0xA0000000u | (firstSector << 16) | firstWordInSector;
+        assert(dmaLoopSystem.read<psxrecomp::u32>(chunkDest) == expectedFirst);
+
+        const psxrecomp::u32 lastWordGlobal = firstWordGlobal + (dmaWordsPerChunk - 1u);
+        const psxrecomp::u32 lastSector = lastWordGlobal / 512u;
+        const psxrecomp::u32 lastWordInSector = lastWordGlobal % 512u;
+        const psxrecomp::u32 expectedLast = 0xA0000000u | (lastSector << 16) | lastWordInSector;
+        assert(dmaLoopSystem.read<psxrecomp::u32>(chunkDest + bytesPerChunk -
+                                                  sizeof(psxrecomp::u32)) == expectedLast);
+    }
 
     bool fired = false;
     system.scheduler().schedule(5, [&fired]() { fired = true; });

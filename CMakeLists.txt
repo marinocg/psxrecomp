@@ -16,7 +16,7 @@ option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
-#Shared build options (target-scoped)
+# Shared build options (target-scoped)
 add_library(psxrecomp_build_options INTERFACE)
 target_compile_definitions(psxrecomp_build_options INTERFACE
     PSXRECOMP_PROJECT_VERSION="${PROJECT_VERSION}"
@@ -124,7 +124,12 @@ set(RECOMPILER_SOURCES
 )
 
 set(RUNTIME_SOURCES
-    src/runtime/cdrom.cpp
+    src/runtime/cdrom_shared.cpp
+    src/runtime/cdrom_core.cpp
+    src/runtime/cdrom_commands.cpp
+    src/runtime/cdrom_data.cpp
+    src/runtime/cdrom_state.cpp
+    src/runtime/disc_image.cpp
     src/runtime/cop0.cpp
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
@@ -151,6 +156,7 @@ set(RUNTIME_SOURCES
     src/runtime/resource_pack.cpp
     src/runtime/scheduler.cpp
     src/runtime/spu.cpp
+    src/runtime/spu_audio.cpp
     src/runtime/timers.cpp
 )
 
@@ -306,6 +312,36 @@ if(BUILD_TESTS)
         tests/unit/spu_test.cpp
     )
     target_link_libraries(spu_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(disc_image_test
+        tests/unit/disc_image_test.cpp
+    )
+    target_link_libraries(disc_image_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_command_test
+        tests/unit/cdrom_command_test.cpp
+    )
+    target_link_libraries(cdrom_command_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_read_pipeline_test
+        tests/unit/cdrom_read_pipeline_test.cpp
+    )
+    target_link_libraries(cdrom_read_pipeline_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_xa_audio_test
+        tests/unit/cdrom_xa_audio_test.cpp
+    )
+    target_link_libraries(cdrom_xa_audio_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_disc_swap_test
+        tests/unit/cdrom_disc_swap_test.cpp
+    )
+    target_link_libraries(cdrom_disc_swap_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_state_test
+        tests/unit/cdrom_state_test.cpp
+    )
+    target_link_libraries(cdrom_state_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp

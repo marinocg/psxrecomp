@@ -71,6 +71,7 @@ void Spu::reset()
     m_mixedAudioBuffer.clear();
     std::fill(m_reverbRing.begin(), m_reverbRing.end(), 0);
     m_reverbIndex = 0;
+    m_cdAudioRing.clear();
 }
 
 u16 Spu::readRegister(u32 offset) const
@@ -113,6 +114,16 @@ void Spu::tick(u32 cycles)
         float leftMix = 0.0f;
         float rightMix = 0.0f;
         float reverbInput = 0.0f;
+        float cdLeft = 0.0f;
+        float cdRight = 0.0f;
+
+        if (m_cdAudioRing.size() >= 2)
+        {
+            cdLeft = static_cast<float>(m_cdAudioRing.front()) / 32768.0f;
+            m_cdAudioRing.pop_front();
+            cdRight = static_cast<float>(m_cdAudioRing.front()) / 32768.0f;
+            m_cdAudioRing.pop_front();
+        }
 
         for (Voice& voice : m_voices)
         {
@@ -138,6 +149,9 @@ void Spu::tick(u32 cycles)
                 reverbInput += (leftVoice + rightVoice) * 0.5f;
             }
         }
+
+        leftMix += cdLeft;
+        rightMix += cdRight;
 
         reverbInput *= m_mixSettings.reverbSend;
         const float reverbOut = static_cast<float>(m_reverbRing[m_reverbIndex]) / 32768.0f;
@@ -192,14 +206,6 @@ const std::array<Spu::Voice, Spu::VoiceCount>& Spu::voices() const
 const std::vector<int16_t>& Spu::mixedAudioBuffer() const
 {
     return m_mixedAudioBuffer;
-}
-
-void Spu::setAudioBackend(std::shared_ptr<SpuAudioBackend> backend)
-{
-    if (backend)
-    {
-        m_audioBackend = std::move(backend);
-    }
 }
 
 size_t Spu::registerIndex(u32 offset)
@@ -459,22 +465,6 @@ int16_t Spu::decodeAdpcmNibble(int nibble, int shift, int filter, int prev1, int
     const int shifted = (sample << 12) >> std::min(12, shift);
     const int prediction = ((prev1 * kFilterK0[filter]) + (prev2 * kFilterK1[filter]) + 32) / 64;
     return clampI16(shifted + prediction);
-}
-
-void Spu::mixQueuedSamples()
-{
-    if (!m_audioBackend || m_mixedAudioBuffer.empty())
-    {
-        return;
-    }
-
-    m_audioBackend->submitSamples(m_mixedAudioBuffer);
-}
-
-float Spu::normalizedSignedVolume(u16 value)
-{
-    const int16_t signedValue = static_cast<int16_t>(value);
-    return static_cast<float>(signedValue) / 32767.0f;
 }
 
 } // namespace runtime

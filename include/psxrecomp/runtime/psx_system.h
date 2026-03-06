@@ -19,6 +19,7 @@
 #include <array>
 #include <cstddef>
 #include <cstring>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -167,6 +168,8 @@ class PsxSystem
     TimerController& timers();
     Cop0& cop0();
 
+    void setDisc(std::shared_ptr<Disc> disc);
+
     void setDiscSwapInfo(DiscSwapInfo info);
     const DiscSwapInfo& discSwapInfo() const;
 
@@ -299,7 +302,9 @@ class PsxSystem
     RuntimeDebugOverlay m_debugOverlay;
     TimerController m_timers;
     Cop0 m_cop0;
+    std::shared_ptr<Disc> m_disc;
     DiscSwapInfo m_discSwapInfo;
+    bool m_discSwapInfoInitialized = false;
     u32 m_frameCount = 0;
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
