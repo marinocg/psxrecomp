@@ -14,6 +14,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     CppEmitter emitter;
     emitter.writeLine("#include \"" + moduleName + ".h\"");
     emitter.writeBlank();
+    emitter.writeLine("#include \"psxrecomp/runtime/disc_image.h\"");
     emitter.writeLine("#include \"psxrecomp/runtime/gpu_renderer.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
     emitter.writeLine("#include <algorithm>");
@@ -25,6 +26,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeLine("#include <filesystem>");
     emitter.writeLine("#include <fstream>");
     emitter.writeLine("#include <iostream>");
+    emitter.writeLine("#include <memory>");
     emitter.writeLine("#include <optional>");
     emitter.writeLine("#include <string>");
     emitter.writeLine("#include <thread>");

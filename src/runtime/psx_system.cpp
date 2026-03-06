@@ -80,6 +80,9 @@ void PsxSystem::reset()
     m_gpu.reset();
     m_spu.reset();
     m_cdrom.reset();
+    m_cdrom.setDiscBackend(m_disc.get());
+    m_cdrom.setXaAudioSink([this](const std::vector<int16_t>& interleavedStereoPcm)
+                           { m_spu.pushCdAudioSamples(interleavedStereoPcm); });
     m_input.reset();
     m_dma.reset();
     m_interrupts.reset();
@@ -367,6 +370,12 @@ Cop0& PsxSystem::cop0()
     return m_cop0;
 }
 
+void PsxSystem::setDisc(std::shared_ptr<Disc> disc)
+{
+    m_disc = std::move(disc);
+    m_cdrom.setDiscBackend(m_disc.get());
+}
+
 KernelEventTable& PsxSystem::events()
 {
     return m_events;
@@ -379,7 +388,20 @@ InterruptDispatcher& PsxSystem::dispatcher()
 
 void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
 {
+    if (!m_discSwapInfoInitialized)
+    {
+        m_discSwapInfo = std::move(info);
+        m_discSwapInfoInitialized = true;
+        return;
+    }
+
+    const bool activeChanged = info.activeDiscIndex != m_discSwapInfo.activeDiscIndex;
+    const bool discCountChanged = info.discs.size() != m_discSwapInfo.discs.size();
     m_discSwapInfo = std::move(info);
+    if (activeChanged || discCountChanged)
+    {
+        m_cdrom.notifyDiscSwap();
+    }
 }
 
 const PsxSystem::DiscSwapInfo& PsxSystem::discSwapInfo() const

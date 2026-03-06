@@ -131,6 +131,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Runner catch block now emits GPU command count, framebuffer pixel count, VRAM word count, command trace, and optional PPM framebuffer dump (`PSXRECOMP_DUMP_FRAMEBUFFER`).
 - Runner supports `PSXRECOMP_RENDER_DEBUG_OVERLAY=1` to composite the debug HUD into both live presentation and framebuffer dumps.
 - Runner now applies `PSXRECOMP_LOG_LEVEL` at runtime (`debug`/`info`/`warn`/`error` or `0..3`) so logger filtering matches user configuration.
+- Runner now mounts the exported runtime disc blob from `resources/disc/data_track.bin` (using `resources/disc/disc_layout.json` for `2048` vs `2352` sector layout), with `PSXRECOMP_DISC_IMAGE` as an explicit override, and reports successful mounts in stdout.
 - Refactored codegen into focused modules: `codegen.cpp`, `codegen_build.cpp`, `codegen_runner.cpp`.
 
 **Missing**
@@ -221,14 +222,22 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 **Present**
 
 - Command/parameter/response FIFOs are wired through MMIO with interrupt flag handling.
+- CD-ROM MMIO now routes through index-selected register banking (`1F801800h` index selector + banked `+1..+3` ports), matching PSX register layout.
+- CD-ROM IRQs now use queued delivery: current IRQ type stays visible until ACK, then next queued IRQ promotes.
+- CD-ROM boot-critical command set now includes `Getstat`, `Setloc`, `SeekL`, `ReadN/ReadS`, `Pause/Stop`, `Setmode`, `GetlocL/GetlocP`, `GetTN/GetTD`, and `GetID` with command-specific response byte shapes.
+- CD-ROM read pipeline now uses Setloc MSF->LBA (with 00:02:00 pregap handling), sector cadence timing, disc-backed sequential reads, and RDDATA overread padding behavior for 0x800/0x924 sector modes.
+- CD-ROM->DMA handshake path now refills read sectors during DMA underflow in active reads, reducing channel-3 stalls in DMA-only polling loops while preserving sector word boundaries.
 - DMA-readable data FIFO path now supports CD-ROM->RAM transfer semantics for streamed sectors.
-- Basic XA streaming controls are implemented (Setmode XA bit + ReadN/ReadS cadence with payload pumping).
+- Save-state now preserves CD-ROM internal runtime state (command/response/data FIFOs, active/pending IRQ state, LBA/mode execution fields, and partially-consumed sector buffering) to avoid post-load desync.
+- XA streaming now validates Mode2/Form2 subheaders, exposes XA payload bytes from raw sectors, and applies Setfilter file/channel matching for XA ADPCM-shaped sectors.
+- XA ADPCM sectors now decode to PCM and feed a CD-audio mixer input in SPU via a bounded ring buffer.
+- Disc swap/lid behavior now models a shell-open status transition on disc changes and returns INT5 errors for no-disc and read-failure conditions.
+- Demo validation note: `CDBROWSE` behavior is verified against `examples/demos/cdbrowse/CDBROWSE.iso` (SHA-1 `d7b4a16d74ea3dc1ee44cf377842abe3bb006df6`); older artifact inputs under `out/recompiled-demos-ubuntu-latest/inputs/CDBROWSE.iso` (SHA-1 `9ff0fd85cbd8f94e927601df9531357acb61a6c1`) are a different binary and can freeze in non-representative paths.
 
 **Missing**
 
-- XA-ADPCM decode handoff into SPU playback.
 - Command timing state machine fidelity (seek latency, busy windows, retries).
-- Sector/subheader validation and detailed error condition coverage.
+- Detailed error condition coverage for malformed/unsupported sector states.
 
 ## Recommended implementation order
 

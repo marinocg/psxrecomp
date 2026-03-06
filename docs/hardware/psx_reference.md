@@ -103,6 +103,20 @@ Commands are written to 0x1F801810:
 - PSX-specific extensions
 - Multi-session support
 
+### MMIO Register Bank (0x1F801800-0x1F801803)
+
+- `0x1F801800` (R): status register, low bits report index.
+- `0x1F801800` (W): index selector (`0..3`) for offsets `+1..+3`.
+- `0x1F801801` (R): response FIFO.
+- `0x1F801801` (W, index 0): command register.
+- `0x1F801802` (R): data FIFO.
+- `0x1F801802` (W, index 0): parameter FIFO.
+- `0x1F801802` (W, index 1): interrupt enable.
+- `0x1F801803` (R, index 0/2): interrupt enable.
+- `0x1F801803` (R, index 1/3): interrupt flags.
+- `0x1F801803` (W, index 1): interrupt flag acknowledge.
+- IRQ delivery is queued: a later IRQ type becomes visible only after ACK clears the current one.
+
 ## Controllers
 
 ### Standard Controller
@@ -166,7 +180,7 @@ IRQ sources:
 0x1F801810: GPU Command/Data
 0x1F801814: GPU Status Register
 0x1F801C00: SPU Control
-0x1F801800: CD-ROM Status
+0x1F801800: CD-ROM index/status port (banked at +0..+3)
 ```
 
 ## Notes for Recompilation

@@ -47,6 +47,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                  "DMA transfer triggered: port=" + std::to_string(static_cast<int>(port)) +
                  " fromRam=" + std::to_string(fromRam) +
                  " base=0x" + ([&]{ std::ostringstream s; s << std::hex << channel.baseAddress; return s.str(); })() +
+                 " block=0x" + ([&]{ std::ostringstream s; s << std::hex << channel.blockControl; return s.str(); })() +
                  " ctrl=0x" + ([&]{ std::ostringstream s; s << std::hex << channel.channelControl; return s.str(); })());
 
     u32 transferredWords = 0;

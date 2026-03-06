@@ -160,6 +160,7 @@ int main()
     assert(runner.find("PSXRECOMP_DUMP_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_DUMP_FULL_FRAMEBUFFER") != std::string::npos);
     assert(runner.find("PSXRECOMP_PRESENT_FRAMEBUFFER") != std::string::npos);
+    assert(runner.find("PSXRECOMP_DISC_IMAGE") != std::string::npos);
     assert(runner.find("PSXRECOMP_AUTO_FRAME_PROGRESS") == std::string::npos);
     assert(runner.find("dumpFramebufferToPpm") != std::string::npos);
     assert(runner.find("extractDisplayPixels") != std::string::npos);
@@ -174,6 +175,14 @@ int main()
     assert(runner.find("Last PC") != std::string::npos);
     assert(runner.find("envFlagEnabled(presentEnv, defaultPresent)") != std::string::npos);
     assert(runner.find("PSXRECOMP_RENDER_DEBUG_OVERLAY") != std::string::npos);
+    assert(runner.find("resourcesDir / \"disc\" / \"data_track.bin\"") != std::string::npos);
+    assert(runner.find("resourcesDir / \"disc\" / \"disc_layout.json\"") != std::string::npos);
+    assert(runner.find("extractJsonU64Field(*layoutText, \"sectorSize\", &sectorSize)") !=
+           std::string::npos);
+    assert(runner.find("system.discSwapInfo()") == std::string::npos);
+    assert(runner.find("system.setDisc(disc);") != std::string::npos);
+    assert(runner.find("disc mounted") != std::string::npos);
+    assert(runner.find("Runtime disc blob not found") != std::string::npos);
     assert(runner.find("decodeLogLevel") != std::string::npos);
     assert(runner.find("const auto& exVramWords = system.gpu().vramWords();") != std::string::npos);
     assert(runner.find("exPixels[y * exWidth + x] = pixel;") != std::string::npos);

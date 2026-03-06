@@ -91,19 +91,7 @@ u8 PsxSystem::readMmio8(Address address)
 {
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
-        switch (address - Mmio::CDROM_BASE)
-        {
-        case 0:
-            return m_cdrom.readStatus();
-        case 1:
-            return m_cdrom.readData();
-        case 2:
-            return m_cdrom.readInterruptFlags();
-        case 3:
-            return m_cdrom.readInterruptEnable();
-        default:
-            return 0;
-        }
+        return m_cdrom.readReg(static_cast<u8>(address - Mmio::CDROM_BASE));
     }
 
     return 0;
@@ -220,26 +208,8 @@ void PsxSystem::writeMmio8(Address address, u8 value)
 {
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
-        switch (address - Mmio::CDROM_BASE)
-        {
-        case 0:
-            m_cdrom.writeCommand(value);
-            syncLevelInterruptSources();
-            break;
-        case 1:
-            m_cdrom.writeParam(value);
-            break;
-        case 2:
-            m_cdrom.writeInterruptFlags(value);
-            syncLevelInterruptSources();
-            break;
-        case 3:
-            m_cdrom.writeInterruptEnable(value);
-            syncLevelInterruptSources();
-            break;
-        default:
-            break;
-        }
+        m_cdrom.writeReg(static_cast<u8>(address - Mmio::CDROM_BASE), value);
+        syncLevelInterruptSources();
     }
 }
 

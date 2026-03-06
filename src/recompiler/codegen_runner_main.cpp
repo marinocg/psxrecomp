@@ -18,10 +18,11 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
     emitter.writeLine(
         "std::cout << \"[psxrecomp] Logging enabled: \" << PSXRECOMP_ENABLE_LOGGING << \"\\n\";");
     emitter.writeBlank();
+    emitter.writeLine("std::filesystem::path exeDir = std::filesystem::current_path();");
     emitter.writeLine("if (argv != nullptr && argv[0] != nullptr)");
     emitter.openBlock("");
-    emitter.writeLine(
-        "std::filesystem::path exeDir = std::filesystem::path(argv[0]).parent_path();");
+    emitter.writeLine("exeDir = std::filesystem::path(argv[0]).parent_path();");
+    emitter.closeBlock();
     emitter.writeLine("std::filesystem::path resourcesDir = exeDir / \"resources\";");
     emitter.writeLine("std::filesystem::path resourceManifestPath =");
     emitter.writeLine("    resourcesDir / \"index\" / \"resources_manifest.json\";");
@@ -66,7 +67,6 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
     emitter.writeLine("          << (filesystemEnabled ? \"true\" : \"false\")");
     emitter.writeLine("          << \", embedded.containersScanned=\" << containersScanned");
     emitter.writeLine("          << \", embedded.hitsExtracted=\" << hitsExtracted << \"\\n\";");
-    emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeBlank();
@@ -130,6 +130,79 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
     emitter.writeLine("return 1;");
     emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
+    emitter.writeLine("const std::filesystem::path defaultDiscPath = resourcesDir / \"disc\" / "
+                      "\"data_track.bin\";");
+    emitter.writeLine(
+        "const std::filesystem::path defaultDiscLayoutPath = resourcesDir / \"disc\" / "
+        "\"disc_layout.json\";");
+    emitter.writeLine("std::filesystem::path mountedDiscPath = defaultDiscPath;");
+    emitter.writeLine("bool usingDefaultDiscPath = true;");
+    emitter.writeLine("if (const char* discPathEnv = std::getenv(\"PSXRECOMP_DISC_IMAGE\"))");
+    emitter.openBlock("");
+    emitter.writeLine("if (discPathEnv[0] != '\\0')");
+    emitter.openBlock("");
+    emitter.writeLine("mountedDiscPath = std::filesystem::path(discPathEnv);");
+    emitter.writeLine("usingDefaultDiscPath = false;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("psxrecomp::runtime::DiscImage::Layout mountedDiscLayout =");
+    emitter.writeLine("    psxrecomp::runtime::DiscImage::Layout::Auto;");
+    emitter.writeLine("if (usingDefaultDiscPath)");
+    emitter.openBlock("");
+    emitter.writeLine("if (auto layoutText = readTextFile(defaultDiscLayoutPath))");
+    emitter.openBlock("");
+    emitter.writeLine("psxrecomp::u64 sectorSize = 0;");
+    emitter.writeLine("if (extractJsonU64Field(*layoutText, \"sectorSize\", &sectorSize))");
+    emitter.openBlock("");
+    emitter.writeLine("if (sectorSize == 2048)");
+    emitter.openBlock("");
+    emitter.writeLine("mountedDiscLayout = psxrecomp::runtime::DiscImage::Layout::User2048;");
+    emitter.closeBlock();
+    emitter.writeLine("else if (sectorSize == 2352)");
+    emitter.openBlock("");
+    emitter.writeLine("mountedDiscLayout = psxrecomp::runtime::DiscImage::Layout::Raw2352;");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Unsupported disc layout sectorSize=\"");
+    emitter.writeLine("          << sectorSize << \" in \" << defaultDiscLayoutPath.string()");
+    emitter.writeLine("          << \"; falling back to auto-detect.\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] disc_layout.json missing sectorSize: \"");
+    emitter.writeLine("          << defaultDiscLayoutPath.string()");
+    emitter.writeLine("          << \"; falling back to auto-detect.\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] disc layout metadata not found: \"");
+    emitter.writeLine("          << defaultDiscLayoutPath.string()");
+    emitter.writeLine("          << \"; falling back to auto-detect.\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("if (std::filesystem::exists(mountedDiscPath))");
+    emitter.openBlock("");
+    emitter.writeLine("auto disc = std::make_shared<psxrecomp::runtime::DiscImage>();");
+    emitter.writeLine("if (disc->open(mountedDiscPath, mountedDiscLayout))");
+    emitter.openBlock("");
+    emitter.writeLine("system.setDisc(disc);");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] disc mounted: \" << mountedDiscPath.string() << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Failed to mount disc image: \" << "
+                      "mountedDiscPath.string() << \"\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Runtime disc blob not found: \" << "
+                      "mountedDiscPath.string() << \"\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::initMemory(system);");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2 || defined(_WIN32)");
     emitter.writeLine("const bool defaultPresent = true;");
