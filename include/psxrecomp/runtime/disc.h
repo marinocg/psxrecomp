@@ -12,7 +12,7 @@
 namespace std
 {
 
-template <typename T, size_t Extent> class span
+template <typename T, size_t Extent> class Span
 {
   public:
     using element_type = T;
@@ -20,14 +20,14 @@ template <typename T, size_t Extent> class span
     using pointer = T*;
     using iterator = T*;
 
-    span(pointer ptr, size_t count) : m_data(ptr)
+    Span(pointer ptr, size_t count) : m_data(ptr)
     {
         (void)count;
     }
 
-    template <typename U> explicit span(std::array<U, Extent>& source) : m_data(source.data()) {}
+    template <typename U> explicit Span(std::array<U, Extent>& source) : m_data(source.data()) {}
 
-    template <typename U> explicit span(const std::array<U, Extent>& source) : m_data(source.data())
+    template <typename U> explicit Span(const std::array<U, Extent>& source) : m_data(source.data())
     {
     }
 
@@ -55,6 +55,8 @@ template <typename T, size_t Extent> class span
   private:
     pointer m_data = nullptr;
 };
+
+template <typename T, size_t Extent> using span = Span<T, Extent>;
 
 } // namespace std
 #endif
