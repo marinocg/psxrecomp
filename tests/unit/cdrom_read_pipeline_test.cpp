@@ -137,6 +137,13 @@ void ack(psxrecomp::runtime::Cdrom& cdrom)
     cdrom.writeInterruptFlags(0x07);
 }
 
+void readSingleResponseAndAck(psxrecomp::runtime::Cdrom& cdrom)
+{
+    assert((cdrom.readStatus() & (1u << 5)) != 0u);
+    (void)cdrom.readResponse();
+    ack(cdrom);
+}
+
 void assertResponse(psxrecomp::runtime::Cdrom& cdrom, std::initializer_list<psxrecomp::u8> expected)
 {
     for (psxrecomp::u8 value : expected)
@@ -153,14 +160,14 @@ void issueSetloc(psxrecomp::runtime::Cdrom& cdrom, psxrecomp::u8 mm, psxrecomp::
     cdrom.writeParam(ff);
     cdrom.writeCommand(0x02);
     assert(irqType(cdrom) == 0x03);
-    ack(cdrom);
+    readSingleResponseAndAck(cdrom);
 }
 
 void issueReadN(psxrecomp::runtime::Cdrom& cdrom)
 {
     cdrom.writeCommand(0x06);
     assert(irqType(cdrom) == 0x03);
-    ack(cdrom);
+    readSingleResponseAndAck(cdrom);
 }
 } // namespace
 
@@ -194,12 +201,12 @@ int main()
         {
             assert(cdrom.readData() == userByte(1, i));
         }
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
 
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         assert(cdrom.readData() == userByte(2, 0));
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
     }
 
     // Setmode bit5 (sector size) must change data bytes exposed through RDDATA.
@@ -211,14 +218,14 @@ int main()
         cdrom.writeParam(0x20); // sector size=2340 mode
         cdrom.writeCommand(0x0E);
         assert(irqType(cdrom) == 0x03);
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
 
         issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
         issueReadN(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         assert(cdrom.readData() == static_cast<psxrecomp::u8>((0xA0u + 12u) & 0xFFu));
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
     }
 
     // XA mode should expose XA payload from validated form2 sectors.
@@ -230,14 +237,14 @@ int main()
         cdrom.writeParam(0x40); // XA streaming model: skip 24-byte header
         cdrom.writeCommand(0x0E);
         assert(irqType(cdrom) == 0x03);
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
 
         issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
         issueReadN(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         assert(cdrom.readData() == userByte(0, 0));
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
     }
 
     // XA Setfilter should only surface matching XA sectors when enabled.
@@ -251,13 +258,13 @@ int main()
         cdrom.writeParam(0x48); // XA streaming + XA filter enable
         cdrom.writeCommand(0x0E);
         assert(irqType(cdrom) == 0x03);
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
 
         cdrom.writeParam(0x01); // file
         cdrom.writeParam(0x02); // channel
         cdrom.writeCommand(0x0D);
         assert(irqType(cdrom) == 0x03);
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
 
         issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
         issueReadN(cdrom);
@@ -270,14 +277,14 @@ int main()
         {
             (void)cdrom.readData();
         }
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
 
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         // Sector1 is filtered out; stream should advance to matching sector2.
         assert(cdrom.readData() == 0xC0);
         assert(cdrom.readData() == 0xC1);
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
     }
 
     // Invalid XA subheader should not apply XA-form2 payload path.
@@ -291,7 +298,7 @@ int main()
         cdrom.writeParam(0x40); // XA streaming
         cdrom.writeCommand(0x0E);
         assert(irqType(cdrom) == 0x03);
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
 
         issueSetloc(cdrom, 0x00, 0x02, 0x03); // LBA=3 (malformed duplicated subheader)
         issueReadN(cdrom);
@@ -300,7 +307,7 @@ int main()
         // Falls back to regular 2048-byte user payload beginning at raw[24].
         assert(cdrom.readData() == 0x55);
         assert(cdrom.readData() == 0x56);
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
     }
 
     // Data FIFO overread should return repeat byte (0x800-8 in 2048-byte mode).
@@ -319,7 +326,7 @@ int main()
             (void)cdrom.readData();
         }
         assert(cdrom.readData() == userByte(0, 2040));
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
     }
 
     // Pause + new Setloc/ReadN must not leak stale prefetched sector bytes.
@@ -349,7 +356,7 @@ int main()
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         assert(cdrom.readData() == userByte(3, 0));
-        ack(cdrom);
+        readSingleResponseAndAck(cdrom);
     }
 
     return 0;

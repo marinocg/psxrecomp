@@ -114,10 +114,12 @@ int main()
         cdrom.writeParam(0x00);
         cdrom.writeCommand(0x02); // Setloc
         assert(irqType(cdrom) == 0x03);
+        (void)cdrom.readResponse();
         ack(cdrom);
 
         cdrom.writeCommand(0x06); // ReadN start
         assert(irqType(cdrom) == 0x03);
+        (void)cdrom.readResponse();
         ack(cdrom);
 
         cdrom.tick(kCdromReadCycles);
