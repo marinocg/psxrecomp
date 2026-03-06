@@ -102,6 +102,8 @@ int main()
     cdrom.writeInterruptFlags(0x04); // Correct ACK bit for INT3.
     assert(irqType(cdrom) == 0x00);
     assert(!cdrom.hasIrqRequest());
+    assert(cdrom.readResponse() == 0x02);
+    assert(irqType(cdrom) == 0x00);
     cdrom.writeInterruptEnable(0x1F);
 
     cdrom.writeParam(0x00);
@@ -213,6 +215,25 @@ int main()
     ack(cdrom);
     assert(irqType(cdrom) == 0x02);
     assertResponse(cdrom, {0x00, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'A'});
+    ack(cdrom);
+
+    // ACKing INT2 before draining GetID response bytes must not drop unread
+    // bytes when a new IRQ event is queued afterward.
+    cdrom.writeCommand(0x1A); // GetID (disc present)
+    assert(irqType(cdrom) == 0x03);
+    assertResponse(cdrom, {0x00});
+    ack(cdrom);
+    assert(irqType(cdrom) == 0x02);
+
+    cdrom.writeInterruptFlags(0x02); // ACK INT2 before draining its response.
+    assert(irqType(cdrom) == 0x00);
+
+    cdrom.writeCommand(0x01); // Queue Getstat while prior response bytes remain unread.
+    assert(irqType(cdrom) == 0x00);
+    assertResponse(cdrom, {0x00, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'A'});
+
+    assert(irqType(cdrom) == 0x03);
+    assertResponse(cdrom, {0x00});
     ack(cdrom);
 
     cdrom.setDiscBackend(nullptr);

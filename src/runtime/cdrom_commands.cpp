@@ -413,7 +413,8 @@ void Cdrom::queueInterruptEvent(u8 type, std::initializer_list<u8> responses)
 
 void Cdrom::publishNextInterruptEvent()
 {
-    if ((m_interruptFlags & 0x07u) != 0 || m_execution.pendingResponseIrqs.empty())
+    if ((m_interruptFlags & 0x07u) != 0 || !m_responseFifo.empty() ||
+        m_execution.pendingResponseIrqs.empty())
     {
         return;
     }

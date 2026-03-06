@@ -328,20 +328,37 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     assert((hintMaskAfterIndex3Write & 0x1Fu) == 0x05u);
     assert((hintMaskAfterIndex3Write & 0xE0u) == 0xE0u);
 
-    // Drain any pre-existing CD-ROM IRQ state from earlier command checks.
-    setCdromIndex(1);
-    for (int i = 0; i < 8; ++i)
+    // Drain any pre-existing CD-ROM IRQ/response state from earlier command checks.
+    for (int i = 0; i < 128; ++i)
     {
+        setCdromIndex(0);
+        const psxrecomp::u8 status =
+            system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
+        const bool responseReady = (status & (1u << 5)) != 0u;
+
+        setCdromIndex(1);
         const psxrecomp::u8 currentFlags =
             system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
-        if ((currentFlags & 0x07u) == 0u)
+        const bool irqActive = (currentFlags & 0x07u) != 0u;
+
+        if (!responseReady && !irqActive)
         {
             break;
         }
-        system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07);
-        system.writeMmioExplicit<psxrecomp::u32>(
-            psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
-            ~static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
+
+        if (responseReady)
+        {
+            setCdromIndex(0);
+            (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
+        }
+        else
+        {
+            setCdromIndex(1);
+            system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07);
+            system.writeMmioExplicit<psxrecomp::u32>(
+                psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
+                ~static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
+        }
     }
 
     // CD-ROM IRQ queue: INT3 must remain visible until ACKed, and unread response

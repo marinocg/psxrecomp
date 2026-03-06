@@ -16,7 +16,7 @@ option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
-#Shared build options(target - scoped)
+# Shared build options (target-scoped)
 add_library(psxrecomp_build_options INTERFACE)
 target_compile_definitions(psxrecomp_build_options INTERFACE
     PSXRECOMP_PROJECT_VERSION="${PROJECT_VERSION}"

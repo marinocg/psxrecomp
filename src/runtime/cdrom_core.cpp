@@ -72,7 +72,9 @@ void Cdrom::setDiscBackend(Disc* disc)
     if (!m_discBackendInitialized)
     {
         m_disc = disc;
-        m_discBackendInitialized = true;
+        // Treat a null backend as "not yet initialized" so startup can mount the
+        // first disc without triggering a synthetic lid-open transition.
+        m_discBackendInitialized = (disc != nullptr);
         return;
     }
 

@@ -21,7 +21,11 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
     emitter.writeLine("std::filesystem::path exeDir = std::filesystem::current_path();");
     emitter.writeLine("if (argv != nullptr && argv[0] != nullptr)");
     emitter.openBlock("");
-    emitter.writeLine("exeDir = std::filesystem::path(argv[0]).parent_path();");
+    emitter.writeLine("const std::filesystem::path exePath(argv[0]);");
+    emitter.writeLine("if (!exePath.parent_path().empty())");
+    emitter.openBlock("");
+    emitter.writeLine("exeDir = exePath.parent_path();");
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeLine("std::filesystem::path resourcesDir = exeDir / \"resources\";");
     emitter.writeLine("std::filesystem::path resourceManifestPath =");
