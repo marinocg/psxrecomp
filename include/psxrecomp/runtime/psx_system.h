@@ -13,6 +13,7 @@
 #include "psxrecomp/runtime/logger.h"
 #include "psxrecomp/runtime/memory_map.h"
 #include "psxrecomp/runtime/scheduler.h"
+#include "psxrecomp/runtime/sio0.h"
 #include "psxrecomp/runtime/spu.h"
 #include "psxrecomp/runtime/timers.h"
 #include "psxrecomp/types.h"
@@ -166,6 +167,7 @@ class PsxSystem
     Spu& spu();
     Cdrom& cdrom();
     InputController& input();
+    Sio0& sio0();
     DmaController& dma();
     InterruptController& interrupts();
     Scheduler& scheduler();
@@ -299,6 +301,7 @@ class PsxSystem
     Spu m_spu;
     Cdrom m_cdrom;
     InputController m_input;
+    Sio0 m_sio0;
     DmaController m_dma;
     InterruptController m_interrupts;
     KernelEventTable m_events;

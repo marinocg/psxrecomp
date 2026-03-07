@@ -190,6 +190,16 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
         bindGteRuntimeHooks();
     }
     m_input.reset();
+    m_sio0.reset();
+    m_sio0.setInputController(&m_input);
+    m_sio0.setScheduler(&m_scheduler);
+    m_sio0.setIrqCallback(
+        [this]()
+        {
+            m_interrupts.raise(InterruptLine::Controller);
+            syncCop0InterruptPending();
+            m_debugOverlay.incrementInterruptsRaised();
+        });
     m_dma.reset();
     m_scheduler.reset();
     m_debugOverlay.reset();

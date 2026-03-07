@@ -90,6 +90,16 @@ void PsxSystem::reset()
     m_cdrom.setXaAudioSink([this](const std::vector<int16_t>& interleavedStereoPcm)
                            { m_spu.pushCdAudioSamples(interleavedStereoPcm); });
     m_input.reset();
+    m_sio0.reset();
+    m_sio0.setInputController(&m_input);
+    m_sio0.setScheduler(&m_scheduler);
+    m_sio0.setIrqCallback(
+        [this]()
+        {
+            m_interrupts.raise(InterruptLine::Controller);
+            syncCop0InterruptPending();
+            m_debugOverlay.incrementInterruptsRaised();
+        });
     m_dma.reset();
     m_interrupts.reset();
     m_events.reset();
@@ -384,159 +394,6 @@ void PsxSystem::callCdromIntrinsic(Address address)
                 stream << std::hex << address;
                 return stream.str();
             }());
-}
-
-u32 PsxSystem::frameCount() const
-{
-    return m_frameCount;
-}
-
-u32 PsxSystem::advanceFrame()
-{
-    tickCpuCycles(CYCLES_PER_FRAME);
-    return m_frameCount;
-}
-
-u8* PsxSystem::getRam()
-{
-    return m_ram.data();
-}
-
-const u8* PsxSystem::getRam() const
-{
-    return m_ram.data();
-}
-
-Gpu& PsxSystem::gpu()
-{
-    return m_gpu;
-}
-
-Spu& PsxSystem::spu()
-{
-    return m_spu;
-}
-
-Cdrom& PsxSystem::cdrom()
-{
-    return m_cdrom;
-}
-
-InputController& PsxSystem::input()
-{
-    return m_input;
-}
-
-DmaController& PsxSystem::dma()
-{
-    return m_dma;
-}
-
-InterruptController& PsxSystem::interrupts()
-{
-    return m_interrupts;
-}
-
-Scheduler& PsxSystem::scheduler()
-{
-    return m_scheduler;
-}
-
-RuntimeLogger& PsxSystem::logger()
-{
-    return m_logger;
-}
-
-RuntimeDebugOverlay& PsxSystem::debugOverlay()
-{
-    return m_debugOverlay;
-}
-
-TimerController& PsxSystem::timers()
-{
-    return m_timers;
-}
-
-Cop0& PsxSystem::cop0()
-{
-    return m_cop0;
-}
-
-Gte& PsxSystem::gte()
-{
-    return m_gte;
-}
-
-void PsxSystem::setDisc(std::shared_ptr<Disc> disc)
-{
-    m_disc = std::move(disc);
-    m_cdrom.setDiscBackend(m_disc.get());
-    if (m_cpuCycles == 0)
-    {
-        m_cdrom.primeBootState(m_disc != nullptr);
-    }
-}
-
-KernelEventTable& PsxSystem::events()
-{
-    return m_events;
-}
-
-InterruptDispatcher& PsxSystem::dispatcher()
-{
-    return m_dispatcher;
-}
-
-void PsxSystem::setDiscSwapInfo(DiscSwapInfo info)
-{
-    if (!m_discSwapInfoInitialized)
-    {
-        m_discSwapInfo = std::move(info);
-        m_discSwapInfoInitialized = true;
-        return;
-    }
-
-    const bool activeChanged = info.activeDiscIndex != m_discSwapInfo.activeDiscIndex;
-    const bool discCountChanged = info.discs.size() != m_discSwapInfo.discs.size();
-    m_discSwapInfo = std::move(info);
-    if (activeChanged || discCountChanged)
-    {
-        m_cdrom.notifyDiscSwap();
-    }
-}
-
-const PsxSystem::DiscSwapInfo& PsxSystem::discSwapInfo() const
-{
-    return m_discSwapInfo;
-}
-
-std::vector<u8> PsxSystem::dumpRam() const
-{
-    return m_ram;
-}
-
-std::vector<u8> PsxSystem::dumpVram() const
-{
-    std::vector<u8> bytes;
-    const auto& words = m_gpu.vramWords();
-    bytes.reserve(words.size() * sizeof(u32));
-    for (u32 value : words)
-    {
-        appendU32(bytes, value);
-    }
-    return bytes;
-}
-
-std::vector<u8> PsxSystem::dumpSpuRam() const
-{
-    std::vector<u8> bytes;
-    const auto& words = m_spu.ramWords();
-    bytes.reserve(words.size() * sizeof(u32));
-    for (u32 value : words)
-    {
-        appendU32(bytes, value);
-    }
-    return bytes;
 }
 
 } // namespace runtime

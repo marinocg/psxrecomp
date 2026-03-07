@@ -113,6 +113,43 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
     emitter.openBlock("");
     emitter.writeLine("running = false;");
     emitter.closeBlock();
+    emitter.writeLine("if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)");
+    emitter.openBlock("");
+    emitter.writeLine("const bool pressed = (event.type == SDL_KEYDOWN);");
+    emitter.writeLine("using psxrecomp::runtime::ControllerButton;");
+    emitter.writeLine("switch (event.key.keysym.sym)");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "case SDLK_UP:    system.input().setButton(ControllerButton::Up, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_DOWN:  system.input().setButton(ControllerButton::Down, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_LEFT:  system.input().setButton(ControllerButton::Left, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_RIGHT: system.input().setButton(ControllerButton::Right, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_RETURN:  system.input().setButton(ControllerButton::Start, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_RSHIFT:  system.input().setButton(ControllerButton::Select, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_z: system.input().setButton(ControllerButton::Cross, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_x: system.input().setButton(ControllerButton::Circle, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_a: system.input().setButton(ControllerButton::Square, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_s: system.input().setButton(ControllerButton::Triangle, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_q: system.input().setButton(ControllerButton::L1, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_w: system.input().setButton(ControllerButton::R1, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_e: system.input().setButton(ControllerButton::L2, pressed); break;");
+    emitter.writeLine(
+        "case SDLK_r: system.input().setButton(ControllerButton::R2, pressed); break;");
+    emitter.writeLine("default: break;");
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeLine("SDL_RenderClear(renderer);");
     emitter.writeLine("SDL_RenderCopy(renderer, texture, nullptr, nullptr);");
@@ -200,6 +237,26 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
     emitter.writeLine("if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0)");
     emitter.openBlock("");
     emitter.writeLine("running = false;");
+    emitter.closeBlock();
+    emitter.writeLine("// Poll keyboard for controller input");
+    emitter.openBlock("");
+    emitter.writeLine("using psxrecomp::runtime::ControllerButton;");
+    emitter.writeLine(
+        "auto keyState = [](int vk) -> bool { return (GetAsyncKeyState(vk) & 0x8000) != 0; };");
+    emitter.writeLine("system.input().setButton(ControllerButton::Up, keyState(VK_UP));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Down, keyState(VK_DOWN));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Left, keyState(VK_LEFT));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Right, keyState(VK_RIGHT));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Start, keyState(VK_RETURN));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Select, keyState(VK_RSHIFT));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Cross, keyState('Z'));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Circle, keyState('X'));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Square, keyState('A'));");
+    emitter.writeLine("system.input().setButton(ControllerButton::Triangle, keyState('S'));");
+    emitter.writeLine("system.input().setButton(ControllerButton::L1, keyState('Q'));");
+    emitter.writeLine("system.input().setButton(ControllerButton::R1, keyState('W'));");
+    emitter.writeLine("system.input().setButton(ControllerButton::L2, keyState('E'));");
+    emitter.writeLine("system.input().setButton(ControllerButton::R2, keyState('R'));");
     emitter.closeBlock();
     emitter.writeLine("Sleep(16);");
     emitter.closeBlock();
