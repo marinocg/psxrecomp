@@ -39,6 +39,7 @@ class Cop0
     u32 mfc0(u8 rd) const;
     void mtc0(u8 rd, u32 value);
 
+    bool cop2Enabled() const;
     void setHardwareInterruptPending(bool pending);
     bool irqEnableHw0() const;
     bool shouldTakeInterruptException() const;
@@ -53,6 +54,7 @@ class Cop0
     static constexpr u32 StatusCurrentModeMask = 0x3u;
     static constexpr u32 StatusModeBitsMask = 0x3Fu;
     static constexpr u32 StatusCurrentInterruptEnableBit = 0x1u;
+    static constexpr u32 StatusCop2EnableBit = 1u << 30;              // CU2
     static constexpr u32 StatusInterruptMaskIp0Ip2Bits = 0x00000700u; // IM0..IM2
     static constexpr u32 StatusInterruptMaskIp2Bit = 1u << 10;        // IM2 (masks Cause.IP2)
     static constexpr u32 CauseSoftwareInterruptPendingMask = 0x00000300u;

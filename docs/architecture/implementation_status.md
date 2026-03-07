@@ -92,7 +92,9 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Delay slot flagging and target resolution helpers.
 - Function boundary discovery heuristics and indirect jump/jump table detection.
 - Code-vs-data segmentation helpers for mixed sections.
+- Callback/indirect-call target harvesting now distinguishes likely function entries from data pointers, allowing IRQ/draw callback paths (including `gtelab_auto`) to recompile without promoting adjacent `.rodata` blobs into code.
 - Entry-function fall-through merge: when the entry point lacks a control-flow terminator before the next prologue, the two regions are merged into a single function boundary.
+- Focused GTE validation demo (`examples/demos/gtelab_auto`) now exercises COP2 transfer/control and transform/lighting instruction mixes (`MTC2/MFC2`, `CTC2/CFC2`, `LWC2/SWC2`, `RTPS/RTPT`, `NCLIP`, `AVSZ3/AVSZ4`, `MVMVA`, and the lighting/color family through shaded primitive output).
 
 **Missing**
 
@@ -106,6 +108,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Function boundary detection and call graph discovery in the pipeline.
 - MIPS→IR lowering for arithmetic/logical ops, shifts, mult/div, HI/LO moves, branches, jumps,
   calls, returns, syscalls, COP0 `MFC0`/`MTC0`/`RFE`, and MMIO intrinsics with non-nop delay slots, including link-register semantics for `JAL`/`JALR` and register-target `JR` lowering.
+- MIPS→IR lowering now covers COP2 register transfers (`MFC2`/`MTC2`/`CFC2`/`CTC2`), memory-backed GTE data-register transfers (`LWC2`/`SWC2`), and generic GTE command execution (`GTE_EXEC`) using the raw 32-bit instruction encoding.
 - BIOS JAL targets (addresses in the `A0`/`B0`/`C0` vector range) are now lowered to `CALL` IR ops instead of `SYSCALL`, routing them through `callBiosVector` for correct dispatch.
 - Optimization passes (constant folding, DCE, CSE, LICM) integrated into the pipeline.
 
@@ -120,6 +123,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Structured C++ emission for core IR ops with control flow and phi-node lowering.
 - Runtime helpers for memory access, MMIO intrinsics, syscalls, and address-based dispatch.
 - COP0 lowering now emits runtime calls for `mfc0`/`mtc0`/`rfe`, and syscall lowering routes non-BIOS syscall codes through COP0 exception entry + vector dispatch.
+- COP2 transfer lowering now emits guarded runtime GTE calls (`gte().mfc2`/`mtc2`/`cfc2`/`ctc2`), dedicated guarded memory-backed data-register transfers for `LWC2`/`SWC2`, and generic guarded `gte().exec(rawEncoding)` lowering for decoded GTE command opcodes.
 - Peephole optimizations, logging hooks, and debug metadata in generated output.
 - End-to-end pipeline validation and compile-and-run checks in unit tests.
 - Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs, including per-run trend snapshots and top-family prioritization.
@@ -136,7 +140,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 **Missing**
 
-- Higher-level ABI conventions (stack, callee-saved handling), remaining COP0 branch/control transfer variants, and aggressive inlining heuristics.
+- Higher-level ABI conventions (stack, callee-saved handling), remaining COP0 branch/control transfer variants, aggressive inlining heuristics, and edge-case GTE accuracy work beyond the current transform/lighting coverage (for example, more exhaustive FLAG corner cases and rare register timing quirks).
 
 ### Runtime Library (~77%)
 
@@ -144,6 +148,9 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 
 - Core PSX system scaffolding (memory, basic subsystems).
 - Minimal COP0 runtime device with `Status`/`Cause`/`EPC`/`BadVAddr` register backing, exception entry bookkeeping, and `RFE` mode restore behavior.
+- Runtime GTE device with separate COP2 data/control register banks, real screen/depth/RGB FIFO movement, raw-command execution decode, transform/depth command subset (`RTPS`/`RTPT`/`NCLIP`/`AVSZ3`/`AVSZ4`/`MVMVA`), lighting/color command family (`DPCS`, `INTPL`, `NCDS`, `CDP`, `NCDT`, `NCCS`, `CC`, `NCS`, `NCT`, `DCPL`, `DPCT`, `GPF`, `GPL`, `NCCT`), and busy-cycle tracking wired through `PsxSystem`.
+- GTE timing fidelity now includes command-cycle countdown, CPU stall on COP2 reads / next command while busy, no stall on COP2 writes, delayed IRGB/ORGB visibility, LZCS/LZCR register behavior, and save-state serialization/restoration of in-flight GTE state.
+- COP0 now exposes `cop2Enabled()` (`Status.CU2`) so generated COP2 register accesses can trap correctly when the GTE is disabled.
 - COP0 interrupt wiring now mirrors IRQ-controller pending state into `Cause.IP2`, preserves hardware IP bits when software writes `Cause` via `mtc0`, and gates IRQ delivery/exception entry with `Status.IEc` + `Status.IM2` (plus runtime callback/critical-section guards).
 - IRQ delivery now restores COP0 `Status` via a guaranteed `serviceInterrupts()` epilogue (`rfe`) instead of relying on BIOS `B0:17` to manage COP0 state.
 - Boot now seeds minimal COP0 Status defaults for BIOS-style IRQ flow (`IEc=1`, `IM2=1`, `KUc=0`) before entering recompiled code.
@@ -151,7 +158,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Structured runtime logging with per-category events and configurable verbosity.
 - Debug overlay counters for frame timing, DMA transfers, and interrupt activity.
 - Debug overlay text now includes FPS derived from the last frame cycle count.
-- Diagnostic memory dump support for RAM, VRAM, and SPU RAM plus save-state serialization/checksum.
+- Diagnostic memory dump support for RAM, VRAM, and SPU RAM plus save-state serialization/checksum, now including persisted in-flight GTE timing/register state.
 - Resource pack loader for runtime assets (textures/audio/movie payload containers).
 - BIOS vector framework (`callBiosVector`) handling A0/B0/C0 vectors with 50 implemented functions (16 A0, 23 B0, 11 C0).
 - Functional string/memory BIOS functions (strcmp, strcpy, memcpy, memset, bzero).

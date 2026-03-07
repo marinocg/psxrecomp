@@ -5,6 +5,7 @@
 #include "psxrecomp/runtime/debug_overlay.h"
 #include "psxrecomp/runtime/dma.h"
 #include "psxrecomp/runtime/gpu.h"
+#include "psxrecomp/runtime/gte.h"
 #include "psxrecomp/runtime/input.h"
 #include "psxrecomp/runtime/interrupt_controller.h"
 #include "psxrecomp/runtime/interrupt_dispatcher.h"
@@ -38,6 +39,11 @@ namespace runtime
 class PsxSystem
 {
   public:
+    static constexpr u32 BIOS_C0_TABLE_ADDRESS = 0x80000500u;
+    static constexpr u32 BIOS_C0_HANDLER_TABLE_ADDRESS = 0x80000540u;
+    static constexpr u32 BIOS_B0_TABLE_ADDRESS = 0x80000580u;
+    static constexpr u32 BIOS_B0_HANDLER_TABLE_ADDRESS = 0x800005C0u;
+
     struct DiscSwapInfo
     {
         struct DiscEntry
@@ -167,6 +173,7 @@ class PsxSystem
     RuntimeDebugOverlay& debugOverlay();
     TimerController& timers();
     Cop0& cop0();
+    Gte& gte();
 
     void setDisc(std::shared_ptr<Disc> disc);
 
@@ -282,6 +289,8 @@ class PsxSystem
     {
     };
 
+    void bindGteRuntimeHooks();
+
     std::vector<u8> m_ram;        // 2MB main RAM
     std::vector<u8> m_scratchpad; // 1KB scratchpad
     std::vector<u8> m_bios;       // 512KB BIOS
@@ -302,6 +311,7 @@ class PsxSystem
     RuntimeDebugOverlay m_debugOverlay;
     TimerController m_timers;
     Cop0 m_cop0;
+    Gte m_gte;
     std::shared_ptr<Disc> m_disc;
     DiscSwapInfo m_discSwapInfo;
     bool m_discSwapInfoInitialized = false;
@@ -310,9 +320,16 @@ class PsxSystem
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState
     {
-        u32 descriptorAddress = 0; ///< B0(19) HookEntryInt descriptor pointer.
+        u32 descriptorAddress = 0; ///< B0(19) HookEntryInt setjmp buffer pointer.
+    };
+    struct BiosCdromState
+    {
+        bool initialized = false;
+        u32 handleStorageAddress = 0;
+        std::array<u32, 5> eventHandles{};
     };
     HookEntryIntState m_hookEntryInt;
+    BiosCdromState m_biosCdrom;
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
     bool m_hasPendingCallbackRegisters = false;
@@ -338,7 +355,9 @@ class PsxSystem
     void syncLevelInterruptSources();
     void syncCop0InterruptPending();
     void invokeHookEntryIntHandler();
-    u32 resolveHookEntryIntCallback(u32 descriptorAddress) const;
+    void initializeBiosCdromState(u32 handleStorageAddress);
+    void resetBiosCdromState();
+    bool serviceBiosCdromInterrupt();
 
     static Address normalizeAddress(Address address)
     {

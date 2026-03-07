@@ -1,5 +1,6 @@
 #include "pipeline_analysis_helpers.h"
 
+#include "../disasm/analysis_helpers.h"
 #include "psxrecomp/disasm/analysis.h"
 
 #include <algorithm>
@@ -20,16 +21,82 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     PipelineCodeLayout layout;
 
     const auto jumpTables = disasm::findJumpTables(disassembled);
-    std::unordered_map<Address, disasm::Opcode> opcodeByAddress;
-    opcodeByAddress.reserve(disassembled.size());
-    for (const auto& instruction : disassembled)
+    const auto instructionIndexMap = disasm::detail::buildInstructionIndex(disassembled);
+    const auto looksLikeFunctionEntry = [&disassembled, &instructionIndexMap](Address address)
     {
-        opcodeByAddress.emplace(instruction.address, instruction.opcode);
-    }
-    const auto hasKnownOpcode = [&opcodeByAddress](Address address)
-    {
-        auto it = opcodeByAddress.find(address);
-        return it != opcodeByAddress.end() && it->second != disasm::Opcode::UNKNOWN;
+        auto it = instructionIndexMap.find(address);
+        if (it == instructionIndexMap.end())
+        {
+            return false;
+        }
+
+        const size_t startIndex = it->second;
+        if (disasm::detail::hasProloguePattern(disassembled, startIndex))
+        {
+            return true;
+        }
+
+        const auto hasNearbyStackPrologue = [&]()
+        {
+            const size_t prologueSearchLimit = std::min(startIndex + 4, disassembled.size());
+            for (size_t prologueIndex = startIndex; prologueIndex < prologueSearchLimit;
+                 ++prologueIndex)
+            {
+                const auto& prologueInstruction = disassembled[prologueIndex];
+                if (prologueInstruction.opcode != disasm::Opcode::ADDIU ||
+                    prologueInstruction.rs != Registers::SP ||
+                    prologueInstruction.rt != Registers::SP || prologueInstruction.immediate >= 0)
+                {
+                    continue;
+                }
+
+                const size_t saveLimit = std::min(prologueIndex + 8, disassembled.size());
+                for (size_t saveIndex = prologueIndex + 1; saveIndex < saveLimit; ++saveIndex)
+                {
+                    const auto& saveInstruction = disassembled[saveIndex];
+                    if (saveInstruction.opcode == disasm::Opcode::SW &&
+                        saveInstruction.rs == Registers::SP && saveInstruction.rt == Registers::RA)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+
+        if (hasNearbyStackPrologue())
+        {
+            return true;
+        }
+
+        const auto& firstInstruction = disassembled[startIndex];
+
+        if (firstInstruction.opcode == disasm::Opcode::J)
+        {
+            return true;
+        }
+
+        if (firstInstruction.opcode != disasm::Opcode::LUI &&
+            firstInstruction.opcode != disasm::Opcode::ADDIU)
+        {
+            return false;
+        }
+
+        const size_t limitIndex = std::min(startIndex + 16, disassembled.size());
+        for (size_t i = startIndex; i < limitIndex; ++i)
+        {
+            const auto& instruction = disassembled[i];
+            if (instruction.opcode == disasm::Opcode::UNKNOWN)
+            {
+                break;
+            }
+            if (instruction.isReturn())
+            {
+                return true;
+            }
+        }
+
+        return false;
     };
 
     const Address binaryEnd = baseAddress + static_cast<Address>(exeImage.programData.size());
@@ -56,26 +123,86 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     layout.segmentation = disasm::segmentCodeAndData(disassembled, entrySeeds, jumpTables);
 
     std::vector<Address> harvestedPointers;
+    std::vector<Address> jumpTableHarvestedPointers;
     {
         const Address endAddress = baseAddress + static_cast<Address>(exeImage.programData.size());
-        for (const auto& range : layout.segmentation.dataRanges)
+        std::vector<Address> clusteredCodePointers;
+        const auto flushClusteredCodePointers = [&]()
         {
-            for (Address addr = range.start; addr <= range.end; addr += 4)
+            if (clusteredCodePointers.size() >= 2)
             {
-                const size_t offset = addr - baseAddress;
-                if (offset + 4 <= exeImage.programData.size())
+                harvestedPointers.insert(harvestedPointers.end(), clusteredCodePointers.begin(),
+                                         clusteredCodePointers.end());
+            }
+            else if (clusteredCodePointers.size() == 1 &&
+                     looksLikeFunctionEntry(clusteredCodePointers.front()))
+            {
+                harvestedPointers.push_back(clusteredCodePointers.front());
+            }
+            clusteredCodePointers.clear();
+        };
+
+        for (Address addr = baseAddress; addr + 3 < endAddress; addr += 4)
+        {
+            const size_t offset = addr - baseAddress;
+            const uint32_t value = static_cast<uint32_t>(exeImage.programData[offset]) |
+                                   (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
+                                   (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
+                                   (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
+            if (value >= baseAddress && value < endAddress && (value % 4) == 0 &&
+                instructionIndexMap.count(value) != 0)
+            {
+                clusteredCodePointers.push_back(value);
+            }
+            else
+            {
+                flushClusteredCodePointers();
+            }
+        }
+        flushClusteredCodePointers();
+        std::unordered_set<Address> existingSeeds(entrySeeds.begin(), entrySeeds.end());
+        constexpr size_t kMaxJumpTableEntries = 64;
+        for (const auto& jumpTable : jumpTables)
+        {
+            if (!jumpTable.tableBaseAddress.has_value())
+            {
+                continue;
+            }
+
+            Address tableAddress =
+                static_cast<Address>(*jumpTable.tableBaseAddress + jumpTable.tableOffset);
+            for (size_t entryIndex = 0; entryIndex < kMaxJumpTableEntries; ++entryIndex)
+            {
+                if (tableAddress < baseAddress || tableAddress >= endAddress)
                 {
-                    const uint32_t value =
-                        static_cast<uint32_t>(exeImage.programData[offset]) |
-                        (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
-                        (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
-                        (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
-                    if (value >= baseAddress && value < endAddress && (value % 4) == 0 &&
-                        hasKnownOpcode(value))
-                    {
-                        harvestedPointers.push_back(value);
-                    }
+                    break;
                 }
+
+                const size_t offset = tableAddress - baseAddress;
+                if (offset + 4 > exeImage.programData.size())
+                {
+                    break;
+                }
+
+                const uint32_t value =
+                    static_cast<uint32_t>(exeImage.programData[offset]) |
+                    (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
+                    (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
+                    (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
+                const Address target = static_cast<Address>(value);
+                if (target < baseAddress || target >= endAddress || (target % 4) != 0 ||
+                    instructionIndexMap.count(target) == 0)
+                {
+                    break;
+                }
+
+                if (existingSeeds.insert(target).second)
+                {
+                    entrySeeds.push_back(target);
+                    jumpTableHarvestedPointers.push_back(target);
+                }
+
+                tableAddress += 4;
             }
         }
         if (!harvestedPointers.empty())
@@ -84,6 +211,9 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
             {
                 entrySeeds.push_back(ptr);
             }
+        }
+        if (!jumpTableHarvestedPointers.empty() || !harvestedPointers.empty())
+        {
             layout.segmentation = disasm::segmentCodeAndData(disassembled, entrySeeds, jumpTables);
         }
     }
@@ -219,7 +349,7 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
 
             const Address addr = builtAddress.value();
             if (usedAsLikelyCodeTarget && addr >= baseAddress && addr < endAddress &&
-                (addr % 4) == 0 && hasKnownOpcode(addr) &&
+                (addr % 4) == 0 && looksLikeFunctionEntry(addr) &&
                 existingSeeds.find(addr) == existingSeeds.end())
             {
                 entrySeeds.push_back(addr);
@@ -260,6 +390,8 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     }
 
     std::vector<Address> additionalStarts = harvestedPointers;
+    additionalStarts.insert(additionalStarts.end(), jumpTableHarvestedPointers.begin(),
+                            jumpTableHarvestedPointers.end());
     additionalStarts.insert(additionalStarts.end(), codeHarvestedPointers.begin(),
                             codeHarvestedPointers.end());
     additionalStarts.push_back(entryAddress);
@@ -300,6 +432,18 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
 
     std::vector<disasm::FunctionBoundary> filledBoundaries;
     filledBoundaries.reserve(layout.boundaries.size() * 2);
+    const auto rangeHasCodeInstruction = [&layout](Address start, Address end)
+    {
+        if (start > end)
+        {
+            return false;
+        }
+
+        auto it = std::lower_bound(layout.codeInstructions.begin(), layout.codeInstructions.end(),
+                                   start, [](const disasm::Instruction& instruction, Address target)
+                                   { return instruction.address < target; });
+        return it != layout.codeInstructions.end() && it->address <= end;
+    };
 
     for (size_t i = 0; i < layout.boundaries.size(); ++i)
     {
@@ -309,7 +453,7 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
         {
             const Address gapStart = layout.boundaries[i].end + 4;
             const Address gapEnd = layout.boundaries[i + 1].start - 4;
-            if (gapStart <= gapEnd)
+            if (rangeHasCodeInstruction(gapStart, gapEnd))
             {
                 filledBoundaries.push_back({gapStart, gapEnd, false, false});
             }
@@ -320,7 +464,7 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     {
         const Address lastEnd = filledBoundaries.back().end;
         const Address codeEnd = layout.codeInstructions.back().address;
-        if (lastEnd + 4 <= codeEnd)
+        if (rangeHasCodeInstruction(lastEnd + 4, codeEnd))
         {
             filledBoundaries.push_back({lastEnd + 4, codeEnd, false, false});
         }

@@ -11,9 +11,7 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
     emitter.writeLine("                          const std::atomic<bool>& stopRequested,");
     emitter.writeLine("                          bool renderDebugOverlay)");
     emitter.openBlock("");
-    emitter.writeLine("constexpr size_t width = psxrecomp::runtime::SoftwareGpuRenderer::Width;");
-    emitter.writeLine("constexpr size_t height = psxrecomp::runtime::SoftwareGpuRenderer::Height;");
-    emitter.writeLine("std::vector<psxrecomp::u8> rgb(width * height * 3, 0);");
+    emitter.writeLine("std::vector<psxrecomp::u8> rgb;");
     emitter.writeLine("#if PSXRECOMP_HAS_SDL2");
     emitter.writeLine("if (SDL_Init(SDL_INIT_VIDEO) != 0)");
     emitter.openBlock("");
@@ -45,31 +43,54 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
     emitter.writeLine("SDL_Quit();");
     emitter.writeLine("return false;");
     emitter.closeBlock();
-    emitter.writeLine("SDL_Texture* texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24,");
-    emitter.writeLine(
-        "                                        SDL_TEXTUREACCESS_STREAMING, 1024, 512);");
-    emitter.writeLine("if (texture == nullptr)");
-    emitter.openBlock("");
-    emitter.writeLine("std::cerr << \"[psxrecomp][warn] SDL texture creation failed: \" << "
-                      "SDL_GetError() << \"\\n\";");
-    emitter.writeLine("SDL_DestroyRenderer(renderer);");
-    emitter.writeLine("SDL_DestroyWindow(window);");
-    emitter.writeLine("SDL_Quit();");
-    emitter.writeLine("return false;");
-    emitter.closeBlock();
+    emitter.writeLine("SDL_Texture* texture = nullptr;");
+    emitter.writeLine("size_t textureWidth = 0;");
+    emitter.writeLine("size_t textureHeight = 0;");
     emitter.writeLine("bool running = true;");
     emitter.writeLine("while (running && !stopRequested.load(std::memory_order_relaxed))");
     emitter.openBlock("");
-    emitter.writeLine("auto framebuffer = system.gpu().frameBufferSnapshot();");
-    emitter.writeLine("if (framebuffer.size() < width * height)");
+    emitter.writeLine("size_t displayWidth = 0;");
+    emitter.writeLine("size_t displayHeight = 0;");
+    emitter.writeLine("auto framebuffer = captureBestDisplayPixels(system.gpu(),");
+    emitter.writeLine("                                         &displayWidth,");
+    emitter.writeLine("                                         &displayHeight);");
+    emitter.writeLine("if (displayWidth == 0 || displayHeight == 0)");
     emitter.openBlock("");
-    emitter.writeLine("framebuffer.resize(width * height, 0);");
+    emitter.writeLine("displayWidth = 1;");
+    emitter.writeLine("displayHeight = 1;");
+    emitter.writeLine("framebuffer.assign(1, 0);");
     emitter.closeBlock();
     emitter.writeLine("if (renderDebugOverlay)");
     emitter.openBlock("");
-    emitter.writeLine("system.debugOverlay().drawOnFrameBuffer(framebuffer, width, height);");
+    emitter.writeLine(
+        "system.debugOverlay().drawOnFrameBuffer(framebuffer, displayWidth, displayHeight);");
     emitter.closeBlock();
-    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.writeLine("if (texture == nullptr || textureWidth != displayWidth || textureHeight != "
+                      "displayHeight)");
+    emitter.openBlock("");
+    emitter.writeLine("if (texture != nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine("SDL_DestroyTexture(texture);");
+    emitter.closeBlock();
+    emitter.writeLine("texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB24,");
+    emitter.writeLine(
+        "                            SDL_TEXTUREACCESS_STREAMING, static_cast<int>(displayWidth),");
+    emitter.writeLine("                            static_cast<int>(displayHeight));");
+    emitter.writeLine("if (texture == nullptr)");
+    emitter.openBlock("");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] SDL texture creation failed: \" << ");
+    emitter.writeLine("             SDL_GetError() << \"\\n\";");
+    emitter.writeLine("break;");
+    emitter.closeBlock();
+    emitter.writeLine("textureWidth = displayWidth;");
+    emitter.writeLine("textureHeight = displayHeight;");
+    emitter.writeLine("rgb.assign(displayWidth * displayHeight * 3, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("else if (rgb.size() != displayWidth * displayHeight * 3)");
+    emitter.openBlock("");
+    emitter.writeLine("rgb.assign(displayWidth * displayHeight * 3, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("for (size_t i = 0; i < displayWidth * displayHeight; ++i)");
     emitter.openBlock("");
     emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
     emitter.writeLine(
@@ -80,7 +101,7 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
         "rgb[i * 3 + 2] = static_cast<psxrecomp::u8>(((pixel >> 10) & 0x1F) * 255 / 31);");
     emitter.closeBlock();
     emitter.writeLine(
-        "SDL_UpdateTexture(texture, nullptr, rgb.data(), static_cast<int>(width * 3));");
+        "SDL_UpdateTexture(texture, nullptr, rgb.data(), static_cast<int>(displayWidth * 3));");
     emitter.writeLine("SDL_Event event;");
     emitter.writeLine("while (SDL_PollEvent(&event))");
     emitter.openBlock("");
@@ -98,7 +119,7 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
     emitter.writeLine("SDL_RenderPresent(renderer);");
     emitter.writeLine("SDL_Delay(16);");
     emitter.closeBlock();
-    emitter.writeLine("SDL_DestroyTexture(texture);");
+    emitter.writeLine("if (texture != nullptr) SDL_DestroyTexture(texture);");
     emitter.writeLine("SDL_DestroyRenderer(renderer);");
     emitter.writeLine("SDL_DestroyWindow(window);");
     emitter.writeLine("SDL_Quit();");
@@ -134,16 +155,27 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
     emitter.writeLine("TranslateMessage(&msg);");
     emitter.writeLine("DispatchMessageW(&msg);");
     emitter.closeBlock();
-    emitter.writeLine("auto framebuffer = system.gpu().frameBufferSnapshot();");
-    emitter.writeLine("if (framebuffer.size() < width * height)");
+    emitter.writeLine("size_t displayWidth = 0;");
+    emitter.writeLine("size_t displayHeight = 0;");
+    emitter.writeLine("auto framebuffer = captureBestDisplayPixels(system.gpu(),");
+    emitter.writeLine("                                         &displayWidth,");
+    emitter.writeLine("                                         &displayHeight);");
+    emitter.writeLine("if (displayWidth == 0 || displayHeight == 0)");
     emitter.openBlock("");
-    emitter.writeLine("framebuffer.resize(width * height, 0);");
+    emitter.writeLine("displayWidth = 1;");
+    emitter.writeLine("displayHeight = 1;");
+    emitter.writeLine("framebuffer.assign(1, 0);");
     emitter.closeBlock();
     emitter.writeLine("if (renderDebugOverlay)");
     emitter.openBlock("");
-    emitter.writeLine("system.debugOverlay().drawOnFrameBuffer(framebuffer, width, height);");
+    emitter.writeLine(
+        "system.debugOverlay().drawOnFrameBuffer(framebuffer, displayWidth, displayHeight);");
     emitter.closeBlock();
-    emitter.writeLine("for (size_t i = 0; i < width * height; ++i)");
+    emitter.writeLine("if (rgb.size() != displayWidth * displayHeight * 3)");
+    emitter.openBlock("");
+    emitter.writeLine("rgb.assign(displayWidth * displayHeight * 3, 0);");
+    emitter.closeBlock();
+    emitter.writeLine("for (size_t i = 0; i < displayWidth * displayHeight; ++i)");
     emitter.openBlock("");
     emitter.writeLine("psxrecomp::u16 pixel = framebuffer[i];");
     emitter.writeLine(
@@ -156,13 +188,14 @@ void emitRunnerSupportPresenter(CppEmitter& emitter)
     emitter.writeLine("HDC hdc = GetDC(window);");
     emitter.writeLine("BITMAPINFO bmi{};");
     emitter.writeLine("bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);");
-    emitter.writeLine("bmi.bmiHeader.biWidth = windowWidth;");
-    emitter.writeLine("bmi.bmiHeader.biHeight = -windowHeight;");
+    emitter.writeLine("bmi.bmiHeader.biWidth = static_cast<LONG>(displayWidth);");
+    emitter.writeLine("bmi.bmiHeader.biHeight = -static_cast<LONG>(displayHeight);");
     emitter.writeLine("bmi.bmiHeader.biPlanes = 1;");
     emitter.writeLine("bmi.bmiHeader.biBitCount = 24;");
     emitter.writeLine("bmi.bmiHeader.biCompression = BI_RGB;");
-    emitter.writeLine("StretchDIBits(hdc, 0, 0, windowWidth, windowHeight, 0, 0, windowWidth, "
-                      "windowHeight, rgb.data(), &bmi, DIB_RGB_COLORS, SRCCOPY);");
+    emitter.writeLine(
+        "StretchDIBits(hdc, 0, 0, windowWidth, windowHeight, 0, 0, static_cast<int>(displayWidth), "
+        "static_cast<int>(displayHeight), rgb.data(), &bmi, DIB_RGB_COLORS, SRCCOPY);");
     emitter.writeLine("ReleaseDC(window, hdc);");
     emitter.writeLine("if ((GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0)");
     emitter.openBlock("");

@@ -30,6 +30,16 @@ psxrecomp::u32 encodeCop0(psxrecomp::u32 rs, psxrecomp::u32 rt, psxrecomp::u32 r
     return (0x10u << 26) | (rs << 21) | (rt << 16) | (rd << 11) | (funct & 0x3Fu);
 }
 
+psxrecomp::u32 encodeCop2Transfer(psxrecomp::u32 rs, psxrecomp::u32 rt, psxrecomp::u32 rd)
+{
+    return (0x12u << 26) | (rs << 21) | (rt << 16) | (rd << 11);
+}
+
+psxrecomp::u32 encodeGteCommand(psxrecomp::u32 rawCommandBits)
+{
+    return 0x4A000000u | (rawCommandBits & 0x01FFFFFFu);
+}
+
 void appendLe32(std::vector<psxrecomp::u8>& buffer, psxrecomp::u32 value)
 {
     buffer.push_back(static_cast<psxrecomp::u8>(value & 0xFF));
@@ -207,10 +217,109 @@ int main()
     assert(foundCfc0Alias);
     assert(foundCop0Rfe);
 
+    std::vector<psxrecomp::u8> cop2Buffer;
+    cop2Buffer.reserve(36);
+    appendLe32(cop2Buffer, encodeCop2Transfer(0x04, 8, 6));  // mtc2 $t0, $c2_data6
+    appendLe32(cop2Buffer, encodeCop2Transfer(0x00, 9, 6));  // mfc2 $t1, $c2_data6
+    appendLe32(cop2Buffer, encodeCop2Transfer(0x06, 10, 7)); // ctc2 $t2, $c2_ctrl7
+    appendLe32(cop2Buffer, encodeCop2Transfer(0x02, 11, 7)); // cfc2 $t3, $c2_ctrl7
+    appendLe32(cop2Buffer, encodeI(0x32, 12, 8, 0x0010));    // lwc2 $c2_data8, 0x10($t4)
+    appendLe32(cop2Buffer, encodeI(0x3A, 13, 9, -4));        // swc2 $c2_data9, -4($t5)
+    appendLe32(cop2Buffer, encodeGteCommand(0x280030u));     // rtpt
+    appendLe32(cop2Buffer, encodeGteCommand(0x486012u));     // mvmva sf=1, cv=3
+    appendLe32(cop2Buffer, encodeR(0, 0, 0, 0, 0x00));       // nop
+
+    auto cop2Instructions =
+        MipsDisassembler::disassemble(cop2Buffer.data(), cop2Buffer.size(), 0x80032000);
+    auto cop2Result = buildIrFromMips(cop2Instructions);
+
+    assert(cop2Result.errors.empty());
+    bool foundGteMtc2 = false;
+    bool foundGteMfc2 = false;
+    bool foundGteCtc2 = false;
+    bool foundGteCfc2 = false;
+    bool foundGteLwc2 = false;
+    bool foundGteSwc2 = false;
+    bool foundGteExecRtpt = false;
+    bool foundGteExecMvmva = false;
+    for (const auto& instruction : cop2Result.instructions)
+    {
+        if (instruction.opcode == Opcode::GTE_MTC2 && instruction.inputs.size() == 2 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 6 &&
+            instruction.inputs[1].kind == psxrecomp::ir::ValueKind::REGISTER &&
+            instruction.inputs[1].reg == 8)
+        {
+            foundGteMtc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_MFC2 && instruction.inputs.size() == 1 &&
+            instruction.outputs.size() == 1 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 6 &&
+            instruction.outputs[0].kind == psxrecomp::ir::ValueKind::REGISTER &&
+            instruction.outputs[0].reg == 9)
+        {
+            foundGteMfc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_CTC2 && instruction.inputs.size() == 2 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 7 &&
+            instruction.inputs[1].kind == psxrecomp::ir::ValueKind::REGISTER &&
+            instruction.inputs[1].reg == 10)
+        {
+            foundGteCtc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_CFC2 && instruction.inputs.size() == 1 &&
+            instruction.outputs.size() == 1 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 7 &&
+            instruction.outputs[0].kind == psxrecomp::ir::ValueKind::REGISTER &&
+            instruction.outputs[0].reg == 11)
+        {
+            foundGteCfc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_LWC2 && instruction.inputs.size() == 2 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 8 &&
+            instruction.inputs[1].kind == psxrecomp::ir::ValueKind::TEMPORARY)
+        {
+            foundGteLwc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_SWC2 && instruction.inputs.size() == 2 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == 9 &&
+            instruction.inputs[1].kind == psxrecomp::ir::ValueKind::TEMPORARY)
+        {
+            foundGteSwc2 = true;
+        }
+        if (instruction.opcode == Opcode::GTE_EXEC && instruction.inputs.size() == 1 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == static_cast<psxrecomp::s32>(0x4A280030u))
+        {
+            foundGteExecRtpt = true;
+        }
+        if (instruction.opcode == Opcode::GTE_EXEC && instruction.inputs.size() == 1 &&
+            instruction.inputs[0].kind == psxrecomp::ir::ValueKind::IMMEDIATE &&
+            instruction.inputs[0].immediate == static_cast<psxrecomp::s32>(0x4A486012u))
+        {
+            foundGteExecMvmva = true;
+        }
+    }
+
+    assert(foundGteMtc2);
+    assert(foundGteMfc2);
+    assert(foundGteCtc2);
+    assert(foundGteCfc2);
+    assert(foundGteLwc2);
+    assert(foundGteSwc2);
+    assert(foundGteExecRtpt);
+    assert(foundGteExecMvmva);
+
     std::vector<psxrecomp::u8> cop0ExceptionBuffer;
-    cop0ExceptionBuffer.reserve(12);
+    cop0ExceptionBuffer.reserve(16);
     appendLe32(cop0ExceptionBuffer, encodeCop0(0x10, 0, 0, 0x02)); // tlbwi
     appendLe32(cop0ExceptionBuffer, encodeI(0x30, 8, 2, 0x0010));  // lwc0 $c2, 0x10($t0)
+    appendLe32(cop0ExceptionBuffer, 0xF4B00000u);                  // sdc1 $f16, 0($a1)
     appendLe32(cop0ExceptionBuffer, encodeR(0, 0, 0, 0, 0x00));    // nop
 
     auto cop0ExceptionInstructions = MipsDisassembler::disassemble(
@@ -220,6 +329,7 @@ int main()
 
     bool foundTlbwiRi = false;
     bool foundLwc0CpU = false;
+    bool foundSdc1CpU = false;
     for (const auto& instruction : cop0ExceptionResult.instructions)
     {
         if (instruction.opcode != Opcode::CPU_EXCEPTION || instruction.inputs.size() < 2 ||
@@ -244,10 +354,18 @@ int main()
         {
             foundLwc0CpU = true;
         }
+        if (instruction.sourceAsmAddress.value() == 0x80031008 &&
+            instruction.inputs[0].immediate ==
+                static_cast<psxrecomp::s32>(
+                    psxrecomp::runtime::Cop0::ExceptionCode::CoprocessorUnusable))
+        {
+            foundSdc1CpU = true;
+        }
     }
 
     assert(foundTlbwiRi);
     assert(foundLwc0CpU);
+    assert(foundSdc1CpU);
 
     psxrecomp::ir::MipsIrBuildOptions noSourceAsmOptions;
     noSourceAsmOptions.captureSourceAsm = false;

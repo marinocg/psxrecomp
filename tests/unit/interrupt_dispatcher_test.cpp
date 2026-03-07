@@ -128,7 +128,41 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 4: Masked interrupts are not dispatched
+    // Test 4: Alternate VBlank event class is delivered by VBlank IRQ
+    // ---------------------------------------------------------------
+    {
+        InterruptController interrupts;
+        KernelEventTable events;
+        InterruptDispatcher dispatcher;
+        RuntimeLogger logger;
+
+        interrupts.reset();
+        events.reset();
+        dispatcher.reset();
+
+        u32 handle = events.openEvent(EventClass::VBlankAlt, EventSpec::Interrupted,
+                                      EventMode::Callback, 0x80010280);
+        events.enableEvent(handle);
+
+        interrupts.writeMask(static_cast<u32>(InterruptLine::VBlank));
+        interrupts.raise(InterruptLine::VBlank);
+
+        std::vector<u32> invoked;
+        dispatcher.setCallbackInvoker(
+            [&invoked](u32 addr) -> u32
+            {
+                invoked.push_back(addr);
+                return 0;
+            });
+
+        dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
+        assert(invoked.size() == 1);
+        assert(invoked[0] == 0x80010280);
+        std::cerr << "[PASS] alternate VBlank class dispatches callback\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 5: Masked interrupts are not dispatched
     // ---------------------------------------------------------------
     {
         InterruptController interrupts;
@@ -161,7 +195,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 5: Multiple simultaneous IRQs dispatched in priority order
+    // Test 6: Multiple simultaneous IRQs dispatched in priority order
     // ---------------------------------------------------------------
     {
         InterruptController interrupts;

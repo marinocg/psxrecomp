@@ -2,6 +2,7 @@
 
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 #include <vector>
@@ -139,7 +140,7 @@ void runBiosVectorInterruptChainTests()
     }
 
     // ---------------------------------------------------------------
-    // Test 24: ReturnFromException in chain short-circuits event dispatch
+    // Test 24: ReturnFromException in chain still preserves kernel-event delivery
     // ---------------------------------------------------------------
     {
         PsxSystem system;
@@ -184,28 +185,49 @@ void runBiosVectorInterruptChainTests()
         system.interrupts().raise(InterruptLine::VBlank);
         system.serviceInterrupts();
 
-        assert(order.size() == 1);
+        assert(order.size() == 2);
         assert(order[0] == func1);
-        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) != 0);
-        std::cerr << "[PASS] chain ReturnFromException short-circuits dispatch\n";
+        assert(order[1] == eventCallback);
+        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) == 0u);
+        std::cerr << "[PASS] chain ReturnFromException preserves event delivery\n";
     }
 
     // ---------------------------------------------------------------
-    // Test 25: ReturnFromException in HookEntryInt short-circuits dispatcher
+    // Test 25: HookEntryInt runs before chain/event dispatch and preserves events
     // ---------------------------------------------------------------
     {
         PsxSystem system;
         assert(system.initialize());
 
+        constexpr u32 chainFunc = 0x80016280;
         constexpr u32 hookDescriptor = 0x80017300;
         constexpr u32 hookCallback = 0x80016300;
         constexpr u32 eventCallback = 0x80016310;
+        constexpr u32 node = 0x80017280;
 
-        system.write<u32>(hookDescriptor, hookCallback);
         u32 regs[32] = {};
+        regs[9] = 0x13; // setjmp
+        regs[4] = hookDescriptor;
+        regs[31] = hookCallback; // saved RA / resume target
+        regs[29] = 0x80017400;
+        regs[30] = 0x80017420;
+        system.callBiosVector(0xA0, regs, 32);
+
+        std::fill(std::begin(regs), std::end(regs), 0u);
         regs[9] = 0x19; // HookEntryInt
         regs[4] = hookDescriptor;
         system.callBiosVector(0xB0, regs, 32);
+
+        system.write<u32>(node + 0x00, 0);
+        system.write<u32>(node + 0x04, 0);
+        system.write<u32>(node + 0x08, chainFunc);
+        system.write<u32>(node + 0x0C, 0);
+
+        regs[9] = 0x02; // SysEnqIntRP
+        regs[4] = 0;    // priority
+        regs[5] = node;
+        system.callBiosVector(0xC0, regs, 32);
+        assert(regs[2] == 1);
 
         const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
                                                      EventMode::Callback, eventCallback);
@@ -213,7 +235,7 @@ void runBiosVectorInterruptChainTests()
 
         std::vector<u32> order;
         system.setCallbackInvoker(
-            [&system, &order, hookCallback](u32 address) -> u32
+            [&system, &order, hookCallback, chainFunc](u32 address) -> u32
             {
                 order.push_back(address);
                 if (address == hookCallback)
@@ -229,9 +251,107 @@ void runBiosVectorInterruptChainTests()
         system.interrupts().raise(InterruptLine::VBlank);
         system.serviceInterrupts();
 
-        assert(order.size() == 1);
+        assert(order.size() == 2);
         assert(order[0] == hookCallback);
-        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) != 0);
-        std::cerr << "[PASS] HookEntryInt ReturnFromException short-circuits dispatcher\n";
+        assert(order[1] == eventCallback);
+        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) == 0u);
+        std::cerr << "[PASS] HookEntryInt ReturnFromException preserves event delivery\n";
+    }
+
+    // Test 26: _96_init maps CDROM INT3 to CommandAck before HookEntryInt
+    {
+        using psxrecomp::runtime::EventMode;
+        namespace EventClass = psxrecomp::runtime::EventClass;
+        namespace EventSpec = psxrecomp::runtime::EventSpec;
+
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 regs[32] = {};
+        regs[9] = 0x71;
+        regs[4] = 0x00012100u;
+        system.callBiosVector(0xA0, regs, 32);
+
+        const u32 handle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
+                                                     EventMode::Callback, 0x80014000u);
+        assert(handle != 0xFFFFFFFFu);
+        assert(system.events().enableEvent(handle));
+
+        bool callbackInvoked = false;
+        system.setCallbackInvoker(
+            [&system, &callbackInvoked](u32 address) -> u32
+            {
+                if (address == 0x80014000u)
+                {
+                    callbackInvoked = true;
+                    system.cdrom().writeInterruptFlags(0x07u);
+                }
+                return 0;
+            });
+
+        system.interrupts().writeMask(system.interrupts().readMask() |
+                                      static_cast<u32>(InterruptLine::Cdrom));
+        system.cdrom().writeCommand(0x01); // Getstat -> INT3 / CommandAck
+        assert((system.cdrom().readInterruptFlags() & 0x07u) == 0x03u);
+
+        system.serviceInterrupts();
+
+        assert(callbackInvoked);
+        assert((system.cdrom().readInterruptFlags() & 0x07u) == 0u);
+        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0u);
+        assert(system.cdrom().readResponse() == 0x00u);
+
+        std::cerr << "[PASS] _96_init routes CDROM INT3 to completion event\n";
+    }
+
+    // Test 27: HookEntryInt acknowledging an IRQ does not starve kernel events.
+    {
+        using psxrecomp::runtime::EventMode;
+
+        PsxSystem system;
+        assert(system.initialize());
+
+        constexpr u32 hookDescriptor = 0x80017500;
+        constexpr u32 hookCallback = 0x80016400;
+        constexpr u32 eventCallback = 0x80016410;
+
+        u32 regs[32] = {};
+        regs[9] = 0x13; // setjmp
+        regs[4] = hookDescriptor;
+        regs[31] = hookCallback;
+        regs[29] = 0x80017600;
+        regs[30] = 0x80017620;
+        system.callBiosVector(0xA0, regs, 32);
+
+        std::fill(std::begin(regs), std::end(regs), 0u);
+        regs[9] = 0x19; // HookEntryInt
+        regs[4] = hookDescriptor;
+        system.callBiosVector(0xB0, regs, 32);
+
+        const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                     EventMode::Callback, eventCallback);
+        system.events().enableEvent(handle);
+
+        std::vector<u32> order;
+        system.setCallbackInvoker(
+            [&system, &order, hookCallback](u32 address) -> u32
+            {
+                order.push_back(address);
+                if (address == hookCallback)
+                {
+                    system.interrupts().writeStatus(~static_cast<u32>(InterruptLine::VBlank));
+                }
+                return 0;
+            });
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+
+        assert(order.size() == 2);
+        assert(order[0] == hookCallback);
+        assert(order[1] == eventCallback);
+        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) == 0u);
+        std::cerr << "[PASS] HookEntryInt ack does not starve kernel events\n";
     }
 }

@@ -107,7 +107,7 @@ Goal: run a controlled demo binary end-to-end with deterministic output.
 
 **Deliverables**
 
-- [x] Known-good demo ROM/EXE pipeline build (current corpus: ADVHELLO, COP0TEST, COP0LAB, GPUTEST, HELLOWLD, MEMTEST).
+- [x] Known-good demo ROM/EXE pipeline build (current corpus: ADVHELLO, COP0TEST, GPUTEST, HELLOWLD, MEMTEST, CDBROWSE, CDCRC, CDXA, GTELAB).
 - [x] CI recompile-demos workflow builds generated artifacts with SDL2 display support on all platforms.
 - [x] COP0 exception-path demo (`COP0TEST`) passes functional criteria (`MFC0`/`MTC0`/`RFE`, syscall exception, resume path).
 - [ ] Recompiled output runs to completion in CI.

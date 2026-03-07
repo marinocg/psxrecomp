@@ -76,6 +76,16 @@ class InterruptDispatcher
                            u32 criticalDepth, RuntimeLogger* logger);
 
     /**
+     * @brief Dispatch kernel events for an explicit pending IRQ snapshot.
+     *
+     * Higher-level BIOS handlers may acknowledge a hardware IRQ before the
+     * kernel-event layer runs. This preserves which IRQ lines were originally
+     * pending so OpenEvent callbacks can still be delivered.
+     */
+    void servicePendingMask(InterruptController& interrupts, KernelEventTable& events,
+                            u32 criticalDepth, u32 pendingMask, RuntimeLogger* logger);
+
+    /**
      * @brief Number of callbacks dispatched since last reset.
      */
     u32 callbacksDispatched() const;
@@ -97,6 +107,10 @@ class InterruptDispatcher
     /// Queued callback addresses deferred due to critical section or
     /// reentrancy.
     std::vector<u32> m_deferredCallbacks;
+
+    void serviceInterruptsImpl(InterruptController& interrupts, KernelEventTable& events,
+                               u32 criticalDepth, RuntimeLogger* logger, u32 pendingMask,
+                               bool hasForcedPendingMask);
 
     /**
      * @brief Dispatch a single interrupt line.

@@ -144,6 +144,20 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "cop0_mtc";
     case ir::Opcode::COP0_RFE:
         return "cop0_rfe";
+    case ir::Opcode::GTE_MFC2:
+        return "gte_mfc2";
+    case ir::Opcode::GTE_MTC2:
+        return "gte_mtc2";
+    case ir::Opcode::GTE_CFC2:
+        return "gte_cfc2";
+    case ir::Opcode::GTE_CTC2:
+        return "gte_ctc2";
+    case ir::Opcode::GTE_LWC2:
+        return "gte_lwc2";
+    case ir::Opcode::GTE_SWC2:
+        return "gte_swc2";
+    case ir::Opcode::GTE_EXEC:
+        return "gte_exec";
     case ir::Opcode::CPU_EXCEPTION:
         return "cpu_exception";
     case ir::Opcode::SYSCALL:

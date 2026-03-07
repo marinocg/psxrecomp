@@ -2,13 +2,42 @@
 
 #include "bios_helpers.h"
 
+#include <cctype>
 #include <cstring>
 #include <sstream>
+#include <string>
 
 namespace psxrecomp
 {
 namespace runtime
 {
+
+namespace
+{
+constexpr Address SETJMP_RA_OFFSET = 0x00u;
+constexpr Address SETJMP_SP_OFFSET = 0x04u;
+constexpr Address SETJMP_FP_OFFSET = 0x08u;
+constexpr Address SETJMP_S0_OFFSET = 0x0Cu;
+constexpr Address SETJMP_GP_OFFSET = 0x2Cu;
+
+std::string readBiosString(const std::vector<u8>& ram, u32 address, size_t maxLen = 1024)
+{
+    const char* ptr = reinterpret_cast<const char*>(ramPointerConst(ram.data(), address));
+    std::string result;
+    for (size_t i = 0; i < maxLen && ptr[i] != 0; ++i)
+    {
+        result.push_back(ptr[i]);
+    }
+    return result;
+}
+
+u32 readStackArg(const std::vector<u8>& ram, u32 address)
+{
+    u32 value = 0;
+    std::memcpy(&value, ramPointerConst(ram.data(), address), sizeof(value));
+    return value;
+}
+} // namespace
 
 bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
 {
@@ -18,9 +47,20 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
 
     switch (functionId)
     {
-    case 0x13:       // setjmp - store context, return 0
+    case 0x13: // setjmp - store HookEntryInt longjmp state, return 0
+    {
+        write<u32>(a0 + SETJMP_RA_OFFSET, regs[Registers::RA]);
+        write<u32>(a0 + SETJMP_SP_OFFSET, regs[Registers::SP]);
+        write<u32>(a0 + SETJMP_FP_OFFSET, regs[Registers::FP]);
+        for (u32 reg = Registers::S0; reg <= Registers::S7; ++reg)
+        {
+            const Address offset = SETJMP_S0_OFFSET + (reg - Registers::S0) * sizeof(u32);
+            write<u32>(a0 + offset, regs[reg]);
+        }
+        write<u32>(a0 + SETJMP_GP_OFFSET, regs[Registers::GP]);
         regs[2] = 0; // $v0 = 0
         return true;
+    }
     case 0x17: // strcmp
     {
         const char* s1Ptr = reinterpret_cast<const char*>(ramPointerConst(m_ram.data(), a0));
@@ -30,6 +70,26 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         {
             int c1 = static_cast<unsigned char>(*s1Ptr);
             int c2 = static_cast<unsigned char>(*s2Ptr);
+            if (c1 != c2 || c1 == 0)
+            {
+                result = c1 - c2;
+                break;
+            }
+            ++s1Ptr;
+            ++s2Ptr;
+        }
+        regs[2] = static_cast<u32>(result);
+        return true;
+    }
+    case 0x18: // strncmp
+    {
+        const char* s1Ptr = reinterpret_cast<const char*>(ramPointerConst(m_ram.data(), a0));
+        const char* s2Ptr = reinterpret_cast<const char*>(ramPointerConst(m_ram.data(), a1));
+        int result = 0;
+        for (u32 i = 0; i < a2; ++i)
+        {
+            const int c1 = static_cast<unsigned char>(*s1Ptr);
+            const int c2 = static_cast<unsigned char>(*s2Ptr);
             if (c1 != c2 || c1 == 0)
             {
                 result = c1 - c2;
@@ -51,6 +111,19 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         }
         *dst = 0;
         regs[2] = a0;
+        return true;
+    }
+    case 0x1B: // strlen
+    {
+        regs[2] = static_cast<u32>(
+            std::strlen(reinterpret_cast<const char*>(ramPointerConst(m_ram.data(), a0))));
+        return true;
+    }
+    case 0x27: // bcopy
+    {
+        u8* dst = ramPointer(m_ram.data(), a1);
+        const u8* src = ramPointerConst(m_ram.data(), a0);
+        std::memmove(dst, src, a2);
         return true;
     }
     case 0x28: // bzero / memset 0
@@ -115,6 +188,113 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         }
         msg << "\"";
         m_logger.log(LogLevel::Info, "bios", msg.str());
+        return true;
+    }
+    case 0x3F: // printf
+    {
+        const std::string format = readBiosString(m_ram, a0);
+        std::ostringstream rendered;
+        u32 stackArgAddress = regs[Registers::SP] + 16;
+        u8 nextRegArg = Registers::A1;
+        const auto nextArg = [&]() -> u32
+        {
+            if (nextRegArg <= Registers::A3)
+            {
+                return regs[nextRegArg++];
+            }
+            const u32 value = readStackArg(m_ram, stackArgAddress);
+            stackArgAddress += 4;
+            return value;
+        };
+
+        for (size_t i = 0; i < format.size(); ++i)
+        {
+            const char ch = format[i];
+            if (ch != '%')
+            {
+                rendered << ch;
+                continue;
+            }
+            if (i + 1 < format.size() && format[i + 1] == '%')
+            {
+                rendered << '%';
+                ++i;
+                continue;
+            }
+
+            size_t specIndex = i + 1;
+            while (specIndex < format.size() &&
+                   (format[specIndex] == '-' || format[specIndex] == '+' ||
+                    format[specIndex] == ' ' || format[specIndex] == '#' ||
+                    format[specIndex] == '0'))
+            {
+                ++specIndex;
+            }
+            while (specIndex < format.size() &&
+                   std::isdigit(static_cast<unsigned char>(format[specIndex])) != 0)
+            {
+                ++specIndex;
+            }
+            if (specIndex < format.size() && format[specIndex] == '.')
+            {
+                ++specIndex;
+                while (specIndex < format.size() &&
+                       std::isdigit(static_cast<unsigned char>(format[specIndex])) != 0)
+                {
+                    ++specIndex;
+                }
+            }
+            while (
+                specIndex < format.size() &&
+                (format[specIndex] == 'h' || format[specIndex] == 'l' || format[specIndex] == 'L'))
+            {
+                ++specIndex;
+            }
+            if (specIndex >= format.size())
+            {
+                break;
+            }
+
+            const char spec = format[specIndex];
+            const u32 rawArg = nextArg();
+            switch (spec)
+            {
+            case 'c':
+                rendered << static_cast<char>(rawArg & 0xFFu);
+                break;
+            case 's':
+                rendered << readBiosString(m_ram, rawArg);
+                break;
+            case 'd':
+            case 'i':
+                rendered << static_cast<s32>(rawArg);
+                break;
+            case 'u':
+                rendered << rawArg;
+                break;
+            case 'x':
+            case 'X':
+                rendered << std::hex;
+                if (spec == 'X')
+                {
+                    rendered.setf(std::ios::uppercase);
+                }
+                rendered << rawArg;
+                rendered << std::dec;
+                rendered.unsetf(std::ios::uppercase);
+                break;
+            case 'p':
+                rendered << "0x" << std::hex << rawArg << std::dec;
+                break;
+            default:
+                rendered << '%' << spec;
+                break;
+            }
+            i = specIndex;
+        }
+
+        regs[2] = static_cast<u32>(rendered.str().size());
+        m_logger.log(LogLevel::Info, "bios", "BIOS printf: \"" + rendered.str() + "\"");
         return true;
     }
     case 0x44: // FlushCache
@@ -196,9 +376,17 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         m_logger.log(LogLevel::Debug, "bios", "GPU_init (A0 0x70)");
         return true;
     }
-    case 0x72: // _96_init - CD-ROM initialization (stub)
+    case 0x71: // _96_init - initialize BIOS-facing CD-ROM interrupt state
     {
-        m_logger.log(LogLevel::Debug, "bios", "_96_init (A0 0x72) - stub");
+        initializeBiosCdromState(a0);
+        regs[2] = 0;
+        m_logger.log(LogLevel::Debug, "bios", "_96_init (A0 0x71)");
+        return true;
+    }
+    case 0x72: // _96_remove - bug-compatible no-op in retail BIOS
+    {
+        regs[2] = 0;
+        m_logger.log(LogLevel::Debug, "bios", "_96_remove (A0 0x72)");
         return true;
     }
     default:

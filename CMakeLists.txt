@@ -133,6 +133,7 @@ set(RUNTIME_SOURCES
     src/runtime/cop0.cpp
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
+    src/runtime/gte.cpp
     src/runtime/gpu.cpp
     src/runtime/gpu_transfer.cpp
     src/runtime/gpu_commands.cpp
@@ -307,6 +308,11 @@ if(BUILD_TESTS)
         tests/unit/cop0_test.cpp
     )
     target_link_libraries(cop0_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(gte_test
+        tests/unit/gte_test.cpp
+    )
+    target_link_libraries(gte_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(spu_test
         tests/unit/spu_test.cpp

@@ -95,6 +95,15 @@ void Cdrom::notifyDiscSwap()
     beginDoorOpenTransition(m_disc != nullptr);
 }
 
+void Cdrom::primeBootState(bool discPresent)
+{
+    m_execution.motorOn = discPresent;
+    m_execution.readActive = false;
+    m_execution.seekActive = false;
+    m_interruptFlags = 0;
+    m_responseFifo.clear();
+}
+
 void Cdrom::tick(u32 cpuCycles)
 {
     if (m_doorOpen && m_doorCloseCycles > 0)

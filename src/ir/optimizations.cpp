@@ -23,6 +23,13 @@ bool hasSideEffects(Opcode opcode)
     case Opcode::COP0_MFC:
     case Opcode::COP0_MTC:
     case Opcode::COP0_RFE:
+    case Opcode::GTE_MFC2:
+    case Opcode::GTE_MTC2:
+    case Opcode::GTE_CFC2:
+    case Opcode::GTE_CTC2:
+    case Opcode::GTE_LWC2:
+    case Opcode::GTE_SWC2:
+    case Opcode::GTE_EXEC:
     case Opcode::CPU_EXCEPTION:
     case Opcode::SYSCALL:
     case Opcode::BRANCH:

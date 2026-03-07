@@ -79,6 +79,23 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
         return;
     }
 
+    const u32 primaryOpcode = (instr.encoding >> 26) & 0x3Fu;
+    switch (primaryOpcode)
+    {
+    case 0x31: // LWC1
+    case 0x33: // LWC3
+    case 0x35: // LDC1
+    case 0x37: // LDC3
+    case 0x39: // SWC1
+    case 0x3B: // SWC3
+    case 0x3D: // SDC1
+    case 0x3F: // SDC3
+        emitCpuException(EXCEPTION_CODE_COPROCESSOR_UNUSABLE);
+        return;
+    default:
+        break;
+    }
+
     switch (instr.opcode)
     {
     case disasm::Opcode::ADD:
@@ -189,6 +206,66 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
         break;
     case disasm::Opcode::RFE:
         emit(Opcode::COP0_RFE, {}, {});
+        break;
+    case disasm::Opcode::MFC2:
+        emit(Opcode::GTE_MFC2, {Value::makeImmediate(static_cast<s32>(instr.rd))},
+             {Value::makeRegister(instr.rt)});
+        break;
+    case disasm::Opcode::MTC2:
+        emit(Opcode::GTE_MTC2,
+             {Value::makeImmediate(static_cast<s32>(instr.rd)), Value::makeRegister(instr.rt)}, {});
+        break;
+    case disasm::Opcode::CFC2:
+        emit(Opcode::GTE_CFC2, {Value::makeImmediate(static_cast<s32>(instr.rd))},
+             {Value::makeRegister(instr.rt)});
+        break;
+    case disasm::Opcode::CTC2:
+        emit(Opcode::GTE_CTC2,
+             {Value::makeImmediate(static_cast<s32>(instr.rd)), Value::makeRegister(instr.rt)}, {});
+        break;
+    case disasm::Opcode::LWC2:
+    {
+        Value addressTemp = m_builder.createTemporary();
+        emit(Opcode::ADD,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<s32>(instr.immediate))},
+             {addressTemp});
+        emit(Opcode::GTE_LWC2, {Value::makeImmediate(static_cast<s32>(instr.rt)), addressTemp}, {});
+        break;
+    }
+    case disasm::Opcode::SWC2:
+    {
+        Value addressTemp = m_builder.createTemporary();
+        emit(Opcode::ADD,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<s32>(instr.immediate))},
+             {addressTemp});
+        emit(Opcode::GTE_SWC2, {Value::makeImmediate(static_cast<s32>(instr.rt)), addressTemp}, {});
+        break;
+    }
+    case disasm::Opcode::GTE_RTPS:
+    case disasm::Opcode::GTE_RTPT:
+    case disasm::Opcode::GTE_NCLIP:
+    case disasm::Opcode::GTE_OP:
+    case disasm::Opcode::GTE_DPCS:
+    case disasm::Opcode::GTE_INTPL:
+    case disasm::Opcode::GTE_MVMVA:
+    case disasm::Opcode::GTE_NCDS:
+    case disasm::Opcode::GTE_CDP:
+    case disasm::Opcode::GTE_NCDT:
+    case disasm::Opcode::GTE_NCCS:
+    case disasm::Opcode::GTE_CC:
+    case disasm::Opcode::GTE_NCS:
+    case disasm::Opcode::GTE_NCT:
+    case disasm::Opcode::GTE_SQR:
+    case disasm::Opcode::GTE_DCPL:
+    case disasm::Opcode::GTE_DPCT:
+    case disasm::Opcode::GTE_AVSZ3:
+    case disasm::Opcode::GTE_AVSZ4:
+    case disasm::Opcode::GTE_GPF:
+    case disasm::Opcode::GTE_GPL:
+    case disasm::Opcode::GTE_NCCT:
+        emit(Opcode::GTE_EXEC, {Value::makeImmediate(static_cast<s32>(instr.encoding))}, {});
         break;
     case disasm::Opcode::TLBR:
     case disasm::Opcode::TLBWI:

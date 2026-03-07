@@ -48,6 +48,11 @@ void Cop0::mtc0(u8 rd, u32 value)
     }
 }
 
+bool Cop0::cop2Enabled() const
+{
+    return (m_registers[RegisterIndex::Status] & StatusCop2EnableBit) != 0u;
+}
+
 void Cop0::setHardwareInterruptPending(bool pending)
 {
     if (pending)

@@ -41,6 +41,13 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Implement BIOS/syscall layer for common kernel services.
 - [x] Add save-state serialization and determinism checks.
 - [x] Add resource pack loader for non-code assets (textures, audio, movies).
+- [x] Validate COP2/GTE command paths with focused demo coverage (`examples/demos/gtelab_auto`) for transfer, transform, and lighting op sequences.
+- [x] Add runtime GTE device skeleton in `PsxSystem` with separate data/control banks, COP2-only accessors, placeholder FIFOs, and busy-cycle tracking.
+- [x] Lower COP2 transfer ops (`MFC2`/`MTC2`/`CFC2`/`CTC2`) through IR/codegen into the runtime GTE device with `Status.CU2` guard behavior (`CoprocessorUnusable` when disabled).
+- [x] Lower COP2 memory-backed data-register transfers (`LWC2`/`SWC2`) through dedicated IR/codegen paths so later GTE stall modeling stays distinct from generic load/store lowering.
+- [x] Lower decoded GTE command opcodes through a generic `GTE_EXEC` IR op and implement the first transform/depth execution subset (`RTPS`/`RTPT`/`NCLIP`/`AVSZ3`/`AVSZ4`/`MVMVA`) against raw instruction bits in the runtime.
+- [x] Flesh out the lighting/color command family (`DPCS`, `INTPL`, `NCDS`, `CDP`, `NCDT`, `NCCS`, `CC`, `NCS`, `NCT`, `DCPL`, `DPCT`, `GPF`, `GPL`, `NCCT`) with RGB FIFO, far/background color, and lighting/color matrix usage.
+- [x] Add GTE timing/state fidelity hooks: command cycle countdown, CPU stall on COP2 reads / next command while busy, no stall on writes, IRGB/ORGB delayed read behavior, LZCS/LZCR register handling, and save-state serialization of in-flight GTE state.
 
 ## Phase 6: BIOS Coverage Expansion
 
@@ -52,7 +59,8 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Implement system initialization C0 stubs.
 - [x] Add BIOS trace support (`PSXRECOMP_TRACE_BIOS` env var).
 - [x] Refactor BIOS code into dedicated `psx_system_bios.cpp` module.
-- [ ] Implement `printf` (A0:0x3F) with format string support.
+- [x] Align BIOS internal CD-ROM helpers with PSX-SPX: boot-time `_96_init` state, `A0(0x71)` re-init behavior, bug-compatible `A0(0x72)` `_96_remove`, and BIOS-owned `F0000003` event lifecycle.
+- [x] Implement `printf` (A0:0x3F) logging support for common string/integer/pointer specifiers; richer format coverage may still need expansion.
 - [ ] Implement threading functions (OpenThread, CloseThread, ChangeThread).
 - [ ] Implement timer functions (init_timer, get_timer, enable/disable_timer_irq).
 - [ ] Implement CD-ROM BIOS functions (CdInit, CdRemove).

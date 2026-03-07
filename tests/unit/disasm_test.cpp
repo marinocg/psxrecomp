@@ -286,8 +286,11 @@ int main()
         assert(cfc2.opcode == Opcode::CFC2);
         assert(cfc2.toString() == "cfc2 $t2, $r33");
 
-        Instruction gteRtpt =
-            MipsDisassembler::decode((0x12u << 26) | (0x10u << 21) | 0x01u, 0x80010032);
+        Instruction gteRtps = MipsDisassembler::decode(0x4A180001u, 0x80010032);
+        assert(gteRtps.opcode == Opcode::GTE_RTPS);
+        assert(gteRtps.toString() == "rtps");
+
+        Instruction gteRtpt = MipsDisassembler::decode(0x4A280030u, 0x80010036);
         assert(gteRtpt.opcode == Opcode::GTE_RTPT);
         assert(gteRtpt.toString() == "rtpt");
     }
@@ -423,15 +426,15 @@ int main()
 
     {
         std::vector<uint32_t> encodings = {
-            encodeI(0x0F, 0, 4, 0x1F80),   // lui $a0, 0x1F80
-            encodeI(0x0D, 4, 4, 0x0010),   // ori $a0, $a0, 0x0010
-            encodeI(0x09, 0, 5, 0x0034),   // addiu $a1, $zero, 0x0034
-            encodeI(0x2B, 4, 5, 0),        // sw $a1, 0($a0)
-            encodeI(0x04, 5, 0, 2),        // beqz $a1, +2
-            encodeR(31, 0, 0, 0, 0x08),    // jr $ra
-            encodeR(0, 0, 0, 0, 0x00),     // nop
-            (0x12u << 26) | (0x10u << 21), // gte rtps
-            encodeI(0x10, 0x08, 0x01, 1)   // bc0t
+            encodeI(0x0F, 0, 4, 0x1F80), // lui $a0, 0x1F80
+            encodeI(0x0D, 4, 4, 0x0010), // ori $a0, $a0, 0x0010
+            encodeI(0x09, 0, 5, 0x0034), // addiu $a1, $zero, 0x0034
+            encodeI(0x2B, 4, 5, 0),      // sw $a1, 0($a0)
+            encodeI(0x04, 5, 0, 2),      // beqz $a1, +2
+            encodeR(31, 0, 0, 0, 0x08),  // jr $ra
+            encodeR(0, 0, 0, 0, 0x00),   // nop
+            0x4A180001u,                 // gte rtps
+            encodeI(0x10, 0x08, 0x01, 1) // bc0t
         };
 
         std::vector<uint8_t> bytes(encodings.size() * sizeof(uint32_t), 0);

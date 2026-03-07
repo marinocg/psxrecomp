@@ -111,13 +111,13 @@ constexpr std::array<OpcodeMapEntry, 6> kRegimmTrapTable = {{
 
 // clang-format off
 constexpr std::array<OpcodeMapEntry, 22> kCop2CommandTable = {{
-    {0x00, Opcode::GTE_RTPS},  {0x01, Opcode::GTE_RTPT}, {0x06, Opcode::GTE_NCLIP},
-    {0x0C, Opcode::GTE_OP},    {0x10, Opcode::GTE_DPCS}, {0x11, Opcode::GTE_INTPL},
-    {0x12, Opcode::GTE_MVMVA}, {0x13, Opcode::GTE_NCDS}, {0x14, Opcode::GTE_CDP},
-    {0x16, Opcode::GTE_NCDT},  {0x1B, Opcode::GTE_NCCS}, {0x1C, Opcode::GTE_CC},
-    {0x1E, Opcode::GTE_NCS},   {0x20, Opcode::GTE_NCT},  {0x28, Opcode::GTE_SQR},
-    {0x29, Opcode::GTE_DCPL},  {0x2A, Opcode::GTE_DPCT}, {0x2D, Opcode::GTE_AVSZ3},
-    {0x2E, Opcode::GTE_AVSZ4}, {0x3D, Opcode::GTE_GPF},  {0x3E, Opcode::GTE_GPL},
+    {0x01, Opcode::GTE_RTPS},  {0x06, Opcode::GTE_NCLIP}, {0x0C, Opcode::GTE_OP},
+    {0x10, Opcode::GTE_DPCS},  {0x11, Opcode::GTE_INTPL}, {0x12, Opcode::GTE_MVMVA},
+    {0x13, Opcode::GTE_NCDS},  {0x14, Opcode::GTE_CDP},   {0x16, Opcode::GTE_NCDT},
+    {0x1B, Opcode::GTE_NCCS},  {0x1C, Opcode::GTE_CC},    {0x1E, Opcode::GTE_NCS},
+    {0x20, Opcode::GTE_NCT},   {0x28, Opcode::GTE_SQR},   {0x29, Opcode::GTE_DCPL},
+    {0x2A, Opcode::GTE_DPCT},  {0x2D, Opcode::GTE_AVSZ3}, {0x2E, Opcode::GTE_AVSZ4},
+    {0x30, Opcode::GTE_RTPT},  {0x3D, Opcode::GTE_GPF},   {0x3E, Opcode::GTE_GPL},
     {0x3F, Opcode::GTE_NCCT},
 }};
 // clang-format on
@@ -320,14 +320,16 @@ Instruction MipsDisassembler::decodeCoprocessor(u32 encoding, Address address)
         case 0x06:
             instruction.opcode = Opcode::CTC2;
             break;
-        case 0x10:
-            if (!decodeWithTable(kCop2CommandTable, encoding & FUNCT_MASK, instruction.opcode))
-            {
-                instruction.opcode = Opcode::UNKNOWN;
-                instruction.type = InstructionType::UNKNOWN;
-            }
-            break;
         default:
+            if ((instruction.rs & 0x10u) != 0u)
+            {
+                if (!decodeWithTable(kCop2CommandTable, encoding & FUNCT_MASK, instruction.opcode))
+                {
+                    instruction.opcode = Opcode::UNKNOWN;
+                    instruction.type = InstructionType::UNKNOWN;
+                }
+                break;
+            }
             instruction.opcode = Opcode::UNKNOWN;
             instruction.type = InstructionType::UNKNOWN;
             break;

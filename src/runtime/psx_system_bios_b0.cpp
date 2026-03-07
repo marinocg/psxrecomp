@@ -88,6 +88,10 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         return true;
     case 0x13: // StartPad
         return true;
+    case 0x15: // PAD_init2(buf1, siz1, buf2, siz2)
+        // Accept controller init and report a dual-port pad setup present.
+        regs[2] = 2;
+        return true;
     case 0x17: // ReturnFromException
         // In callback/IRQ context this exits the current callback and returns
         // to the interrupted execution point. IRQ epilogue COP0 restoration
@@ -181,10 +185,10 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     case 0x4B: // StartCard
         return true;
     case 0x56: // GetC0Table
-        regs[2] = 0;
+        regs[2] = BIOS_C0_TABLE_ADDRESS;
         return true;
     case 0x57: // GetB0Table
-        regs[2] = 0;
+        regs[2] = BIOS_B0_TABLE_ADDRESS;
         return true;
     case 0x5B: // ChangeClearPAD
         return true;

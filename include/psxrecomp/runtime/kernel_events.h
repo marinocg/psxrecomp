@@ -22,10 +22,12 @@ namespace runtime
  */
 namespace EventClass
 {
-constexpr u32 VBlank = 0xF0000001;     ///< Vertical-blank interrupt
-constexpr u32 Gpu = 0xF0000002;        ///< GPU interrupt
-constexpr u32 Cdrom = 0xF0000003;      ///< CD-ROM interrupt
-constexpr u32 Dma = 0xF0000004;        ///< DMA interrupt
+constexpr u32 VBlank = 0xF0000001; ///< Vertical-blank interrupt
+constexpr u32 VBlankAlt =
+    0xF2000002;                   ///< Alternate VBlank callback class used by some BIOS/libetc code
+constexpr u32 Gpu = 0xF0000002;   ///< GPU interrupt
+constexpr u32 Cdrom = 0xF0000003; ///< CD-ROM interrupt
+constexpr u32 Dma = 0xF0000004;   ///< DMA interrupt
 constexpr u32 Timer0 = 0xF0000005;     ///< Root counter 0
 constexpr u32 Timer1 = 0xF0000006;     ///< Root counter 1
 constexpr u32 Timer2 = 0xF0000006;     ///< Root counter 2 (shares class with Timer1 on BIOS)
