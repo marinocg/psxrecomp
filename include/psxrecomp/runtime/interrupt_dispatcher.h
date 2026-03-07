@@ -83,7 +83,7 @@ class InterruptDispatcher
      * pending so OpenEvent callbacks can still be delivered.
      */
     void servicePendingMask(InterruptController& interrupts, KernelEventTable& events,
-                u32 criticalDepth, u32 pendingMask, RuntimeLogger* logger);
+                            u32 criticalDepth, u32 pendingMask, RuntimeLogger* logger);
 
     /**
      * @brief Number of callbacks dispatched since last reset.
@@ -109,8 +109,8 @@ class InterruptDispatcher
     std::vector<u32> m_deferredCallbacks;
 
     void serviceInterruptsImpl(InterruptController& interrupts, KernelEventTable& events,
-                   u32 criticalDepth, RuntimeLogger* logger, u32 pendingMask,
-                   bool hasForcedPendingMask);
+                               u32 criticalDepth, RuntimeLogger* logger, u32 pendingMask,
+                               bool hasForcedPendingMask);
 
     /**
      * @brief Dispatch a single interrupt line.

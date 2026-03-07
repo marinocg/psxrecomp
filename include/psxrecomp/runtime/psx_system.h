@@ -39,10 +39,10 @@ namespace runtime
 class PsxSystem
 {
   public:
-        static constexpr u32 BIOS_C0_TABLE_ADDRESS = 0x80000500u;
-        static constexpr u32 BIOS_C0_HANDLER_TABLE_ADDRESS = 0x80000540u;
-        static constexpr u32 BIOS_B0_TABLE_ADDRESS = 0x80000580u;
-        static constexpr u32 BIOS_B0_HANDLER_TABLE_ADDRESS = 0x800005C0u;
+    static constexpr u32 BIOS_C0_TABLE_ADDRESS = 0x80000500u;
+    static constexpr u32 BIOS_C0_HANDLER_TABLE_ADDRESS = 0x80000540u;
+    static constexpr u32 BIOS_B0_TABLE_ADDRESS = 0x80000580u;
+    static constexpr u32 BIOS_B0_HANDLER_TABLE_ADDRESS = 0x800005C0u;
 
     struct DiscSwapInfo
     {

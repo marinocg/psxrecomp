@@ -156,9 +156,9 @@ void PsxSystem::initializeBiosCdromState(u32 handleStorageAddress)
     m_biosCdrom.initialized = true;
     m_biosCdrom.handleStorageAddress = handleStorageAddress;
     const bool hasHandleStorage =
-        handleStorageAddress != 0u && normalizeAddress(handleStorageAddress) <=
-                                       MemoryMap::RAM_SIZE -
-                                           static_cast<Address>(BIOS_CDROM_EVENT_SPECS.size() * sizeof(u32));
+        handleStorageAddress != 0u &&
+        normalizeAddress(handleStorageAddress) <=
+            MemoryMap::RAM_SIZE - static_cast<Address>(BIOS_CDROM_EVENT_SPECS.size() * sizeof(u32));
 
     if (hasHandleStorage)
     {
@@ -173,8 +173,8 @@ void PsxSystem::initializeBiosCdromState(u32 handleStorageAddress)
     // executable starts running.
     for (size_t i = 0; i < BIOS_CDROM_EVENT_SPECS.size(); ++i)
     {
-        const u32 handle =
-            m_events.openEvent(EventClass::Cdrom, BIOS_CDROM_EVENT_SPECS[i], EventMode::NoCallback, 0);
+        const u32 handle = m_events.openEvent(EventClass::Cdrom, BIOS_CDROM_EVENT_SPECS[i],
+                                              EventMode::NoCallback, 0);
         m_biosCdrom.eventHandles[i] = handle;
         if (hasHandleStorage)
         {

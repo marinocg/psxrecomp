@@ -267,7 +267,7 @@ void PsxSystem::serviceInterrupts()
             try
             {
                 m_dispatcher.servicePendingMask(m_interrupts, m_events, m_criticalSectionDepth,
-                                               pendingForKernelEvents, &m_logger);
+                                                pendingForKernelEvents, &m_logger);
             }
             catch (const ReturnFromExceptionSignal&)
             {
@@ -305,7 +305,7 @@ void PsxSystem::serviceInterrupts()
         try
         {
             m_dispatcher.servicePendingMask(m_interrupts, m_events, m_criticalSectionDepth,
-                                           pendingForKernelEvents, &m_logger);
+                                            pendingForKernelEvents, &m_logger);
         }
         catch (const ReturnFromExceptionSignal&)
         {
