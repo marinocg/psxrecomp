@@ -177,6 +177,57 @@ void runBiosVectorKernelEventTests()
     }
 
     // ---------------------------------------------------------------
+    // Test 17a: B0 HookEntryInt ignores invalid longjmp resume addresses
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 lastCallback = 0;
+        bool warningLogged = false;
+        system.logger().setMinLevel(LogLevel::Warn);
+        system.logger().setCallback(
+            [&warningLogged](const psxrecomp::runtime::LogEvent& event)
+            {
+                if (event.level == LogLevel::Warn && event.category == "bios" &&
+                    event.message.find("Ignoring HookEntryInt resume address") != std::string::npos)
+                {
+                    warningLogged = true;
+                }
+            });
+        system.setCallbackInvoker(
+            [&lastCallback](u32 address) -> u32
+            {
+                lastCallback = address;
+                return 0;
+            });
+
+        constexpr u32 descriptorAddress = 0x80014100;
+        constexpr u32 invalidResumeAddress = 0x80012341;
+        u32 regs[32] = {};
+        regs[9] = 0x13;              // setjmp
+        regs[4] = descriptorAddress; // jmp_buf
+        regs[31] = invalidResumeAddress;
+        regs[29] = 0x80018000;
+        regs[30] = 0x80018020;
+        system.callBiosVector(0xA0, regs, 32);
+
+        std::fill(std::begin(regs), std::end(regs), 0u);
+        regs[9] = 0x19;              // HookEntryInt
+        regs[4] = descriptorAddress; // descriptor address
+        system.callBiosVector(0xB0, regs, 32);
+
+        system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
+        system.interrupts().raise(InterruptLine::VBlank);
+        system.serviceInterrupts();
+
+        assert(lastCallback == 0);
+        assert(warningLogged);
+
+        std::cerr << "[PASS] B0 HookEntryInt ignores invalid resume addresses\n";
+    }
+
+    // ---------------------------------------------------------------
     // Test 17: B0 HookEntryInt no longer treats raw callback as descriptor
     // ---------------------------------------------------------------
     {

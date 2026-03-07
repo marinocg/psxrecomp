@@ -1,4 +1,4 @@
-#Implementation Status Report
+# Implementation Status Report
 
 This report estimates current implementation coverage across major subsystems and lists
 what is present vs. missing. Percentages are coarse estimates intended for planning.

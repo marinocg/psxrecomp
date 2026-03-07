@@ -35,6 +35,33 @@ mkdir -p "$OUT_ROOT"
 
 printf 'demo,iso,recompile_ok,unsupported_ops,build_ok,resource_ok,render_ok,ppm_non_zero,gpu_commands,frame_count,run_rc,unsupported_jump,status,notes\n' > "$SUMMARY"
 
+find_source_root() {
+  local search_root="$1"
+  local cmake_file=""
+  cmake_file=$(find "$search_root" -type f -name CMakeLists.txt | head -n 1)
+  if [[ -n "$cmake_file" ]]; then
+    dirname "$cmake_file"
+  fi
+}
+
+run_with_timeout() {
+  local timeout_seconds="$1"
+  shift
+  python3 - "$timeout_seconds" "$@" <<'PY'
+import subprocess
+import sys
+
+timeout_seconds = float(sys.argv[1])
+command = sys.argv[2:]
+
+try:
+    completed = subprocess.run(command, check=False, timeout=timeout_seconds)
+    raise SystemExit(completed.returncode)
+except subprocess.TimeoutExpired:
+    raise SystemExit(124)
+PY
+}
+
 resolve_iso() {
   local demo="$1"
   local mapped="${DEMO_ISOS[$demo]:-}"
@@ -99,7 +126,7 @@ print(sum(1 for w in warnings if 'Unsupported opcode:' in w))
 PY
 )
 
-  source_root=$(find "$gen_dir" -type f -name CMakeLists.txt | head -n 1 | xargs -r dirname)
+  source_root="$(find_source_root "$gen_dir")"
   if [[ -n "$source_root" ]]; then
     if [[ -f "$source_root/resources/index/catalog.json" ]] || [[ -f "$source_root/resources/index/recomp_inputs.json" ]]; then
       resource_ok=1
@@ -127,11 +154,14 @@ PY
         cp -R "$source_root/resources" "$(dirname "$runner")/"
       fi
       set +e
-      PSXRECOMP_PRESENT_FRAMEBUFFER=0 \
-      PSXRECOMP_MAX_STEPS="$max_steps" \
-      PSXRECOMP_DUMP_FRAMEBUFFER="$screen_dir/$demo.ppm" \
-      timeout 30 "$runner" > "$log_dir/run.log" 2>&1
+      export PSXRECOMP_PRESENT_FRAMEBUFFER=0
+      export PSXRECOMP_MAX_STEPS="$max_steps"
+      export PSXRECOMP_DUMP_FRAMEBUFFER="$screen_dir/$demo.ppm"
+      run_with_timeout 30 "$runner" > "$log_dir/run.log" 2>&1
       run_rc=$?
+      unset PSXRECOMP_PRESENT_FRAMEBUFFER
+      unset PSXRECOMP_MAX_STEPS
+      unset PSXRECOMP_DUMP_FRAMEBUFFER
       set -e
       unsupported_jump=$(python3 - <<'PY' "$log_dir/run.log"
 from pathlib import Path
