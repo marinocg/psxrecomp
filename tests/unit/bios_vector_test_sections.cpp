@@ -2,6 +2,7 @@
 
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <algorithm>
 #include <cassert>
 #include <iostream>
 
@@ -84,7 +85,30 @@ void runBiosVectorKernelEventTests()
     }
 
     // ---------------------------------------------------------------
-    // Test 15: B0 vector stubs (InitPad, StartPad, etc.)
+    // Test 15: B0 vector - GetC0Table/GetB0Table expose writable BIOS tables
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 regs[32] = {};
+        regs[9] = 0x56; // GetC0Table
+        system.callBiosVector(0xB0, regs, 32);
+        const u32 c0Table = regs[2];
+        assert(c0Table != 0u);
+        assert(system.read<u32>(c0Table + 24u) != 0u);
+
+        regs[9] = 0x57; // GetB0Table
+        system.callBiosVector(0xB0, regs, 32);
+        const u32 b0Table = regs[2];
+        assert(b0Table != 0u);
+        assert(system.read<u32>(b0Table + 24u) != 0u);
+
+        std::cerr << "[PASS] B0 GetC0Table/GetB0Table expose kernel tables\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 16: B0 vector stubs (InitPad, StartPad, etc.)
     //
     // Should not crash.
     // ---------------------------------------------------------------
@@ -105,7 +129,7 @@ void runBiosVectorKernelEventTests()
     }
 
     // ---------------------------------------------------------------
-    // Test 16: B0 HookEntryInt descriptor callback runs on IRQ service
+    // Test 17: B0 HookEntryInt descriptor callback runs on IRQ service
     // ---------------------------------------------------------------
     {
         PsxSystem system;
@@ -121,9 +145,16 @@ void runBiosVectorKernelEventTests()
 
         constexpr u32 descriptorAddress = 0x80014000;
         constexpr u32 callbackAddress = 0x80012340;
-        system.write<u32>(descriptorAddress, callbackAddress);
-
         u32 regs[32] = {};
+        regs[9] = 0x13;              // setjmp
+        regs[4] = descriptorAddress; // jmp_buf
+        regs[31] = callbackAddress;  // saved RA / resume target
+        regs[29] = 0x80018000;       // SP
+        regs[30] = 0x80018020;       // FP
+        system.callBiosVector(0xA0, regs, 32);
+        assert(regs[2] == 0);
+
+        std::fill(std::begin(regs), std::end(regs), 0u);
         regs[9] = 0x19;              // HookEntryInt
         regs[4] = descriptorAddress; // descriptor address
         system.callBiosVector(0xB0, regs, 32);
@@ -259,12 +290,28 @@ void runBiosVectorKernelEventTests()
         assert(system.initialize());
 
         u32 regs[32] = {};
-        regs[9] = 0x13;   // setjmp
-        regs[2] = 0xDEAD; // pre-set $v0
+        constexpr u32 bufferAddress = 0x80014100;
+        regs[9] = 0x13;          // setjmp
+        regs[4] = bufferAddress; // jmp_buf
+        regs[2] = 0xDEAD;        // pre-set $v0
+        regs[28] = 0x80017770;   // GP
+        regs[29] = 0x80017780;   // SP
+        regs[30] = 0x80017790;   // FP
+        regs[31] = 0x800177A0;   // RA
+        regs[16] = 0x11111111;   // S0
+        regs[17] = 0x22222222;   // S1
+        regs[23] = 0x88888888;   // S7
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] == 0); // setjmp returns 0
+        assert(system.read<u32>(bufferAddress + 0x00) == 0x800177A0u);
+        assert(system.read<u32>(bufferAddress + 0x04) == 0x80017780u);
+        assert(system.read<u32>(bufferAddress + 0x08) == 0x80017790u);
+        assert(system.read<u32>(bufferAddress + 0x0C) == 0x11111111u);
+        assert(system.read<u32>(bufferAddress + 0x10) == 0x22222222u);
+        assert(system.read<u32>(bufferAddress + 0x28) == 0x88888888u);
+        assert(system.read<u32>(bufferAddress + 0x2C) == 0x80017770u);
 
-        std::cerr << "[PASS] A0 setjmp returns 0\n";
+        std::cerr << "[PASS] A0 setjmp saves HookEntryInt state\n";
     }
 
     // ---------------------------------------------------------------

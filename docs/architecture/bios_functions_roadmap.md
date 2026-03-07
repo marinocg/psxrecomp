@@ -138,8 +138,8 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 ###Ings / Math / Exception (0x70+)
 
 - [x] `0x70` — `GPU_init()` — _Stub: sends GPU reset + default display mode_
-- [ ] `0x71` — `CdInit()` _(internal)_
-- [x] `0x72` — `_96_init()` _(internal CD-ROM init stub)_
+- [x] `0x71` — `_96_init()` _(internal BIOS CD-ROM event init; also mirrored by boot-time setup)_
+- [x] `0x72` — `_96_remove()` _(bug-compatible no-op; retail BIOS teardown is not reliable per PSX-SPX)_
 - [ ] `0x78` — `CdAsyncSeekL(src)`
 - [ ] `0x7C` — `CdAsyncGetStatus(dst)`
 - [ ] `0x7E` — `CdAsyncReadSector(count, dst, mode)`

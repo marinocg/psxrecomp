@@ -39,6 +39,11 @@ namespace runtime
 class PsxSystem
 {
   public:
+        static constexpr u32 BIOS_C0_TABLE_ADDRESS = 0x80000500u;
+        static constexpr u32 BIOS_C0_HANDLER_TABLE_ADDRESS = 0x80000540u;
+        static constexpr u32 BIOS_B0_TABLE_ADDRESS = 0x80000580u;
+        static constexpr u32 BIOS_B0_HANDLER_TABLE_ADDRESS = 0x800005C0u;
+
     struct DiscSwapInfo
     {
         struct DiscEntry
@@ -315,9 +320,16 @@ class PsxSystem
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState
     {
-        u32 descriptorAddress = 0; ///< B0(19) HookEntryInt descriptor pointer.
+        u32 descriptorAddress = 0; ///< B0(19) HookEntryInt setjmp buffer pointer.
+    };
+    struct BiosCdromState
+    {
+        bool initialized = false;
+        u32 handleStorageAddress = 0;
+        std::array<u32, 5> eventHandles{};
     };
     HookEntryIntState m_hookEntryInt;
+    BiosCdromState m_biosCdrom;
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
     bool m_hasPendingCallbackRegisters = false;
@@ -343,7 +355,9 @@ class PsxSystem
     void syncLevelInterruptSources();
     void syncCop0InterruptPending();
     void invokeHookEntryIntHandler();
-    u32 resolveHookEntryIntCallback(u32 descriptorAddress) const;
+    void initializeBiosCdromState(u32 handleStorageAddress);
+    void resetBiosCdromState();
+    bool serviceBiosCdromInterrupt();
 
     static Address normalizeAddress(Address address)
     {

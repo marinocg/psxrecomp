@@ -36,22 +36,40 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
             return true;
         }
 
-        const auto& firstInstruction = disassembled[startIndex];
-        if (firstInstruction.opcode == disasm::Opcode::ADDIU &&
-            firstInstruction.rs == Registers::SP && firstInstruction.rt == Registers::SP &&
-            firstInstruction.immediate < 0)
+        const auto hasNearbyStackPrologue = [&]()
         {
-            const size_t saveLimit = std::min(startIndex + 8, disassembled.size());
-            for (size_t i = startIndex + 1; i < saveLimit; ++i)
+            const size_t prologueSearchLimit = std::min(startIndex + 4, disassembled.size());
+            for (size_t prologueIndex = startIndex; prologueIndex < prologueSearchLimit;
+                 ++prologueIndex)
             {
-                const auto& instruction = disassembled[i];
-                if (instruction.opcode == disasm::Opcode::SW && instruction.rs == Registers::SP &&
-                    instruction.rt == Registers::RA)
+                const auto& prologueInstruction = disassembled[prologueIndex];
+                if (prologueInstruction.opcode != disasm::Opcode::ADDIU ||
+                    prologueInstruction.rs != Registers::SP ||
+                    prologueInstruction.rt != Registers::SP || prologueInstruction.immediate >= 0)
                 {
-                    return true;
+                    continue;
+                }
+
+                const size_t saveLimit = std::min(prologueIndex + 8, disassembled.size());
+                for (size_t saveIndex = prologueIndex + 1; saveIndex < saveLimit; ++saveIndex)
+                {
+                    const auto& saveInstruction = disassembled[saveIndex];
+                    if (saveInstruction.opcode == disasm::Opcode::SW &&
+                        saveInstruction.rs == Registers::SP && saveInstruction.rt == Registers::RA)
+                    {
+                        return true;
+                    }
                 }
             }
+            return false;
+        };
+
+        if (hasNearbyStackPrologue())
+        {
+            return true;
         }
+
+        const auto& firstInstruction = disassembled[startIndex];
 
         if (firstInstruction.opcode == disasm::Opcode::J)
         {
@@ -108,26 +126,40 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     std::vector<Address> jumpTableHarvestedPointers;
     {
         const Address endAddress = baseAddress + static_cast<Address>(exeImage.programData.size());
-        for (const auto& range : layout.segmentation.dataRanges)
+        std::vector<Address> clusteredCodePointers;
+        const auto flushClusteredCodePointers = [&]()
         {
-            for (Address addr = range.start; addr <= range.end; addr += 4)
+            if (clusteredCodePointers.size() >= 2)
             {
-                const size_t offset = addr - baseAddress;
-                if (offset + 4 <= exeImage.programData.size())
-                {
-                    const uint32_t value =
-                        static_cast<uint32_t>(exeImage.programData[offset]) |
-                        (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
-                        (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
-                        (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
-                    if (value >= baseAddress && value < endAddress && (value % 4) == 0 &&
-                        looksLikeFunctionEntry(value))
-                    {
-                        harvestedPointers.push_back(value);
-                    }
-                }
+                harvestedPointers.insert(harvestedPointers.end(), clusteredCodePointers.begin(),
+                                         clusteredCodePointers.end());
+            }
+            else if (clusteredCodePointers.size() == 1 &&
+                     looksLikeFunctionEntry(clusteredCodePointers.front()))
+            {
+                harvestedPointers.push_back(clusteredCodePointers.front());
+            }
+            clusteredCodePointers.clear();
+        };
+
+        for (Address addr = baseAddress; addr + 3 < endAddress; addr += 4)
+        {
+            const size_t offset = addr - baseAddress;
+            const uint32_t value = static_cast<uint32_t>(exeImage.programData[offset]) |
+                                   (static_cast<uint32_t>(exeImage.programData[offset + 1]) << 8) |
+                                   (static_cast<uint32_t>(exeImage.programData[offset + 2]) << 16) |
+                                   (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
+            if (value >= baseAddress && value < endAddress && (value % 4) == 0 &&
+                instructionIndexMap.count(value) != 0)
+            {
+                clusteredCodePointers.push_back(value);
+            }
+            else
+            {
+                flushClusteredCodePointers();
             }
         }
+        flushClusteredCodePointers();
         std::unordered_set<Address> existingSeeds(entrySeeds.begin(), entrySeeds.end());
         constexpr size_t kMaxJumpTableEntries = 64;
         for (const auto& jumpTable : jumpTables)

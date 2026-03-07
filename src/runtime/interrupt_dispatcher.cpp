@@ -43,12 +43,31 @@ void InterruptDispatcher::serviceInterrupts(InterruptController& interrupts,
                                             KernelEventTable& events, u32 criticalDepth,
                                             RuntimeLogger* logger)
 {
+    serviceInterruptsImpl(interrupts, events, criticalDepth, logger, 0, false);
+}
+
+void InterruptDispatcher::servicePendingMask(InterruptController& interrupts,
+                                             KernelEventTable& events, u32 criticalDepth,
+                                             u32 pendingMask, RuntimeLogger* logger)
+{
+    serviceInterruptsImpl(interrupts, events, criticalDepth, logger, pendingMask, true);
+}
+
+void InterruptDispatcher::serviceInterruptsImpl(InterruptController& interrupts,
+                                                KernelEventTable& events, u32 criticalDepth,
+                                                RuntimeLogger* logger, u32 pendingMask,
+                                                bool hasForcedPendingMask)
+{
     if (traceIrqFlowEnabled() && logger)
     {
         std::ostringstream msg;
         msg << "event=dispatcher_enter status=0x" << std::hex << interrupts.readStatus()
             << " mask=0x" << interrupts.readMask() << " critical_depth=" << std::dec
             << criticalDepth << " reentrant=" << (m_dispatching ? 1 : 0);
+        if (hasForcedPendingMask)
+        {
+            msg << " forced_pending=0x" << std::hex << pendingMask;
+        }
         logger->log(LogLevel::Info, "irq_trace", msg.str());
     }
 
@@ -114,7 +133,7 @@ void InterruptDispatcher::serviceInterrupts(InterruptController& interrupts,
         m_dispatching = false;
     };
 
-    if (!interrupts.isInterruptPending())
+    if (!hasForcedPendingMask && !interrupts.isInterruptPending())
     {
         // No pending work — but flush any deferred callbacks from a
         // previous critical section.
@@ -124,7 +143,7 @@ void InterruptDispatcher::serviceInterrupts(InterruptController& interrupts,
 
     const u32 status = interrupts.readStatus();
     const u32 mask = interrupts.readMask();
-    const u32 pending = status & mask;
+    const u32 pending = hasForcedPendingMask ? (pendingMask & mask) : (status & mask);
     if (pending == 0)
     {
         return;
@@ -196,6 +215,16 @@ u32 InterruptDispatcher::dispatchLine(InterruptLine line, InterruptController& i
 
     // Deliver events for the "Interrupted" spec (most common for HW IRQs).
     auto callbacks = events.deliverByClassSpec(eventClass, EventSpec::Interrupted);
+
+    // Some BIOS/libetc code registers VBlank callbacks through the alternate
+    // class 0xF2000002 instead of the canonical 0xF0000001 event family.
+    // On hardware these callbacks are still driven by the VBlank IRQ.
+    if (line == InterruptLine::VBlank)
+    {
+        auto alternateCallbacks =
+            events.deliverByClassSpec(EventClass::VBlankAlt, EventSpec::Interrupted);
+        callbacks.insert(callbacks.end(), alternateCallbacks.begin(), alternateCallbacks.end());
+    }
 
     // Also deliver "Counter" events for timer lines (used by VSync/timer
     // counter patterns).

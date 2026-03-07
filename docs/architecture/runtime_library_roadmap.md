@@ -59,6 +59,7 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Implement system initialization C0 stubs.
 - [x] Add BIOS trace support (`PSXRECOMP_TRACE_BIOS` env var).
 - [x] Refactor BIOS code into dedicated `psx_system_bios.cpp` module.
+- [x] Align BIOS internal CD-ROM helpers with PSX-SPX: boot-time `_96_init` state, `A0(0x71)` re-init behavior, bug-compatible `A0(0x72)` `_96_remove`, and BIOS-owned `F0000003` event lifecycle.
 - [ ] Implement `printf` (A0:0x3F) with format string support.
 - [ ] Implement threading functions (OpenThread, CloseThread, ChangeThread).
 - [ ] Implement timer functions (init_timer, get_timer, enable/disable_timer_irq).

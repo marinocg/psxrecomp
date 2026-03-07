@@ -165,8 +165,15 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     // HookEntryInt callback should not run while inside a critical section.
     constexpr Address hookDescriptorAddress = 0x00001000;
     constexpr psxrecomp::u32 hookCallbackAddress = 0x80002000u;
-    system.write<psxrecomp::u32>(hookDescriptorAddress, hookCallbackAddress);
     std::array<psxrecomp::u32, 32> hookRegs{};
+    hookRegs[9] = 0x13; // setjmp
+    hookRegs[4] = hookDescriptorAddress;
+    hookRegs[31] = hookCallbackAddress;
+    hookRegs[29] = 0x80002100u;
+    hookRegs[30] = 0x80002120u;
+    system.callBiosVector(0xA0, hookRegs.data(), hookRegs.size());
+
+    hookRegs = {};
     hookRegs[9] = 0x19; // HookEntryInt
     hookRegs[4] = hookDescriptorAddress;
     system.callBiosVector(0xB0, hookRegs.data(), hookRegs.size());
@@ -202,8 +209,15 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     // restore Status low mode bits when callback flow aborts via ReturnFromException.
     constexpr Address cop0HookDescriptorAddress = 0x00001100;
     constexpr psxrecomp::u32 cop0HookCallbackAddress = 0x80003000u;
-    system.write<psxrecomp::u32>(cop0HookDescriptorAddress, cop0HookCallbackAddress);
     std::array<psxrecomp::u32, 32> cop0HookRegs{};
+    cop0HookRegs[9] = 0x13; // setjmp
+    cop0HookRegs[4] = cop0HookDescriptorAddress;
+    cop0HookRegs[31] = cop0HookCallbackAddress;
+    cop0HookRegs[29] = 0x80003100u;
+    cop0HookRegs[30] = 0x80003120u;
+    system.callBiosVector(0xA0, cop0HookRegs.data(), cop0HookRegs.size());
+
+    cop0HookRegs = {};
     cop0HookRegs[9] = 0x19; // HookEntryInt
     cop0HookRegs[4] = cop0HookDescriptorAddress;
     system.callBiosVector(0xB0, cop0HookRegs.data(), cop0HookRegs.size());

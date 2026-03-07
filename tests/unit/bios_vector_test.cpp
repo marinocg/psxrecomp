@@ -3,15 +3,36 @@
  * @brief Tests for PsxSystem::callBiosVector covering A0, B0, and C0 vectors.
  */
 #include "bios_vector_test_sections.h"
+#include "psxrecomp/runtime/disc.h"
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace MemoryMap = psxrecomp::MemoryMap;
+
+namespace
+{
+class TestDisc final : public psxrecomp::runtime::Disc
+{
+  public:
+    bool readUserSector(psxrecomp::u32, std::span<psxrecomp::u8, 2048> out) override
+    {
+        std::fill(out.begin(), out.end(), 0);
+        return true;
+    }
+
+    psxrecomp::u32 userSectorCount() const override
+    {
+        return 16;
+    }
+};
+} // namespace
 
 int main()
 {
@@ -84,7 +105,35 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 3: A0 vector - strcpy (function 0x19)
+    // Test 3: A0 vector - strncmp (function 0x18)
+    //
+    // Compare up to N bytes and stop at terminator or mismatch.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u8* ram = system.getRam();
+        std::memcpy(ram + 0x4000, "hello", sizeof("hello"));
+        std::memcpy(ram + 0x4100, "help!", sizeof("help!"));
+
+        u32 regs[32] = {};
+        regs[9] = 0x18;
+        regs[4] = 0x4000;
+        regs[5] = 0x4100;
+        regs[6] = 3;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(regs[2] == 0);
+
+        regs[6] = 4;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(static_cast<int>(regs[2]) != 0);
+
+        std::cerr << "[PASS] A0 strncmp\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 4: A0 vector - strcpy (function 0x19)
     //
     // Copy a string and return destination address in $v0.
     // ---------------------------------------------------------------
@@ -108,7 +157,51 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 4: A0 vector - bzero (function 0x28)
+    // Test 5: A0 vector - strlen (function 0x1B)
+    //
+    // Return the length of the string in bytes excluding the terminator.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u8* ram = system.getRam();
+        std::memcpy(ram + 0x6800, "Crash", sizeof("Crash"));
+
+        u32 regs[32] = {};
+        regs[9] = 0x1B;
+        regs[4] = 0x6800;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(regs[2] == 5);
+
+        std::cerr << "[PASS] A0 strlen\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 6: A0 vector - bcopy (function 0x27)
+    //
+    // Move bytes between RAM regions, allowing overlap.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u8* ram = system.getRam();
+        std::memcpy(ram + 0x6900, "abcdef", sizeof("abcdef"));
+
+        u32 regs[32] = {};
+        regs[9] = 0x27;
+        regs[4] = 0x6900;
+        regs[5] = 0x6902;
+        regs[6] = 4;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(std::memcmp(ram + 0x6902, "abcd", 4) == 0);
+
+        std::cerr << "[PASS] A0 bcopy\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 7: A0 vector - bzero (function 0x28)
     //
     // Zero a region of RAM.
     // ---------------------------------------------------------------
@@ -134,7 +227,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 5: A0 vector - memcpy (function 0x2A)
+    // Test 8: A0 vector - memcpy (function 0x2A)
     //
     // Copy bytes between RAM regions.
     // ---------------------------------------------------------------
@@ -164,7 +257,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 6: A0 vector - memset (function 0x2B)
+    // Test 9: A0 vector - memset (function 0x2B)
     //
     // Fill a region with a byte value.
     // ---------------------------------------------------------------
@@ -191,7 +284,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 7: A0 vector - malloc (function 0x33)
+    // Test 10: A0 vector - malloc (function 0x33)
     //
     // Simple bump allocator should return a non-zero address.
     // ---------------------------------------------------------------
@@ -217,7 +310,26 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 8: A0 vector - putchar (function 0x3C)
+    // Test 11: B0 vector - PAD_init2 (function 0x15)
+    //
+    // Should acknowledge a two-port pad setup.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u32 regs[32] = {};
+        regs[9] = 0x15;
+        regs[4] = 0x20000001;
+        regs[5] = 0x1000;
+        system.callBiosVector(0xB0, regs, 32);
+        assert(regs[2] == 2);
+
+        std::cerr << "[PASS] B0 PAD_init2\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 12: A0 vector - putchar (function 0x3C)
     //
     // Should log the character without crashing.
     // ---------------------------------------------------------------
@@ -247,7 +359,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 9: A0 vector - puts (function 0x3E)
+    // Test 13: A0 vector - puts (function 0x3E)
     //
     // Should log the string without crashing.
     // ---------------------------------------------------------------
@@ -280,7 +392,44 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 10: A0 vector - FlushCache (function 0x44)
+    // Test 14: A0 vector - printf (function 0x3F)
+    //
+    // Should format common integer/string arguments and return a length.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        assert(system.initialize());
+
+        u8* ram = system.getRam();
+        std::memcpy(ram + 0xB100, "Score %d %s", sizeof("Score %d %s"));
+        std::memcpy(ram + 0xB120, "Wumpa", sizeof("Wumpa"));
+
+        bool logged = false;
+        system.logger().setMinLevel(LogLevel::Info);
+        system.logger().setCallback(
+            [&logged](const psxrecomp::runtime::LogEvent& event)
+            {
+                if (event.level == LogLevel::Info && event.category == "bios" &&
+                    event.message.find("Score 7 Wumpa") != std::string::npos)
+                {
+                    logged = true;
+                }
+            });
+
+        u32 regs[32] = {};
+        regs[9] = 0x3F;   // printf
+        regs[4] = 0xB100; // format string
+        regs[5] = 7;
+        regs[6] = 0xB120;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(logged);
+        assert(regs[2] == std::strlen("Score 7 Wumpa"));
+
+        std::cerr << "[PASS] A0 printf\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 15: A0 vector - FlushCache (function 0x44)
     //
     // Should be a no-op (no crash).
     // ---------------------------------------------------------------
@@ -297,7 +446,7 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 11: A0 vector - send_gpu_linked_list (function 0x4B)
+    // Test 16: A0 vector - send_gpu_linked_list (function 0x4B)
     //
     // Should configure GPU DMA via registers and consume linked-list words.
     // ---------------------------------------------------------------
@@ -328,7 +477,84 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 12: A0 vector - gpu_sync (function 0x4E)
+    // Test 17: BIOS boot + A0 vector - _96_init (function 0x71)
+    //
+    // BIOS boot should already prime CD-ROM IRQ enables, and _96_init should
+    // preserve that state when libcd calls it again.
+    // ---------------------------------------------------------------
+    {
+        PsxSystem system;
+        system.setDisc(std::make_shared<TestDisc>());
+        assert(system.initialize());
+        assert((system.cdrom().readInterruptEnable() & 0x1Fu) == 0x1Fu);
+
+        system.cdrom().writeCommand(0x01);
+        assert((system.cdrom().readInterruptFlags() & 0x07u) == 0x03u);
+        assert(system.cdrom().readResponse() == 0x02u);
+        system.cdrom().writeInterruptFlags(0x04u);
+
+        u32 regs[32] = {};
+        regs[9] = 0x71;
+        regs[4] = 0x00012000u;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(regs[2] == 0);
+        assert((system.cdrom().readInterruptEnable() & 0x1Fu) == 0x1Fu);
+        for (u32 i = 0; i < 5; ++i)
+        {
+            assert(system.read<u32>(0x00012000u + i * sizeof(u32)) != 0u);
+        }
+
+        std::cerr << "[PASS] BIOS boot and A0 _96_init prime CD-ROM IRQ enable\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 18: A0 vector - _96_remove (function 0x72)
+    //
+    // Should leave BIOS-managed CD-ROM event routing intact.
+    // ---------------------------------------------------------------
+    {
+        using psxrecomp::runtime::EventMode;
+        namespace EventClass = psxrecomp::runtime::EventClass;
+        namespace EventSpec = psxrecomp::runtime::EventSpec;
+
+        PsxSystem system;
+        assert(system.initialize());
+        assert((system.cdrom().readInterruptEnable() & 0x1Fu) == 0x1Fu);
+
+        u32 regs[32] = {};
+        regs[9] = 0x72;
+        system.callBiosVector(0xA0, regs, 32);
+        assert(regs[2] == 0);
+
+        bool callbackInvoked = false;
+        const u32 handle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
+                                                     EventMode::Callback, 0x80014000u);
+        assert(handle != 0xFFFFFFFFu);
+        assert(system.events().enableEvent(handle));
+        system.setCallbackInvoker(
+            [&system, &callbackInvoked](u32 address) -> u32
+            {
+                if (address == 0x80014000u)
+                {
+                    callbackInvoked = true;
+                    system.cdrom().writeInterruptFlags(0x07u);
+                }
+                return 0;
+            });
+
+        system.interrupts().writeMask(system.interrupts().readMask() |
+                                      static_cast<u32>(InterruptLine::Cdrom));
+        system.cdrom().writeCommand(0x01); // Getstat -> INT3
+        system.serviceInterrupts();
+
+        assert(callbackInvoked);
+        assert((system.cdrom().readInterruptFlags() & 0x07u) == 0u);
+
+        std::cerr << "[PASS] A0 _96_remove leaves BIOS CD-ROM routing intact\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 19: A0 vector - gpu_sync (function 0x4E)
     //
     // Should disable GPU DMA mode after synchronization.
     // ---------------------------------------------------------------

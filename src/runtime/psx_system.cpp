@@ -17,6 +17,11 @@ constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
 constexpr u32 VBLANK_CYCLES = CYCLES_PER_FRAME / 10u;
 constexpr u32 VBLANK_MID_CYCLES = VBLANK_CYCLES / 2u;
 constexpr u32 ACTIVE_CYCLES = CYCLES_PER_FRAME - VBLANK_CYCLES;
+constexpr u32 BIOS_VECTOR_TABLE_POINTER_OFFSET = 24u;
+constexpr std::array<u16, 5> BIOS_CDROM_EVENT_SPECS = {
+    0x0010u, // PSX-SPX: BIOS _96_init opens F0000003 specs 10h,20h,40h,80h,8000h
+    0x0020u, 0x0040u, 0x0080u, 0x8000u,
+};
 
 const char* interruptTraceKindName(InterruptController::TraceEvent::Kind kind)
 {
@@ -97,6 +102,7 @@ void PsxSystem::reset()
     bindGteRuntimeHooks();
     m_criticalSectionDepth = 0;
     m_hookEntryInt = {};
+    resetBiosCdromState();
     m_callbackInvoker = CallbackInvoker{};
     m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
@@ -132,6 +138,58 @@ void PsxSystem::reset()
     m_logger.log(LogLevel::Info, "system", "Runtime reset complete");
 }
 
+void PsxSystem::resetBiosCdromState()
+{
+    for (u32 handle : m_biosCdrom.eventHandles)
+    {
+        if (handle != 0 && handle != 0xFFFFFFFFu)
+        {
+            m_events.closeEvent(handle);
+        }
+    }
+    m_biosCdrom = {};
+}
+
+void PsxSystem::initializeBiosCdromState(u32 handleStorageAddress)
+{
+    resetBiosCdromState();
+    m_biosCdrom.initialized = true;
+    m_biosCdrom.handleStorageAddress = handleStorageAddress;
+    const bool hasHandleStorage =
+        handleStorageAddress != 0u && normalizeAddress(handleStorageAddress) <=
+                                       MemoryMap::RAM_SIZE -
+                                           static_cast<Address>(BIOS_CDROM_EVENT_SPECS.size() * sizeof(u32));
+
+    if (hasHandleStorage)
+    {
+        for (size_t i = 0; i < BIOS_CDROM_EVENT_SPECS.size(); ++i)
+        {
+            write<u32>(handleStorageAddress + static_cast<u32>(i * sizeof(u32)), 0u);
+        }
+    }
+
+    // PSX-SPX: the BIOS opens five internal CDROM events for class F0000003
+    // during _96_init, and the kernel performs that setup before the boot
+    // executable starts running.
+    for (size_t i = 0; i < BIOS_CDROM_EVENT_SPECS.size(); ++i)
+    {
+        const u32 handle =
+            m_events.openEvent(EventClass::Cdrom, BIOS_CDROM_EVENT_SPECS[i], EventMode::NoCallback, 0);
+        m_biosCdrom.eventHandles[i] = handle;
+        if (hasHandleStorage)
+        {
+            write<u32>(handleStorageAddress + static_cast<u32>(i * sizeof(u32)), handle);
+        }
+        if (handle != 0xFFFFFFFFu)
+        {
+            m_events.enableEvent(handle);
+        }
+    }
+
+    // PSX-SPX notes the BIOS/libcd path typically enables all CDROM IRQ subtypes.
+    m_cdrom.writeInterruptEnable(0x1Fu);
+}
+
 void PsxSystem::bindGteRuntimeHooks()
 {
     m_gte.setCpuStallCallback(
@@ -165,6 +223,24 @@ void PsxSystem::boot()
         static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2);
     m_interrupts.writeMask(bootMask);
     syncCop0InterruptPending();
+
+    // PSX-SPX: GetC0Table/GetB0Table expose BIOS-owned writable table roots in
+    // kernel RAM. Games such as Crash patch the C0 handler table during boot.
+    // Keep the layout minimal but non-null so those installs target kernel
+    // workspace instead of clobbering address 0.
+    for (u32 address = BIOS_C0_TABLE_ADDRESS; address < BIOS_B0_HANDLER_TABLE_ADDRESS + 0x40u;
+         address += sizeof(u32))
+    {
+        write<u32>(address, 0u);
+    }
+    write<u32>(BIOS_C0_TABLE_ADDRESS + BIOS_VECTOR_TABLE_POINTER_OFFSET,
+               BIOS_C0_HANDLER_TABLE_ADDRESS);
+    write<u32>(BIOS_B0_TABLE_ADDRESS + BIOS_VECTOR_TABLE_POINTER_OFFSET,
+               BIOS_B0_HANDLER_TABLE_ADDRESS);
+
+    m_cdrom.primeBootState(m_disc != nullptr);
+
+    initializeBiosCdromState(0u);
 
     m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
 }
@@ -395,6 +471,10 @@ void PsxSystem::setDisc(std::shared_ptr<Disc> disc)
 {
     m_disc = std::move(disc);
     m_cdrom.setDiscBackend(m_disc.get());
+    if (m_cpuCycles == 0)
+    {
+        m_cdrom.primeBootState(m_disc != nullptr);
+    }
 }
 
 KernelEventTable& PsxSystem::events()

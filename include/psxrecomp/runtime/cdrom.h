@@ -40,6 +40,8 @@ class Cdrom
     void writeInterruptFlags(u8 value);
     void writeInterruptEnable(u8 value);
 
+    void primeBootState(bool discPresent);
+
     void writeDma(u32 value);
     u32 readDma();
     u32 lastDmaWord() const;

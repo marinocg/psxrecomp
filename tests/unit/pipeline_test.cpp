@@ -242,6 +242,38 @@ std::vector<psxrecomp::u8> buildExeWithLiteralFunctionPointerInData()
     return buffer;
 }
 
+std::vector<psxrecomp::u8> buildExeWithClusteredCodePointersInData()
+{
+    constexpr psxrecomp::u32 loadSize = 112;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004000); // j 0x80010000
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop
+
+    // Vtable-like cluster: one canonical function entry plus one internal code
+    // label that is a valid resume point but does not start with a prologue.
+    writeLe32(buffer, codeOffset + 0x08, 0x8001003C);
+    writeLe32(buffer, codeOffset + 0x0C, 0x80010030);
+    writeLe32(buffer, codeOffset + 0x10, 0x11111111);
+    writeLe32(buffer, codeOffset + 0x14, 0x22222222);
+
+    writeLe32(buffer, codeOffset + 0x30, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x34, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x38, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x3C, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x40, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x44, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x48, 0x00000000); // nop
+
+    return buffer;
+}
+
 std::vector<psxrecomp::u8> buildExeWithLocalJumpTableTargets()
 {
     constexpr psxrecomp::u32 loadSize = 128;
@@ -273,6 +305,40 @@ std::vector<psxrecomp::u8> buildExeWithLocalJumpTableTargets()
     writeLe32(buffer, codeOffset + 0x6C, 0x24020002); // li v0, 2
     writeLe32(buffer, codeOffset + 0x70, 0x03E00008); // jr ra
     writeLe32(buffer, codeOffset + 0x74, 0x00000000); // nop
+
+    return buffer;
+}
+
+std::vector<psxrecomp::u8> buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads()
+{
+    constexpr psxrecomp::u32 loadSize = 128;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x04, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x08, 0x3C028001); // lui v0, 0x8001
+    writeLe32(buffer, codeOffset + 0x0C, 0x24420040); // addiu v0, v0, 0x0040
+    writeLe32(buffer, codeOffset + 0x10, 0xAFA20008); // sw v0, 8(sp)
+    writeLe32(buffer, codeOffset + 0x14, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x18, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x1C, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x20, 0x00000000); // nop
+
+    // Target begins with a couple of global loads before the actual stack frame.
+    writeLe32(buffer, codeOffset + 0x40, 0x3C028001); // lui v0, 0x8001
+    writeLe32(buffer, codeOffset + 0x44, 0x8C420070); // lw v0, 0x0070(v0)
+    writeLe32(buffer, codeOffset + 0x48, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x4C, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x50, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x54, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x58, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x5C, 0x00000000); // nop
 
     return buffer;
 }
@@ -465,6 +531,27 @@ int main()
     }
     assert(hasLiteralFunctionPointerTarget);
 
+    std::filesystem::path clusteredCodePointerExePath =
+        tempDir / ("psxrecomp_pipeline_clustered_code_pointer_" + suffix + ".psx");
+    guard.exes.push_back(clusteredCodePointerExePath);
+    auto clusteredCodePointerBuffer = buildExeWithClusteredCodePointersInData();
+    std::ofstream clusteredCodePointerFile(clusteredCodePointerExePath, std::ios::binary);
+    clusteredCodePointerFile.write(reinterpret_cast<const char*>(clusteredCodePointerBuffer.data()),
+                                   static_cast<std::streamsize>(clusteredCodePointerBuffer.size()));
+    clusteredCodePointerFile.close();
+    auto clusteredCodePointerResult = pipeline.run(clusteredCodePointerExePath.string());
+    assert(clusteredCodePointerResult.success);
+    assert(!hasEmptyBoundaryWarning(clusteredCodePointerResult.warnings));
+    bool hasClusteredLabelTarget = false;
+    for (const auto& function : clusteredCodePointerResult.functions)
+    {
+        if (function.entryAddress == 0x8001003C)
+        {
+            hasClusteredLabelTarget = true;
+        }
+    }
+    assert(hasClusteredLabelTarget);
+
     std::filesystem::path callbackPointerExePath =
         tempDir / ("psxrecomp_pipeline_callback_pointer_" + suffix + ".psx");
     guard.exes.push_back(callbackPointerExePath);
@@ -485,6 +572,27 @@ int main()
         }
     }
     assert(hasCallbackTarget);
+
+    std::filesystem::path prefixedCallbackExePath =
+        tempDir / ("psxrecomp_pipeline_prefixed_callback_target_" + suffix + ".psx");
+    guard.exes.push_back(prefixedCallbackExePath);
+    auto prefixedCallbackBuffer = buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads();
+    std::ofstream prefixedCallbackFile(prefixedCallbackExePath, std::ios::binary);
+    prefixedCallbackFile.write(reinterpret_cast<const char*>(prefixedCallbackBuffer.data()),
+                               static_cast<std::streamsize>(prefixedCallbackBuffer.size()));
+    prefixedCallbackFile.close();
+    auto prefixedCallbackResult = pipeline.run(prefixedCallbackExePath.string());
+    assert(prefixedCallbackResult.success);
+    assert(!hasEmptyBoundaryWarning(prefixedCallbackResult.warnings));
+    bool hasPrefixedCallbackTarget = false;
+    for (const auto& function : prefixedCallbackResult.functions)
+    {
+        if (function.entryAddress == 0x80010040)
+        {
+            hasPrefixedCallbackTarget = true;
+        }
+    }
+    assert(hasPrefixedCallbackTarget);
 
     std::filesystem::path jumpTableExePath =
         tempDir / ("psxrecomp_pipeline_jump_table_" + suffix + ".psx");

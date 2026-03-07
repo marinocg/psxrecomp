@@ -23,6 +23,7 @@ namespace runtime
 namespace EventClass
 {
 constexpr u32 VBlank = 0xF0000001;     ///< Vertical-blank interrupt
+constexpr u32 VBlankAlt = 0xF2000002;  ///< Alternate VBlank callback class used by some BIOS/libetc code
 constexpr u32 Gpu = 0xF0000002;        ///< GPU interrupt
 constexpr u32 Cdrom = 0xF0000003;      ///< CD-ROM interrupt
 constexpr u32 Dma = 0xF0000004;        ///< DMA interrupt
