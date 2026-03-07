@@ -62,12 +62,8 @@ static constexpr u16 CTRL_IRQ_ENABLE = 1u << 12;
 
 void Sio0::scheduleAckIrq()
 {
-    // Only schedule if IRQ enable (CTRL bit 12) is set.
-    if (!(m_ctrl & CTRL_IRQ_ENABLE))
-    {
-        return;
-    }
-
+    // Always schedule the ACK-clear event — on real hardware the device
+    // pulses /ACK for ~2 µs then releases it regardless of IRQ enable.
     if (m_scheduler)
     {
         m_scheduler->schedule(ACK_DELAY_CYCLES, [this]() { fireAckIrqNow(); });
@@ -81,12 +77,16 @@ void Sio0::scheduleAckIrq()
 
 void Sio0::fireAckIrqNow()
 {
-    m_stat |= STAT_IRQ_REQUEST;
-    // Clear the edge-triggered ACK level; the IRQ has been captured.
+    // The /ACK pulse has ended: clear STAT.7 unconditionally.
     m_stat &= ~STAT_ACK_LEVEL;
-    if (m_irqCallback)
+    // Only raise the interrupt when CTRL.12 (IRQ enable) is set.
+    if (m_ctrl & CTRL_IRQ_ENABLE)
     {
-        m_irqCallback();
+        m_stat |= STAT_IRQ_REQUEST;
+        if (m_irqCallback)
+        {
+            m_irqCallback();
+        }
     }
 }
 
@@ -117,13 +117,12 @@ void Sio0::processTransferByte(u8 txByte)
         else if (txByte == 0x81)
         {
             // Memory-card address — device not implemented yet.
-            // Return Hi-Z with no ACK, same as a disconnected slot.
-            m_activeDevice = DeviceType::MemoryCard;
+            // Return Hi-Z with no ACK. Enter Deselected so that subsequent
+            // bytes on this transfer are absorbed until /JOY is deasserted.
             m_rxData = 0xFF;
             m_stat |= STAT_RX_NOT_EMPTY;
             m_stat &= ~STAT_ACK_LEVEL;
-            // Stay in Idle so subsequent bytes are ignored until /JOY reset.
-            m_activeDevice = DeviceType::None;
+            m_protoState = ProtoState::Deselected;
         }
         else
         {
@@ -155,6 +154,13 @@ void Sio0::processTransferByte(u8 txByte)
             m_stat &= ~STAT_ACK_LEVEL;
             m_protoState = ProtoState::Idle;
         }
+        break;
+
+    case ProtoState::Deselected:
+        // Unimplemented device was addressed; ignore bytes until /JOY deassert.
+        m_rxData = 0xFF;
+        m_stat |= STAT_RX_NOT_EMPTY;
+        m_stat &= ~STAT_ACK_LEVEL;
         break;
 
     case ProtoState::Transferring:
@@ -222,13 +228,17 @@ void Sio0::write8(Address offset, u8 value)
 //  16-bit access
 // ----------------------------------------------------------------
 
-u16 Sio0::read16(Address offset) const
+u16 Sio0::read16(Address offset)
 {
     switch (offset)
     {
     case Register::Data:
-        // 16-bit read returns RX data in low byte, "preview" in high byte.
-        return static_cast<u16>(m_rxData | (m_rxData << 8));
+    {
+        // 16-bit read returns RX data; clear RX-Not-Empty like 8/32-bit reads.
+        u16 value = static_cast<u16>(m_rxData | (m_rxData << 8));
+        m_stat &= ~STAT_RX_NOT_EMPTY;
+        return value;
+    }
     case Register::Stat:
         // Low 16 bits of JOY_STAT.
         return static_cast<u16>(m_stat & 0xFFFFu);
@@ -298,6 +308,12 @@ void Sio0::write32(Address offset, u32 value)
         break;
     case Register::Mode:
         write16(Register::Mode, static_cast<u16>(value));
+        break;
+    case Register::Ctrl:
+        write16(Register::Ctrl, static_cast<u16>(value));
+        break;
+    case Register::Baud:
+        write16(Register::Baud, static_cast<u16>(value));
         break;
     default:
         break;

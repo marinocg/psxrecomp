@@ -73,7 +73,7 @@ class Sio0
     void write8(Address offset, u8 value);
 
     /// 16-bit read.
-    u16 read16(Address offset) const;
+    u16 read16(Address offset);
 
     /// 16-bit write.
     void write16(Address offset, u16 value);
@@ -105,10 +105,12 @@ class Sio0
     /// Reset the protocol state machine (called on /CS deassert / reset).
     void resetProtocol();
 
-    /// Schedule the ACK-delay event that asserts STAT.9 and raises the IRQ.
+    /// Schedule the ACK-delay event that clears STAT.7 and, when CTRL.12
+    /// (IRQ enable) is set, also asserts STAT.9 and raises the IRQ.
     void scheduleAckIrq();
 
-    /// Immediately assert STAT.9 and fire the IRQ callback (no scheduler).
+    /// Execute the ACK pulse completion: always clear STAT.7; only assert
+    /// STAT.9 and fire the IRQ callback when CTRL.12 is set.
     void fireAckIrqNow();
 
     // ----- Device routing -----
@@ -126,6 +128,8 @@ class Sio0
         Idle,         ///< Waiting for address byte.
         Selected,     ///< Address matched, waiting for command byte.
         Transferring, ///< Sending response data bytes.
+        Deselected,   ///< Unrecognised/unimplemented device addressed; absorb
+                      ///< remaining bytes until /CS (/JOY) is deasserted.
     };
 
     DeviceType m_activeDevice = DeviceType::None;
