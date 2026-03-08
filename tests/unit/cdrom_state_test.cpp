@@ -133,7 +133,7 @@ int main()
         assert(cdrom.deserializeState(saved));
 
         const std::vector<psxrecomp::u8> expected = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2};
-        for (psxrecomp::u8 value : expected)
+        for ([[maybe_unused]] psxrecomp::u8 value : expected)
         {
             assert(cdrom.readData() == value);
         }
@@ -141,7 +141,7 @@ int main()
         drainIrqs(cdrom);
         cdrom.writeCommand(0x11); // GetlocP
         assert(irqType(cdrom) == 0x03u);
-        for (psxrecomp::u8 expectedValue : expectedLoc)
+        for ([[maybe_unused]] psxrecomp::u8 expectedValue : expectedLoc)
         {
             assert(cdrom.readResponse() == expectedValue);
         }

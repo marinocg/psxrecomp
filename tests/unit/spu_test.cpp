@@ -87,7 +87,7 @@ int main()
     assert(!mixed.empty());
     assert(mixed.size() == Spu::SamplesPerTick * 2);
 
-    bool sawNonZero = false;
+    [[maybe_unused]] bool sawNonZero = false;
     for (int16_t sample : mixed)
     {
         if (sample != 0)

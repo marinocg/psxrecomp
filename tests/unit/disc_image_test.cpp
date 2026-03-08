@@ -36,7 +36,7 @@ int main()
     assert(image.isOpen());
     assert(image.sectorCount() == 3u);
 
-    std::array<u8, 2048> user{};
+    [[maybe_unused]] std::array<u8, 2048> user{};
     assert(image.readUserSector(0u, std::span<u8, 2048>(user)));
     assert(user[0] == 0x11u && user[2047] == 0x11u);
     assert(image.readUserSector(2u, std::span<u8, 2048>(user)));
@@ -76,7 +76,7 @@ int main()
     assert(rawImage.sectorCount() == 2u);
     assert(rawImage.readUserSector(1u, std::span<u8, 2048>(user)));
     assert(user[0] == 0xA5u && user[2047] == 0xA5u);
-    std::array<u8, 2352> rawSector{};
+    [[maybe_unused]] std::array<u8, 2352> rawSector{};
     assert(rawImage.readRawSector2352(0u, std::span<u8, 2352>(rawSector)));
     assert(rawSector[24] == 0x5Au);
     assert(!rawImage.readRawSector2352(2u, std::span<u8, 2352>(rawSector))); // out of range

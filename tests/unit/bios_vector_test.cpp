@@ -280,7 +280,7 @@ int main()
         regs[4] = 256;  // $a0 = size
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] != 0); // should allocate
-        u32 firstAlloc = regs[2];
+        [[maybe_unused]] u32 firstAlloc = regs[2];
 
         // Second allocation should be at a different address
         regs[9] = 0x33;

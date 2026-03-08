@@ -82,7 +82,8 @@ int main()
     std::string source = generator.generateSource(program, "module");
     std::string buildFile = generator.generateBuildFile("module");
     std::string runner = generator.generateRunnerSource("module");
-    auto countOccurrences = [](const std::string& haystack, const std::string& needle) -> size_t
+    [[maybe_unused]] auto countOccurrences = [](const std::string& haystack,
+                                                const std::string& needle) -> size_t
     {
         if (needle.empty())
         {

@@ -200,7 +200,7 @@ int main()
         assert(selfLoopCase != std::string::npos);
 
         // In the self_loop case body, look for the redirection
-        auto afterSelfLoop = source.find("after_loop", selfLoopCase);
+        [[maybe_unused]] auto afterSelfLoop = source.find("after_loop", selfLoopCase);
         assert(afterSelfLoop != std::string::npos);
 
         std::cerr << "[PASS] self-loop prevention redirects to next block\n";
@@ -231,7 +231,7 @@ int main()
         // In the first block, it should go to second normally
         auto firstCase = source.find("case BlockId::first:");
         assert(firstCase != std::string::npos);
-        auto secondRef = source.find("BlockId::second", firstCase);
+        [[maybe_unused]] auto secondRef = source.find("BlockId::second", firstCase);
         assert(secondRef != std::string::npos);
 
         std::cerr << "[PASS] non-self-loop successor preserved\n";
@@ -353,15 +353,15 @@ int main()
         assert(loopCase != std::string::npos);
 
         // Should have normal if/else branching in the loop block
-        auto ifStmt = source.find("if (", loopCase);
+        [[maybe_unused]] auto ifStmt = source.find("if (", loopCase);
         assert(ifStmt != std::string::npos);
-        auto elseStmt = source.find("else", loopCase);
+        [[maybe_unused]] auto elseStmt = source.find("else", loopCase);
         assert(elseStmt != std::string::npos);
 
         // Both successors should be referenced: loop_block and exit_block
-        auto loopRef = source.find("BlockId::loop_block", loopCase);
+        [[maybe_unused]] auto loopRef = source.find("BlockId::loop_block", loopCase);
         assert(loopRef != std::string::npos);
-        auto exitRef = source.find("BlockId::exit_block", loopCase);
+        [[maybe_unused]] auto exitRef = source.find("BlockId::exit_block", loopCase);
         assert(exitRef != std::string::npos);
 
         std::cerr << "[PASS] conditional self-loop is normal branch (not advanceFrame)\n";

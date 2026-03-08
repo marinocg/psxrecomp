@@ -51,10 +51,10 @@ int main()
     assert(buildResult.errors.empty());
     assert(buildResult.function.blocks.size() == 4);
 
-    const BasicBlock& entry = buildResult.function.blocks[0];
-    const BasicBlock& fallthrough = buildResult.function.blocks[1];
-    const BasicBlock& branchTarget = buildResult.function.blocks[2];
-    const BasicBlock& joinBlock = buildResult.function.blocks[3];
+    [[maybe_unused]] const BasicBlock& entry = buildResult.function.blocks[0];
+    [[maybe_unused]] const BasicBlock& fallthrough = buildResult.function.blocks[1];
+    [[maybe_unused]] const BasicBlock& branchTarget = buildResult.function.blocks[2];
+    [[maybe_unused]] const BasicBlock& joinBlock = buildResult.function.blocks[3];
 
     assert(entry.name == "block_0x1000");
     assert(fallthrough.name == "block_0x1008");
@@ -69,7 +69,7 @@ int main()
     auto ssaResult = psxrecomp::ir::convertToSSA(buildResult.function);
     assert(ssaResult.errors.empty());
 
-    const BasicBlock& ssaJoin = buildResult.function.blocks[3];
+    [[maybe_unused]] const BasicBlock& ssaJoin = buildResult.function.blocks[3];
     assert(!ssaJoin.instructions.empty());
     assert(ssaJoin.instructions.front().opcode == Opcode::PHI);
 
@@ -100,9 +100,9 @@ int main()
         psxrecomp::ir::buildControlFlowFunction("delay_slot", 0x8000, delaySlotInstructions);
     assert(delaySlotCfg.errors.empty());
     assert(delaySlotCfg.function.blocks.size() == 3);
-    bool foundBlock8000 = false;
-    bool foundBlock800c = false;
-    bool foundBlock8014 = false;
+    [[maybe_unused]] bool foundBlock8000 = false;
+    [[maybe_unused]] bool foundBlock800c = false;
+    [[maybe_unused]] bool foundBlock8014 = false;
     for (const auto& block : delaySlotCfg.function.blocks)
     {
         if (block.name == "block_0x8000")
@@ -130,8 +130,8 @@ int main()
     ControlFlowBuildResult externalTargetCfg = psxrecomp::ir::buildControlFlowFunction(
         "external_target", 0x9000, externalTargetInstructions);
     assert(externalTargetCfg.errors.empty());
-    bool foundExternalBlock = false;
-    bool foundJumpBlock = false;
+    [[maybe_unused]] bool foundExternalBlock = false;
+    [[maybe_unused]] bool foundJumpBlock = false;
     for (const auto& block : externalTargetCfg.function.blocks)
     {
         if (block.name == "block_external")
@@ -155,8 +155,8 @@ int main()
     ControlFlowBuildResult indirectJumpCfg =
         psxrecomp::ir::buildControlFlowFunction("indirect_jump", 0x9100, indirectJumpInstructions);
     assert(indirectJumpCfg.errors.empty());
-    bool foundIndirectExternal = false;
-    bool foundIndirectJumpBlock = false;
+    [[maybe_unused]] bool foundIndirectExternal = false;
+    [[maybe_unused]] bool foundIndirectJumpBlock = false;
     for (const auto& block : indirectJumpCfg.function.blocks)
     {
         if (block.name == "block_external")
@@ -226,10 +226,10 @@ int main()
                     0x600C});
     optimizations.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x6010});
 
-    auto stats = psxrecomp::ir::runOptimizations(optimizations);
+    [[maybe_unused]] auto stats = psxrecomp::ir::runOptimizations(optimizations);
     assert(stats.constantsFolded > 0);
     assert(stats.deadInstructionsRemoved > 0);
-    bool foundFolded = false;
+    [[maybe_unused]] bool foundFolded = false;
     for (const auto& instruction : optimizations.blocks[0].instructions)
     {
         if (instruction.opcode == Opcode::MOVE && !instruction.inputs.empty() &&
@@ -252,9 +252,9 @@ int main()
     cop0Effects.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x610C});
 
     psxrecomp::ir::runOptimizations(cop0Effects);
-    bool keptCop0Mfc = false;
-    bool keptCop0Mtc = false;
-    bool keptCop0Rfe = false;
+    [[maybe_unused]] bool keptCop0Mfc = false;
+    [[maybe_unused]] bool keptCop0Mtc = false;
+    [[maybe_unused]] bool keptCop0Rfe = false;
     for (const auto& instruction : cop0Effects.blocks[0].instructions)
     {
         if (instruction.opcode == Opcode::COP0_MFC)
@@ -296,13 +296,13 @@ int main()
     gteEffects.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x621C});
 
     psxrecomp::ir::runOptimizations(gteEffects);
-    bool keptGteMfc2 = false;
-    bool keptGteMtc2 = false;
-    bool keptGteCfc2 = false;
-    bool keptGteCtc2 = false;
-    bool keptGteLwc2 = false;
-    bool keptGteSwc2 = false;
-    bool keptGteExec = false;
+    [[maybe_unused]] bool keptGteMfc2 = false;
+    [[maybe_unused]] bool keptGteMtc2 = false;
+    [[maybe_unused]] bool keptGteCfc2 = false;
+    [[maybe_unused]] bool keptGteCtc2 = false;
+    [[maybe_unused]] bool keptGteLwc2 = false;
+    [[maybe_unused]] bool keptGteSwc2 = false;
+    [[maybe_unused]] bool keptGteExec = false;
     for (const auto& instruction : gteEffects.blocks[0].instructions)
     {
         if (instruction.opcode == Opcode::GTE_MFC2)
@@ -357,7 +357,7 @@ int main()
     crossBlockDce.blocks[1].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x700C});
 
     psxrecomp::ir::runOptimizations(crossBlockDce);
-    bool producerKept = false;
+    [[maybe_unused]] bool producerKept = false;
     for (const auto& instruction : crossBlockDce.blocks[0].instructions)
     {
         if (!instruction.outputs.empty() &&
@@ -405,7 +405,7 @@ int main()
 
         // The block at 0xA000 should contain BOTH the ADD and LOAD
         // (not split into two blocks with the same name).
-        bool foundBlockA000 = false;
+        [[maybe_unused]] bool foundBlockA000 = false;
         for (const auto& block : dupAddrCfg.function.blocks)
         {
             if (block.name == "block_0xa000")
@@ -416,7 +416,7 @@ int main()
                 assert(block.instructions[0].opcode == Opcode::ADD);
                 assert(block.instructions[1].opcode == Opcode::LOAD);
                 // Successor should NOT be block_external.
-                bool hasExternalSuccessor = false;
+                [[maybe_unused]] bool hasExternalSuccessor = false;
                 for (const auto& successor : block.successors)
                 {
                     if (successor == "block_external")
@@ -431,7 +431,7 @@ int main()
         assert(foundBlockA000);
 
         // There should be NO block_external block at all.
-        bool hasExternalBlock = false;
+        [[maybe_unused]] bool hasExternalBlock = false;
         for (const auto& block : dupAddrCfg.function.blocks)
         {
             if (block.name == "block_external")

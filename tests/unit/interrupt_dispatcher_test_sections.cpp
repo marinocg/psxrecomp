@@ -59,7 +59,7 @@ void runInterruptDispatcherExceptionTests()
                 return 0;
             });
 
-        bool threw = false;
+        [[maybe_unused]] bool threw = false;
         try
         {
             dispatcher.serviceInterrupts(interrupts, events, 0, &logger);
@@ -126,7 +126,7 @@ void runInterruptDispatcherExceptionTests()
                 return 0;
             });
 
-        bool threw = false;
+        [[maybe_unused]] bool threw = false;
         try
         {
             dispatcher.serviceInterrupts(interrupts, events, 0, &logger);

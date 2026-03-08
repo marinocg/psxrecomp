@@ -111,7 +111,7 @@ int main()
     auto vectorResult = pipeline.run(vectorExePath.string());
     assert(vectorResult.success);
     assert(!hasEmptyBoundaryWarning(vectorResult.warnings));
-    bool hasBaseVectorFunction = false;
+    [[maybe_unused]] bool hasBaseVectorFunction = false;
     for (const auto& function : vectorResult.functions)
     {
         if (function.entryAddress == 0x80010000)
@@ -133,7 +133,7 @@ int main()
     auto copLoadResult = pipeline.run(copLoadExePath.string());
     assert(copLoadResult.success);
     assert(!hasEmptyBoundaryWarning(copLoadResult.warnings));
-    bool hasIndirectTargetFunction = false;
+    [[maybe_unused]] bool hasIndirectTargetFunction = false;
     for (const auto& function : copLoadResult.functions)
     {
         if (function.entryAddress == 0x80010020)
@@ -155,7 +155,7 @@ int main()
     auto storedPointerResult = pipeline.run(storedPointerExePath.string());
     assert(storedPointerResult.success);
     assert(!hasEmptyBoundaryWarning(storedPointerResult.warnings));
-    for (const auto& function : storedPointerResult.functions)
+    for ([[maybe_unused]] const auto& function : storedPointerResult.functions)
     {
         assert(function.entryAddress != 0x80010024);
     }
@@ -171,7 +171,7 @@ int main()
     auto literalPointerResult = pipeline.run(literalPointerExePath.string());
     assert(literalPointerResult.success);
     assert(!hasEmptyBoundaryWarning(literalPointerResult.warnings));
-    for (const auto& function : literalPointerResult.functions)
+    for ([[maybe_unused]] const auto& function : literalPointerResult.functions)
     {
         assert(function.entryAddress != 0x80010030);
     }
@@ -188,7 +188,7 @@ int main()
     auto literalFunctionPointerResult = pipeline.run(literalFunctionPointerExePath.string());
     assert(literalFunctionPointerResult.success);
     assert(!hasEmptyBoundaryWarning(literalFunctionPointerResult.warnings));
-    bool hasLiteralFunctionPointerTarget = false;
+    [[maybe_unused]] bool hasLiteralFunctionPointerTarget = false;
     for (const auto& function : literalFunctionPointerResult.functions)
     {
         if (function.entryAddress == 0x80010030)
@@ -209,7 +209,7 @@ int main()
     auto clusteredCodePointerResult = pipeline.run(clusteredCodePointerExePath.string());
     assert(clusteredCodePointerResult.success);
     assert(!hasEmptyBoundaryWarning(clusteredCodePointerResult.warnings));
-    bool hasClusteredLabelTarget = false;
+    [[maybe_unused]] bool hasClusteredLabelTarget = false;
     for (const auto& function : clusteredCodePointerResult.functions)
     {
         if (function.entryAddress == 0x8001003C)
@@ -230,7 +230,7 @@ int main()
     auto callbackPointerResult = pipeline.run(callbackPointerExePath.string());
     assert(callbackPointerResult.success);
     assert(!hasEmptyBoundaryWarning(callbackPointerResult.warnings));
-    bool hasCallbackTarget = false;
+    [[maybe_unused]] bool hasCallbackTarget = false;
     for (const auto& function : callbackPointerResult.functions)
     {
         if (function.entryAddress == 0x80010040)
@@ -251,7 +251,7 @@ int main()
     auto prefixedCallbackResult = pipeline.run(prefixedCallbackExePath.string());
     assert(prefixedCallbackResult.success);
     assert(!hasEmptyBoundaryWarning(prefixedCallbackResult.warnings));
-    bool hasPrefixedCallbackTarget = false;
+    [[maybe_unused]] bool hasPrefixedCallbackTarget = false;
     for (const auto& function : prefixedCallbackResult.functions)
     {
         if (function.entryAddress == 0x80010040)
@@ -272,8 +272,8 @@ int main()
     auto jumpTableResult = pipeline.run(jumpTableExePath.string());
     assert(jumpTableResult.success);
     assert(!hasEmptyBoundaryWarning(jumpTableResult.warnings));
-    bool hasJumpTableTarget0 = false;
-    bool hasJumpTableTarget1 = false;
+    [[maybe_unused]] bool hasJumpTableTarget0 = false;
+    [[maybe_unused]] bool hasJumpTableTarget1 = false;
     for (const auto& function : jumpTableResult.functions)
     {
         if (function.entryAddress == 0x80010060)
@@ -298,7 +298,7 @@ int main()
     auto mixedResult = pipeline.run(mixedExePath.string());
     assert(mixedResult.success);
     assert(!hasEmptyBoundaryWarning(mixedResult.warnings));
-    const auto isUnsupportedFromAsciiData = [](const std::string& message)
+    [[maybe_unused]] const auto isUnsupportedFromAsciiData = [](const std::string& message)
     {
         if (message.find("Unsupported opcode:") == std::string::npos)
         {
@@ -307,11 +307,11 @@ int main()
         return message.find("0x80010008") != std::string::npos ||
                message.find("0x8001000c") != std::string::npos;
     };
-    for (const auto& warning : mixedResult.warnings)
+    for ([[maybe_unused]] const auto& warning : mixedResult.warnings)
     {
         assert(!isUnsupportedFromAsciiData(warning));
     }
-    for (const auto& diagnostic : mixedResult.diagnostics)
+    for ([[maybe_unused]] const auto& diagnostic : mixedResult.diagnostics)
     {
         assert(!isUnsupportedFromAsciiData(diagnostic.message));
     }

@@ -38,7 +38,7 @@ void runEmbeddedScanDeterminismScenario(const psxrecomp::recompiler::PipelineOpt
         std::ifstream manifestFile(embeddedResult.artifacts.resourceManifestPath);
         const std::string manifest((std::istreambuf_iterator<char>(manifestFile)),
                                    std::istreambuf_iterator<char>());
-        const size_t embeddedScanPos = manifest.find("\"embeddedScan\"");
+        [[maybe_unused]] const size_t embeddedScanPos = manifest.find("\"embeddedScan\"");
         assert(embeddedScanPos != std::string::npos);
         assert(manifest.find("\"enabled\": true", embeddedScanPos) != std::string::npos);
         assert(findJsonIntegerField(manifest, "containersScanned") >= 1);

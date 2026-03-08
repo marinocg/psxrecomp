@@ -119,7 +119,7 @@ int main()
         const uint64_t sectorSize = findJsonIntegerField(layout, "sectorSize");
         const uint64_t lbaStart = findJsonIntegerField(layout, "lbaStart");
         const uint64_t lbaCount = findJsonIntegerField(layout, "lbaCount");
-        const uint64_t blobSize = std::filesystem::file_size(blobPath);
+        [[maybe_unused]] const uint64_t blobSize = std::filesystem::file_size(blobPath);
         assert(sectorSize == 2048 || sectorSize == 2352);
         assert(lbaCount > 0);
         assert(blobSize > 0);
@@ -138,7 +138,7 @@ int main()
         {
             assert(lba >= lbaStart);
             assert(static_cast<uint64_t>(lba - lbaStart) < lbaCount);
-            const uint32_t relativeLba =
+            [[maybe_unused]] const uint32_t relativeLba =
                 static_cast<uint32_t>(static_cast<uint64_t>(lba) - lbaStart);
             if (sectorSize == 2352)
             {
@@ -151,7 +151,7 @@ int main()
                 assert(lbaParser.readSectorUser2048(relativeLba, sectorData));
             }
             assert(sectorData.size() == sectorSize);
-            const size_t blobOffset =
+            [[maybe_unused]] const size_t blobOffset =
                 static_cast<size_t>(lba - lbaStart) * static_cast<size_t>(sectorSize);
             assert(blobOffset + sectorData.size() <= blobData.size());
             assert(std::equal(sectorData.begin(), sectorData.end(), blobData.begin() + blobOffset));
@@ -233,9 +233,9 @@ int main()
             }
             return nullptr;
         };
-        const auto* baselineCandidate =
+        [[maybe_unused]] const auto* baselineCandidate =
             findCandidateByPath(result, result.selectionInfo.selectedPath);
-        const auto* workspaceCandidate =
+        [[maybe_unused]] const auto* workspaceCandidate =
             findCandidateByPath(workspaceResult, workspaceResult.selectionInfo.selectedPath);
         assert(baselineCandidate != nullptr);
         assert(workspaceCandidate != nullptr);
@@ -244,7 +244,7 @@ int main()
         assert(workspaceCandidate->loadSize == baselineCandidate->loadSize);
         assert(workspaceCandidate->entryPoint == baselineCandidate->entryPoint);
 
-        const auto buildFunctionSignature =
+        [[maybe_unused]] const auto buildFunctionSignature =
             [](const psxrecomp::recompiler::PipelineResult& runResult)
         {
             std::ostringstream stream;
@@ -342,7 +342,7 @@ int main()
                              runResult.artifacts.exportedResources.end(),
                              [](const std::string& path) { return path.rfind("fs/", 0) == 0; });
     };
-    auto hasExportedPath =
+    [[maybe_unused]] auto hasExportedPath =
         [](const psxrecomp::recompiler::PipelineResult& runResult, const std::string& path)
     {
         return std::find(runResult.artifacts.exportedResources.begin(),
@@ -373,9 +373,9 @@ int main()
     const auto fullResult = fullPipeline.run(policyIsoPath.string());
     assert(fullResult.success);
 
-    const size_t minimalFsCount = countFsExports(minimalResult);
-    const size_t smartFsCount = countFsExports(smartResult);
-    const size_t fullFsCount = countFsExports(fullResult);
+    [[maybe_unused]] const size_t minimalFsCount = countFsExports(minimalResult);
+    [[maybe_unused]] const size_t smartFsCount = countFsExports(smartResult);
+    [[maybe_unused]] const size_t fullFsCount = countFsExports(fullResult);
     assert(minimalFsCount == 3);
     assert(minimalFsCount < smartFsCount);
     assert(smartFsCount < fullFsCount);
@@ -438,12 +438,12 @@ int main()
         std::ifstream layoutFile(layoutPath);
         const std::string layout((std::istreambuf_iterator<char>(layoutFile)),
                                  std::istreambuf_iterator<char>());
-        const uint64_t lbaStart = findJsonIntegerField(layout, "lbaStart");
+        [[maybe_unused]] const uint64_t lbaStart = findJsonIntegerField(layout, "lbaStart");
         assert(lbaStart == 150);
-        const uint64_t lbaCount = findJsonIntegerField(layout, "lbaCount");
+        [[maybe_unused]] const uint64_t lbaCount = findJsonIntegerField(layout, "lbaCount");
         assert(lbaCount == 64);
 
-        auto findFirstExtentLbaForPath = [&](const std::string& path)
+        [[maybe_unused]] auto findFirstExtentLbaForPath = [&](const std::string& path)
         {
             const std::string pathMarker = "\"path\": \"" + path + "\"";
             const size_t pathPos = layout.find(pathMarker);

@@ -94,13 +94,13 @@ void runBiosVectorKernelEventTests()
         u32 regs[32] = {};
         regs[9] = 0x56; // GetC0Table
         system.callBiosVector(0xB0, regs, 32);
-        const u32 c0Table = regs[2];
+        [[maybe_unused]] const u32 c0Table = regs[2];
         assert(c0Table != 0u);
         assert(system.read<u32>(c0Table + 24u) != 0u);
 
         regs[9] = 0x57; // GetB0Table
         system.callBiosVector(0xB0, regs, 32);
-        const u32 b0Table = regs[2];
+        [[maybe_unused]] const u32 b0Table = regs[2];
         assert(b0Table != 0u);
         assert(system.read<u32>(b0Table + 24u) != 0u);
 

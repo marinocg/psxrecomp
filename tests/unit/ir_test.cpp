@@ -20,15 +20,15 @@ int main()
 
     auto& function = builder.createFunction("boot", 0x80010000);
     BasicBlock& entry = builder.createBlock(function, "entry");
-    BasicBlock* entryPtr = &entry;
+    [[maybe_unused]] BasicBlock* entryPtr = &entry;
 
     Value temp0 = builder.createTemporary();
     Value temp1 = builder.createTemporary();
     Value regA0 = Value::makeRegister(static_cast<Register>(4));
     Value imm16 = Value::makeImmediate(16);
-    Value negImm = Value::makeImmediate(-8);
-    Value addr = Value::makeAddress(0x80010000);
-    Value invalid = Value::invalid();
+    [[maybe_unused]] Value negImm = Value::makeImmediate(-8);
+    [[maybe_unused]] Value addr = Value::makeAddress(0x80010000);
+    [[maybe_unused]] Value invalid = Value::invalid();
 
     Instruction add = builder.makeInstruction(Opcode::ADD, {regA0, imm16}, {temp0}, 0x80010000);
     Instruction move = builder.makeInstruction(Opcode::MOVE, {temp0}, {temp1}, std::nullopt);

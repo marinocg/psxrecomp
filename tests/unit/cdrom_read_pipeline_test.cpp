@@ -127,33 +127,34 @@ class XaPatternDisc final : public psxrecomp::runtime::Disc
     std::vector<std::array<psxrecomp::u8, 2352>> m_rawSectors;
 };
 
-psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
+[[maybe_unused]] psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
 {
     return static_cast<psxrecomp::u8>(cdrom.readInterruptFlags() & 0x07u);
 }
 
-void ack(psxrecomp::runtime::Cdrom& cdrom)
+void ack([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
 {
     cdrom.writeInterruptFlags(0x07);
 }
 
-void readSingleResponseAndAck(psxrecomp::runtime::Cdrom& cdrom)
+void readSingleResponseAndAck([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
 {
     assert((cdrom.readStatus() & (1u << 5)) != 0u);
     (void)cdrom.readResponse();
     ack(cdrom);
 }
 
-void assertResponse(psxrecomp::runtime::Cdrom& cdrom, std::initializer_list<psxrecomp::u8> expected)
+void assertResponse([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom,
+                    std::initializer_list<psxrecomp::u8> expected)
 {
-    for (psxrecomp::u8 value : expected)
+    for ([[maybe_unused]] psxrecomp::u8 value : expected)
     {
         assert(cdrom.readResponse() == value);
     }
 }
 
-void issueSetloc(psxrecomp::runtime::Cdrom& cdrom, psxrecomp::u8 mm, psxrecomp::u8 ss,
-                 psxrecomp::u8 ff)
+void issueSetloc([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom, psxrecomp::u8 mm,
+                 psxrecomp::u8 ss, psxrecomp::u8 ff)
 {
     cdrom.writeParam(mm);
     cdrom.writeParam(ss);
@@ -163,7 +164,7 @@ void issueSetloc(psxrecomp::runtime::Cdrom& cdrom, psxrecomp::u8 mm, psxrecomp::
     readSingleResponseAndAck(cdrom);
 }
 
-void issueReadN(psxrecomp::runtime::Cdrom& cdrom)
+void issueReadN([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
 {
     cdrom.writeCommand(0x06);
     assert(irqType(cdrom) == 0x03);

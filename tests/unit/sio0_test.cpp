@@ -22,7 +22,7 @@ int main()
     //  1. Reset defaults are correct
     // ----------------------------------------------------------------
     {
-        const auto& sio = system.sio0();
+        [[maybe_unused]] const auto& sio = system.sio0();
         assert(sio.stat() == 0x0005u);
         assert(sio.mode() == 0x000Du);
         assert(sio.ctrl() == 0x0000u);
@@ -59,7 +59,7 @@ int main()
     // ----------------------------------------------------------------
     {
         constexpr Address joyStat = 0x1F801044u;
-        const auto stat = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+        [[maybe_unused]] const auto stat = system.readMmioExplicit<psxrecomp::u32>(joyStat);
         assert((stat & 0x05u) == 0x05u);
         std::puts("[PASS] SIO0 32-bit JOY_STAT read");
     }
@@ -68,7 +68,7 @@ int main()
     //  4. 8-bit JOY_RX_DATA read / JOY_TX_DATA write (idle state)
     // ----------------------------------------------------------------
     {
-        constexpr Address joyData = 0x1F801040u;
+        [[maybe_unused]] constexpr Address joyData = 0x1F801040u;
         // Reset to get clean state.
         constexpr Address joyCtrl = 0x1F80104Au;
         system.writeMmioExplicit<psxrecomp::u16>(joyCtrl, 0x0040u);
@@ -95,7 +95,7 @@ int main()
         constexpr Address joyMode = 0x1F801048u;
         constexpr Address joyCtrl = 0x1F80104Au;
         constexpr Address joyBaud = 0x1F80104Eu;
-        constexpr Address joyStat = 0x1F801044u;
+        [[maybe_unused]] constexpr Address joyStat = 0x1F801044u;
 
         system.writeMmioExplicit<psxrecomp::u16>(joyMode, 0x0003u);
         system.writeMmioExplicit<psxrecomp::u16>(joyBaud, 0x0044u);
@@ -116,8 +116,8 @@ int main()
     // ----------------------------------------------------------------
     {
         constexpr Address joyMode = 0x1F801048u;
-        constexpr Address joyBaud = 0x1F80104Eu;
-        constexpr Address joyCtrl = 0x1F80104Au;
+        [[maybe_unused]] constexpr Address joyBaud = 0x1F80104Eu;
+        [[maybe_unused]] constexpr Address joyCtrl = 0x1F80104Au;
 
         system.writeMmioExplicit<psxrecomp::u16>(joyMode, 0x0106u);
         assert(system.readMmioExplicit<psxrecomp::u16>(joyBaud) == 0x0088u);
@@ -166,7 +166,7 @@ int main()
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x01u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(st & (1u << 1)); // RX not empty
             assert(st & (1u << 7)); // ACK
         }
@@ -192,7 +192,7 @@ int main()
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x00u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(st & (1u << 1));    // RX not empty
             assert(!(st & (1u << 7))); // NO ACK on last byte
         }
@@ -237,7 +237,7 @@ int main()
         assert(hi == 0xBFu);
 
         // Reconstruct and verify against InputController.
-        psxrecomp::u16 reconstructed = static_cast<psxrecomp::u16>(lo | (hi << 8));
+        [[maybe_unused]] psxrecomp::u16 reconstructed = static_cast<psxrecomp::u16>(lo | (hi << 8));
         assert(reconstructed == system.input().readState());
 
         // Release buttons for subsequent tests.
@@ -259,7 +259,7 @@ int main()
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x02u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(!(st & (1u << 7))); // no ACK
         }
         (void)system.readMmioExplicit<psxrecomp::u8>(joyData);
@@ -282,7 +282,7 @@ int main()
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x01u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(!(st & (1u << 7))); // no ACK from absent port
         }
         (void)system.readMmioExplicit<psxrecomp::u8>(joyData);
@@ -307,7 +307,7 @@ int main()
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x99u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(!(st & (1u << 7))); // no ACK
         }
         (void)system.readMmioExplicit<psxrecomp::u8>(joyData);
@@ -335,7 +335,7 @@ int main()
         system.writeMmioExplicit<psxrecomp::u16>(joyCtrl, 0x0003u);
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x01u);
         assert(system.sio0().rxData() == 0xFFu);
-        auto st = system.readMmioExplicit<psxrecomp::u32>(0x1F801044u);
+        [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(0x1F801044u);
         assert(st & (1u << 7)); // ACK from fresh start
         (void)system.readMmioExplicit<psxrecomp::u8>(joyData);
 
@@ -349,7 +349,7 @@ int main()
         resetForTransfer();
 
         constexpr Address joyData = 0x1F801040u;
-        constexpr Address joyStat = 0x1F801044u;
+        [[maybe_unused]] constexpr Address joyStat = 0x1F801044u;
 
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x01u);
         assert(system.readMmioExplicit<psxrecomp::u32>(joyStat) & (1u << 1));
@@ -390,7 +390,7 @@ int main()
         system.input().setButton(ControllerButton::L1, true);
         resetForTransfer();
 
-        psxrecomp::u16 result = doExchange();
+        [[maybe_unused]] psxrecomp::u16 result = doExchange();
         // L1 = bit 10 → bit 10 cleared.
         assert(result == static_cast<psxrecomp::u16>(0xFFFF & ~(1u << 10)));
 

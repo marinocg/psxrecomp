@@ -96,9 +96,9 @@ void runBiosVectorOutputTests()
         regs[4] = otBase;
         system.callBiosVector(0xA0, regs, 32);
 
-        const u32 gpuDmaChcr = system.read<u32>(0x1F8010A8u);
-        const u32 dmaDicr = system.read<u32>(0x1F8010F4u);
-        const u32 gpuStat = system.read<u32>(0x1F801814u);
+        [[maybe_unused]] const u32 gpuDmaChcr = system.read<u32>(0x1F8010A8u);
+        [[maybe_unused]] const u32 dmaDicr = system.read<u32>(0x1F8010F4u);
+        [[maybe_unused]] const u32 gpuStat = system.read<u32>(0x1F801814u);
 
         // Transfer completed (start bit cleared), DMA2 completion latched.
         assert((gpuDmaChcr & 0x01000000u) == 0);
@@ -159,8 +159,8 @@ void runBiosVectorOutputTests()
         assert(regs[2] == 0);
 
         bool callbackInvoked = false;
-        const u32 handle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
-                                                     EventMode::Callback, 0x80014000u);
+        [[maybe_unused]] const u32 handle = system.events().openEvent(
+            EventClass::Cdrom, EventSpec::CommandDone, EventMode::Callback, 0x80014000u);
         assert(handle != 0xFFFFFFFFu);
         assert(system.events().enableEvent(handle));
         system.setCallbackInvoker(
@@ -207,7 +207,7 @@ void runBiosVectorOutputTests()
         system.callBiosVector(0xA0, regs, 32);
         assert(regs[2] == 0);
 
-        const u32 gpuStat = system.read<u32>(0x1F801814u);
+        [[maybe_unused]] const u32 gpuStat = system.read<u32>(0x1F801814u);
         assert(((gpuStat >> 29) & 0x3u) == 0u);
 
         std::cerr << "[PASS] A0 gpu_sync disables DMA mode\n";

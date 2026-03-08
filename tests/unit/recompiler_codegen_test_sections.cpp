@@ -37,7 +37,7 @@ void runCodegenOverlapTest(psxrecomp::recompiler::CodeGenerator& generator)
                                            {overlappingBuilder.createTemporary()}, 0x80010008));
     innerBlock.instructions.push_back(overlappingBuilder.makeInstruction(Opcode::RETURN, {}, {}));
 
-    bool overlapDetected = false;
+    [[maybe_unused]] bool overlapDetected = false;
     try
     {
         (void)generator.generateSource(overlappingProgram, "module_overlap");

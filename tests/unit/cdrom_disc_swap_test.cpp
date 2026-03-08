@@ -30,7 +30,7 @@ class FailingDisc final : public psxrecomp::runtime::Disc
     }
 };
 
-psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
+[[maybe_unused]] psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
 {
     return static_cast<psxrecomp::u8>(cdrom.readInterruptFlags() & 0x07u);
 }

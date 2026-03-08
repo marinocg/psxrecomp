@@ -21,7 +21,7 @@ int main()
     system.write<psxrecomp::u32>(ramEnd, 0xDEADBEEF);
     assert(system.read<psxrecomp::u32>(ramEnd) == 0xDEADBEEF);
 
-    Address ramMirror = 0x80000000 + 0x20;
+    [[maybe_unused]] Address ramMirror = 0x80000000 + 0x20;
     system.write<psxrecomp::u32>(MemoryMap::RAM_BASE + 0x20, 0x12345678);
     assert(system.read<psxrecomp::u32>(ramMirror) == 0x12345678);
 
@@ -204,7 +204,7 @@ int main()
 
     // A second frame should queue another sector without dropping boundaries.
     system.runFrame();
-    bool reachedSecondSector = false;
+    [[maybe_unused]] bool reachedSecondSector = false;
     for (int i = 0; i < 2048; ++i)
     {
         if (system.cdrom().readDma() == 0xDDCCBBAAu)
@@ -233,7 +233,7 @@ int main()
     boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1,
                                                         0x06);
     boundedQueueSystem.runFrame();
-    const psxrecomp::u32 boundedWord = boundedQueueSystem.cdrom().readDma();
+    [[maybe_unused]] const psxrecomp::u32 boundedWord = boundedQueueSystem.cdrom().readDma();
     assert((boundedWord & 0xFFu) == 16u);
 
     // CD-ROM DMA loops without CPU data-port reads should preserve sector boundaries.
@@ -278,17 +278,20 @@ int main()
 
     for (psxrecomp::u32 chunk = 0; chunk < 6; ++chunk)
     {
-        const Address chunkDest = dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
+        [[maybe_unused]] const Address chunkDest =
+            dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
         const psxrecomp::u32 firstWordGlobal = chunk * dmaWordsPerChunk;
         const psxrecomp::u32 firstSector = firstWordGlobal / 512u;
         const psxrecomp::u32 firstWordInSector = firstWordGlobal % 512u;
-        const psxrecomp::u32 expectedFirst = 0xA0000000u | (firstSector << 16) | firstWordInSector;
+        [[maybe_unused]] const psxrecomp::u32 expectedFirst =
+            0xA0000000u | (firstSector << 16) | firstWordInSector;
         assert(dmaLoopSystem.read<psxrecomp::u32>(chunkDest) == expectedFirst);
 
         const psxrecomp::u32 lastWordGlobal = firstWordGlobal + (dmaWordsPerChunk - 1u);
         const psxrecomp::u32 lastSector = lastWordGlobal / 512u;
         const psxrecomp::u32 lastWordInSector = lastWordGlobal % 512u;
-        const psxrecomp::u32 expectedLast = 0xA0000000u | (lastSector << 16) | lastWordInSector;
+        [[maybe_unused]] const psxrecomp::u32 expectedLast =
+            0xA0000000u | (lastSector << 16) | lastWordInSector;
         assert(dmaLoopSystem.read<psxrecomp::u32>(chunkDest + bytesPerChunk -
                                                   sizeof(psxrecomp::u32)) == expectedLast);
     }

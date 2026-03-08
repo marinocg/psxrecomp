@@ -56,7 +56,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         // Immediately after write, STAT.7 (ACK level) should be set
         // but STAT.9 (IRQ Request) should NOT yet be set — it's delayed.
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(st & (1u << 7));    // ACK level asserted
             assert(!(st & (1u << 9))); // IRQ not yet
         }
@@ -66,7 +66,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
 
         // Now STAT.9 should be set and STAT.7 should be cleared.
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(st & (1u << 9));    // IRQ request set
             assert(!(st & (1u << 7))); // ACK level cleared by IRQ firing
         }
@@ -88,7 +88,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
 
         // I_STAT Controller bit should be clear before tick.
         {
-            auto istat = system.interrupts().readStatus();
+            [[maybe_unused]] auto istat = system.interrupts().readStatus();
             assert(!(istat &
                      static_cast<psxrecomp::u32>(psxrecomp::runtime::InterruptLine::Controller)));
         }
@@ -97,7 +97,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
 
         // Now Controller bit should be set in I_STAT.
         {
-            auto istat = system.interrupts().readStatus();
+            [[maybe_unused]] auto istat = system.interrupts().readStatus();
             assert(istat &
                    static_cast<psxrecomp::u32>(psxrecomp::runtime::InterruptLine::Controller));
         }
@@ -125,7 +125,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         // Write CTRL with bit 4 (acknowledge) to clear STAT.9.
         system.writeMmioExplicit<psxrecomp::u16>(joyCtrl, 0x1013u); // keep IRQ en + ack
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(!(st & (1u << 9))); // IRQ request cleared
         }
 
@@ -157,7 +157,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         // Tick again — IRQ should NOT re-appear.
         system.tickCpuCycles(500);
         {
-            auto istat = system.interrupts().readStatus();
+            [[maybe_unused]] auto istat = system.interrupts().readStatus();
             assert(!(istat &
                      static_cast<psxrecomp::u32>(psxrecomp::runtime::InterruptLine::Controller)));
         }
@@ -189,7 +189,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         assert(!(system.sio0().stat() & (1u << 9)));
         // I_STAT Controller bit should NOT be set.
         {
-            auto istat = system.interrupts().readStatus();
+            [[maybe_unused]] auto istat = system.interrupts().readStatus();
             assert(!(istat &
                      static_cast<psxrecomp::u32>(psxrecomp::runtime::InterruptLine::Controller)));
         }
@@ -239,7 +239,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         assert(!(system.sio0().stat() & (1u << 9)));
         // I_STAT Controller should NOT be set.
         {
-            auto istat = system.interrupts().readStatus();
+            [[maybe_unused]] auto istat = system.interrupts().readStatus();
             assert(!(istat &
                      static_cast<psxrecomp::u32>(psxrecomp::runtime::InterruptLine::Controller)));
         }
@@ -306,7 +306,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x81u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(st & (1u << 1));    // RX not empty
             assert(!(st & (1u << 7))); // no ACK from memory card
         }
@@ -336,7 +336,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x01u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(st & (1u << 7)); // ACK from controller
         }
         (void)system.readMmioExplicit<psxrecomp::u8>(joyData);
@@ -359,7 +359,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x81u);
         assert(system.sio0().rxData() == 0xFFu);
         {
-            auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
+            [[maybe_unused]] auto st = system.readMmioExplicit<psxrecomp::u32>(joyStat);
             assert(!(st & (1u << 7))); // no ACK from absent port
         }
         (void)system.readMmioExplicit<psxrecomp::u8>(joyData);
@@ -374,7 +374,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         resetForTransfer();
 
         constexpr Address joyData = 0x1F801040u;
-        constexpr Address joyStat = 0x1F801044u;
+        [[maybe_unused]] constexpr Address joyStat = 0x1F801044u;
 
         // Address memory card → no ACK.
         system.writeMmioExplicit<psxrecomp::u8>(joyData, 0x81u);
@@ -407,7 +407,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         assert(!(system.sio0().stat() & (1u << 9)));
         // I_STAT Controller should NOT be set.
         {
-            auto istat = system.interrupts().readStatus();
+            [[maybe_unused]] auto istat = system.interrupts().readStatus();
             assert(!(istat &
                      static_cast<psxrecomp::u32>(psxrecomp::runtime::InterruptLine::Controller)));
         }

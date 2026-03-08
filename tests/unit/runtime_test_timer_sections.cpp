@@ -27,7 +27,7 @@ void runRuntimeTimerChecks(psxrecomp::runtime::PsxSystem& system)
     assert((system.interrupts().readStatus() &
             static_cast<psxrecomp::u32>(InterruptLine::Timer0)) != 0);
 
-    const psxrecomp::u16 timer0Mode =
+    [[maybe_unused]] const psxrecomp::u16 timer0Mode =
         system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
     assert((timer0Mode & (1u << 11)) != 0);
 
@@ -70,7 +70,7 @@ void runRuntimeTimerChecks(psxrecomp::runtime::PsxSystem& system)
     system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 0x7FFFu);
     system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
     system.timers().tick(2, nullptr);
-    const psxrecomp::u16 noTargetOnOverflowMode =
+    [[maybe_unused]] const psxrecomp::u16 noTargetOnOverflowMode =
         system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
     assert((noTargetOnOverflowMode & (1u << 11)) == 0u);
 }

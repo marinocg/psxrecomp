@@ -125,7 +125,7 @@ int main()
         assert(system.spu().queuedCdAudioSamples() > 0);
 
         system.runFrame();
-        const auto& mixed = system.spu().mixedAudioBuffer();
+        [[maybe_unused]] const auto& mixed = system.spu().mixedAudioBuffer();
         assert(mixed.size() >= 64);
         assert(mixed[0] == 1);
         assert(mixed[1] == 2);
