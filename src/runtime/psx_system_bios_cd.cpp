@@ -111,6 +111,7 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         // Acknowledge the INT3 from Setloc before issuing SeekL.
         m_cdrom.writeInterruptFlags(0x07u);
         m_cdrom.writeCommand(CDCMD_SEEKL);
+        m_events.deliverByClassSpec(EventClass::Cdrom, EventSpec::CommandDone);
 
         regs[2] = 1;
         {
