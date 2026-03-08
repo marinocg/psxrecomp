@@ -27,7 +27,7 @@ class StaticDisc final : public psxrecomp::runtime::Disc
     }
 };
 
-psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
+[[maybe_unused]] psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
 {
     return static_cast<psxrecomp::u8>(cdrom.readInterruptFlags() & 0x07u);
 }
@@ -48,7 +48,7 @@ void assertResponse(psxrecomp::runtime::Cdrom& cdrom, std::initializer_list<psxr
     const std::vector<psxrecomp::u8> got = readResponse(cdrom, expected.size());
     assert(got.size() == expected.size());
     size_t i = 0;
-    for (psxrecomp::u8 value : expected)
+    for ([[maybe_unused]] psxrecomp::u8 value : expected)
     {
         assert(got[i] == value);
         ++i;

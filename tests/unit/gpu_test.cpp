@@ -13,7 +13,7 @@ using psxrecomp::runtime::GpuCommandKind;
 
 constexpr psxrecomp::u16 kVramWidth = psxrecomp::runtime::SoftwareGpuRenderer::Width;
 
-void writePacket(Gpu& gpu, std::initializer_list<psxrecomp::u32> words)
+void writePacket([[maybe_unused]] Gpu& gpu, std::initializer_list<psxrecomp::u32> words)
 {
     for (const auto word : words)
     {
@@ -21,13 +21,13 @@ void writePacket(Gpu& gpu, std::initializer_list<psxrecomp::u32> words)
     }
 }
 
-void assertLastCommand(const Gpu& gpu, GpuCommandKind kind)
+void assertLastCommand([[maybe_unused]] const Gpu& gpu, [[maybe_unused]] GpuCommandKind kind)
 {
     assert(!gpu.commandTrace().empty());
     assert(gpu.commandTrace().back().kind == kind);
 }
 
-psxrecomp::u16 readVramPixel(const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
+[[maybe_unused]] psxrecomp::u16 readVramPixel(const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
 {
     const auto& vram = gpu.vramWords();
     const size_t pixel = static_cast<size_t>(y) * kVramWidth + x;
@@ -39,7 +39,7 @@ psxrecomp::u16 readVramPixel(const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
     return static_cast<psxrecomp::u16>((word >> 16) & 0xFFFFu);
 }
 
-psxrecomp::u16 readFramePixel(const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
+psxrecomp::u16 readFramePixel([[maybe_unused]] const Gpu& gpu, psxrecomp::u16 x, psxrecomp::u16 y)
 {
     const auto& frame = gpu.frameBuffer();
     return frame[static_cast<size_t>(y) * kVramWidth + x];
@@ -154,7 +154,7 @@ int main()
     }
 
     gpu.reset();
-    const auto traceBeforeMalformed = gpu.commandTrace().size();
+    [[maybe_unused]] const auto traceBeforeMalformed = gpu.commandTrace().size();
     gpu.writeCommand(0x20000000u);
     gpu.writeStatus(0x03000000u);
     assert(gpu.commandTrace().size() == traceBeforeMalformed + 1);
@@ -166,25 +166,25 @@ int main()
     {
         gpu.writeCommand(0x00000000u);
     }
-    const auto statusWhenFull = gpu.readStatus();
+    [[maybe_unused]] const auto statusWhenFull = gpu.readStatus();
     assert((statusWhenFull & (1u << 26)) == 0);
 
-    const auto traceBeforeOverflowAttempt = gpu.commandTrace().size();
+    [[maybe_unused]] const auto traceBeforeOverflowAttempt = gpu.commandTrace().size();
     writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00100010u});
     assert(gpu.fifoDepth() == 64);
     assert(gpu.commandTrace().size() == traceBeforeOverflowAttempt);
 
-    const auto initialDepth = gpu.fifoDepth();
+    [[maybe_unused]] const auto initialDepth = gpu.fifoDepth();
     gpu.tickGpu(2);
     assert(gpu.fifoDepth() <= initialDepth);
 
     gpu.reset();
-    const auto fifoDepthBeforeOffDma = gpu.fifoDepth();
+    [[maybe_unused]] const auto fifoDepthBeforeOffDma = gpu.fifoDepth();
     gpu.writeDma(0x12345678u);
     assert(gpu.fifoDepth() == fifoDepthBeforeOffDma);
 
     gpu.writeStatus(0x04000002u);
-    const auto statusCpuToGp0 = gpu.readStatus();
+    [[maybe_unused]] const auto statusCpuToGp0 = gpu.readStatus();
     assert(((statusCpuToGp0 >> 29) & 0x3u) == 0x2u);
     assert((statusCpuToGp0 & (1u << 28)) != 0);
 
@@ -196,7 +196,7 @@ int main()
     assert(gpu.fifoDepth() == 0);
 
     gpu.writeStatus(0x04000003u);
-    const auto statusGpuToCpu = gpu.readStatus();
+    [[maybe_unused]] const auto statusGpuToCpu = gpu.readStatus();
     assert(((statusGpuToCpu >> 29) & 0x3u) == 0x3u);
     assert((statusGpuToCpu & (1u << 27)) != 0);
 
@@ -209,12 +209,12 @@ int main()
     assert((gpu.readStatus() & (1u << 23)) != 0);
 
     gpu.writeStatus(0x08000020u);
-    const auto beforeLineTick = gpu.readStatus();
+    [[maybe_unused]] const auto beforeLineTick = gpu.readStatus();
     // Two ticks: ActiveDisplay → VBlankStart (bit 22 set, bit 31 same)
     //            VBlankStart  → VBlankEnd    (bit 31 flips)
     gpu.tickDisplayLine();
     gpu.tickDisplayLine();
-    const auto afterLineTick = gpu.readStatus();
+    [[maybe_unused]] const auto afterLineTick = gpu.readStatus();
     assert((beforeLineTick ^ afterLineTick) & (1u << 31));
 
     gpu.writeStatus(0x00000000u);
@@ -339,7 +339,7 @@ int main()
     gpu.reset();
     // 4-bit indexed fetch: default texel index is 0, so CLUT entry 0 should be returned.
     writePacket(gpu, {0x0200FF00u, 0x00010000u, 0x00010001u});
-    const auto clut4Color = readFramePixel(gpu, 0, 1);
+    [[maybe_unused]] const auto clut4Color = readFramePixel(gpu, 0, 1);
     writePacket(gpu, {0xE1000001u});
     writePacket(gpu, {0x64FFFFFFu, 0x000A000Au, 0x00400003u, 0x00010001u});
     assert(readFramePixel(gpu, 10, 10) == clut4Color);
@@ -347,7 +347,7 @@ int main()
     // 8-bit indexed fetch should also resolve through CLUT entry 0.
     gpu.reset();
     writePacket(gpu, {0x020000FFu, 0x00020000u, 0x00010001u});
-    const auto clut8Color = readFramePixel(gpu, 0, 2);
+    [[maybe_unused]] const auto clut8Color = readFramePixel(gpu, 0, 2);
     writePacket(gpu, {0xE1000081u});
     writePacket(gpu, {0x64FFFFFFu, 0x00140014u, 0x00800001u, 0x00010001u});
     assert(readFramePixel(gpu, 20, 20) == clut8Color);
@@ -357,15 +357,15 @@ int main()
     writePacket(gpu, {0x02FFFFFFu, 0x00000000u, 0x00010001u});
     writePacket(gpu, {0xE1000100u}); // 16-bit texture mode
     writePacket(gpu, {0x64404040u, 0x00200020u, 0x00000000u, 0x00010001u});
-    const auto modulatedPixel = readFramePixel(gpu, 32, 32);
+    [[maybe_unused]] const auto modulatedPixel = readFramePixel(gpu, 32, 32);
     writePacket(gpu, {0x65404040u, 0x00210020u, 0x00000000u, 0x00010001u});
-    const auto rawPixel = readFramePixel(gpu, 33, 32);
+    [[maybe_unused]] const auto rawPixel = readFramePixel(gpu, 33, 32);
     assert(modulatedPixel != rawPixel);
 
     // 16-bit texture fetch reads direct texel value without CLUT.
     gpu.reset();
     writePacket(gpu, {0x02FFFFFFu, 0x00000000u, 0x00010001u});
-    const auto tex16Color = readFramePixel(gpu, 0, 0);
+    [[maybe_unused]] const auto tex16Color = readFramePixel(gpu, 0, 0);
     writePacket(gpu, {0xE1000100u});
     writePacket(gpu, {0x64FFFFFFu, 0x001E001Eu, 0x00000000u, 0x00010001u});
     assert(readFramePixel(gpu, 30, 30) == tex16Color);
@@ -382,13 +382,13 @@ int main()
     writePacket(gpu, {0x020000FFu, 0x00050005u, 0x00010001u});
     writePacket(gpu, {0xE6000003u}); // force mask + check masked
     writePacket(gpu, {0x22000020u, 0x00050005u, 0x00060005u, 0x00050006u});
-    const auto blended = readFramePixel(gpu, 5, 5);
+    [[maybe_unused]] const auto blended = readFramePixel(gpu, 5, 5);
     assert((blended & 0x8000u) != 0);
     // Per PSX-SPX: "Rectangle filling is not affected by the GP0(E6h) mask
     // setting, acting as if GP0(E6h).0 and GP0(E6h).1 are both zero."
     // So the fill rect SHOULD overwrite the masked pixel.
     writePacket(gpu, {0x02000000u, 0x00050005u, 0x00010001u});
-    const auto afterFill = readFramePixel(gpu, 5, 5);
+    [[maybe_unused]] const auto afterFill = readFramePixel(gpu, 5, 5);
     assert(afterFill != blended);
     assert((afterFill & 0x8000u) == 0);
 
@@ -397,13 +397,13 @@ int main()
     writePacket(gpu, {0x02008040u, 0x00080008u, 0x00010001u});
     writePacket(gpu, {0xE1000001u}); // blend mode 0, raw texture disabled
     writePacket(gpu, {0x22000020u, 0x00080008u, 0x00090008u, 0x00080009u});
-    const auto blendMode0 = readFramePixel(gpu, 8, 8);
+    [[maybe_unused]] const auto blendMode0 = readFramePixel(gpu, 8, 8);
 
     gpu.reset();
     writePacket(gpu, {0x02008040u, 0x00080008u, 0x00010001u});
     writePacket(gpu, {0xE1000021u}); // blend mode 1, additive
     writePacket(gpu, {0x22000020u, 0x00080008u, 0x00090008u, 0x00080009u});
-    const auto blendMode1 = readFramePixel(gpu, 8, 8);
+    [[maybe_unused]] const auto blendMode1 = readFramePixel(gpu, 8, 8);
     assert(blendMode0 != blendMode1);
 
     // Dithering should vary semi-transparent primitive output across neighboring pixels.
@@ -411,22 +411,22 @@ int main()
     writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
     writePacket(gpu, {0xE1000001u}); // blend mode 0
     writePacket(gpu, {0x2A808080u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
-    const auto transparentNoDither = readFramePixel(gpu, 50, 50);
+    [[maybe_unused]] const auto transparentNoDither = readFramePixel(gpu, 50, 50);
     assert(transparentNoDither != 0);
 
     gpu.reset();
     writePacket(gpu, {0x02008080u, 0x00320032u, 0x00020001u});
     writePacket(gpu, {0xE1000201u}); // blend mode 0 + dithering
     writePacket(gpu, {0x2A808080u, 0x00320032u, 0x00320034u, 0x00330032u, 0x00330034u});
-    const auto transparentWithDither = readFramePixel(gpu, 50, 50);
+    [[maybe_unused]] const auto transparentWithDither = readFramePixel(gpu, 50, 50);
     assert(transparentWithDither != 0);
 
     // Dithering should vary nearby primitive pixels when enabled.
     gpu.reset();
     writePacket(gpu, {0xE1000200u}); // dithering enabled
     writePacket(gpu, {0x40012345u, 0x00280028u, 0x002A0028u, 0x00000000u});
-    const auto ditherLeft = readFramePixel(gpu, 40, 40);
-    const auto ditherRight = readFramePixel(gpu, 41, 40);
+    [[maybe_unused]] const auto ditherLeft = readFramePixel(gpu, 40, 40);
+    [[maybe_unused]] const auto ditherRight = readFramePixel(gpu, 41, 40);
     assert(ditherLeft != ditherRight);
 
     // --- Fill rect correctness tests (PSX-SPX GP0(02h) behavior) ---
@@ -455,11 +455,11 @@ int main()
     writePacket(gpu, {0xE6000003u});                           // force mask + check mask
     // Draw a triangle that covers (10,10) — this sets mask bit on the pixel.
     writePacket(gpu, {0x22000020u, 0x000A000Au, 0x000B000Au, 0x000A000Bu});
-    const auto maskedPixel = readFramePixel(gpu, 10, 10);
+    [[maybe_unused]] const auto maskedPixel = readFramePixel(gpu, 10, 10);
     assert((maskedPixel & 0x8000u) != 0); // mask bit set by triangle
     // Fill rect should overwrite even though mask is set.
     writePacket(gpu, {0x0200FF00u, 0x000A000Au, 0x00010001u}); // fill green
-    const auto afterFillMask = readFramePixel(gpu, 10, 10);
+    [[maybe_unused]] const auto afterFillMask = readFramePixel(gpu, 10, 10);
     assert(afterFillMask != maskedPixel);
     assert((afterFillMask & 0x8000u) == 0); // mask bit NOT forced for fill rect
 

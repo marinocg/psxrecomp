@@ -27,6 +27,10 @@ u32 PsxSystem::readMmio32(Address address)
     {
         return m_dma.readRegister(address);
     }
+    if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
+    {
+        return m_sio0.read32(address - Mmio::CONTROLLER_BASE);
+    }
     // Timer registers: PSn00bSDK reads Timer1 (HBlank counter used for VSync)
     // via 32-bit LW instructions.  Forward to the 16-bit timer handler.
     if (isInRange(address, Mmio::TIMER_BASE, Mmio::TIMER_SIZE))
@@ -65,7 +69,7 @@ u16 PsxSystem::readMmio16(Address address)
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
-        return m_input.readState();
+        return m_sio0.read16(address - Mmio::CONTROLLER_BASE);
     }
     if (isInRange(address, Mmio::TIMER_BASE, Mmio::TIMER_SIZE))
     {
@@ -92,6 +96,10 @@ u8 PsxSystem::readMmio8(Address address)
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
         return m_cdrom.readReg(static_cast<u8>(address - Mmio::CDROM_BASE));
+    }
+    if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
+    {
+        return m_sio0.read8(address - Mmio::CONTROLLER_BASE);
     }
 
     return 0;
@@ -131,6 +139,11 @@ void PsxSystem::writeMmio32(Address address, u32 value)
             handleDmaTransfer(*triggered);
         }
         syncLevelInterruptSources();
+        return;
+    }
+    if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
+    {
+        m_sio0.write32(address - Mmio::CONTROLLER_BASE, value);
         return;
     }
     // Timer registers: some code writes timers with 32-bit SW instructions.
@@ -180,7 +193,7 @@ void PsxSystem::writeMmio16(Address address, u16 value)
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
-        (void)value;
+        m_sio0.write16(address - Mmio::CONTROLLER_BASE, value);
         return;
     }
     if (isInRange(address, Mmio::TIMER_BASE, Mmio::TIMER_SIZE))
@@ -210,6 +223,11 @@ void PsxSystem::writeMmio8(Address address, u8 value)
     {
         m_cdrom.writeReg(static_cast<u8>(address - Mmio::CDROM_BASE), value);
         syncLevelInterruptSources();
+        return;
+    }
+    if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
+    {
+        m_sio0.write8(address - Mmio::CONTROLLER_BASE, value);
     }
 }
 

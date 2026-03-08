@@ -38,11 +38,11 @@ int main()
     assert(std::find(executableList.begin(), executableList.end(), exeName) !=
            executableList.end());
     auto flatTree = parser.listAllFilesRecursive();
-    auto dataDirEntry =
+    [[maybe_unused]] auto dataDirEntry =
         std::find_if(flatTree.begin(), flatTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
                      { return entry.path == "DATA" && entry.isDirectory; });
     assert(dataDirEntry != flatTree.end());
-    auto gameExeEntry =
+    [[maybe_unused]] auto gameExeEntry =
         std::find_if(flatTree.begin(), flatTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
                      { return entry.path == "DATA/GAME.EXE" && !entry.isDirectory; });
     assert(gameExeEntry != flatTree.end());
@@ -93,7 +93,7 @@ int main()
     assert(xaResources.size() == 1);
     assert(xaResources.front() == "AUDIO.XA");
     auto cueTree = cueParser.listAllFilesRecursive();
-    auto multiEntry =
+    [[maybe_unused]] auto multiEntry =
         std::find_if(cueTree.begin(), cueTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
                      { return entry.path == "MULTI.BIN" && !entry.isDirectory; });
     assert(multiEntry != cueTree.end());
@@ -120,11 +120,11 @@ int main()
     assert(brokenTimResources.size() == 1);
     assert(brokenTimResources.front() == "DATA/NESTED.TIM");
     auto brokenTree = brokenPathTableParser.listAllFilesRecursive();
-    auto nestedTimEntry = std::find_if(
+    [[maybe_unused]] auto nestedTimEntry = std::find_if(
         brokenTree.begin(), brokenTree.end(), [](const psxrecomp::iso::IsoFileEntry& entry)
         { return entry.path == "DATA/NESTED.TIM" && !entry.isDirectory; });
     assert(nestedTimEntry != brokenTree.end());
-    bool hasPathTableError = false;
+    [[maybe_unused]] bool hasPathTableError = false;
     for (const auto& error : brokenPathTableParser.getErrors())
     {
         if (error.find("path table") != std::string::npos ||
@@ -206,7 +206,7 @@ int main()
     assert(splitCueParser.isValid());
     assert(splitCueParser.findExecutable() == "GAME.EXE");
     assert(splitCueParser.getTotalSectors() == splitCue.totalDiscSectors);
-    bool hasVolumeSizeError = false;
+    [[maybe_unused]] bool hasVolumeSizeError = false;
     for (const auto& error : splitCueParser.getErrors())
     {
         if (error.find("Volume space size exceeds image size.") != std::string::npos)

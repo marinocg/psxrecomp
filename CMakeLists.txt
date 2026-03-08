@@ -85,6 +85,7 @@ set(IR_SOURCES
     src/ir/mips_ir_builder.cpp
     src/ir/mips_ir_translation.cpp
     src/ir/mips_ir_translation_no_delay.cpp
+    src/ir/mips_ir_translation_no_delay_load.cpp
     src/ir/optimizations.cpp
     src/ir/ssa.cpp
     src/ir/verify.cpp
@@ -99,9 +100,11 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen_source.cpp
     src/recompiler/codegen_source_body.cpp
     src/recompiler/codegen_runner_main.cpp
+    src/recompiler/codegen_runner_exception_block.cpp
     src/recompiler/codegen_lowering.cpp
     src/recompiler/codegen_lowering_helpers.cpp
     src/recompiler/codegen_lowering_instructions.cpp
+    src/recompiler/codegen_lowering_gte.cpp
     src/recompiler/codegen_lowering_control_flow.cpp
     src/recompiler/codegen_runtime_helpers.cpp
     src/recompiler/cpp_emitter.cpp
@@ -134,6 +137,10 @@ set(RUNTIME_SOURCES
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gte.cpp
+    src/runtime/gte_commands.cpp
+    src/runtime/gte_lighting.cpp
+    src/runtime/gte_math.cpp
+    src/runtime/gte_ops.cpp
     src/runtime/gpu.cpp
     src/runtime/gpu_transfer.cpp
     src/runtime/gpu_commands.cpp
@@ -145,8 +152,10 @@ set(RUNTIME_SOURCES
     src/runtime/kernel_events.cpp
     src/runtime/logger.cpp
     src/runtime/psx_system.cpp
+    src/runtime/psx_system_accessors.cpp
     src/runtime/psx_system_callbacks.cpp
     src/runtime/psx_system_interrupts.cpp
+    src/runtime/psx_system_irq_chains.cpp
     src/runtime/psx_system_bios.cpp
     src/runtime/psx_system_bios_a0.cpp
     src/runtime/psx_system_bios_b0.cpp
@@ -156,6 +165,7 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system_dma.cpp
     src/runtime/resource_pack.cpp
     src/runtime/scheduler.cpp
+    src/runtime/sio0.cpp
     src/runtime/spu.cpp
     src/runtime/spu_audio.cpp
     src/runtime/timers.cpp
@@ -270,6 +280,7 @@ if(BUILD_TESTS)
 
     add_psxrecomp_unit_test(recompiler_codegen_test
         tests/unit/recompiler_codegen_test.cpp
+        tests/unit/recompiler_codegen_test_sections.cpp
     )
     target_link_libraries(recompiler_codegen_test PRIVATE psxrecomp_recompiler)
     target_compile_definitions(
@@ -301,6 +312,7 @@ if(BUILD_TESTS)
     add_psxrecomp_unit_test(runtime_test
         tests/unit/runtime_test.cpp
         tests/unit/runtime_test_sections.cpp
+        tests/unit/runtime_test_timer_sections.cpp
     )
     target_link_libraries(runtime_test PRIVATE psxrecomp_runtime)
 
@@ -349,8 +361,15 @@ if(BUILD_TESTS)
     )
     target_link_libraries(cdrom_state_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(sio0_test
+        tests/unit/sio0_test.cpp
+        tests/unit/sio0_irq_bus_test_sections.cpp
+    )
+    target_link_libraries(sio0_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp
+        tests/unit/pipeline_test_builders.cpp
     )
     target_link_libraries(pipeline_test
         PRIVATE
@@ -379,6 +398,7 @@ if(BUILD_TESTS)
     add_psxrecomp_unit_test(codegen_lowering_test
         tests/unit/codegen_lowering_test.cpp
         tests/unit/codegen_lowering_source_comments_case.cpp
+        tests/unit/codegen_lowering_cop_test_sections.cpp
     )
     target_link_libraries(codegen_lowering_test PRIVATE psxrecomp_recompiler)
 
@@ -391,6 +411,7 @@ if(BUILD_TESTS)
         tests/unit/bios_vector_test.cpp
         tests/unit/bios_vector_test_sections.cpp
         tests/unit/bios_vector_test_interrupts.cpp
+        tests/unit/bios_vector_test_output_sections.cpp
     )
     target_link_libraries(bios_vector_test PRIVATE psxrecomp_runtime)
 

@@ -53,7 +53,7 @@ int main()
     assert(result.errors.empty());
     assert(result.warnings.empty());
 
-    const auto hasInstruction =
+    [[maybe_unused]] const auto hasInstruction =
         [&](psxrecomp::ir::Opcode opcode, psxrecomp::ir::Value input, psxrecomp::ir::Value output)
     {
         return std::any_of(result.instructions.begin(), result.instructions.end(),
@@ -133,8 +133,8 @@ int main()
     assert(dualContext.errors.empty());
 
     size_t delayCopies = 0;
-    bool hasReturnContextDelayCopy = false;
-    bool hasNormalContextDelayCopy = false;
+    [[maybe_unused]] bool hasReturnContextDelayCopy = false;
+    [[maybe_unused]] bool hasNormalContextDelayCopy = false;
     for (const auto& instruction : dualContext.instructions)
     {
         if (instruction.opcode == psxrecomp::ir::Opcode::OR && !instruction.outputs.empty() &&
@@ -171,7 +171,7 @@ int main()
         return &(*it);
     };
 
-    const auto* returnBlock = findBlock("block_0x80020008");
+    [[maybe_unused]] const auto* returnBlock = findBlock("block_0x80020008");
     assert(returnBlock != nullptr);
     assert(returnBlock->instructions.size() >= 2);
     assert(returnBlock->instructions[0].opcode == psxrecomp::ir::Opcode::OR);
@@ -179,7 +179,7 @@ int main()
 
     const auto* delayBlock = findBlock("block_0x8002000c");
     assert(delayBlock != nullptr);
-    bool reachesAfterDelay = false;
+    [[maybe_unused]] bool reachesAfterDelay = false;
     for (const auto& instruction : delayBlock->instructions)
     {
         if (instruction.sourceAddress.value_or(0) == 0x80020010)

@@ -5,8 +5,8 @@
 int main()
 {
     using psxrecomp::runtime::Cop0;
-    constexpr psxrecomp::u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
-    constexpr psxrecomp::u32 CAUSE_IP2_BIT = 1u << 10;
+    [[maybe_unused]] constexpr psxrecomp::u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
+    [[maybe_unused]] constexpr psxrecomp::u32 CAUSE_IP2_BIT = 1u << 10;
     constexpr psxrecomp::u32 STATUS_IEC_BIT = 1u << 0;
     constexpr psxrecomp::u32 STATUS_IM0_BIT = 1u << 8;
     constexpr psxrecomp::u32 STATUS_IM2_BIT = 1u << 10;
@@ -52,9 +52,9 @@ int main()
 
     // MTC0 Cause may only modify software-pending bits (IP0/IP1).
     cop0.setHardwareInterruptPending(true);
-    const psxrecomp::u32 causeBefore = cop0.mfc0(Cop0::RegisterIndex::Cause);
+    [[maybe_unused]] const psxrecomp::u32 causeBefore = cop0.mfc0(Cop0::RegisterIndex::Cause);
     cop0.mtc0(Cop0::RegisterIndex::Cause, 0xFFFFFFFFu);
-    const psxrecomp::u32 causeAfter = cop0.mfc0(Cop0::RegisterIndex::Cause);
+    [[maybe_unused]] const psxrecomp::u32 causeAfter = cop0.mfc0(Cop0::RegisterIndex::Cause);
     assert((causeAfter & CAUSE_IP0_IP1_MASK) == CAUSE_IP0_IP1_MASK);
     assert((causeAfter & CAUSE_IP2_BIT) != 0u);
     assert((causeAfter & 0xFFFFFCFFu) == (causeBefore & 0xFFFFFCFFu));

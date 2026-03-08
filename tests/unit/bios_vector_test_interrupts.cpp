@@ -272,8 +272,8 @@ void runBiosVectorInterruptChainTests()
         regs[4] = 0x00012100u;
         system.callBiosVector(0xA0, regs, 32);
 
-        const u32 handle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
-                                                     EventMode::Callback, 0x80014000u);
+        [[maybe_unused]] const u32 handle = system.events().openEvent(
+            EventClass::Cdrom, EventSpec::CommandDone, EventMode::Callback, 0x80014000u);
         assert(handle != 0xFFFFFFFFu);
         assert(system.events().enableEvent(handle));
 

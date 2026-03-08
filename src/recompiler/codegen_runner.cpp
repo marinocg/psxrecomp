@@ -16,6 +16,7 @@ std::string CodeGenerator::generateRunnerSource(const std::string& moduleName)
     emitter.writeBlank();
     emitter.writeLine("#include \"psxrecomp/runtime/disc_image.h\"");
     emitter.writeLine("#include \"psxrecomp/runtime/gpu_renderer.h\"");
+    emitter.writeLine("#include \"psxrecomp/runtime/input.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
     emitter.writeLine("#include <algorithm>");
     emitter.writeLine("#include <atomic>");

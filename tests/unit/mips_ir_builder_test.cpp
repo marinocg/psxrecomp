@@ -87,7 +87,7 @@ int main()
     assert(result.instructions[3].sourceAddress.value_or(0) == 0x80010008);
     assert(result.instructions[3].sourceAsmAddress.value_or(0) == 0x8001000C);
 
-    const Address branchAddress = result.instructions[2].sourceAddress.value_or(0);
+    [[maybe_unused]] const Address branchAddress = result.instructions[2].sourceAddress.value_or(0);
     assert(branchAddress == 0x80010008);
 
     std::vector<psxrecomp::u8> extendedBuffer;
@@ -107,12 +107,12 @@ int main()
     auto extended = buildIrFromMips(extendedInstructions);
 
     assert(extended.errors.empty());
-    bool foundNorXor = false;
-    bool foundSlti = false;
-    bool foundSltu = false;
-    bool foundLoadStore = false;
-    bool foundBiosSyscall = false;
-    bool foundConditionalLink = false;
+    [[maybe_unused]] bool foundNorXor = false;
+    [[maybe_unused]] bool foundSlti = false;
+    [[maybe_unused]] bool foundSltu = false;
+    [[maybe_unused]] bool foundLoadStore = false;
+    [[maybe_unused]] bool foundBiosSyscall = false;
+    [[maybe_unused]] bool foundConditionalLink = false;
     for (const auto& instruction : extended.instructions)
     {
         if (instruction.opcode == Opcode::XOR)
@@ -168,11 +168,11 @@ int main()
     auto cop0Result = buildIrFromMips(cop0Instructions);
 
     assert(cop0Result.errors.empty());
-    bool foundCop0Mtc = false;
-    bool foundCop0Mfc = false;
-    bool foundCtc0Alias = false;
-    bool foundCfc0Alias = false;
-    bool foundCop0Rfe = false;
+    [[maybe_unused]] bool foundCop0Mtc = false;
+    [[maybe_unused]] bool foundCop0Mfc = false;
+    [[maybe_unused]] bool foundCtc0Alias = false;
+    [[maybe_unused]] bool foundCfc0Alias = false;
+    [[maybe_unused]] bool foundCop0Rfe = false;
     for (const auto& instruction : cop0Result.instructions)
     {
         if (instruction.opcode == Opcode::COP0_MTC && instruction.inputs.size() == 2 &&
@@ -234,14 +234,14 @@ int main()
     auto cop2Result = buildIrFromMips(cop2Instructions);
 
     assert(cop2Result.errors.empty());
-    bool foundGteMtc2 = false;
-    bool foundGteMfc2 = false;
-    bool foundGteCtc2 = false;
-    bool foundGteCfc2 = false;
-    bool foundGteLwc2 = false;
-    bool foundGteSwc2 = false;
-    bool foundGteExecRtpt = false;
-    bool foundGteExecMvmva = false;
+    [[maybe_unused]] bool foundGteMtc2 = false;
+    [[maybe_unused]] bool foundGteMfc2 = false;
+    [[maybe_unused]] bool foundGteCtc2 = false;
+    [[maybe_unused]] bool foundGteCfc2 = false;
+    [[maybe_unused]] bool foundGteLwc2 = false;
+    [[maybe_unused]] bool foundGteSwc2 = false;
+    [[maybe_unused]] bool foundGteExecRtpt = false;
+    [[maybe_unused]] bool foundGteExecMvmva = false;
     for (const auto& instruction : cop2Result.instructions)
     {
         if (instruction.opcode == Opcode::GTE_MTC2 && instruction.inputs.size() == 2 &&
@@ -327,9 +327,9 @@ int main()
     auto cop0ExceptionResult = buildIrFromMips(cop0ExceptionInstructions);
     assert(cop0ExceptionResult.errors.empty());
 
-    bool foundTlbwiRi = false;
-    bool foundLwc0CpU = false;
-    bool foundSdc1CpU = false;
+    [[maybe_unused]] bool foundTlbwiRi = false;
+    [[maybe_unused]] bool foundLwc0CpU = false;
+    [[maybe_unused]] bool foundSdc1CpU = false;
     for (const auto& instruction : cop0ExceptionResult.instructions)
     {
         if (instruction.opcode != Opcode::CPU_EXCEPTION || instruction.inputs.size() < 2 ||
@@ -372,7 +372,7 @@ int main()
     auto noSourceAsmResult = buildIrFromMips(instructions, noSourceAsmOptions);
     assert(noSourceAsmResult.errors.empty());
     assert(!noSourceAsmResult.instructions.empty());
-    for (const auto& instruction : noSourceAsmResult.instructions)
+    for ([[maybe_unused]] const auto& instruction : noSourceAsmResult.instructions)
     {
         assert(!instruction.sourceAsm.has_value());
         assert(!instruction.sourceAsmAddress.has_value());

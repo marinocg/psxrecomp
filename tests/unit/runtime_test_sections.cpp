@@ -1,4 +1,5 @@
 #include "runtime_test_sections.h"
+#include "runtime_test_timer_sections.h"
 
 #include "psxrecomp/runtime/psx_system.h"
 #include "psxrecomp/runtime/resource_pack.h"
@@ -22,9 +23,9 @@ void runRuntimeStateSerializationChecks(psxrecomp::runtime::PsxSystem& system)
 {
     using psxrecomp::runtime::InterruptController;
 
-    auto checksum1 = system.stateChecksum();
+    [[maybe_unused]] auto checksum1 = system.stateChecksum();
     auto state = system.serializeState();
-    const auto cdromStatusBefore =
+    [[maybe_unused]] const auto cdromStatusBefore =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
 
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0xAABBCCDDu);
@@ -34,7 +35,7 @@ void runRuntimeStateSerializationChecks(psxrecomp::runtime::PsxSystem& system)
             0x03u) == 0x02u);
 
     assert(system.deserializeState(state));
-    auto checksum2 = system.stateChecksum();
+    [[maybe_unused]] auto checksum2 = system.stateChecksum();
     assert(checksum1 == checksum2);
     assert(system.gpu().fifoDepth() == 0);
     assert(system.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0) == 0);
@@ -75,7 +76,7 @@ void runRuntimeStateSerializationChecks(psxrecomp::runtime::PsxSystem& system)
 
     assert(system.deserializeState(gteState));
     assert(system.gte().busyCyclesRemaining() == 5u);
-    const auto gteCpuBeforeRead = system.cpuCyclesElapsed();
+    [[maybe_unused]] const auto gteCpuBeforeRead = system.cpuCyclesElapsed();
     assert(system.gte().mfc2(6) == 0x11223344u);
     assert(system.cpuCyclesElapsed() == gteCpuBeforeRead + 5u);
     assert(system.gte().cfc2(24) == 0x55667788u);
@@ -107,7 +108,7 @@ void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)
     assert(lastEvent.has_value());
     assert(lastEvent->level == LogLevel::Warn);
 
-    const auto dmaTransfersBeforeFrame = system.debugOverlay().dmaTransfers();
+    [[maybe_unused]] const auto dmaTransfersBeforeFrame = system.debugOverlay().dmaTransfers();
     const psxrecomp::Address spuBase =
         DmaController::ChannelBase +
         DmaController::ChannelStride * static_cast<psxrecomp::Address>(DmaPort::Spu);
@@ -249,7 +250,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     assert((system.cop0().mfc0(Cop0::RegisterIndex::Status) & 0x3Fu) == 0x0Bu);
 
     // Cause.IP2 should track I_STAT&I_MASK pending state (VBlank here).
-    constexpr psxrecomp::u32 kCauseIp2Bit = 1u << 10;
+    [[maybe_unused]] constexpr psxrecomp::u32 kCauseIp2Bit = 1u << 10;
     system.interrupts().restoreState(0u, static_cast<psxrecomp::u32>(InterruptLine::VBlank));
     system.tickCpuCycles(1);
     assert((system.cop0().mfc0(Cop0::RegisterIndex::Cause) & kCauseIp2Bit) == 0u);
@@ -341,7 +342,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     setCdromIndex(1);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x05);
     setCdromIndex(0);
-    const psxrecomp::u8 hintMask =
+    [[maybe_unused]] const psxrecomp::u8 hintMask =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
     assert((hintMask & 0x1Fu) == 0x05u);
     assert((hintMask & 0xE0u) == 0xE0u);
@@ -361,7 +362,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     setCdromIndex(3);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0xFF);
     setCdromIndex(0);
-    const psxrecomp::u8 hintMaskAfterIndex3Write =
+    [[maybe_unused]] const psxrecomp::u8 hintMaskAfterIndex3Write =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
     assert((hintMaskAfterIndex3Write & 0x1Fu) == 0x05u);
     assert((hintMaskAfterIndex3Write & 0xE0u) == 0xE0u);
@@ -414,18 +415,18 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) !=
            0u);
     setCdromIndex(1);
-    const psxrecomp::u8 hintStatusIndex1 =
+    [[maybe_unused]] const psxrecomp::u8 hintStatusIndex1 =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
     assert((hintStatusIndex1 & 0x07u) == 0x03u);
     assert((hintStatusIndex1 & 0xE0u) == 0xE0u);
     setCdromIndex(3);
-    const psxrecomp::u8 hintStatusIndex3 =
+    [[maybe_unused]] const psxrecomp::u8 hintStatusIndex3 =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
     assert((hintStatusIndex3 & 0x07u) == 0x03u);
     assert((hintStatusIndex3 & 0xE0u) == 0xE0u);
     setCdromIndex(1);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07);
-    const psxrecomp::u8 clearedHintStatus =
+    [[maybe_unused]] const psxrecomp::u8 clearedHintStatus =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
     assert((clearedHintStatus & 0x07u) == 0x00u);
     assert((clearedHintStatus & 0xE0u) == 0xE0u);
@@ -435,14 +436,14 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
            0u);
 
     setCdromIndex(0);
-    const psxrecomp::u8 statusAfterAckBeforeRead =
+    [[maybe_unused]] const psxrecomp::u8 statusAfterAckBeforeRead =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
     assert((statusAfterAckBeforeRead & (1u << 5)) != 0u);
 
     // Drain the prior INT3 response byte; this should allow queued INT2 to promote.
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
     setCdromIndex(1);
-    const psxrecomp::u8 promotedHintStatus =
+    [[maybe_unused]] const psxrecomp::u8 promotedHintStatus =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
     assert((promotedHintStatus & 0x07u) == 0x02u);
     assert((promotedHintStatus & 0xE0u) == 0xE0u);
@@ -452,17 +453,17 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
            0u);
 
     setCdromIndex(0);
-    const psxrecomp::u8 statusAfterQueuePromote =
+    [[maybe_unused]] const psxrecomp::u8 statusAfterQueuePromote =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
     assert((statusAfterQueuePromote & (1u << 5)) != 0u);
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
-    const psxrecomp::u8 statusAfterReadingPromotedResponse =
+    [[maybe_unused]] const psxrecomp::u8 statusAfterReadingPromotedResponse =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
     assert((statusAfterReadingPromotedResponse & (1u << 5)) == 0u);
 
     setCdromIndex(1);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07);
-    const psxrecomp::u8 finalClearedHintStatus =
+    [[maybe_unused]] const psxrecomp::u8 finalClearedHintStatus =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
     assert((finalClearedHintStatus & 0x07u) == 0x00u);
     assert((finalClearedHintStatus & 0xE0u) == 0xE0u);
@@ -490,90 +491,5 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::INTERRUPT_MASK) ==
            lowMask);
 
-    // Timer0 target IRQ should fire once runFrame advances cycles.
-    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_MASK,
-                                             static_cast<psxrecomp::u32>(InterruptLine::Timer0));
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 3u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0018u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0u);
-    assert((system.interrupts().readStatus() &
-            static_cast<psxrecomp::u32>(InterruptLine::Timer0)) == 0);
-    system.runFrame();
-    assert((system.interrupts().readStatus() &
-            static_cast<psxrecomp::u32>(InterruptLine::Timer0)) != 0);
-
-    const psxrecomp::u16 timer0Mode =
-        system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
-    assert((timer0Mode & (1u << 11)) != 0);
-
-    // Timer2 alternate divider mode should only advance every 8 CPU cycles.
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 + 0x4,
-                                             0x0200u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 + 0x0, 0u);
-    system.timers().tick(7, nullptr);
-    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 +
-                                                   0x0) == 0u);
-    system.timers().tick(1, nullptr);
-    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x20 +
-                                                   0x0) == 1u);
-
-    // Timer overflow should wrap counter in free-running mode.
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0000u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
-    system.timers().tick(4, nullptr);
-    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
-           2u);
-
-    // Reset-on-target with target=0 should behave as 0x10000 period (no divide-by-zero).
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0008u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 0x0000u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
-    system.timers().tick(4, nullptr);
-    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
-           2u);
-
-    // Reset-on-target should not trigger early when counter starts above target.
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0018u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 3u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 10u);
-    system.timers().tick(3, nullptr);
-    assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0) ==
-           13u);
-
-    // Target flag must not latch on overflow if target value was not crossed.
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4, 0x0000u);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x8, 0x7FFFu);
-    system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x0, 0xFFFEu);
-    system.timers().tick(2, nullptr);
-    const psxrecomp::u16 noTargetOnOverflowMode =
-        system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE + 0x4);
-    assert((noTargetOnOverflowMode & (1u << 11)) == 0u);
-}
-
-void runRuntimeResourcePackChecks()
-{
-    using psxrecomp::runtime::ResourcePack;
-
-    auto tempRoot = std::filesystem::temp_directory_path() / "psxrecomp_runtime_test_assets";
-    std::filesystem::create_directories(tempRoot / "textures");
-    {
-        std::ofstream file(tempRoot / "textures" / "logo.bin", std::ios::binary);
-        const char bytes[] = {1, 2, 3, 4};
-        file.write(bytes, sizeof(bytes));
-    }
-
-    ResourcePack pack;
-    assert(!pack.loadFromDirectory(tempRoot / "missing"));
-    assert(pack.loadFromDirectory(tempRoot));
-    assert(pack.hasResource("textures/logo.bin"));
-    auto resource = pack.readResource("textures/logo.bin");
-    assert(resource.has_value());
-    assert(resource->size() == 4);
-    assert(pack.resourceCount() == 1);
-
-    std::filesystem::remove(tempRoot / "textures" / "logo.bin");
-    auto missingResource = pack.readResource("textures/logo.bin");
-    assert(!missingResource.has_value());
-
-    std::filesystem::remove_all(tempRoot);
+    runRuntimeTimerChecks(system);
 }

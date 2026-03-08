@@ -28,7 +28,7 @@ int main()
         for (size_t i = 0; i < KernelEventTable::MAX_EVENTS; ++i)
         {
             u32 handle = KernelEventTable::HANDLE_BASE | static_cast<u32>(i << 4);
-            const auto* ev = table.getEvent(handle);
+            [[maybe_unused]] const auto* ev = table.getEvent(handle);
             assert(ev != nullptr);
             assert(ev->status == EventStatus::Free);
         }
@@ -43,7 +43,7 @@ int main()
         u32 handle =
             table.openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::NoCallback, 0);
         assert(handle != 0xFFFFFFFFu);
-        const auto* ev = table.getEvent(handle);
+        [[maybe_unused]] const auto* ev = table.getEvent(handle);
         assert(ev != nullptr);
         assert(ev->classId == EventClass::VBlank);
         assert(ev->spec == EventSpec::Counter);
@@ -60,12 +60,12 @@ int main()
         KernelEventTable table;
         for (size_t i = 0; i < KernelEventTable::MAX_EVENTS; ++i)
         {
-            u32 handle =
+            [[maybe_unused]] u32 handle =
                 table.openEvent(EventClass::Gpu, EventSpec::Interrupted, EventMode::NoCallback, 0);
             assert(handle != 0xFFFFFFFFu);
         }
         // Next should fail
-        u32 overflow =
+        [[maybe_unused]] u32 overflow =
             table.openEvent(EventClass::Gpu, EventSpec::Interrupted, EventMode::NoCallback, 0);
         assert(overflow == 0xFFFFFFFFu);
         std::cerr << "[PASS] OpenEvent exhausts after MAX_EVENTS\n";
@@ -79,7 +79,7 @@ int main()
         u32 handle = table.openEvent(EventClass::Dma, EventSpec::EndOfIO, EventMode::NoCallback, 0);
         assert(handle != 0xFFFFFFFFu);
         assert(table.closeEvent(handle));
-        const auto* ev = table.getEvent(handle);
+        [[maybe_unused]] const auto* ev = table.getEvent(handle);
         assert(ev != nullptr);
         assert(ev->status == EventStatus::Free);
         std::cerr << "[PASS] CloseEvent frees slot\n";
@@ -90,7 +90,7 @@ int main()
     // ---------------------------------------------------------------
     {
         KernelEventTable table;
-        u32 handle =
+        [[maybe_unused]] u32 handle =
             table.openEvent(EventClass::Timer0, EventSpec::Counter, EventMode::NoCallback, 0);
         // Initial is Disabled
         assert(table.getEvent(handle)->status == EventStatus::Disabled);
@@ -275,7 +275,7 @@ int main()
         table.reset();
         for (size_t i = 0; i < KernelEventTable::MAX_EVENTS; ++i)
         {
-            u32 handle = KernelEventTable::HANDLE_BASE | static_cast<u32>(i << 4);
+            [[maybe_unused]] u32 handle = KernelEventTable::HANDLE_BASE | static_cast<u32>(i << 4);
             assert(table.getEvent(handle)->status == EventStatus::Free);
         }
         std::cerr << "[PASS] reset clears all events\n";
@@ -325,14 +325,14 @@ int main()
         }
         for (size_t i = 0; i < handles.size(); ++i)
         {
-            const auto* ev = table.getEvent(handles[i]);
+            [[maybe_unused]] const auto* ev = table.getEvent(handles[i]);
             assert(ev != nullptr);
             assert(ev->classId == EventClass::VBlank);
         }
         // Close the middle one and reopen — should reuse slot
         table.closeEvent(handles[2]);
-        u32 reused = table.openEvent(EventClass::Gpu, EventSpec::Interrupted, EventMode::Callback,
-                                     0x80020000);
+        [[maybe_unused]] u32 reused = table.openEvent(EventClass::Gpu, EventSpec::Interrupted,
+                                                      EventMode::Callback, 0x80020000);
         assert(reused != 0xFFFFFFFFu);
         assert(table.getEvent(reused)->classId == EventClass::Gpu);
         std::cerr << "[PASS] handle encoding/decoding round-trip\n";

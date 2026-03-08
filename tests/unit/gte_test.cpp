@@ -104,7 +104,7 @@ int main()
         assert(gte.mfc2(11) == 1000u);
         assert(gte.mfc2(19) == 1000u);
 
-        const psxrecomp::u32 sxy2 = gte.mfc2(14);
+        [[maybe_unused]] const psxrecomp::u32 sxy2 = gte.mfc2(14);
         assert(lowHalfSigned(sxy2) == 192);
         assert(highHalfSigned(sxy2) == 136);
         assert(gte.mfc2(15) == sxy2);
@@ -136,9 +136,9 @@ int main()
         assert(gte.mfc2(18) == 1000u);
         assert(gte.mfc2(19) == 1000u);
 
-        const psxrecomp::u32 sxy0 = gte.mfc2(12);
-        const psxrecomp::u32 sxy1 = gte.mfc2(13);
-        const psxrecomp::u32 sxy2 = gte.mfc2(14);
+        [[maybe_unused]] const psxrecomp::u32 sxy0 = gte.mfc2(12);
+        [[maybe_unused]] const psxrecomp::u32 sxy1 = gte.mfc2(13);
+        [[maybe_unused]] const psxrecomp::u32 sxy2 = gte.mfc2(14);
         assert(lowHalfSigned(sxy0) == 192);
         assert(highHalfSigned(sxy0) == 136);
         assert(lowHalfSigned(sxy1) == 127);
@@ -193,7 +193,7 @@ int main()
         assert(gte.mfc2(9) == 0u);
         assert(gte.mfc2(10) == 20u);
         assert(gte.mfc2(11) == 0u);
-        const psxrecomp::u32 flag = gte.cfc2(31);
+        [[maybe_unused]] const psxrecomp::u32 flag = gte.cfc2(31);
         assert((flag & (1u << 24)) != 0u);
         assert((flag & (1u << 22)) != 0u);
         assert((flag & (1u << 31)) != 0u);
@@ -416,18 +416,18 @@ int main()
         system.reset();
 
         system.gte().exec(encodeGteCommand(0x00002Du));
-        const uint64_t readStallBefore = system.cpuCyclesElapsed();
+        [[maybe_unused]] const uint64_t readStallBefore = system.cpuCyclesElapsed();
         assert(system.gte().mfc2(7) == 0u);
         assert(system.cpuCyclesElapsed() == readStallBefore + 5u);
 
         system.gte().exec(encodeGteCommand(0x00002Du));
-        const uint64_t writeStallBefore = system.cpuCyclesElapsed();
+        [[maybe_unused]] const uint64_t writeStallBefore = system.cpuCyclesElapsed();
         system.gte().mtc2(7, 0x1234u);
         system.gte().ctc2(24, 0x5678u);
         assert(system.cpuCyclesElapsed() == writeStallBefore);
 
         system.gte().exec(encodeGteCommand(0x00002Du));
-        const uint64_t execStallBefore = system.cpuCyclesElapsed();
+        [[maybe_unused]] const uint64_t execStallBefore = system.cpuCyclesElapsed();
         system.gte().exec(encodeGteCommand(0x00002Eu));
         assert(system.cpuCyclesElapsed() == execStallBefore + 5u);
         assert(system.gte().busyCyclesRemaining() == 6u);
@@ -442,7 +442,7 @@ int main()
         assert(system.gte().mfc2(10) == 0u);
         assert(system.gte().mfc2(11) == 0u);
 
-        const uint64_t irgbReadBefore = system.cpuCyclesElapsed();
+        [[maybe_unused]] const uint64_t irgbReadBefore = system.cpuCyclesElapsed();
         assert(system.gte().mfc2(29) == 0x7C1Fu);
         assert(system.cpuCyclesElapsed() == irgbReadBefore + 3u);
         assert(system.gte().mfc2(9) == 0x0F80u);
