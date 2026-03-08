@@ -54,7 +54,7 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Implement BIOS vector dispatch framework (`callBiosVector` for A0/B0/C0).
 - [x] Implement functional string/memory BIOS functions (strcmp, strcpy, memcpy, memset, bzero).
 - [x] Implement GPU BIOS helpers (GPU_cw, GPU_cwp, send_gpu_linked_list, GPU_init, GPU_sync).
-- [x] Implement event management stubs (OpenEvent, CloseEvent, WaitEvent, TestEvent, EnableEvent, DisableEvent).
+- [x] Implement functional kernel event handling, including blocking `WaitEvent` for `NoCallback` events.
 - [x] Implement pad/controller/memory-card init stubs.
 - [x] Implement system initialization C0 stubs.
 - [x] Add BIOS trace support (`PSXRECOMP_TRACE_BIOS` env var).
@@ -63,7 +63,8 @@ This roadmap covers the runtime library that backs recompiled code with PSX hard
 - [x] Implement `printf` (A0:0x3F) logging support for common string/integer/pointer specifiers; richer format coverage may still need expansion.
 - [ ] Implement threading functions (OpenThread, CloseThread, ChangeThread).
 - [ ] Implement timer functions (init_timer, get_timer, enable/disable_timer_irq).
-- [ ] Implement CD-ROM BIOS functions (CdInit, CdRemove).
+- [x] Implement BIOS-facing CD-ROM helper calls (`CdInit`, `CdRemove`, `CdAsyncSeekL`, `CdAsyncGetStatus`, `CdAsyncReadSector`, `CdAsyncSetMode`, `CdInitSubFunc`).
+- [x] Implement a read-only BIOS file/device layer (`FileOpen`, `FileSeek`, `FileRead`, `FileClose`, `firstfile`, `nextfile`) backed directly by mounted ISO 9660 disc contents.
 - [ ] Implement memory card sector read/write.
 - [ ] See full checklist: [BIOS Functions Roadmap](bios_functions_roadmap.md)
 

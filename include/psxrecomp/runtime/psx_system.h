@@ -1,5 +1,6 @@
 #pragma once
 
+#include "psxrecomp/runtime/bios_file_table.h"
 #include "psxrecomp/runtime/cdrom.h"
 #include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/debug_overlay.h"
@@ -11,10 +12,12 @@
 #include "psxrecomp/runtime/interrupt_dispatcher.h"
 #include "psxrecomp/runtime/kernel_events.h"
 #include "psxrecomp/runtime/logger.h"
+#include "psxrecomp/runtime/mdec.h"
 #include "psxrecomp/runtime/memory_map.h"
 #include "psxrecomp/runtime/scheduler.h"
 #include "psxrecomp/runtime/sio0.h"
 #include "psxrecomp/runtime/spu.h"
+#include "psxrecomp/runtime/stall_classifier.h"
 #include "psxrecomp/runtime/timers.h"
 #include "psxrecomp/types.h"
 
@@ -166,6 +169,7 @@ class PsxSystem
     Gpu& gpu();
     Spu& spu();
     Cdrom& cdrom();
+    Mdec& mdec();
     InputController& input();
     Sio0& sio0();
     DmaController& dma();
@@ -176,6 +180,7 @@ class PsxSystem
     TimerController& timers();
     Cop0& cop0();
     Gte& gte();
+    StallClassifier& stallClassifier();
 
     void setDisc(std::shared_ptr<Disc> disc);
 
@@ -300,6 +305,7 @@ class PsxSystem
     Gpu m_gpu;
     Spu m_spu;
     Cdrom m_cdrom;
+    Mdec m_mdec;
     InputController m_input;
     Sio0 m_sio0;
     DmaController m_dma;
@@ -315,6 +321,7 @@ class PsxSystem
     TimerController m_timers;
     Cop0 m_cop0;
     Gte m_gte;
+    StallClassifier m_stallClassifier;
     std::shared_ptr<Disc> m_disc;
     DiscSwapInfo m_discSwapInfo;
     bool m_discSwapInfoInitialized = false;
@@ -330,9 +337,14 @@ class PsxSystem
         bool initialized = false;
         u32 handleStorageAddress = 0;
         std::array<u32, 5> eventHandles{};
+        u32 asyncResultPtr = 0;   ///< Destination for CdAsyncGetStatus result.
+        u32 asyncReadBuffer = 0;  ///< Destination buffer for sector reads.
+        u32 asyncReadCount = 0;   ///< Sectors remaining to read.
+        u32 asyncSectorsRead = 0; ///< Sectors copied so far.
     };
     HookEntryIntState m_hookEntryInt;
     BiosCdromState m_biosCdrom;
+    BiosFileTable m_biosFt;
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
     bool m_hasPendingCallbackRegisters = false;
@@ -361,6 +373,20 @@ class PsxSystem
     void initializeBiosCdromState(u32 handleStorageAddress);
     void resetBiosCdromState();
     bool serviceBiosCdromInterrupt();
+    bool callBiosCdFunction(u32 functionId, u32* regs);
+
+    /**
+     * @brief Block until a kernel event is delivered, advancing hardware.
+     *
+     * Implements the real PSX BIOS WaitEvent semantics for NoCallback
+     * events: tick CPU cycles, service interrupts, and pump hardware
+     * until the event transitions to Delivered, or until a watchdog
+     * fires.
+     *
+     * @param handle  The kernel event handle to wait on.
+     * @return true if the event was delivered, false on watchdog timeout.
+     */
+    bool waitForEvent(u32 handle);
 
     static Address normalizeAddress(Address address)
     {

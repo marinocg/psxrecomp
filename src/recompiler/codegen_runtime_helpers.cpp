@@ -236,6 +236,7 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");
     emitter.openBlock("");
     emitter.writeLine("context.system.debugOverlay().setLastProgramCounter(pc);");
+    emitter.writeLine("context.system.stallClassifier().recordPc(pc);");
     emitter.writeBlank();
     emitter.writeLine("// Step budget: throw after N PC updates to break hangs.");
     emitter.writeLine("static uint64_t stepCount = 0;");
@@ -253,7 +254,8 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("std::ostringstream stream;");
     emitter.writeLine(
         "stream << \"Step budget exhausted after \" << stepCount << \" steps at PC 0x\"");
-    emitter.writeLine("       << std::hex << pc;");
+    emitter.writeLine("       << std::hex << pc << \"\\n\";");
+    emitter.writeLine("stream << context.system.stallClassifier().classify();");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();

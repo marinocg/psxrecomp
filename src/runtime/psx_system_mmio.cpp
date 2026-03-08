@@ -9,11 +9,27 @@ u32 PsxSystem::readMmio32(Address address)
 {
     if (address == Mmio::GPU_GP1)
     {
-        return m_gpu.pollStatus();
+        const u32 val = m_gpu.pollStatus();
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
     }
     if (address == Mmio::GPU_GP0)
     {
-        return m_gpu.readData();
+        const u32 val = m_gpu.readData();
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
+    }
+    if (address == Mmio::MDEC_BASE)
+    {
+        const u32 val = m_mdec.readData();
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
+    }
+    if (address == Mmio::MDEC_BASE + 4)
+    {
+        const u32 val = m_mdec.readStatus();
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
@@ -29,7 +45,9 @@ u32 PsxSystem::readMmio32(Address address)
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
-        return m_sio0.read32(address - Mmio::CONTROLLER_BASE);
+        const u32 val = m_sio0.read32(address - Mmio::CONTROLLER_BASE);
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
     }
     // Timer registers: PSn00bSDK reads Timer1 (HBlank counter used for VSync)
     // via 32-bit LW instructions.  Forward to the 16-bit timer handler.
@@ -69,7 +87,9 @@ u16 PsxSystem::readMmio16(Address address)
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
-        return m_sio0.read16(address - Mmio::CONTROLLER_BASE);
+        const u16 val = m_sio0.read16(address - Mmio::CONTROLLER_BASE);
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
     }
     if (isInRange(address, Mmio::TIMER_BASE, Mmio::TIMER_SIZE))
     {
@@ -95,11 +115,15 @@ u8 PsxSystem::readMmio8(Address address)
 {
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
-        return m_cdrom.readReg(static_cast<u8>(address - Mmio::CDROM_BASE));
+        const u8 val = m_cdrom.readReg(static_cast<u8>(address - Mmio::CDROM_BASE));
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
-        return m_sio0.read8(address - Mmio::CONTROLLER_BASE);
+        const u8 val = m_sio0.read8(address - Mmio::CONTROLLER_BASE);
+        m_stallClassifier.recordMmioAccess(address, val, false);
+        return val;
     }
 
     return 0;
@@ -117,6 +141,18 @@ void PsxSystem::writeMmio32(Address address, u32 value)
     {
         m_gpu.writeStatus(value);
         syncLevelInterruptSources();
+        return;
+    }
+    if (address == Mmio::MDEC_BASE)
+    {
+        m_stallClassifier.recordMmioAccess(address, value, true);
+        m_mdec.writeCommand(value);
+        return;
+    }
+    if (address == Mmio::MDEC_BASE + 4)
+    {
+        m_stallClassifier.recordMmioAccess(address, value, true);
+        m_mdec.writeControl(value);
         return;
     }
     if (address == Mmio::INTERRUPT_STATUS)
@@ -221,12 +257,14 @@ void PsxSystem::writeMmio8(Address address, u8 value)
 {
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
+        m_stallClassifier.recordMmioAccess(address, value, true);
         m_cdrom.writeReg(static_cast<u8>(address - Mmio::CDROM_BASE), value);
         syncLevelInterruptSources();
         return;
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
+        m_stallClassifier.recordMmioAccess(address, value, true);
         m_sio0.write8(address - Mmio::CONTROLLER_BASE, value);
     }
 }

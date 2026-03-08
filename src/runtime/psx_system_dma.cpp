@@ -43,6 +43,9 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     const auto& channel = m_dma.channel(port);
     const bool fromRam = (channel.channelControl & DMA_DIRECTION_FROM_RAM) != 0;
 
+    m_stallClassifier.recordDmaTrigger(static_cast<u8>(port), channel.baseAddress,
+                                       channel.blockControl);
+
     m_logger.log(LogLevel::Info, "dma",
                  "DMA transfer triggered: port=" + std::to_string(static_cast<int>(port)) +
                  " fromRam=" + std::to_string(fromRam) +
@@ -101,6 +104,9 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             u32 value = 0;
             switch (port)
             {
+            case DmaPort::MdecOut:
+                value = m_mdec.readDma();
+                break;
             case DmaPort::Gpu:
                 value = m_gpu.readData();
                 break;
@@ -195,6 +201,9 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 const u32 value = read<u32>(current);
                 switch (port)
                 {
+                case DmaPort::MdecIn:
+                    m_mdec.writeDma(value);
+                    break;
                 case DmaPort::Gpu:
                     m_gpu.writeDma(value);
                     break;

@@ -127,6 +127,28 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         return false;
     }
 
+    // INT1 (data-ready): copy sector data for CdAsyncReadSector.
+    if (irqType == 1u && m_biosCdrom.asyncReadCount > 0)
+    {
+        constexpr u32 SECTOR_BYTES = 2048;
+        const u32 dstAddr =
+            m_biosCdrom.asyncReadBuffer + m_biosCdrom.asyncSectorsRead * SECTOR_BYTES;
+        for (u32 i = 0; i < SECTOR_BYTES; ++i)
+        {
+            write<u8>(dstAddr + i, m_cdrom.readData());
+        }
+        ++m_biosCdrom.asyncSectorsRead;
+        --m_biosCdrom.asyncReadCount;
+    }
+
+    // INT3 (first ack): copy status byte for CdAsyncGetStatus.
+    if (irqType == 3u && m_biosCdrom.asyncResultPtr != 0)
+    {
+        const u8 stat = m_cdrom.readResponse();
+        write<u8>(m_biosCdrom.asyncResultPtr, stat);
+        m_biosCdrom.asyncResultPtr = 0;
+    }
+
     std::vector<u32> callbacks =
         m_events.deliverByClassSpec(EventClass::Cdrom, CDROM_IRQ_EVENT_SPECS[irqType - 1u]);
     auto genericCallbacks = m_events.deliverByClassSpec(EventClass::Cdrom, EventSpec::Interrupted);
@@ -154,6 +176,11 @@ void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
 void PsxSystem::serviceInterrupts()
 {
     syncLevelInterruptSources();
+
+    // Record CD-ROM / IRQ state snapshot for stall classification.
+    m_stallClassifier.recordCdromIrqState(
+        m_cdrom.readInterruptFlags(), static_cast<u16>(m_interrupts.readStatus()),
+        static_cast<u16>(m_interrupts.readMask()), m_cdrom.hasIrqRequest());
 
     const u32 pendingMasked = m_interrupts.readStatus() & m_interrupts.readMask();
     const u32 cop0Status = m_cop0.mfc0(Cop0::RegisterIndex::Status);

@@ -78,6 +78,10 @@ void PsxSystem::reset()
     m_gpu.reset();
     m_spu.reset();
     m_cdrom.reset();
+    m_mdec.reset();
+    m_mdec.setLogCallback(
+        [this](LogLevel level, const std::string& category, const std::string& message)
+        { m_logger.log(level, category, message); });
     m_cdrom.setDiscBackend(m_disc.get());
     m_cdrom.setXaAudioSink([this](const std::vector<int16_t>& interleavedStereoPcm)
                            { m_spu.pushCdAudioSamples(interleavedStereoPcm); });
@@ -101,10 +105,13 @@ void PsxSystem::reset()
     m_timers.reset();
     m_cop0.reset();
     m_gte.reset();
+    m_stallClassifier.reset();
     bindGteRuntimeHooks();
     m_criticalSectionDepth = 0;
     m_hookEntryInt = {};
     resetBiosCdromState();
+    m_biosFt.reset();
+    m_biosFt.setDisc(m_disc.get());
     m_callbackInvoker = CallbackInvoker{};
     m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;

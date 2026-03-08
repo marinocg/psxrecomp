@@ -151,6 +151,7 @@ set(RUNTIME_SOURCES
     src/runtime/interrupt_dispatcher.cpp
     src/runtime/kernel_events.cpp
     src/runtime/logger.cpp
+    src/runtime/mdec.cpp
     src/runtime/psx_system.cpp
     src/runtime/psx_system_accessors.cpp
     src/runtime/psx_system_callbacks.cpp
@@ -160,14 +161,18 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system_bios_a0.cpp
     src/runtime/psx_system_bios_b0.cpp
     src/runtime/psx_system_bios_c0.cpp
+    src/runtime/bios_file_table.cpp
+    src/runtime/psx_system_bios_cd.cpp
     src/runtime/psx_system_mmio.cpp
     src/runtime/psx_system_state.cpp
     src/runtime/psx_system_dma.cpp
+    src/runtime/psx_system_wait_event.cpp
     src/runtime/resource_pack.cpp
     src/runtime/scheduler.cpp
     src/runtime/sio0.cpp
     src/runtime/spu.cpp
     src/runtime/spu_audio.cpp
+    src/runtime/stall_classifier.cpp
     src/runtime/timers.cpp
 )
 
@@ -367,6 +372,21 @@ if(BUILD_TESTS)
     )
     target_link_libraries(sio0_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(stall_classifier_test
+        tests/unit/stall_classifier_test.cpp
+    )
+    target_link_libraries(stall_classifier_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(wait_event_test
+        tests/unit/wait_event_test.cpp
+    )
+    target_link_libraries(wait_event_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(bios_cd_test
+        tests/unit/bios_cd_test.cpp
+    )
+    target_link_libraries(bios_cd_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp
         tests/unit/pipeline_test_builders.cpp
@@ -425,6 +445,11 @@ if(BUILD_TESTS)
         tests/unit/interrupt_dispatcher_test_sections.cpp
     )
     target_link_libraries(interrupt_dispatcher_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(bios_file_test
+        tests/unit/bios_file_test.cpp
+    )
+    target_link_libraries(bios_file_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(codegen_debug_test
         tests/unit/codegen_debug_test.cpp

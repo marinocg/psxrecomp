@@ -80,6 +80,18 @@ void runRuntimeStateSerializationChecks(psxrecomp::runtime::PsxSystem& system)
     assert(system.gte().mfc2(6) == 0x11223344u);
     assert(system.cpuCyclesElapsed() == gteCpuBeforeRead + 5u);
     assert(system.gte().cfc2(24) == 0x55667788u);
+
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4,
+                                             (1u << 30) | (1u << 29));
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 0, 0x38000001u);
+    const auto mdecState = system.serializeState();
+
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4, (1u << 31));
+    assert(system.deserializeState(mdecState));
+    assert((system.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4) &
+            (1u << 29)) != 0u);
+    assert((system.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4) &
+            (1u << 28)) != 0u);
 }
 
 void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)

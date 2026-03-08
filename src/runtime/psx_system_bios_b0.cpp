@@ -59,10 +59,24 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     }
     case 0x0A: // WaitEvent(handle)
     {
-        // Real BIOS blocks until delivery. In this runtime we keep
-        // WaitEvent non-blocking and do not fabricate delivery.
-        // The game can observe delivery via TestEvent after IRQ dispatch.
-        m_logger.log(LogLevel::Debug, "bios", "WaitEvent (non-blocking stub)");
+        const auto* ev = m_events.getEvent(a0);
+        if (ev && ev->mode == EventMode::NoCallback)
+        {
+            // PSX-SPX: For NoCallback events, WaitEvent blocks the
+            // calling thread until the event is delivered by an IRQ.
+            // We emulate this by busy-waiting while pumping hardware.
+            bool delivered = waitForEvent(a0);
+            regs[2] = delivered ? 1u : 0u;
+        }
+        else
+        {
+            // Callback-mode events: the delivery is handled via the
+            // interrupt dispatcher invoking the callback directly.
+            // WaitEvent returns immediately for these.
+            m_logger.log(LogLevel::Debug, "bios",
+                         "WaitEvent (callback-mode or invalid handle — non-blocking)");
+            regs[2] = 1;
+        }
         return true;
     }
     case 0x0B: // TestEvent(handle)
@@ -147,9 +161,82 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         m_logger.log(LogLevel::Debug, "bios", "UnDeliverEvent");
         return true;
     }
-    case 0x32:       // FileOpen - stub
-        regs[2] = 0; // fail
+    case 0x32: // FileOpen(filename, accessmode)
+    {
+        const char* filename = reinterpret_cast<const char*>(ramPointerConst(m_ram.data(), a0));
+        int fd = m_biosFt.fileOpen(filename ? filename : "");
+        regs[2] = static_cast<u32>(fd); // -1 (0xFFFFFFFF) on failure
+        {
+            std::ostringstream msg;
+            msg << "FileOpen \"" << (filename ? filename : "(null)") << "\" => fd=" << fd;
+            m_logger.log(LogLevel::Debug, "bios", msg.str());
+        }
         return true;
+    }
+    case 0x33: // FileSeek(fd, offset, seektype)
+    {
+        int fd = static_cast<int>(a0);
+        int offset = static_cast<int>(a1);
+        int whence = static_cast<int>(a2);
+        int result = m_biosFt.fileSeek(fd, offset, whence);
+        regs[2] = static_cast<u32>(result);
+        return true;
+    }
+    case 0x34: // FileRead(fd, dst, length)
+    {
+        int fd = static_cast<int>(a0);
+        u8* dst = ramPointer(m_ram.data(), a1);
+        u32 length = a2;
+        int result = m_biosFt.fileRead(fd, dst, length);
+        regs[2] = static_cast<u32>(result);
+        return true;
+    }
+    case 0x36: // FileClose(fd)
+    {
+        int fd = static_cast<int>(a0);
+        bool ok = m_biosFt.fileClose(fd);
+        regs[2] = ok ? static_cast<u32>(fd) : 0xFFFFFFFFu;
+        return true;
+    }
+    case 0x42: // firstfile(filename, direntry)
+    {
+        const char* pattern = reinterpret_cast<const char*>(ramPointerConst(m_ram.data(), a0));
+        const auto* entry = m_biosFt.firstFile(pattern ? pattern : "");
+        if (entry && a1 != 0)
+        {
+            // Write the DirEntry struct at a1 in PSX RAM.
+            // PSX DirEntry layout: name[20] @ +0, attr u32 @ +20, size u32 @ +24, (next ptr etc.)
+            u8* dirEntryPtr = ramPointer(m_ram.data(), a1);
+            std::memset(dirEntryPtr, 0, 40);
+            size_t nameLen = std::min(entry->name.size(), static_cast<size_t>(19));
+            std::memcpy(dirEntryPtr, entry->name.c_str(), nameLen);
+            dirEntryPtr[nameLen] = 0;
+            u32 attr = (entry->flags & 0x02) ? 0x10u : 0x00u; // directory flag
+            std::memcpy(dirEntryPtr + 20, &attr, 4);
+            u32 sz = entry->size;
+            std::memcpy(dirEntryPtr + 24, &sz, 4);
+        }
+        regs[2] = entry ? a1 : 0u;
+        return true;
+    }
+    case 0x43: // nextfile(direntry)
+    {
+        const auto* entry = m_biosFt.nextFile();
+        if (entry && a0 != 0)
+        {
+            u8* dirEntryPtr = ramPointer(m_ram.data(), a0);
+            std::memset(dirEntryPtr, 0, 40);
+            size_t nameLen = std::min(entry->name.size(), static_cast<size_t>(19));
+            std::memcpy(dirEntryPtr, entry->name.c_str(), nameLen);
+            dirEntryPtr[nameLen] = 0;
+            u32 attr = (entry->flags & 0x02) ? 0x10u : 0x00u;
+            std::memcpy(dirEntryPtr + 20, &attr, 4);
+            u32 sz = entry->size;
+            std::memcpy(dirEntryPtr + 24, &sz, 4);
+        }
+        regs[2] = entry ? a0 : 0u;
+        return true;
+    }
     case 0x3D: // putchar
     {
         char ch = static_cast<char>(a0 & 0xFF);

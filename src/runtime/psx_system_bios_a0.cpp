@@ -389,6 +389,15 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         m_logger.log(LogLevel::Debug, "bios", "_96_remove (A0 0x72)");
         return true;
     }
+    // CD-ROM BIOS functions — delegated to psx_system_bios_cd.cpp
+    case 0x54: // CdInit
+    case 0x56: // CdRemove
+    case 0x78: // CdAsyncSeekL
+    case 0x7C: // CdAsyncGetStatus
+    case 0x7E: // CdAsyncReadSector
+    case 0x81: // CdAsyncSetMode
+    case 0x95: // CdInitSubFunc
+        return callBiosCdFunction(functionId, regs);
     default:
         return false;
     }

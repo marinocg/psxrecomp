@@ -47,9 +47,10 @@ std::vector<u8> PsxSystem::serializeState() const
 {
     const std::vector<u8> cdromState = m_cdrom.serializeState();
     const std::vector<u8> gteState = m_gte.serializeState();
+    const std::vector<u8> mdecState = m_mdec.serializeState();
     std::vector<u8> state;
     state.reserve(sizeof(u32) * 12 + m_ram.size() + m_scratchpad.size() + m_bios.size() +
-                  cdromState.size() + gteState.size());
+                  cdromState.size() + gteState.size() + mdecState.size());
 
     appendU32(state, static_cast<u32>(m_ram.size()));
     state.insert(state.end(), m_ram.begin(), m_ram.end());
@@ -72,6 +73,8 @@ std::vector<u8> PsxSystem::serializeState() const
     state.insert(state.end(), cdromState.begin(), cdromState.end());
     appendU32(state, static_cast<u32>(gteState.size()));
     state.insert(state.end(), gteState.begin(), gteState.end());
+    appendU32(state, static_cast<u32>(mdecState.size()));
+    state.insert(state.end(), mdecState.begin(), mdecState.end());
     return state;
 }
 
@@ -91,6 +94,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     u32 cop0Epc = 0;
     u32 cdromStateSize = 0;
     u32 gteStateSize = 0;
+    u32 mdecStateSize = 0;
 
     auto readBlob = [&state, &cursor](u32 blobSize, std::vector<u8>& out)
     {
@@ -110,8 +114,10 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     std::vector<u8> biosCopy;
     std::vector<u8> cdromStateCopy;
     std::vector<u8> gteStateCopy;
+    std::vector<u8> mdecStateCopy;
     bool hasCdromState = false;
     bool hasGteState = false;
+    bool hasMdecState = false;
 
     if (!consumeU32(state, cursor, ramSize) || ramSize != m_ram.size() ||
         !readBlob(ramSize, ramCopy) || !consumeU32(state, cursor, scratchpadSize) ||
@@ -146,6 +152,15 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
 
     if (cursor != state.size())
     {
+        if (!consumeU32(state, cursor, mdecStateSize) || !readBlob(mdecStateSize, mdecStateCopy))
+        {
+            return false;
+        }
+        hasMdecState = true;
+    }
+
+    if (cursor != state.size())
+    {
         return false;
     }
 
@@ -156,6 +171,11 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     }
     Gte gteCandidate = m_gte;
     if (hasGteState && !gteCandidate.deserializeState(gteStateCopy))
+    {
+        return false;
+    }
+    Mdec mdecCandidate = m_mdec;
+    if (hasMdecState && !mdecCandidate.deserializeState(mdecStateCopy))
     {
         return false;
     }
@@ -174,6 +194,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_cop0.reset();
     m_cop0.restoreState(badVaddr, cop0Status, cop0Cause, cop0Epc);
     m_gte.reset();
+    m_mdec.reset();
     bindGteRuntimeHooks();
 
     if (hasCdromState)
@@ -189,6 +210,13 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
         m_gte = std::move(gteCandidate);
         bindGteRuntimeHooks();
     }
+    if (hasMdecState)
+    {
+        m_mdec = std::move(mdecCandidate);
+    }
+    m_mdec.setLogCallback(
+        [this](LogLevel level, const std::string& category, const std::string& message)
+        { m_logger.log(level, category, message); });
     m_input.reset();
     m_sio0.reset();
     m_sio0.setInputController(&m_input);

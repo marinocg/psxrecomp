@@ -59,6 +59,11 @@ Cdrom& PsxSystem::cdrom()
     return m_cdrom;
 }
 
+Mdec& PsxSystem::mdec()
+{
+    return m_mdec;
+}
+
 InputController& PsxSystem::input()
 {
     return m_input;
@@ -109,10 +114,16 @@ Gte& PsxSystem::gte()
     return m_gte;
 }
 
+StallClassifier& PsxSystem::stallClassifier()
+{
+    return m_stallClassifier;
+}
+
 void PsxSystem::setDisc(std::shared_ptr<Disc> disc)
 {
     m_disc = std::move(disc);
     m_cdrom.setDiscBackend(m_disc.get());
+    m_biosFt.setDisc(m_disc.get());
     if (m_cpuCycles == 0)
     {
         m_cdrom.primeBootState(m_disc != nullptr);
