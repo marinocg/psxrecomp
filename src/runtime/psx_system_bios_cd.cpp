@@ -135,6 +135,13 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         m_biosCdrom.asyncResultPtr = a0;
         m_cdrom.writeInterruptFlags(0x07u);
         m_cdrom.writeCommand(CDCMD_GETSTAT);
+        if (m_biosCdrom.asyncResultPtr != 0)
+        {
+            const u8 stat = m_cdrom.readResponse();
+            write<u8>(m_biosCdrom.asyncResultPtr, stat);
+            m_biosCdrom.asyncResultPtr = 0;
+        }
+        m_events.deliverByClassSpec(EventClass::Cdrom, EventSpec::CommandDone);
         regs[2] = 1;
         m_logger.log(LogLevel::Debug, "bios", "CdAsyncGetStatus (A0 0x7C)");
         return true;
