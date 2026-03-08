@@ -311,6 +311,11 @@ int main()
     runtimeHeader << "    std::array<u32, 32> m_data{};\n";
     runtimeHeader << "    std::array<u32, 32> m_ctrl{};\n";
     runtimeHeader << "};\n";
+    runtimeHeader << "class StallClassifier {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    void recordPc(Address) {}\n";
+    runtimeHeader << "    std::string classify() const { return {}; }\n";
+    runtimeHeader << "};\n";
     runtimeHeader << "class PsxSystem {\n";
     runtimeHeader << "  public:\n";
     runtimeHeader << "    struct DiscSwapInfo {\n";
@@ -357,11 +362,13 @@ int main()
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "    Cop0& cop0() { return m_cop0; }\n";
     runtimeHeader << "    Gte& gte() { return m_gte; }\n";
+    runtimeHeader << "    StallClassifier& stallClassifier() { return m_stallClassifier; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
     runtimeHeader << "    RuntimeDebugOverlay m_overlay;\n";
     runtimeHeader << "    Cop0 m_cop0;\n";
     runtimeHeader << "    Gte m_gte;\n";
+    runtimeHeader << "    StallClassifier m_stallClassifier;\n";
     runtimeHeader << "};\n";
     runtimeHeader << "} }\n";
     runtimeHeader.close();

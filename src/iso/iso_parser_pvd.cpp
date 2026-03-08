@@ -240,15 +240,17 @@ bool IsoParser::readPVD()
             }
             if (jolietRoot)
             {
+                const auto [rootExtent, rootSize] = *jolietRoot;
                 m_useJoliet = true;
-                m_rootExtent = jolietRoot->first;
-                m_rootSize = jolietRoot->second;
+                m_rootExtent = rootExtent;
+                m_rootSize = rootSize;
             }
             else if (pvdRoot)
             {
+                const auto [rootExtent, rootSize] = *pvdRoot;
                 m_useJoliet = false;
-                m_rootExtent = pvdRoot->first;
-                m_rootSize = pvdRoot->second;
+                m_rootExtent = rootExtent;
+                m_rootSize = rootSize;
             }
             if (!loadPathTable())
             {
