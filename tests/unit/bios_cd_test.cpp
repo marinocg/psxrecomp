@@ -157,7 +157,8 @@ static void testCdAsyncSetMode()
     callA0(system, 0x81, regs);
     assert(regs[2] == 1);
 
-    // The INT3 from Setmode should fire and deliver the event.
+    // Pump until Setmode INT3 fires; serviceBiosCdromInterrupt delivers CommandDone.
+    assert(pumpUntilCdromIrq(system, 200));
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
 
@@ -193,7 +194,8 @@ static void testCdAsyncGetStatus()
     callA0(system, 0x7C, regs);
     assert(regs[2] == 1);
 
-    // Service INT3 — this should copy the stat byte.
+    // Pump until Getstat INT3 fires; serviceBiosCdromInterrupt copies stat + delivers CommandDone.
+    assert(pumpUntilCdromIrq(system, 200));
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
 
@@ -236,14 +238,16 @@ static void testCdAsyncSeekL()
     callA0(system, 0x78, regs);
     assert(regs[2] == 1);
 
-    // Ack INT3 from Setloc, then INT3 from SeekL ack
-    // (SeekL queues INT3 ack + INT2 completion).
-    // Service the interrupts.
-    system.serviceInterrupts();
-
-    // After processing, we should see the INT2 completion event.
-    // Ack pending IRQs and re-service to get INT2.
+    // SeekL: the CDROM fires INT3 (first response) immediately, then INT2 (seek complete)
+    // only after the mechanical seek finishes.  Drain any immediate INT3s, then pump
+    // for INT2; serviceBiosCdromInterrupt delivers CommandDone on INT2.
+    pumpUntilCdromIrq(system, 200);
     ackCdromIrq(system);
+    system.serviceInterrupts();
+    pumpUntilCdromIrq(system, 200);
+    ackCdromIrq(system);
+    system.serviceInterrupts();
+    assert(pumpUntilCdromIrq(system, 500));
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
 
@@ -278,9 +282,14 @@ static void testCdAsyncReadSector()
     regs[4] = locAddr;
     callA0(system, 0x78, regs); // SeekL to 00:02:00
 
-    // Ack SeekL interrupts.
+    // Drain intermediate INT3s and wait for INT2 (seek complete).
+    pumpUntilCdromIrq(system, 200);
     ackCdromIrq(system);
     system.serviceInterrupts();
+    pumpUntilCdromIrq(system, 200);
+    ackCdromIrq(system);
+    system.serviceInterrupts();
+    pumpUntilCdromIrq(system, 500); // SeekL INT2
     ackCdromIrq(system);
     system.serviceInterrupts();
 
@@ -387,10 +396,14 @@ static void testSdkStyleAsyncCdFlow()
     callA0(system, 0x78, regs);
     assert(regs[2] == 1);
 
-    // Drain SeekL interrupts.
+    // Drain intermediate INT3s and pump for INT2 (seek complete = CommandDone).
+    pumpUntilCdromIrq(system, 200);
     ackCdromIrq(system);
     system.serviceInterrupts();
+    pumpUntilCdromIrq(system, 200);
     ackCdromIrq(system);
+    system.serviceInterrupts();
+    assert(pumpUntilCdromIrq(system, 500));
     system.serviceInterrupts();
 
     // The CommandDone event should be delivered from SeekL INT2.
