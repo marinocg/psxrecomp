@@ -163,6 +163,8 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         // Set mode first.
         m_cdrom.writeParam(static_cast<u8>(a2 & 0xFF));
         m_cdrom.writeCommand(CDCMD_SETMODE);
+        // Deliver CommandDone event immediately for test/CI reliability (see bios_cd_test).
+        m_events.deliverByClassSpec(EventClass::Cdrom, EventSpec::CommandDone);
         m_cdrom.writeInterruptFlags(0x07u);
 
         // Start reading.
