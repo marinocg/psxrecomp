@@ -18,8 +18,8 @@ namespace runtime
 class Mdec
 {
   public:
-    using LogCallback =
-        std::function<void(LogLevel level, const std::string& category, const std::string& message)>;
+    using LogCallback = std::function<void(LogLevel level, const std::string& category,
+                                           const std::string& message)>;
 
     void reset();
     void setLogCallback(LogCallback callback);

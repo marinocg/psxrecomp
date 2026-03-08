@@ -27,8 +27,8 @@ constexpr u32 PVD_SECTOR = 16; // ISO 9660 Primary Volume Descriptor.
 /// Read a little-endian u32 from a byte pointer.
 u32 readLE32(const u8* p)
 {
-    return static_cast<u32>(p[0]) | (static_cast<u32>(p[1]) << 8) |
-           (static_cast<u32>(p[2]) << 16) | (static_cast<u32>(p[3]) << 24);
+    return static_cast<u32>(p[0]) | (static_cast<u32>(p[1]) << 8) | (static_cast<u32>(p[2]) << 16) |
+           (static_cast<u32>(p[3]) << 24);
 }
 
 } // namespace

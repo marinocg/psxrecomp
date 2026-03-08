@@ -60,7 +60,12 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     case 0x0A: // WaitEvent(handle)
     {
         const auto* ev = m_events.getEvent(a0);
-        if (ev && ev->mode == EventMode::NoCallback)
+        if (ev == nullptr)
+        {
+            m_logger.log(LogLevel::Warn, "bios", "WaitEvent (invalid handle)");
+            regs[2] = 0;
+        }
+        else if (ev->mode == EventMode::NoCallback)
         {
             // PSX-SPX: For NoCallback events, WaitEvent blocks the
             // calling thread until the event is delivered by an IRQ.
@@ -73,8 +78,7 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
             // Callback-mode events: the delivery is handled via the
             // interrupt dispatcher invoking the callback directly.
             // WaitEvent returns immediately for these.
-            m_logger.log(LogLevel::Debug, "bios",
-                         "WaitEvent (callback-mode or invalid handle — non-blocking)");
+            m_logger.log(LogLevel::Debug, "bios", "WaitEvent (callback-mode — non-blocking)");
             regs[2] = 1;
         }
         return true;

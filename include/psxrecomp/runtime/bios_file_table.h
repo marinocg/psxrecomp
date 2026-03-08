@@ -22,10 +22,10 @@ class Disc;
 struct BiosFileDescriptor
 {
     bool open = false;
-    u32 lba = 0;        ///< Starting LBA on disc.
-    u32 size = 0;        ///< File size in bytes.
-    u32 position = 0;    ///< Current seek position in bytes.
-    std::string path;    ///< Normalised path for debugging.
+    u32 lba = 0;      ///< Starting LBA on disc.
+    u32 size = 0;     ///< File size in bytes.
+    u32 position = 0; ///< Current seek position in bytes.
+    std::string path; ///< Normalised path for debugging.
 };
 
 /**

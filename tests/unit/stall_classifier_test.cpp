@@ -66,7 +66,7 @@ static void testStallReasonLabels()
     assert(std::string(stallReasonLabel(StallReason::ControllerPolling)) ==
            "polling JOY_STAT/JOY_CTRL forever");
     assert(std::string(stallReasonLabel(StallReason::MdecPolling)) ==
-           "touching unimplemented MDEC registers");
+           "polling MDEC / waiting for decode output");
     assert(std::string(stallReasonLabel(StallReason::BiosEventWait)) ==
            "stalled in WaitEvent / TestEvent");
     assert(std::string(stallReasonLabel(StallReason::SpinLoop)) == "CPU spin loop (repeated PC)");

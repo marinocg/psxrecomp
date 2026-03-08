@@ -3,7 +3,7 @@
  * @brief Tests for blocking WaitEvent (B0:0A) semantics.
  *
  * Verifies that WaitEvent blocks until delivery, that TestEvent resets
- * delivered state correctly, and that the watchdog fires for impossible waits.
+ * delivered state correctly, and that invalid/disabled handles fail cleanly.
  */
 #include "psxrecomp/runtime/psx_system.h"
 

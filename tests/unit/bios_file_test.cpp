@@ -172,11 +172,11 @@ class IsoTestDisc final : public psxrecomp::runtime::Disc
         {
             m_helloData[i] = static_cast<u8>((i * 7u + 3u) & 0xFFu);
         }
-        m_systemCnfData.assign({'B', 'O', 'O', 'T', ' ', '=', ' ', 'c', 'd', 'r', 'o', 'm', ':',
-                                '\\', 'H', 'E', 'L', 'L', 'O', '.', 'B', 'I', 'N', ';', '1',
-                                '\r', '\n'});
-        m_nestedData.assign({'N', 'e', 's', 't', 'e', 'd', ' ', 'p', 'a', 'y', 'l', 'o', 'a',
-                             'd', '\n'});
+        m_systemCnfData.assign({'B', 'O', 'O', 'T', ' ',  '=', ' ', 'c',  'd',
+                                'r', 'o', 'm', ':', '\\', 'H', 'E', 'L',  'L',
+                                'O', '.', 'B', 'I', 'N',  ';', '1', '\r', '\n'});
+        m_nestedData.assign(
+            {'N', 'e', 's', 't', 'e', 'd', ' ', 'p', 'a', 'y', 'l', 'o', 'a', 'd', '\n'});
 
         writeFile(kHelloLba, m_helloData);
         writeFile(kSystemCnfLba, m_systemCnfData);
@@ -191,18 +191,20 @@ class IsoTestDisc final : public psxrecomp::runtime::Disc
 
         auto& rootDir = m_sectors[kRootDirLba];
         size_t rootOffset = 0;
-        appendRecord(rootDir, rootOffset, makeDirectoryRecord({0u}, kRootDirLba, kSectorSize, 0x02u));
-        appendRecord(rootDir, rootOffset, makeDirectoryRecord({1u}, kRootDirLba, kSectorSize, 0x02u));
+        appendRecord(rootDir, rootOffset,
+                     makeDirectoryRecord({0u}, kRootDirLba, kSectorSize, 0x02u));
+        appendRecord(rootDir, rootOffset,
+                     makeDirectoryRecord({1u}, kRootDirLba, kSectorSize, 0x02u));
         appendRecord(rootDir, rootOffset,
                      makeDirectoryRecord({'H', 'E', 'L', 'L', 'O', '.', 'B', 'I', 'N', ';', '1'},
                                          kHelloLba, static_cast<u32>(m_helloData.size()), 0x00u));
-        appendRecord(rootDir, rootOffset,
-                     makeDirectoryRecord({'S', 'Y', 'S', 'T', 'E', 'M', '.', 'C', 'N', 'F', ';', '1'},
-                                         kSystemCnfLba, static_cast<u32>(m_systemCnfData.size()),
-                                         0x00u));
-        appendRecord(rootDir, rootOffset,
-                     makeDirectoryRecord({'S', 'U', 'B', 'D', 'I', 'R'}, kSubdirLba, kSectorSize,
-                                         0x02u));
+        appendRecord(
+            rootDir, rootOffset,
+            makeDirectoryRecord({'S', 'Y', 'S', 'T', 'E', 'M', '.', 'C', 'N', 'F', ';', '1'},
+                                kSystemCnfLba, static_cast<u32>(m_systemCnfData.size()), 0x00u));
+        appendRecord(
+            rootDir, rootOffset,
+            makeDirectoryRecord({'S', 'U', 'B', 'D', 'I', 'R'}, kSubdirLba, kSectorSize, 0x02u));
 
         auto& subdir = m_sectors[kSubdirLba];
         size_t subdirOffset = 0;
@@ -317,8 +319,7 @@ void testNestedOpenAndDirectoryEnumeration()
     regs[6] = static_cast<u32>(disc->nestedData().size());
     callB0(system, 0x34, regs);
     assert(regs[2] == disc->nestedData().size());
-    assert(std::memcmp(ram + readAddr, disc->nestedData().data(), disc->nestedData().size()) ==
-           0);
+    assert(std::memcmp(ram + readAddr, disc->nestedData().data(), disc->nestedData().size()) == 0);
 
     std::fill(std::begin(regs), std::end(regs), 0u);
     regs[4] = static_cast<u32>(fd);

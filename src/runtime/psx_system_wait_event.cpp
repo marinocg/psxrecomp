@@ -12,13 +12,13 @@ namespace
 {
 
 /// Cycles to advance per busy-wait iteration.
-/// Approximately one VBlank period (~5600 CPU cycles is ~0.01 frame).
-/// We tick in small chunks so hardware events fire at realistic intervals.
+/// Chosen as a small fraction of a frame so hardware events can fire with
+/// reasonable granularity while keeping the wait loop inexpensive.
 constexpr u32 WAIT_EVENT_TICK_CYCLES = 2048;
 
 /// Maximum iterations before the watchdog fires.
 /// With 2048 cycles per tick and ~564480 cycles per frame, this gives
-/// roughly 27 frames of wall-time — more than enough for any legitimate
+/// roughly 10 frames of emulated CPU time — more than enough for any legitimate
 /// PSX BIOS WaitEvent (CD-ROM reads complete in <1 second, VBlank is 1/60s).
 constexpr u32 WAIT_EVENT_MAX_ITERATIONS = 10 * (564480 / WAIT_EVENT_TICK_CYCLES);
 

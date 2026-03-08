@@ -214,8 +214,10 @@ StallReason StallClassifier::detectBiosLoop() const
     }
     if (latest.vector == 0xA0)
     {
-        // A0:72 = CdRemove, A0:71 = CdInit — CD-ROM BIOS helpers
-        if (latest.functionId == 0x71 || latest.functionId == 0x72)
+        // A0:54/A0:56 are CdInit/CdRemove, and A0:71/A0:72 are the
+        // related _96_init/_96_remove BIOS CD setup helpers.
+        if (latest.functionId == 0x54 || latest.functionId == 0x56 || latest.functionId == 0x71 ||
+            latest.functionId == 0x72)
         {
             return StallReason::CdromIrqWait;
         }
