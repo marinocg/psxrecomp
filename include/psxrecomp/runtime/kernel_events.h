@@ -185,6 +185,15 @@ class KernelEventTable
     const KernelEvent* getEvent(u32 handle) const;
 
     /**
+     * @brief Check whether an event has been delivered (non-mutating).
+     *
+     * Unlike testEvent(), this does NOT reset the delivered flag.
+     * Used by the WaitEvent busy-loop to poll without consuming delivery.
+     * @return true if the event status is Delivered.
+     */
+    bool isEventDelivered(u32 handle) const;
+
+    /**
      * @brief Map an InterruptLine to the corresponding event class.
      */
     static u32 interruptLineToEventClass(InterruptLine line);

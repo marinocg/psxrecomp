@@ -45,6 +45,8 @@ void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
     const char* vecName = vectorName(vector);
     const bool traceBiosFlow = traceBiosFlowEnabled();
 
+    m_stallClassifier.recordBiosCall(vector, functionId, a0);
+
     if (traceBiosFlow)
     {
         std::ostringstream trace;

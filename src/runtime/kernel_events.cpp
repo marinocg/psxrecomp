@@ -169,6 +169,16 @@ const KernelEvent* KernelEventTable::getEvent(u32 handle) const
     return &m_events[index];
 }
 
+bool KernelEventTable::isEventDelivered(u32 handle) const
+{
+    const size_t index = handleToIndex(handle);
+    if (index >= MAX_EVENTS)
+    {
+        return false;
+    }
+    return m_events[index].status == EventStatus::Delivered;
+}
+
 u32 KernelEventTable::interruptLineToEventClass(InterruptLine line)
 {
     switch (line)

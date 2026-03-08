@@ -6,7 +6,9 @@ Unchecked functions remain to be implemented.
 
 Reference: [PSX-SPX BIOS Function Summary](http://problemkaputt.de/psx-spx.htm#biosfunctionsummary)
 
-Implementation source: `src/runtime/psx_system_bios.cpp`
+Implementation sources: `src/runtime/psx_system_bios_a0.cpp`, `src/runtime/psx_system_bios_b0.cpp`,
+`src/runtime/psx_system_bios_c0.cpp`, `src/runtime/psx_system_wait_event.cpp`,
+`src/runtime/psx_system_bios_cd.cpp`, `src/runtime/bios_file_table.cpp`
 
 ---
 
@@ -14,10 +16,10 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 | Vector  | Implemented | Total known | Coverage |
 | ------- | ----------: | ----------: | -------: |
-| A0      |          16 |        ~100 |     ~16% |
-| B0      |          23 |         ~90 |     ~26% |
+| A0      |          30 |        ~100 |     ~30% |
+| B0      |          30 |         ~90 |     ~33% |
 | C0      |          11 |         ~30 |     ~37% |
-| **All** |      **50** |    **~220** | **~23%** |
+| **All** |      **71** |    **~220** | **~32%** |
 
 ---
 
@@ -55,10 +57,10 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 - [ ] `0x15` — `strcat(dst, src)`
 - [ ] `0x16` — `strncat(dst, src, maxlen)`
 - [x] `0x17` — `strcmp(s1, s2)` — _Functional: byte-by-byte comparison_
-- [ ] `0x18` — `strncmp(s1, s2, maxlen)`
+- [x] `0x18` — `strncmp(s1, s2, maxlen)` — _Functional: bounded byte-by-byte comparison_
 - [x] `0x19` — `strcpy(dst, src)` — _Functional: byte-by-byte copy_
 - [ ] `0x1A` — `strncpy(dst, src, maxlen)`
-- [ ] `0x1B` — `strlen(src)`
+- [x] `0x1B` — `strlen(src)` — _Functional: counts bytes until terminator_
 - [ ] `0x1C` — `index(src, char)` / `strchr`
 - [ ] `0x1D` — `rindex(src, char)` / `strrchr`
 - [ ] `0x1E` — `strchr(src, char)`
@@ -73,7 +75,7 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 - [ ] `0x25` — `toupper(char)`
 - [ ] `0x26` — `tolower(char)`
-- [ ] `0x27` — `bcopy(src, dst, len)`
+- [x] `0x27` — `bcopy(src, dst, len)` — _Functional: overlap-safe byte copy_
 - [x] `0x28` — `bzero(dst, len)` — _Functional: memset to 0_
 - [ ] `0x29` — `bcmp(ptr1, ptr2, len)`
 - [x] `0x2A` — `memcpy(dst, src, len)` — _Functional: std::memcpy_
@@ -103,7 +105,7 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 - [x] `0x3C` — `putchar(char)` — _Functional: logs character_
 - [ ] `0x3D` — `gets(dst)`
 - [x] `0x3E` — `puts(src)` — _Functional: logs string_
-- [ ] `0x3F` — `printf(txt, param1, ...)` _(variable args)_
+- [x] `0x3F` — `printf(txt, param1, ...)` — _Functional: common `%s/%d/%u/%x/%X/%c/%p/%%` logging support_
 
 ### Misc System
 
@@ -121,14 +123,14 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 - [x] `0x4B` — `send_gpu_linked_list(src)` — _Functional: traverses ordering-table linked list and forwards GP0 commands_
 - [ ] `0x4C` — `gpu_abort_dma()`
 - [ ] `0x4D` — `GetGPUStatus()`
-- [ ] `0x4E` — `gpu_sync()`
+- [x] `0x4E` — `gpu_sync()` — _Functional: reports idle / completes immediately for current runtime model_
 
 ### System/Boot (0x50+)
 
 - [ ] `0x51` — `LoadAndExecute(filename, stackbase, stackoffset)`
-- [ ] `0x54` — `CdInit()`
+- [x] `0x54` — `CdInit()` — _Functional: initializes BIOS CD state and issues the Init command_
 - [ ] `0x55` — `_bu_init()`
-- [ ] `0x56` — `CdRemove()`
+- [x] `0x56` — `CdRemove()` — _Functional: BIOS-facing CD teardown acknowledgment_
 - [ ] `0x5B` — `dev_tty_init()`
 - [ ] `0x5C` — `dev_tty_open(fd, fcb, "...")`
 - [ ] `0x5D` — `dev_tty_action(...)` (in/out/ioctl)
@@ -140,16 +142,16 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 - [x] `0x70` — `GPU_init()` — _Stub: sends GPU reset + default display mode_
 - [x] `0x71` — `_96_init()` _(internal BIOS CD-ROM event init; also mirrored by boot-time setup)_
 - [x] `0x72` — `_96_remove()` _(bug-compatible no-op; retail BIOS teardown is not reliable per PSX-SPX)_
-- [ ] `0x78` — `CdAsyncSeekL(src)`
-- [ ] `0x7C` — `CdAsyncGetStatus(dst)`
-- [ ] `0x7E` — `CdAsyncReadSector(count, dst, mode)`
-- [ ] `0x81` — `CdAsyncSetMode(mode)`
+- [x] `0x78` — `CdAsyncSeekL(src)` — _Functional: issues `Setloc` + `SeekL` and completes via CD events_
+- [x] `0x7C` — `CdAsyncGetStatus(dst)` — _Functional: writes status byte after command completion_
+- [x] `0x7E` — `CdAsyncReadSector(count, dst, mode)` — _Functional: schedules BIOS-visible async sector reads_
+- [x] `0x81` — `CdAsyncSetMode(mode)` — _Functional: issues `Setmode` and completes via CD events_
 - [ ] `0x90` — `CdromIoIrqFunc1()`
 - [ ] `0x91` — `CdromDmaIrqFunc1()`
 - [ ] `0x92` — `CdromIoIrqFunc2()`
 - [ ] `0x93` — `CdromDmaIrqFunc2()`
 - [ ] `0x94` — `CdromGetInt5errCode(...)`
-- [ ] `0x95` — `CdInitSubFunc()`
+- [x] `0x95` — `CdInitSubFunc()` — _Functional: initializes BIOS-owned CD event handles_
 - [ ] `0x96` — `AddCDROMDevice()`
 - [ ] `0x97` — `AddMemCardDevice()`
 - [ ] `0x98` — `AddDuartTtyDevice()`
@@ -181,13 +183,13 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 ### Events
 
-- [x] `0x07` — `DeliverEvent(class, spec)` — _Stub: no-op_
-- [x] `0x08` — `OpenEvent(class, spec, mode, func)` — _Stub: returns fake handle 0x10_
-- [x] `0x09` — `CloseEvent(event)` — _Stub: no-op_
-- [x] `0x0A` — `WaitEvent(event)` — _Stub: returns immediately_
-- [x] `0x0B` — `TestEvent(event)` — _Stub: returns 1 (event occurred)_
-- [x] `0x0C` — `EnableEvent(event)` — _Stub: no-op_
-- [x] `0x0D` — `DisableEvent(event)` — _Stub: no-op_
+- [x] `0x07` — `DeliverEvent(class, spec)` — _Functional: delivers matching kernel events and invokes callbacks_
+- [x] `0x08` — `OpenEvent(class, spec, mode, func)` — _Functional: allocates real kernel event handles_
+- [x] `0x09` — `CloseEvent(event)` — _Functional: closes kernel event handles_
+- [x] `0x0A` — `WaitEvent(event)` — _Functional: blocks for `NoCallback` events while pumping runtime hardware_
+- [x] `0x0B` — `TestEvent(event)` — _Functional: reports and clears delivered event state_
+- [x] `0x0C` — `EnableEvent(event)` — _Functional: enables an existing kernel event_
+- [x] `0x0D` — `DisableEvent(event)` — _Functional: disables an existing kernel event_
 
 ### Thread Control Block
 
@@ -207,8 +209,8 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 ### Exception / Return
 
 - [x] `0x17` — `ReturnFromException()` — _Control-flow signal in callback/IRQ context; COP0 `rfe` handled by IRQ service epilogue_
-- [x] `0x18` — `SetDefaultExitFromException()` — _Stub: no-op_
-- [x] `0x19` — `SetCustomExitFromException(addr)` — _Stub: no-op_
+- [x] `0x18` — `ResetEntryInt()` — _Functional: returns and clears the `HookEntryInt` descriptor_
+- [x] `0x19` — `HookEntryInt(addr)` — _Functional: installs the `HookEntryInt` descriptor_
 
 ### Misc Kernel
 
@@ -218,7 +220,7 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 - [ ] `0x1D` — _(unused)_
 - [ ] `0x1E` — _(unused)_
 - [ ] `0x1F` — _(unused)_
-- [x] `0x20` — `UnDeliverEvent(class, spec)` — _Stub: no-op_
+- [x] `0x20` — `UnDeliverEvent(class, spec)` — _Functional: clears delivered state for matching events_
 
 ###Ings / String / Memory (B0)
 
@@ -229,11 +231,11 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 ### File I/O (B0)
 
-- [x] `0x32` — `FileOpen(filename, accessmode)` — _Stub: returns 0 (fail)_
-- [ ] `0x33` — `FileSeek(fd, offset, seektype)`
-- [ ] `0x34` — `FileRead(fd, dst, length)`
+- [x] `0x32` — `FileOpen(filename, accessmode)` — _Functional: read-only ISO 9660-backed open over mounted disc contents_
+- [x] `0x33` — `FileSeek(fd, offset, seektype)` — _Functional: seek within read-only BIOS file descriptors_
+- [x] `0x34` — `FileRead(fd, dst, length)` — _Functional: reads bytes from mounted-disc file extents_
 - [ ] `0x35` — `FileWrite(fd, src, length)`
-- [ ] `0x36` — `FileClose(fd)`
+- [x] `0x36` — `FileClose(fd)` — _Functional: closes BIOS file descriptors_
 - [ ] `0x37` — `FileIoctl(fd, cmd, arg)`
 - [ ] `0x38` — `exit(exitcode)`
 - [ ] `0x39` — `FileGetDeviceFlag(fd)`
@@ -251,11 +253,11 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 - [ ] `0x40` — `chdir(name)`
 - [ ] `0x41` — `FormatDevice(devicename)`
-- [ ] `0x42` — `firstfile(filename, direntry)`
-- [ ] `0x43` — `nextfile(direntry)`
+- [x] `0x42` — `firstfile(filename, direntry)` — _Functional: enumerates ISO 9660 directory entries into BIOS `DirEntry` structs_
+- [x] `0x43` — `nextfile(direntry)` — _Functional: continues BIOS directory enumeration_
 - [ ] `0x44` — `FileRename(old_filename, new_filename)`
 - [ ] `0x45` — `FileDelete(filename)`
-- [x] `0x46` — `GPU_sync(mode)` — _Stub: returns idle (0)_
+- [x] `0x46` — `undelete(filename)` — _Stub: acknowledged but not implemented_
 - [x] `0x47` — `AddDevice(device_info)` — _Stub: returns 1_
 - [ ] `0x48` — `RemoveDevice(device_name)`
 - [ ] `0x49` — `PrintInstalledDevices()`
@@ -277,8 +279,8 @@ Implementation source: `src/runtime/psx_system_bios.cpp`
 
 ### BIOS Table Access
 
-- [x] `0x56` — `GetC0Table()` — _Stub: returns 0_
-- [x] `0x57` — `GetB0Table()` — _Stub: returns 0_
+- [x] `0x56` — `GetC0Table()` — _Functional: returns the runtime C0 table address_
+- [x] `0x57` — `GetB0Table()` — _Functional: returns the runtime B0 table address_
 - [ ] `0x58` — `_card_chan()` _(internal)_
 - [ ] `0x59` — _(unused)_
 - [ ] `0x5A` — _(unused)_
@@ -334,8 +336,8 @@ implemented early.
 
 | Vector | ID     | Function               | Status |
 | ------ | ------ | ---------------------- | ------ |
-| A0     | `0x3F` | `printf`               | ❌     |
-| A0     | `0x1B` | `strlen`               | ❌     |
+| A0     | `0x3F` | `printf`               | ✅     |
+| A0     | `0x1B` | `strlen`               | ✅     |
 | A0     | `0x2C` | `memmove`              | ❌     |
 | A0     | `0x48` | `SendGP1Command`       | ❌     |
 | A0     | `0x4B` | `send_gpu_linked_list` | ✅     |
@@ -350,11 +352,11 @@ implemented early.
 
 | Vector | ID     | Function                | Status |
 | ------ | ------ | ----------------------- | ------ |
-| A0     | `0x54` | `CdInit`                | ❌     |
-| A0     | `0x56` | `CdRemove`              | ❌     |
-| B0     | `0x32` | `FileOpen` (functional) | ❌     |
-| B0     | `0x34` | `FileRead`              | ❌     |
-| B0     | `0x36` | `FileClose`             | ❌     |
+| A0     | `0x54` | `CdInit`                | ✅     |
+| A0     | `0x56` | `CdRemove`              | ✅     |
+| B0     | `0x32` | `FileOpen` (functional) | ✅     |
+| B0     | `0x34` | `FileRead`              | ✅     |
+| B0     | `0x36` | `FileClose`             | ✅     |
 | B0     | `0x4E` | `write_card_sector`     | ❌     |
 | B0     | `0x4F` | `read_card_sector`      | ❌     |
 
@@ -386,5 +388,7 @@ implemented early.
 ## References
 
 - PSX-SPX BIOS documentation: http://problemkaputt.de/psx-spx.htm#biosfunctionsummary
-- Implementation: `src/runtime/psx_system_bios.cpp`
+- Implementation: `src/runtime/psx_system_bios_a0.cpp`, `src/runtime/psx_system_bios_b0.cpp`,
+  `src/runtime/psx_system_bios_c0.cpp`, `src/runtime/psx_system_wait_event.cpp`,
+  `src/runtime/psx_system_bios_cd.cpp`, `src/runtime/bios_file_table.cpp`
 - Runtime library roadmap: `docs/architecture/runtime_library_roadmap.md`

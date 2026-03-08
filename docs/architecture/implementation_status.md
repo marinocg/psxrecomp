@@ -20,10 +20,10 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 | Disassembler         |                 ~77% |
 | IR Pipeline          |                 ~87% |
 | Recompiler / Codegen |                 ~82% |
-| Runtime Library      |                 ~77% |
+| Runtime Library      |                 ~81% |
 | GPU Emulation        |                 ~76% |
 | SPU Emulation        |                 ~45% |
-| CD-ROM               |                 ~42% |
+| CD-ROM               |                 ~48% |
 
 ### Pipeline & Tooling (~64%)
 
@@ -160,12 +160,14 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Debug overlay text now includes FPS derived from the last frame cycle count.
 - Diagnostic memory dump support for RAM, VRAM, and SPU RAM plus save-state serialization/checksum, now including persisted in-flight GTE timing/register state.
 - Resource pack loader for runtime assets (textures/audio/movie payload containers).
-- BIOS vector framework (`callBiosVector`) handling A0/B0/C0 vectors with 50 implemented functions (16 A0, 23 B0, 11 C0).
-- Functional string/memory BIOS functions (strcmp, strcpy, memcpy, memset, bzero).
+- BIOS vector framework (`callBiosVector`) handling A0/B0/C0 vectors with 71 implemented functions (30 A0, 30 B0, 11 C0).
+- Functional string/memory BIOS functions (`strcmp`, `strncmp`, `strcpy`, `strlen`, `bcopy`, `memcpy`, `memset`, `bzero`) plus common `printf` formatting support.
 - GPU BIOS helpers (GPU_cw, GPU_cwp, GPU_init, GPU_sync) forwarding GP0/GP1 commands.
-- Event management stubs (OpenEvent, CloseEvent, WaitEvent, TestEvent, EnableEvent, DisableEvent, DeliverEvent).
+- Functional kernel event handling (`OpenEvent`, `CloseEvent`, `WaitEvent`, `TestEvent`, `EnableEvent`, `DisableEvent`, `DeliverEvent`, `UnDeliverEvent`) with blocking `WaitEvent` support for `NoCallback` events.
 - Pad/controller initialization stubs (InitPad, StartPad, InitCard, StartCard).
 - System initialization stubs for C0 vector (EnqueueTimerAndVblankIrqs, SysEnqIntRP, InstallExceptionHandlers, etc.).
+- Read-only BIOS file/device layer backed by mounted-disc ISO 9660 traversal (`FileOpen`, `FileSeek`, `FileRead`, `FileClose`, `firstfile`, `nextfile`).
+- BIOS-facing CD-ROM helper coverage for `CdInit`, `CdRemove`, `CdAsyncSeekL`, `CdAsyncGetStatus`, `CdAsyncReadSector`, `CdAsyncSetMode`, and `CdInitSubFunc`.
 - BIOS trace support via `PSXRECOMP_TRACE_BIOS` environment variable.
 - Refactored runtime into focused modules: `psx_system.cpp` and `psx_system_bios.cpp`.
 - COP0 state is serialized in save-state snapshots and restored on load.
@@ -239,6 +241,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - XA streaming now validates Mode2/Form2 subheaders, exposes XA payload bytes from raw sectors, and applies Setfilter file/channel matching for XA ADPCM-shaped sectors.
 - XA ADPCM sectors now decode to PCM and feed a CD-audio mixer input in SPU via a bounded ring buffer.
 - Disc swap/lid behavior now models a shell-open status transition on disc changes and returns INT5 errors for no-disc and read-failure conditions.
+- BIOS A0 CD helpers now layer on top of the runtime CD-ROM device and kernel events so demos can drive reads through BIOS calls instead of treating them as unconditional failure paths.
 - Demo validation note: `CDBROWSE` behavior is verified against `examples/demos/cdbrowse/CDBROWSE.iso` (SHA-1 `d7b4a16d74ea3dc1ee44cf377842abe3bb006df6`); older artifact inputs under `out/recompiled-demos-ubuntu-latest/inputs/CDBROWSE.iso` (SHA-1 `9ff0fd85cbd8f94e927601df9531357acb61a6c1`) are a different binary and can freeze in non-representative paths.
 
 **Missing**

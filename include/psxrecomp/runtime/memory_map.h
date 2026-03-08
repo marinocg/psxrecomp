@@ -28,6 +28,9 @@ constexpr Address SPU_SIZE = 0x00000200;
 
 constexpr Address CONTROLLER_BASE = 0x1F801040;
 constexpr Address CONTROLLER_SIZE = 0x00000010;
+
+constexpr Address MDEC_BASE = 0x1F801820;
+constexpr Address MDEC_SIZE = 0x00000008;
 } // namespace Mmio
 } // namespace runtime
 } // namespace psxrecomp

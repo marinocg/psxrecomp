@@ -294,10 +294,12 @@ void Cdrom::writeInterruptFlags(u8 value)
         if ((ackMask & currentTypeBit) != 0u)
         {
             m_interruptFlags = static_cast<u8>(m_interruptFlags & 0xF8u);
-            if (m_responseFifo.empty())
-            {
-                publishNextInterruptEvent();
-            }
+            // PSX-SPX: "After acknowledge, the Response Fifo is made empty."
+            // Clear the FIFO unconditionally so publishNextInterruptEvent can
+            // promote the next pending event without being blocked by leftover
+            // response bytes from the just-acknowledged interrupt.
+            m_responseFifo.clear();
+            publishNextInterruptEvent();
         }
     }
 

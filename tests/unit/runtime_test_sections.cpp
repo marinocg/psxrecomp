@@ -80,6 +80,18 @@ void runRuntimeStateSerializationChecks(psxrecomp::runtime::PsxSystem& system)
     assert(system.gte().mfc2(6) == 0x11223344u);
     assert(system.cpuCyclesElapsed() == gteCpuBeforeRead + 5u);
     assert(system.gte().cfc2(24) == 0x55667788u);
+
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4,
+                                             (1u << 30) | (1u << 29));
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 0, 0x38000001u);
+    const auto mdecState = system.serializeState();
+
+    system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4, (1u << 31));
+    assert(system.deserializeState(mdecState));
+    assert((system.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4) &
+            (1u << 29)) != 0u);
+    assert((system.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::MDEC_BASE + 4) &
+            (1u << 28)) != 0u);
 }
 
 void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)
@@ -400,9 +412,9 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
         }
     }
 
-    // CD-ROM IRQ queue: INT3 must remain visible until ACKed, and unread response
-    // bytes must survive ACK. The queued INT2 promotes only after the prior
-    // response stream is consumed.
+    // CD-ROM IRQ queue: per PSX-SPX the Response FIFO is cleared on ACK;
+    // if a pending IRQ exists it is immediately promoted to the active slot
+    // (not deferred until the caller manually drains old response bytes).
     system.interrupts().restoreState(0, static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
     setCdromIndex(1);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x07);
@@ -428,11 +440,13 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07);
     [[maybe_unused]] const psxrecomp::u8 clearedHintStatus =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
-    assert((clearedHintStatus & 0x07u) == 0x00u);
+    // INT2 is immediately promoted on ACK (FIFO cleared, pending event loaded).
+    assert((clearedHintStatus & 0x07u) == 0x02u);
     assert((clearedHintStatus & 0xE0u) == 0xE0u);
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
                                              ~static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
-    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) ==
+    // INT2 is active so syncLevelInterruptSources() re-raises the CDROM line.
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) !=
            0u);
 
     setCdromIndex(0);
@@ -440,7 +454,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
     assert((statusAfterAckBeforeRead & (1u << 5)) != 0u);
 
-    // Drain the prior INT3 response byte; this should allow queued INT2 to promote.
+    // Drain the INT2 response byte (INT2 was promoted immediately on ACK).
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
     setCdromIndex(1);
     [[maybe_unused]] const psxrecomp::u8 promotedHintStatus =
@@ -455,7 +469,8 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     setCdromIndex(0);
     [[maybe_unused]] const psxrecomp::u8 statusAfterQueuePromote =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
-    assert((statusAfterQueuePromote & (1u << 5)) != 0u);
+    // The INT2 response byte was already drained above; FIFO is now empty.
+    assert((statusAfterQueuePromote & (1u << 5)) == 0u);
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
     [[maybe_unused]] const psxrecomp::u8 statusAfterReadingPromotedResponse =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);

@@ -2,6 +2,7 @@
 #include "runtime_test_sections.h"
 
 #include <cassert>
+#include <optional>
 #include <vector>
 
 namespace MemoryMap = psxrecomp::MemoryMap;
@@ -201,6 +202,57 @@ int main()
     system.write<psxrecomp::u32>(cdromBase + 0x4, 0x00000001);
     system.write<psxrecomp::u32>(cdromBase + 0x8, 0x01000000);
     assert(system.read<psxrecomp::u32>(cdromDmaOut) == 0x44332211u);
+
+    // MDEC MMIO presence + DMA0/1 scaffolding should be observable even before
+    // real decode output exists.
+    bool sawMdecWarning = false;
+    system.logger().setMinLevel(psxrecomp::runtime::LogLevel::Warn);
+    system.logger().setCallback(
+        [&sawMdecWarning](const psxrecomp::runtime::LogEvent& event)
+        {
+            if (event.level == psxrecomp::runtime::LogLevel::Warn && event.category == "mdec")
+            {
+                sawMdecWarning = true;
+            }
+        });
+
+    constexpr Address mdecData = psxrecomp::runtime::Mmio::MDEC_BASE;
+    constexpr Address mdecStatus = psxrecomp::runtime::Mmio::MDEC_BASE + 4;
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 31)) != 0u);
+
+    system.writeMmioExplicit<psxrecomp::u32>(mdecStatus, (1u << 30) | (1u << 29));
+    system.writeMmioExplicit<psxrecomp::u32>(mdecData, 0x38000001u);
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 29)) != 0u);
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 28)) != 0u);
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (3u << 25)) == (3u << 25));
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & 0xFFFFu) == 0u);
+
+    const Address mdecInBase = DmaController::ChannelBase +
+                               DmaController::ChannelStride * static_cast<Address>(DmaPort::MdecIn);
+    const Address mdecOutBase =
+        DmaController::ChannelBase +
+        DmaController::ChannelStride * static_cast<Address>(DmaPort::MdecOut);
+    constexpr Address mdecParamSource = 0x00017000u;
+    constexpr Address mdecOutputDest = 0x00017020u;
+    system.write<psxrecomp::u32>(mdecParamSource, 0xFE00FE00u);
+    system.write<psxrecomp::u32>(mdecInBase + 0x0, mdecParamSource);
+    system.write<psxrecomp::u32>(mdecInBase + 0x4, 0x00010001u);
+    system.write<psxrecomp::u32>(mdecInBase + 0x8, 0x01000201u);
+    assert(sawMdecWarning);
+
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 29)) == 0u);
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 27)) != 0u);
+    assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 31)) == 0u);
+
+    system.write<psxrecomp::u32>(mdecOutputDest + 0x0, 0xFFFFFFFFu);
+    system.write<psxrecomp::u32>(mdecOutputDest + 0x4, 0xFFFFFFFFu);
+    system.write<psxrecomp::u32>(mdecOutBase + 0x0, mdecOutputDest);
+    system.write<psxrecomp::u32>(mdecOutBase + 0x4, 0x00010002u);
+    system.write<psxrecomp::u32>(mdecOutBase + 0x8, 0x01000200u);
+    assert(system.read<psxrecomp::u32>(mdecOutputDest + 0x0) == 0u);
+    assert(system.read<psxrecomp::u32>(mdecOutputDest + 0x4) == 0u);
+    assert(system.mdec().lastDmaWord() == 0u);
+    system.logger().setCallback({});
 
     // A second frame should queue another sector without dropping boundaries.
     system.runFrame();
