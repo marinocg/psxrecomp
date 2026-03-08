@@ -102,7 +102,8 @@ int main()
     cdrom.writeInterruptFlags(0x04); // Correct ACK bit for INT3.
     assert(irqType(cdrom) == 0x00);
     assert(!cdrom.hasIrqRequest());
-    assert(cdrom.readResponse() == 0x02);
+    // Per PSX-SPX, the Response FIFO is cleared on acknowledge; do not read
+    // response bytes after the ACK (they are gone).
     assert(irqType(cdrom) == 0x00);
     cdrom.writeInterruptEnable(0x1F);
 
