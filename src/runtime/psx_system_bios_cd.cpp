@@ -158,6 +158,25 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         m_biosCdrom.asyncReadCount = a0;
         m_biosCdrom.asyncSectorsRead = 0;
 
+        constexpr u32 SectorBytes = 2048;
+        const u64 requestedBytes = static_cast<u64>(a0) * SectorBytes;
+        if (a0 == 0 || requestedBytes > MemoryMap::RAM_SIZE)
+        {
+            std::ostringstream warn;
+            warn << "CdAsyncReadSector suspicious request sectors=" << std::dec << a0
+                 << " bytes=" << requestedBytes << " dst=0x" << std::hex << a1;
+            m_logger.log(LogLevel::Warn, "load", warn.str());
+        }
+        else
+        {
+            const RamCopyBounds bounds = planRamCopy(a1, static_cast<u32>(requestedBytes));
+            if (!bounds.destinationInRam || bounds.destinationOverflow)
+            {
+                logRamCopyWarning("CdAsyncReadSector", a1, static_cast<u32>(requestedBytes),
+                                  bounds, static_cast<u32>(requestedBytes));
+            }
+        }
+
         m_cdrom.writeInterruptFlags(0x07u);
 
         // Set mode first.

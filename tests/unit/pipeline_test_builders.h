@@ -16,5 +16,7 @@ std::vector<psxrecomp::u8> buildExeWithCallbackPointerPassedToJal();
 std::vector<psxrecomp::u8> buildExeWithLiteralDataPointer();
 std::vector<psxrecomp::u8> buildExeWithLiteralFunctionPointerInData();
 std::vector<psxrecomp::u8> buildExeWithClusteredCodePointersInData();
+std::vector<psxrecomp::u8> buildExeWithMixedCodeAndStringPointerTable();
+std::vector<psxrecomp::u8> buildExeWithClusteredPointersToDataTables();
 std::vector<psxrecomp::u8> buildExeWithLocalJumpTableTargets();
 std::vector<psxrecomp::u8> buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads();

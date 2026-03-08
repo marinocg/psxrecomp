@@ -13,6 +13,11 @@ namespace runtime
 
 namespace
 {
+constexpr u32 GpuCommandReadyCooldownCycles = 2;
+constexpr u16 ActiveDisplayLines = 240u;
+constexpr u16 DisplayFieldFlipLine = 252u;
+constexpr u16 TotalDisplayLines = 263u;
+
 void trimCommandTrace(std::vector<GpuCommand>& trace, size_t maxSize)
 {
     if (trace.size() < maxSize)
@@ -30,8 +35,10 @@ void Gpu::reset()
     m_status = STATUS_READY;
     m_readData = 0;
     m_gpuCycles = 0;
+    m_commandReadyCooldown = 0;
     m_oddField = false;
     m_displayPhase = DisplayPhase::ActiveDisplay;
+    m_displayLine = 0;
     m_registers = {};
     m_fifo.clear();
     m_vram.assign(VramWordCount, 0);
@@ -72,6 +79,7 @@ u32 Gpu::readData()
 void Gpu::writeStatus(u32 value)
 {
     appendPacketWord(true, value);
+    m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
 }
 
 void Gpu::restoreStatus(u32 value)
@@ -84,6 +92,7 @@ void Gpu::writeCommand(u32 value)
     if (m_transferState.mode == TransferState::Mode::CpuToVram)
     {
         consumeCpuToVramWord(value);
+        m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
         updateStatusBits();
         return;
     }
@@ -96,6 +105,7 @@ void Gpu::writeCommand(u32 value)
 
     m_fifo.push_back(value);
     appendPacketWord(false, value);
+    m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
     updateStatusBits();
 }
 
@@ -104,6 +114,7 @@ void Gpu::writeDma(u32 value)
     if (m_transferState.mode == TransferState::Mode::CpuToVram)
     {
         consumeCpuToVramWord(value);
+        m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
         updateStatusBits();
         return;
     }
@@ -118,6 +129,7 @@ void Gpu::writeDma(u32 value)
             m_fifo.push_back(value);
         }
         appendPacketWord(false, value);
+        m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
         updateStatusBits();
         return;
     }
@@ -239,6 +251,15 @@ void Gpu::tickGpu(u32 cycles)
     const u32 wordsToConsume = m_gpuCycles / 2;
     m_gpuCycles %= 2;
 
+    if (m_commandReadyCooldown > cycles)
+    {
+        m_commandReadyCooldown -= cycles;
+    }
+    else
+    {
+        m_commandReadyCooldown = 0;
+    }
+
     for (u32 i = 0; i < wordsToConsume && !m_fifo.empty(); ++i)
     {
         m_fifo.pop_front();
@@ -249,30 +270,28 @@ void Gpu::tickGpu(u32 cycles)
 
 void Gpu::tickDisplayLine()
 {
-    // Advance through a three-phase VBlank model so that PSn00bSDK
-    // VSync sees the correct bit-22 / bit-31 transitions:
-    //
-    //   ActiveDisplay  → VBlankStart  (bit 22 goes high)
-    //   VBlankStart    → VBlankEnd    (bit 31 flips — field changes)
-    //   VBlankEnd      → ActiveDisplay (bit 22 goes low, next frame)
-    //
-    // Each call to tickDisplayLine() advances one phase. The system
-    // timing scheduler drives these transitions during VBlank.
-    switch (m_displayPhase)
+    const u16 previousLine = m_displayLine;
+    m_displayLine = static_cast<u16>((m_displayLine + 1u) % TotalDisplayLines);
+
+    if (m_displayLine < ActiveDisplayLines)
     {
-    case DisplayPhase::ActiveDisplay:
-        m_displayPhase = DisplayPhase::VBlankStart;
-        break;
-    case DisplayPhase::VBlankStart:
-        // The field toggles in the middle of VBlank, which is exactly
-        // what VSync Phase 3 (BGEZ loop) waits for.
-        m_oddField = !m_oddField;
-        m_displayPhase = DisplayPhase::VBlankEnd;
-        break;
-    case DisplayPhase::VBlankEnd:
         m_displayPhase = DisplayPhase::ActiveDisplay;
-        break;
     }
+    else if (m_displayLine < DisplayFieldFlipLine)
+    {
+        m_displayPhase = DisplayPhase::VBlankStart;
+    }
+    else
+    {
+        m_displayPhase = DisplayPhase::VBlankEnd;
+    }
+
+    // Flip the field exactly once per frame, in the middle of VBlank.
+    if (previousLine < DisplayFieldFlipLine && m_displayLine >= DisplayFieldFlipLine)
+    {
+        m_oddField = !m_oddField;
+    }
+
     {
         std::lock_guard<std::mutex> lock(m_rendererMutex);
         updateRendererState();
@@ -288,6 +307,21 @@ bool Gpu::irqPending() const
 bool Gpu::inActiveDisplay() const
 {
     return m_displayPhase == DisplayPhase::ActiveDisplay;
+}
+
+Gpu::DisplayPhase Gpu::displayPhase() const
+{
+    return m_displayPhase;
+}
+
+bool Gpu::oddField() const
+{
+    return m_oddField;
+}
+
+u16 Gpu::displayLine() const
+{
+    return m_displayLine;
 }
 
 void Gpu::appendPacketWord(bool fromGp1, u32 value)
@@ -355,7 +389,9 @@ void Gpu::processPacket(const PacketState& packet)
         if (command.kind == GpuCommandKind::Reset)
         {
             m_gpuCycles = 0;
+            m_commandReadyCooldown = 0;
             m_oddField = false;
+            m_displayPhase = DisplayPhase::ActiveDisplay;
         }
     }
 
@@ -372,6 +408,14 @@ void Gpu::processPacket(const PacketState& packet)
 
 void Gpu::updateStatusBits()
 {
+    constexpr u32 statusDrawModeMask = 0x000007FFu;
+    constexpr u32 statusMaskSettingMask = 0x00001800u;
+    constexpr u32 statusReverseFlag = 1u << 13;
+    constexpr u32 statusHorizontalRes2 = 1u << 16;
+    constexpr u32 statusHorizontalRes1Mask = 0x3u << 17;
+    constexpr u32 statusInterlaceGate = 1u << 19;
+    constexpr u32 statusVideoMode = 1u << 20;
+    constexpr u32 statusDisplayDepth = 1u << 21;
     constexpr u32 statusReadyToReceiveCommand = 1u << 26;
     constexpr u32 statusReadyToSendToCpu = 1u << 27;
     constexpr u32 statusDmaRequest = 1u << 28;
@@ -381,13 +425,42 @@ void Gpu::updateStatusBits()
     constexpr u32 statusInterlaceField = 1u << 31;
     constexpr u32 statusDrawingEvenOdd = 1u << 22; // VBlank-in-progress flag
 
+    constexpr u32 statusMirroredMask = statusDrawModeMask | statusMaskSettingMask |
+                                       statusReverseFlag | statusHorizontalRes2 |
+                                       statusHorizontalRes1Mask | statusInterlaceGate |
+                                       statusVideoMode | statusDisplayDepth;
     constexpr u32 statusDynamicMask = statusReadyToReceiveCommand | statusReadyToSendToCpu |
                                       statusDmaRequest | statusDisplayDisable | statusIrqRequest |
                                       (0x3u << statusDmaDirectionShift) | statusInterlaceField |
                                       statusDrawingEvenOdd;
-    const u32 statusBase = STATUS_READY & ~statusDynamicMask;
+    const u32 statusBase = STATUS_READY & ~(statusDynamicMask | statusMirroredMask);
 
     m_status = statusBase;
+    m_status |= static_cast<u32>(m_registers.drawModeStatus & statusDrawModeMask);
+    m_status |= (static_cast<u32>(m_registers.maskStatus & 0x3u) << 11);
+
+    const u32 displayMode = static_cast<u32>(m_registers.displayModeStatus);
+    if ((displayMode & 0x40u) != 0)
+    {
+        m_status |= statusHorizontalRes2;
+    }
+    m_status |= (displayMode & 0x3u) << 17;
+    if (m_registers.interlaced || m_registers.displayHeight > 240)
+    {
+        m_status |= statusInterlaceGate;
+    }
+    if ((displayMode & 0x08u) != 0)
+    {
+        m_status |= statusVideoMode;
+    }
+    if ((displayMode & 0x10u) != 0)
+    {
+        m_status |= statusDisplayDepth;
+    }
+    if ((displayMode & 0x80u) != 0)
+    {
+        m_status |= statusReverseFlag;
+    }
 
     if (!m_registers.displayEnabled)
     {
@@ -398,9 +471,12 @@ void Gpu::updateStatusBits()
         m_status |= statusIrqRequest;
     }
 
-    const bool canAcceptCommands = (m_fifo.size() < MAX_FIFO_DEPTH) &&
-                                   (m_transferState.mode != TransferState::Mode::CpuToVram);
-    if (canAcceptCommands)
+    const bool dmaInputReady = (m_fifo.size() < MAX_FIFO_DEPTH) &&
+                               (m_transferState.mode != TransferState::Mode::CpuToVram);
+    const bool commandReady = m_fifo.empty() &&
+                              (m_transferState.mode != TransferState::Mode::CpuToVram) &&
+                              m_commandReadyCooldown == 0;
+    if (commandReady)
     {
         m_status |= statusReadyToReceiveCommand;
     }
@@ -421,11 +497,11 @@ void Gpu::updateStatusBits()
     case Registers::DmaDirection::Off:
         // BIOS gpu_sync() polls GPUSTAT.bit28 even with DMA disabled.
         // Keep bit28 high when GP0 can accept commands.
-        request = canAcceptCommands;
+        request = dmaInputReady;
         break;
     case Registers::DmaDirection::Fifo:
     case Registers::DmaDirection::CpuToGp0:
-        request = canAcceptCommands || m_transferState.mode == TransferState::Mode::CpuToVram;
+        request = dmaInputReady || m_transferState.mode == TransferState::Mode::CpuToVram;
         break;
     case Registers::DmaDirection::GpuReadToCpu:
         request = readyToSend;

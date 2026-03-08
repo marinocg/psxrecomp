@@ -89,6 +89,15 @@ class BiosFileTable
     int fileRead(int fd, u8* dst, u32 count);
 
     /**
+     * @brief Read bytes from an open file into a temporary buffer.
+     * @param fd    File descriptor.
+     * @param out   Destination vector resized to bytes actually read.
+     * @param count Bytes requested.
+     * @return Number of bytes actually read, or -1 on error.
+     */
+    int fileRead(int fd, std::vector<u8>& out, u32 count);
+
+    /**
      * @brief Close a file descriptor.
      * @return true on success.
      */

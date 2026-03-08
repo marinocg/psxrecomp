@@ -219,6 +219,52 @@ int main()
     }
     assert(hasClusteredLabelTarget);
 
+    std::filesystem::path mixedPointerTableExePath =
+        tempDir / ("psxrecomp_pipeline_mixed_pointer_table_" + suffix + ".psx");
+    guard.exes.push_back(mixedPointerTableExePath);
+    auto mixedPointerTableBuffer = buildExeWithMixedCodeAndStringPointerTable();
+    std::ofstream mixedPointerTableFile(mixedPointerTableExePath, std::ios::binary);
+    mixedPointerTableFile.write(reinterpret_cast<const char*>(mixedPointerTableBuffer.data()),
+                                static_cast<std::streamsize>(mixedPointerTableBuffer.size()));
+    mixedPointerTableFile.close();
+    auto mixedPointerTableResult = pipeline.run(mixedPointerTableExePath.string());
+    assert(mixedPointerTableResult.success);
+    assert(!hasEmptyBoundaryWarning(mixedPointerTableResult.warnings));
+    [[maybe_unused]] bool hasMixedPointerCodeTarget = false;
+    for (const auto& function : mixedPointerTableResult.functions)
+    {
+        if (function.entryAddress == 0x80010040)
+        {
+            hasMixedPointerCodeTarget = true;
+        }
+        assert(function.entryAddress != 0x80010080);
+    }
+    assert(hasMixedPointerCodeTarget);
+
+    std::filesystem::path dataTablePointerExePath =
+        tempDir / ("psxrecomp_pipeline_data_table_pointers_" + suffix + ".psx");
+    guard.exes.push_back(dataTablePointerExePath);
+    auto dataTablePointerBuffer = buildExeWithClusteredPointersToDataTables();
+    std::ofstream dataTablePointerFile(dataTablePointerExePath, std::ios::binary);
+    dataTablePointerFile.write(reinterpret_cast<const char*>(dataTablePointerBuffer.data()),
+                               static_cast<std::streamsize>(dataTablePointerBuffer.size()));
+    dataTablePointerFile.close();
+    auto dataTablePointerResult = pipeline.run(dataTablePointerExePath.string());
+    assert(dataTablePointerResult.success);
+    assert(!hasEmptyBoundaryWarning(dataTablePointerResult.warnings));
+    for ([[maybe_unused]] const auto& function : dataTablePointerResult.functions)
+    {
+        assert(function.entryAddress != 0x80010080);
+        assert(function.entryAddress != 0x80010090);
+        assert(function.entryAddress != 0x800100A0);
+    }
+    for ([[maybe_unused]] const auto& warning : dataTablePointerResult.warnings)
+    {
+        assert(warning.find("0x80010080") == std::string::npos);
+        assert(warning.find("0x80010090") == std::string::npos);
+        assert(warning.find("0x800100a0") == std::string::npos);
+    }
+
     std::filesystem::path callbackPointerExePath =
         tempDir / ("psxrecomp_pipeline_callback_pointer_" + suffix + ".psx");
     guard.exes.push_back(callbackPointerExePath);

@@ -267,6 +267,73 @@ std::vector<psxrecomp::u8> buildExeWithClusteredCodePointersInData()
     return buffer;
 }
 
+std::vector<psxrecomp::u8> buildExeWithMixedCodeAndStringPointerTable()
+{
+    constexpr psxrecomp::u32 loadSize = 160;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004000); // j 0x80010000
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop
+
+    // Pointer table with one far string target and two real code targets.
+    writeLe32(buffer, codeOffset + 0x08, 0x80010080);
+    writeLe32(buffer, codeOffset + 0x0C, 0x80010040);
+    writeLe32(buffer, codeOffset + 0x10, 0x80010050);
+
+    writeLe32(buffer, codeOffset + 0x40, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x44, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x48, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x4C, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x50, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x54, 0x00000000); // nop
+
+    // Far string payload that decodes as non-code words.
+    writeLe32(buffer, codeOffset + 0x80, 0x6C6C6548); // Hell
+    writeLe32(buffer, codeOffset + 0x84, 0x6F77206F); // o wo
+    writeLe32(buffer, codeOffset + 0x88, 0x00000000);
+
+    return buffer;
+}
+
+std::vector<psxrecomp::u8> buildExeWithClusteredPointersToDataTables()
+{
+    constexpr psxrecomp::u32 loadSize = 192;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004000); // j 0x80010000
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop
+
+    // Clustered pointers to numeric data tables whose first words decode as
+    // unsupported/invalid opcodes and must not be harvested as functions.
+    writeLe32(buffer, codeOffset + 0x08, 0x80010080);
+    writeLe32(buffer, codeOffset + 0x0C, 0x80010090);
+    writeLe32(buffer, codeOffset + 0x10, 0x800100A0);
+
+    writeLe32(buffer, codeOffset + 0x80, 0x00000FFF);
+    writeLe32(buffer, codeOffset + 0x84, 0x00000000);
+    writeLe32(buffer, codeOffset + 0x88, 0xFFFFFFFF);
+    writeLe32(buffer, codeOffset + 0x90, 0x00000001);
+    writeLe32(buffer, codeOffset + 0x94, 0x00000001);
+    writeLe32(buffer, codeOffset + 0x98, 0x00000001);
+    writeLe32(buffer, codeOffset + 0xA0, 0x00000FFF);
+    writeLe32(buffer, codeOffset + 0xA4, 0x000007FF);
+    writeLe32(buffer, codeOffset + 0xA8, 0x00000333);
+
+    return buffer;
+}
+
 std::vector<psxrecomp::u8> buildExeWithLocalJumpTableTargets()
 {
     constexpr psxrecomp::u32 loadSize = 128;

@@ -19,6 +19,29 @@ constexpr u32 DMA_LINKED_LIST_MODE = 0x2;
 constexpr u32 DMA_LIST_END_MARKER = 0x00FFFFFF;
 constexpr u32 DMA_MAX_TRANSFER_WORDS = 0x200000u;
 
+const char* dmaPortName(DmaPort port)
+{
+    switch (port)
+    {
+    case DmaPort::MdecIn:
+        return "MDECin";
+    case DmaPort::MdecOut:
+        return "MDECout";
+    case DmaPort::Gpu:
+        return "GPU";
+    case DmaPort::Cdrom:
+        return "CDROM";
+    case DmaPort::Spu:
+        return "SPU";
+    case DmaPort::Pio:
+        return "PIO";
+    case DmaPort::Otc:
+        return "OTC";
+    default:
+        return "Unknown";
+    }
+}
+
 u32 normalTransferWordCount(const DmaChannel& channel, u32 syncMode)
 {
     const u32 wordsPerBlock = channel.blockControl & 0xFFFF;
@@ -130,6 +153,23 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         }
 
         transferredWords = wordCount;
+
+        std::ostringstream detail;
+        detail << "port=" << dmaPortName(port) << " sync=" << syncMode << " words="
+               << wordCount << " base=0x" << std::hex << base;
+        const u32 requestedBytes = wordCount * sizeof(u32);
+        const bool wraps = requestedBytes > (MemoryMap::RAM_SIZE - base);
+        if (wraps)
+        {
+            std::ostringstream warn;
+            warn << "DMA to RAM wraps base=0x" << std::hex << (0x80000000u | base)
+                 << " bytes=" << std::dec << requestedBytes << " port=" << dmaPortName(port);
+            m_logger.log(LogLevel::Warn, "load", warn.str());
+        }
+        m_stallClassifier.recordRamCopyProvenance(
+            std::string("DMA:") + dmaPortName(port), detail.str(),
+            m_debugOverlay.lastProgramCounter(), 0x80000000u | base, requestedBytes,
+            requestedBytes, true, wraps, false);
     }
     else
     {

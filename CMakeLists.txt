@@ -155,6 +155,9 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system.cpp
     src/runtime/psx_system_accessors.cpp
     src/runtime/psx_system_callbacks.cpp
+    src/runtime/psx_system_copy_debug.cpp
+    src/runtime/psx_system_display_trace.cpp
+    src/runtime/psx_system_gpu_wait_trace.cpp
     src/runtime/psx_system_interrupts.cpp
     src/runtime/psx_system_irq_chains.cpp
     src/runtime/psx_system_bios.cpp
@@ -173,6 +176,8 @@ set(RUNTIME_SOURCES
     src/runtime/spu.cpp
     src/runtime/spu_audio.cpp
     src/runtime/stall_classifier.cpp
+    src/runtime/stall_heap_debug.cpp
+    src/runtime/stall_write_watch.cpp
     src/runtime/timers.cpp
 )
 
@@ -320,6 +325,11 @@ if(BUILD_TESTS)
         tests/unit/runtime_test_timer_sections.cpp
     )
     target_link_libraries(runtime_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(callback_bridge_test
+        tests/unit/callback_bridge_test.cpp
+    )
+    target_link_libraries(callback_bridge_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(cop0_test
         tests/unit/cop0_test.cpp

@@ -22,6 +22,12 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
 
     const auto jumpTables = disasm::findJumpTables(disassembled);
     const auto instructionIndexMap = disasm::detail::buildInstructionIndex(disassembled);
+    const auto isDecodableInstruction = [&disassembled, &instructionIndexMap](Address address)
+    {
+        auto it = instructionIndexMap.find(address);
+        return it != instructionIndexMap.end() &&
+               disassembled[it->second].opcode != disasm::Opcode::UNKNOWN;
+    };
     const auto looksLikeFunctionEntry = [&disassembled, &instructionIndexMap](Address address)
     {
         auto it = instructionIndexMap.find(address);
@@ -105,22 +111,52 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     {
         entrySeeds.push_back(baseAddress);
     }
-    for (const auto& instruction : disassembled)
-    {
-        if (instruction.opcode == disasm::Opcode::JAL ||
-            instruction.opcode == disasm::Opcode::BGEZAL ||
-            instruction.opcode == disasm::Opcode::BLTZAL)
-        {
-            auto target = instruction.getTargetAddress();
-            if (target.has_value() && *target >= baseAddress && *target < binaryEnd &&
-                (*target % 4) == 0)
-            {
-                entrySeeds.push_back(*target);
-            }
-        }
-    }
 
     layout.segmentation = disasm::segmentCodeAndData(disassembled, entrySeeds, jumpTables);
+
+    const auto isSegmentedCodeAddress = [&layout](Address address)
+    {
+        return std::any_of(layout.segmentation.codeRanges.begin(), layout.segmentation.codeRanges.end(),
+                           [address](const disasm::AddressRange& range)
+                           { return address >= range.start && address <= range.end; });
+    };
+
+    {
+        std::unordered_set<Address> existingSeeds(entrySeeds.begin(), entrySeeds.end());
+        bool addedReachableCallTarget = false;
+        for (const auto& instruction : disassembled)
+        {
+            if (!isSegmentedCodeAddress(instruction.address))
+            {
+                continue;
+            }
+
+            if (instruction.opcode != disasm::Opcode::JAL &&
+                instruction.opcode != disasm::Opcode::BGEZAL &&
+                instruction.opcode != disasm::Opcode::BLTZAL)
+            {
+                continue;
+            }
+
+            auto target = instruction.getTargetAddress();
+            if (!target.has_value() || *target < baseAddress || *target >= binaryEnd ||
+                (*target % 4) != 0)
+            {
+                continue;
+            }
+
+            if (existingSeeds.insert(*target).second)
+            {
+                entrySeeds.push_back(*target);
+                addedReachableCallTarget = true;
+            }
+        }
+
+        if (addedReachableCallTarget)
+        {
+            layout.segmentation = disasm::segmentCodeAndData(disassembled, entrySeeds, jumpTables);
+        }
+    }
 
     std::vector<Address> harvestedPointers;
     std::vector<Address> jumpTableHarvestedPointers;
@@ -131,10 +167,76 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
         {
             if (clusteredCodePointers.size() >= 2)
             {
-                harvestedPointers.insert(harvestedPointers.end(), clusteredCodePointers.begin(),
-                                         clusteredCodePointers.end());
+                std::vector<Address> anchoredTargets;
+                anchoredTargets.reserve(clusteredCodePointers.size());
+                for (const Address target : clusteredCodePointers)
+                {
+                    if (!isDecodableInstruction(target))
+                    {
+                        continue;
+                    }
+
+                    if (looksLikeFunctionEntry(target) || isSegmentedCodeAddress(target))
+                    {
+                        anchoredTargets.push_back(target);
+                    }
+                }
+
+                if (!anchoredTargets.empty())
+                {
+                    constexpr size_t kMaxAnchorInstructionDistance = 16;
+                    const auto sharesCodeNeighborhood =
+                        [&instructionIndexMap, &disassembled](Address lhs, Address rhs)
+                    {
+                        auto lhsIt = instructionIndexMap.find(lhs);
+                        auto rhsIt = instructionIndexMap.find(rhs);
+                        if (lhsIt == instructionIndexMap.end() || rhsIt == instructionIndexMap.end())
+                        {
+                            return false;
+                        }
+
+                        const size_t minIndex = std::min(lhsIt->second, rhsIt->second);
+                        const size_t maxIndex = std::max(lhsIt->second, rhsIt->second);
+                        if (maxIndex - minIndex > kMaxAnchorInstructionDistance)
+                        {
+                            return false;
+                        }
+
+                        for (size_t index = minIndex; index <= maxIndex; ++index)
+                        {
+                            if (disassembled[index].opcode == disasm::Opcode::UNKNOWN)
+                            {
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    };
+
+                    for (const Address target : clusteredCodePointers)
+                    {
+                        if (!isDecodableInstruction(target))
+                        {
+                            continue;
+                        }
+
+                        if (looksLikeFunctionEntry(target) || isSegmentedCodeAddress(target))
+                        {
+                            harvestedPointers.push_back(target);
+                            continue;
+                        }
+
+                        if (std::any_of(anchoredTargets.begin(), anchoredTargets.end(),
+                                        [target, &sharesCodeNeighborhood](Address anchor)
+                                        { return sharesCodeNeighborhood(target, anchor); }))
+                        {
+                            harvestedPointers.push_back(target);
+                        }
+                    }
+                }
             }
             else if (clusteredCodePointers.size() == 1 &&
+                     isDecodableInstruction(clusteredCodePointers.front()) &&
                      looksLikeFunctionEntry(clusteredCodePointers.front()))
             {
                 harvestedPointers.push_back(clusteredCodePointers.front());
@@ -164,6 +266,11 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
         constexpr size_t kMaxJumpTableEntries = 64;
         for (const auto& jumpTable : jumpTables)
         {
+            if (!isSegmentedCodeAddress(jumpTable.jumpAddress))
+            {
+                continue;
+            }
+
             if (!jumpTable.tableBaseAddress.has_value())
             {
                 continue;
@@ -191,7 +298,7 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
                     (static_cast<uint32_t>(exeImage.programData[offset + 3]) << 24);
                 const Address target = static_cast<Address>(value);
                 if (target < baseAddress || target >= endAddress || (target % 4) != 0 ||
-                    instructionIndexMap.count(target) == 0)
+                    instructionIndexMap.count(target) == 0 || !isDecodableInstruction(target))
                 {
                     break;
                 }

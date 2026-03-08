@@ -208,6 +208,50 @@ int main()
     gpu.writeStatus(0x03000001u);
     assert((gpu.readStatus() & (1u << 23)) != 0);
 
+    // Commercial polling expectations: readiness and config bits should
+    // evolve with control writes and command queue activity.
+    gpu.reset();
+    [[maybe_unused]] const auto statusAfterReset = gpu.readStatus();
+    assert((statusAfterReset & (1u << 26)) != 0);
+    assert((statusAfterReset & (1u << 28)) != 0);
+    assert((statusAfterReset & (1u << 19)) == 0);
+
+    gpu.writeStatus(0x08000024u); // 320x480 interlaced mode
+    [[maybe_unused]] const auto statusAfterDisplayModeWrite = gpu.readStatus();
+    assert((statusAfterDisplayModeWrite & (1u << 19)) != 0);
+    assert((statusAfterDisplayModeWrite & (1u << 26)) == 0);
+    gpu.tickGpu(2);
+    [[maybe_unused]] const auto statusAfterDisplayModeSettled = gpu.readStatus();
+    assert((statusAfterDisplayModeSettled & (1u << 19)) != 0);
+    assert((statusAfterDisplayModeSettled & (1u << 26)) != 0);
+
+    gpu.writeStatus(0x03000001u); // display disable
+    assert((gpu.readStatus() & (1u << 23)) != 0);
+    gpu.tickGpu(2);
+    gpu.writeStatus(0x03000000u); // display enable
+    assert((gpu.readStatus() & (1u << 23)) == 0);
+
+    gpu.writeStatus(0x04000002u); // DMA CPU->GP0
+    [[maybe_unused]] const auto statusAfterDmaEnable = gpu.readStatus();
+    assert(((statusAfterDmaEnable >> 29) & 0x3u) == 0x2u);
+    assert((statusAfterDmaEnable & (1u << 28)) != 0);
+    gpu.tickGpu(2);
+    gpu.writeStatus(0x04000000u); // DMA off
+    [[maybe_unused]] const auto statusAfterDmaDisable = gpu.readStatus();
+    assert(((statusAfterDmaDisable >> 29) & 0x3u) == 0x0u);
+    assert((statusAfterDmaDisable & (1u << 28)) != 0);
+
+    gpu.tickGpu(2);
+    [[maybe_unused]] const auto statusWithEmptyQueue = gpu.readStatus();
+    assert((statusWithEmptyQueue & (1u << 26)) != 0);
+    gpu.writeCommand(0x00000000u);
+    [[maybe_unused]] const auto statusWithQueuedCommand = gpu.readStatus();
+    assert((statusWithQueuedCommand & (1u << 26)) == 0);
+    assert((statusWithQueuedCommand & (1u << 28)) != 0);
+    gpu.tickGpu(2);
+    [[maybe_unused]] const auto statusAfterQueueDrain = gpu.readStatus();
+    assert((statusAfterQueueDrain & (1u << 26)) != 0);
+
     gpu.writeStatus(0x08000020u);
     [[maybe_unused]] const auto beforeLineTick = gpu.readStatus();
     // Two ticks: ActiveDisplay → VBlankStart (bit 22 set, bit 31 same)

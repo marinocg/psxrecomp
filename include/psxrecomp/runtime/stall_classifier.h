@@ -5,11 +5,14 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace psxrecomp
 {
 namespace runtime
 {
+
+class PsxSystem;
 
 /// Categories for the root cause of an execution stall.
 enum class StallReason : u8
@@ -62,6 +65,37 @@ struct CdromIrqSnapshot
     u16 irqStatus = 0;
     u16 irqMask = 0;
     bool cdromHasIrq = false;
+};
+
+/// Single watched RAM write record stored in the ring buffer.
+struct WatchedRamWriteEntry
+{
+    Address writerPc = 0;
+    Address address = 0;
+    u8 size = 0;
+    u32 oldValue = 0;
+    u32 newValue = 0;
+};
+
+/// Single bulk RAM copy provenance record stored in the ring buffer.
+struct RamCopyProvenanceEntry
+{
+    std::string source;
+    std::string detail;
+    Address writerPc = 0;
+    Address destination = 0;
+    u32 actualLength = 0;
+    u32 requestedLength = 0;
+    bool destinationInRam = true;
+    bool destinationOverflow = false;
+    bool shortRead = false;
+};
+
+/// Inclusive watched RAM range, stored as normalized physical RAM addresses.
+struct WatchedWriteRange
+{
+    Address start = 0;
+    Address end = 0;
 };
 
 /// Fixed-size ring buffer for telemetry entries.
@@ -137,6 +171,10 @@ class StallClassifier
     static constexpr size_t BIOS_RING_SIZE = 16;
     static constexpr size_t DMA_RING_SIZE = 8;
     static constexpr size_t CDROM_RING_SIZE = 8;
+        static constexpr size_t WATCHED_WRITE_RING_SIZE = 64;
+    static constexpr size_t COPY_PROVENANCE_RING_SIZE = 32;
+
+        StallClassifier();
 
     /// Record a PC observation (call from setProgramCounter).
     void recordPc(Address pc);
@@ -153,8 +191,29 @@ class StallClassifier
     /// Record a CD-ROM / IRQ state snapshot.
     void recordCdromIrqState(u8 cdromIrqFlags, u16 irqStatus, u16 irqMask, bool cdromHasIrq);
 
+    /// Check whether a RAM write at `address`/`size` overlaps a watched region.
+    bool shouldWatchRamWrite(Address address, u8 size) const;
+
+    /// Record a watched RAM write.
+    void recordRamWrite(Address writerPc, Address address, u8 size, u32 oldValue, u32 newValue);
+
+    /// Record a bulk RAM copy/load provenance event.
+    void recordRamCopyProvenance(std::string source, std::string detail, Address writerPc,
+                                 Address destination, u32 actualLength, u32 requestedLength,
+                                 bool destinationInRam, bool destinationOverflow,
+                                 bool shortRead);
+
+    /// Whether `PSXRECOMP_WATCH_WRITE` enabled watched RAM writes.
+    bool isWatchingRamWrites() const;
+
+    /// Attach the owning system so heap-aware stall dumps can inspect RAM.
+    void attachSystem(const PsxSystem* system);
+
     /// Classify the current stall and return a compact summary string.
     std::string classify() const;
+
+    /// Format recent watched-write and copy-provenance telemetry.
+    std::string formatRecentMemoryActivity() const;
 
     /// Access the PC ring buffer (for testing / advanced queries).
     const RingBuffer<Address, PC_RING_SIZE>& pcRing() const;
@@ -170,6 +229,13 @@ class StallClassifier
 
     /// Access the CD-ROM/IRQ ring buffer.
     const RingBuffer<CdromIrqSnapshot, CDROM_RING_SIZE>& cdromRing() const;
+
+    /// Access the watched RAM write ring buffer.
+    const RingBuffer<WatchedRamWriteEntry, WATCHED_WRITE_RING_SIZE>& watchedWriteRing() const;
+
+    /// Access the RAM copy provenance ring buffer.
+    const RingBuffer<RamCopyProvenanceEntry, COPY_PROVENANCE_RING_SIZE>& copyProvenanceRing()
+        const;
 
     /// Reset all ring buffers.
     void reset();
@@ -187,14 +253,30 @@ class StallClassifier
     /// Classify MMIO address into a subsystem category.
     static StallReason classifyMmioAddress(Address address);
 
+    /// Check whether allocator heap diagnostics should be appended.
+    bool shouldDumpAllocatorHeap() const;
+
+    /// Format the allocator heap state around the current scan pointer.
+    std::string formatAllocatorHeapDump() const;
+
+    /// Format recent watched RAM writes.
+    std::string formatWatchedRamWrites() const;
+
+    /// Format recent RAM copy provenance entries.
+    std::string formatRamCopyProvenance() const;
+
     /// Format the ring buffers into a human-readable summary.
     std::string formatSummary(StallReason reason) const;
 
+    const PsxSystem* m_system = nullptr;
+    std::vector<WatchedWriteRange> m_watchedWriteRanges;
     RingBuffer<Address, PC_RING_SIZE> m_pcRing;
     RingBuffer<MmioAccessEntry, MMIO_RING_SIZE> m_mmioRing;
     RingBuffer<BiosCallEntry, BIOS_RING_SIZE> m_biosRing;
     RingBuffer<DmaTriggerEntry, DMA_RING_SIZE> m_dmaRing;
     RingBuffer<CdromIrqSnapshot, CDROM_RING_SIZE> m_cdromRing;
+    RingBuffer<WatchedRamWriteEntry, WATCHED_WRITE_RING_SIZE> m_watchedWriteRing;
+    RingBuffer<RamCopyProvenanceEntry, COPY_PROVENANCE_RING_SIZE> m_copyProvenanceRing;
 };
 
 } // namespace runtime

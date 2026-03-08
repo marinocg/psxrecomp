@@ -235,8 +235,7 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeBlank();
     emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");
     emitter.openBlock("");
-    emitter.writeLine("context.system.debugOverlay().setLastProgramCounter(pc);");
-    emitter.writeLine("context.system.stallClassifier().recordPc(pc);");
+    emitter.writeLine("context.system.observeProgramCounter(pc);");
     emitter.writeBlank();
     emitter.writeLine("// Step budget: throw after N PC updates to break hangs.");
     emitter.writeLine("static uint64_t stepCount = 0;");

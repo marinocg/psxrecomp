@@ -210,7 +210,7 @@ Implementation sources: `src/runtime/psx_system_bios_a0.cpp`, `src/runtime/psx_s
 
 - [x] `0x17` — `ReturnFromException()` — _Control-flow signal in callback/IRQ context; COP0 `rfe` handled by IRQ service epilogue_
 - [x] `0x18` — `ResetEntryInt()` — _Functional: returns and clears the `HookEntryInt` descriptor_
-- [x] `0x19` — `HookEntryInt(addr)` — _Functional: installs the `HookEntryInt` descriptor_
+- [x] `0x19` — `HookEntryInt(addr)` — _Functional: installs the `HookEntryInt` descriptor and preserves longjmp-style resumed callback context across the generated callback bridge_
 
 ### Misc Kernel
 

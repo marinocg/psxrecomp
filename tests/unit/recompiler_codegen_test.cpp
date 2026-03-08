@@ -355,9 +355,14 @@ int main()
     runtimeHeader << "    void tickCpuCycles(u32) {}\n";
     runtimeHeader << "    u32 frameCount() const { return 0; }\n";
     runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
+    runtimeHeader << "    void observeProgramCounter(Address pc) { m_overlay.setLastProgramCounter(pc); m_stallClassifier.recordPc(pc); }\n";
     runtimeHeader << "    void serviceInterrupts() {}\n";
+    runtimeHeader << "    void validateAllocatorHeapCallBoundary(Address) {}\n";
+    runtimeHeader << "    enum class CallbackContextDisposition { RestoreSaved, CommitMutated };\n";
     runtimeHeader
-        << "    bool consumePendingCallbackRegisters(std::array<u32, 32>&) { return false; }\n";
+        << "    CallbackContextDisposition consumePendingCallbackRegisters(std::array<u32, 32>&)";
+    runtimeHeader << " { return CallbackContextDisposition::RestoreSaved; }\n";
+    runtimeHeader << "    u32 callbackContextCommitGeneration() const { return 0; }\n";
     runtimeHeader << "    void setCallbackInvoker(std::function<u32(u32)>) {}\n";
     runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
     runtimeHeader << "    Cop0& cop0() { return m_cop0; }\n";

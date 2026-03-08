@@ -2,7 +2,10 @@
 #include "runtime_test_sections.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <optional>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace MemoryMap = psxrecomp::MemoryMap;
@@ -14,6 +17,243 @@ int main()
     using psxrecomp::runtime::DmaPort;
     using psxrecomp::runtime::InterruptLine;
     using psxrecomp::runtime::PsxSystem;
+
+    assert(::setenv("PSXRECOMP_WATCH_WRITE", "0x80056598,0x800577bc-0x800577bf", 1) == 0);
+    {
+        PsxSystem watchedSystem;
+        assert(watchedSystem.initialize());
+        watchedSystem.debugOverlay().setLastProgramCounter(0x80012345u);
+        watchedSystem.write<psxrecomp::u32>(0x80056598u, 0x11223344u);
+        watchedSystem.debugOverlay().setLastProgramCounter(0x80012349u);
+        watchedSystem.write<psxrecomp::u16>(0x800577BCu, 0x5566u);
+        watchedSystem.write<psxrecomp::u32>(0x80058000u, 0xDEADBEEFu);
+
+        const std::string watchedSummary = watchedSystem.stallClassifier().classify();
+        assert(watchedSummary.find("Last watched RAM writes") != std::string::npos);
+        assert(watchedSummary.find("pc=0x80012345") != std::string::npos);
+        assert(watchedSummary.find("pc=0x80012349") != std::string::npos);
+        assert(watchedSummary.find("addr=0x80056598") != std::string::npos);
+        assert(watchedSummary.find("addr=0x800577bc") != std::string::npos);
+        assert(watchedSummary.find("addr=0x80058000") == std::string::npos);
+    }
+    ::unsetenv("PSXRECOMP_WATCH_WRITE");
+
+    if (::setenv("PSXRECOMP_HEAP_VALIDATE", "1", 1) != 0)
+    {
+        throw std::runtime_error("failed to enable PSXRECOMP_HEAP_VALIDATE");
+    }
+    {
+        PsxSystem heapValidateSystem;
+        if (!heapValidateSystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize heap validation runtime test system");
+        }
+
+        bool sawSkipLog = false;
+        heapValidateSystem.logger().setMinLevel(psxrecomp::runtime::LogLevel::Info);
+        heapValidateSystem.logger().setCallback(
+            [&sawSkipLog](const psxrecomp::runtime::LogEvent& event)
+            {
+                if (event.category == "heap" &&
+                    event.message.find("heap validation skipped: allocator not initialized") !=
+                        std::string::npos &&
+                    event.message.find("reason=allocator_not_initialized") !=
+                        std::string::npos)
+                {
+                    sawSkipLog = true;
+                }
+            });
+        heapValidateSystem.validateAllocatorHeapBoundary("CD IRQ callback", 0x3u);
+        if (!sawSkipLog)
+        {
+            throw std::runtime_error("expected allocator-not-initialized heap validation skip");
+        }
+
+        heapValidateSystem.write<psxrecomp::u32>(0x800577BCu, 0x80060000u);
+        heapValidateSystem.write<psxrecomp::u32>(0x80057F38u, 0x80060000u);
+        heapValidateSystem.write<psxrecomp::u32>(0x80060000u, 0x20u);
+        heapValidateSystem.write<psxrecomp::u32>(0x80060024u, 0xFFFFFFFEu);
+        heapValidateSystem.validateAllocatorHeapCallBoundary(0x80011A58u);
+
+        heapValidateSystem.write<psxrecomp::u32>(0x80060000u, 0u);
+        bool heapValidationThrew = false;
+        try
+        {
+            heapValidateSystem.validateAllocatorHeapCallBoundary(0x80011A58u);
+        }
+        catch (const std::runtime_error& error)
+        {
+            heapValidationThrew = std::string(error.what()).find("allocator call return") !=
+                                  std::string::npos;
+        }
+        if (!heapValidationThrew)
+        {
+            throw std::runtime_error("expected allocator call heap validation failure");
+        }
+    }
+    ::unsetenv("PSXRECOMP_HEAP_VALIDATE");
+
+    if (::setenv("PSXRECOMP_TRACE_GPU_WAIT", "1", 1) != 0)
+    {
+        throw std::runtime_error("failed to enable PSXRECOMP_TRACE_GPU_WAIT");
+    }
+    {
+        PsxSystem gpuWaitTraceSystem;
+        if (!gpuWaitTraceSystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize gpu wait trace runtime test system");
+        }
+
+        std::vector<std::string> gpuWaitLogs;
+        gpuWaitTraceSystem.logger().setMinLevel(psxrecomp::runtime::LogLevel::Info);
+        gpuWaitTraceSystem.logger().setCallback(
+            [&gpuWaitLogs](const psxrecomp::runtime::LogEvent& event)
+            {
+                if (event.category == "gpu_wait")
+                {
+                    gpuWaitLogs.push_back(event.message);
+                }
+            });
+
+        gpuWaitTraceSystem.observeProgramCounter(0x80040000u);
+        gpuWaitTraceSystem.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1,
+                                                             0x08000002u);
+        gpuWaitTraceSystem.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0,
+                                                             0xE3003200u);
+
+        gpuWaitTraceSystem.observeProgramCounter(0x8003E4F0u);
+        gpuWaitTraceSystem.gpu().restoreStatus(0x94882000u);
+        gpuWaitTraceSystem.observeProgramCounter(0x8003E510u);
+        gpuWaitTraceSystem.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1);
+        gpuWaitTraceSystem.observeProgramCounter(0x8003E5B4u);
+
+        gpuWaitTraceSystem.gpu().restoreStatus(0x14882000u);
+        gpuWaitTraceSystem.observeProgramCounter(0x8003E5C8u);
+        gpuWaitTraceSystem.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1);
+        gpuWaitTraceSystem.observeProgramCounter(0x8003E5D4u);
+
+        gpuWaitTraceSystem.gpu().restoreStatus(0x94882000u);
+        gpuWaitTraceSystem.observeProgramCounter(0x8003E5E0u);
+        gpuWaitTraceSystem.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1);
+        gpuWaitTraceSystem.observeProgramCounter(0x8003E5F0u);
+
+        auto hasGpuWaitLog = [&gpuWaitLogs](const std::string& needle)
+        {
+            for (const std::string& message : gpuWaitLogs)
+            {
+                if (message.find(needle) != std::string::npos)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (!hasGpuWaitLog("event=helper_entry pc=0x8003e4f0"))
+        {
+            throw std::runtime_error("expected gpu_wait helper entry log");
+        }
+        if (!hasGpuWaitLog("event=status_read phase=initial pc=0x8003e510 raw=0x94882000"))
+        {
+            throw std::runtime_error("expected gpu_wait initial status log");
+        }
+        if (!hasGpuWaitLog("event=bit19_gate pc=0x8003e5b4") ||
+            !hasGpuWaitLog("branch=arm_wait"))
+        {
+            throw std::runtime_error("expected gpu_wait bit19 branch log");
+        }
+        if (!hasGpuWaitLog("event=field_flip_check pc=0x8003e5d4") ||
+            !hasGpuWaitLog("branch=exit_wait"))
+        {
+            throw std::runtime_error("expected gpu_wait compare branch log");
+        }
+        if (!hasGpuWaitLog("event=field_flip_loop pc=0x8003e5f0") ||
+            !hasGpuWaitLog("branch=stay_loop"))
+        {
+            throw std::runtime_error("expected gpu_wait loop branch log");
+        }
+        if (!hasGpuWaitLog("recent_writes=#1 pc=0x80040000 GP1=0x8000002; #2 pc=0x80040000 GP0=0xe3003200"))
+        {
+            throw std::runtime_error("expected gpu_wait recent GPU write provenance");
+        }
+    }
+    ::unsetenv("PSXRECOMP_TRACE_GPU_WAIT");
+
+    if (::setenv("PSXRECOMP_TRACE_DISPLAY_TIMING", "1", 1) != 0)
+    {
+        throw std::runtime_error("failed to enable PSXRECOMP_TRACE_DISPLAY_TIMING");
+    }
+    {
+        PsxSystem displayTraceSystem;
+        if (!displayTraceSystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize display timing trace runtime test system");
+        }
+
+        std::vector<std::string> displayLogs;
+        displayTraceSystem.logger().setMinLevel(psxrecomp::runtime::LogLevel::Info);
+        displayTraceSystem.logger().setCallback(
+            [&displayLogs](const psxrecomp::runtime::LogEvent& event)
+            {
+                if (event.category == "display_timing")
+                {
+                    displayLogs.push_back(event.message);
+                }
+            });
+
+        displayTraceSystem.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::TIMER_BASE +
+                                                                 0x14u,
+                                                             0x0100u);
+        displayTraceSystem.write<psxrecomp::u32>(0x8005392Cu, 0x0010u);
+        displayTraceSystem.write<psxrecomp::u32>(0x80053930u, 0x0020u);
+        displayTraceSystem.write<psxrecomp::u32>(0x800549F0u, 0x0200u);
+        displayTraceSystem.write<psxrecomp::u32>(0x800571B0u, 0x0100u);
+        displayTraceSystem.write<psxrecomp::u32>(0x800571B4u, 3u);
+        displayTraceSystem.write<psxrecomp::u32>(0x800571B8u, 0x8001164Cu);
+
+        displayTraceSystem.observeProgramCounter(0x8003E4F0u);
+        displayTraceSystem.tickCpuCycles(564480u);
+        displayTraceSystem.observeProgramCounter(0x80045690u);
+
+        if (displayTraceSystem.timers().readCounter(1) == 0)
+        {
+            throw std::runtime_error("expected Timer1 display-line clock to advance");
+        }
+
+        auto hasDisplayLog = [&displayLogs](const std::string& needle)
+        {
+            for (const std::string& message : displayLogs)
+            {
+                if (message.find(needle) != std::string::npos)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (!hasDisplayLog("event=tick_display_line"))
+        {
+            throw std::runtime_error("expected display_timing tickDisplayLine log");
+        }
+        if (!hasDisplayLog("phase=active->vblank_start"))
+        {
+            throw std::runtime_error("expected display_timing VBlank-start transition log");
+        }
+        if (!hasDisplayLog("odd_field=0->1") || !hasDisplayLog("bit31=1"))
+        {
+            throw std::runtime_error("expected display_timing field-flip log");
+        }
+        if (!hasDisplayLog("helper_cached_return=0x200"))
+        {
+            throw std::runtime_error("expected display_timing helper cached return log");
+        }
+        if (!hasDisplayLog("threshold=0x100") || !hasDisplayLog("threshold_exceeded=1"))
+        {
+            throw std::runtime_error("expected display_timing threshold comparison log");
+        }
+    }
+    ::unsetenv("PSXRECOMP_TRACE_DISPLAY_TIMING");
 
     PsxSystem system;
     assert(system.initialize());

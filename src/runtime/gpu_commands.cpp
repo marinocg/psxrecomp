@@ -155,6 +155,7 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
         case GpuCommandKind::DrawMode:
             if (!command.words.empty())
             {
+                registers.drawModeStatus = static_cast<u16>(command.words[0] & 0x7FFu);
                 registers.texturePage = static_cast<u16>(command.words[0] & 0x7FF);
             }
             break;
@@ -185,6 +186,7 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
         case GpuCommandKind::MaskBitSetting:
             if (!command.words.empty())
             {
+                registers.maskStatus = static_cast<u8>(command.words[0] & 0x3u);
                 registers.forceMaskBit = (command.words[0] & 0x1) != 0;
                 registers.checkMaskBeforeDraw = (command.words[0] & 0x2) != 0;
             }
@@ -210,6 +212,7 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
         if (!command.words.empty())
         {
             const u32 mode = command.words[0];
+            registers.displayModeStatus = static_cast<u8>(mode & 0xFFu);
             registers.interlaced = (mode & 0x20) != 0;
             registers.displayWidth = decodeDisplayWidth(mode);
             registers.displayHeight = decodeDisplayHeight(mode);

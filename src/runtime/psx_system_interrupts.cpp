@@ -2,6 +2,7 @@
 
 #include "irq_trace_utils.h"
 
+#include <array>
 #include <sstream>
 #include <utility>
 
@@ -133,10 +134,16 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         constexpr u32 SECTOR_BYTES = 2048;
         const u32 dstAddr =
             m_biosCdrom.asyncReadBuffer + m_biosCdrom.asyncSectorsRead * SECTOR_BYTES;
+        std::array<u8, SECTOR_BYTES> sectorData{};
         for (u32 i = 0; i < SECTOR_BYTES; ++i)
         {
-            write<u8>(dstAddr + i, m_cdrom.readData());
+            sectorData[static_cast<size_t>(i)] = m_cdrom.readData();
         }
+        std::ostringstream detail;
+        detail << "irq=INT1 sector_index=" << std::dec << m_biosCdrom.asyncSectorsRead
+               << " sectors_remaining=" << m_biosCdrom.asyncReadCount;
+        copyBufferToRam(dstAddr, sectorData.data(), SECTOR_BYTES, SECTOR_BYTES,
+                        m_debugOverlay.lastProgramCounter(), "CdAsyncReadSector", detail.str());
         ++m_biosCdrom.asyncSectorsRead;
         --m_biosCdrom.asyncReadCount;
     }
@@ -145,7 +152,9 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     if (irqType == 3u && m_biosCdrom.asyncResultPtr != 0)
     {
         const u8 stat = m_cdrom.readResponse();
-        write<u8>(m_biosCdrom.asyncResultPtr, stat);
+        copyBufferToRam(m_biosCdrom.asyncResultPtr, &stat, 1, 1,
+                        m_debugOverlay.lastProgramCounter(), "CdAsyncGetStatus",
+                        "irq=INT3 response_byte=0");
         m_biosCdrom.asyncResultPtr = 0;
     }
 
@@ -158,6 +167,8 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     {
         invokeCallback(address);
     }
+
+    validateAllocatorHeapBoundary("CD IRQ callback", static_cast<Address>(irqType));
 
     return true;
 }
@@ -428,7 +439,16 @@ void PsxSystem::invokeHookEntryIntHandler()
 
         if (resumeAddressValid)
         {
-            (void)invokeCallbackRaw(resumeAddress);
+            try
+            {
+                (void)invokeCallbackRaw(resumeAddress);
+            }
+            catch (...)
+            {
+                validateAllocatorHeapBoundary("HookEntryInt", resumeAddress);
+                throw;
+            }
+            validateAllocatorHeapBoundary("HookEntryInt", resumeAddress);
         }
     }
     catch (...)
@@ -443,11 +463,12 @@ void PsxSystem::invokeHookEntryIntHandler()
     m_inHookEntryIntHandler = false;
 }
 
-bool PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
+PsxSystem::CallbackContextDisposition
+PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
 {
     if (!m_hasPendingCallbackRegisters)
     {
-        return false;
+        return CallbackContextDisposition::RestoreSaved;
     }
 
     for (size_t reg = 0; reg < m_pendingCallbackRegisters.size(); ++reg)
@@ -459,7 +480,13 @@ bool PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
     }
     m_hasPendingCallbackRegisters = false;
     m_pendingCallbackRegisterMask.fill(false);
-    return true;
+    ++m_callbackContextCommitGeneration;
+    return CallbackContextDisposition::CommitMutated;
+}
+
+u32 PsxSystem::callbackContextCommitGeneration() const
+{
+    return m_callbackContextCommitGeneration;
 }
 
 } // namespace runtime

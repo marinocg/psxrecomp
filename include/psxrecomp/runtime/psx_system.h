@@ -43,6 +43,12 @@ namespace runtime
 class PsxSystem
 {
   public:
+    enum class CallbackContextDisposition
+    {
+        RestoreSaved,
+        CommitMutated,
+    };
+
     static constexpr u32 BIOS_C0_TABLE_ADDRESS = 0x80000500u;
     static constexpr u32 BIOS_C0_HANDLER_TABLE_ADDRESS = 0x80000540u;
     static constexpr u32 BIOS_B0_TABLE_ADDRESS = 0x80000580u;
@@ -143,8 +149,20 @@ class PsxSystem
         Address physical = normalizeAddress(address);
         if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
-            writeToRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE,
-                             value);
+            const Address offset = physical - MemoryMap::RAM_BASE;
+            const u8 writeSize = static_cast<u8>(sizeof(T));
+            if (m_stallClassifier.shouldWatchRamWrite(physical, writeSize))
+            {
+                const T oldValue = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
+                writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
+                m_stallClassifier.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
+                                                 writeSize, static_cast<u32>(oldValue),
+                                                 static_cast<u32>(value));
+            }
+            else
+            {
+                writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
+            }
             return;
         }
         if (isInRange(physical, MemoryMap::SCRATCHPAD_BASE, MemoryMap::SCRATCHPAD_SIZE))
@@ -181,6 +199,15 @@ class PsxSystem
     Cop0& cop0();
     Gte& gte();
     StallClassifier& stallClassifier();
+
+    /// Record the current recompiled program counter and run targeted diagnostics.
+    void observeProgramCounter(Address pc);
+
+    /// Validate the allocator heap at a risky runtime boundary when enabled.
+    void validateAllocatorHeapBoundary(const std::string& source, Address relatedAddress = 0);
+
+    /// Validate the allocator heap after returning from a watched allocator function.
+    void validateAllocatorHeapCallBoundary(Address address);
 
     void setDisc(std::shared_ptr<Disc> disc);
 
@@ -284,7 +311,9 @@ class PsxSystem
      *
      * @return true if queued register state was applied.
      */
-    bool consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut);
+    CallbackContextDisposition consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut);
+
+    u32 callbackContextCommitGeneration() const;
 
     /**
      * @brief Current critical-section nesting depth.
@@ -316,6 +345,7 @@ class PsxSystem
     uint64_t m_cpuCycles = 0;
     uint64_t m_gpuDrainCarry = 0;
     bool m_videoSchedulePrimed = false;
+    u32 m_videoLineScheduleCarry = 0;
     RuntimeLogger m_logger;
     RuntimeDebugOverlay m_debugOverlay;
     TimerController m_timers;
@@ -342,12 +372,66 @@ class PsxSystem
         u32 asyncReadCount = 0;   ///< Sectors remaining to read.
         u32 asyncSectorsRead = 0; ///< Sectors copied so far.
     };
+    struct GpuPortTraceEntry
+    {
+        Address pc = 0;
+        Address address = 0;
+        u32 value = 0;
+        uint64_t sequence = 0;
+    };
+    struct GpuWaitTraceState
+    {
+        bool configured = false;
+        bool enabled = false;
+        uint64_t sequence = 0;
+        uint64_t helperEntries = 0;
+        std::array<GpuPortTraceEntry, 8> recentWrites{};
+        size_t recentWriteCount = 0;
+        size_t recentWriteHead = 0;
+        bool hasInitialStatus = false;
+        u32 initialStatus = 0;
+        bool hasCompareStatus = false;
+        u32 compareStatus = 0;
+        bool hasLoopStatus = false;
+        u32 loopStatus = 0;
+    };
+    struct DisplayTimingTraceState
+    {
+        bool configured = false;
+        bool enabled = false;
+        uint64_t tickDisplayCalls = 0;
+        bool hasGpuStatus = false;
+        u32 gpuStatus = 0;
+        bool hasTimer1Counter = false;
+        u32 timer1Counter = 0;
+        bool hasDisplayLine = false;
+        u32 displayLine = 0;
+        Gpu::DisplayPhase displayPhase = Gpu::DisplayPhase::ActiveDisplay;
+        bool oddField = false;
+        bool hasHelperLastCounter = false;
+        u32 helperLastCounter = 0;
+        bool hasHelperLastReturn = false;
+        u32 helperLastReturn = 0;
+        bool hasHelperCachedReturn = false;
+        u32 helperCachedReturn = 0;
+        bool hasThreshold = false;
+        u32 threshold = 0;
+        bool hasThresholdCounter = false;
+        u32 thresholdCounter = 0;
+        bool hasThresholdMessage = false;
+        u32 thresholdMessage = 0;
+        bool hasThresholdExceeded = false;
+        bool thresholdExceeded = false;
+    };
     HookEntryIntState m_hookEntryInt;
     BiosCdromState m_biosCdrom;
+    GpuWaitTraceState m_gpuWaitTrace;
+    DisplayTimingTraceState m_displayTimingTrace;
     BiosFileTable m_biosFt;
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
     bool m_hasPendingCallbackRegisters = false;
+    u32 m_callbackContextCommitGeneration = 0;
     std::array<u32, 32> m_pendingCallbackRegisters{};
     std::array<bool, 32> m_pendingCallbackRegisterMask{};
 
@@ -366,7 +450,7 @@ class PsxSystem
      */
     void primeVideoSchedule();
 
-    void handleVBlankStart();
+    void handleDisplayLineTick();
     void syncLevelInterruptSources();
     void syncCop0InterruptPending();
     void invokeHookEntryIntHandler();
@@ -387,6 +471,34 @@ class PsxSystem
      * @return true if the event was delivered, false on watchdog timeout.
      */
     bool waitForEvent(u32 handle);
+
+    struct RamCopyBounds
+    {
+        bool destinationInRam = false;
+        bool destinationOverflow = false;
+        Address physicalDestination = 0;
+        u32 writableLength = 0;
+    };
+
+    RamCopyBounds planRamCopy(Address destination, u32 requestedLength) const;
+    u32 copyBufferToRam(Address destination, const u8* source, u32 actualLength,
+                        u32 requestedLength, Address writerPc, const std::string& sourceTag,
+                        const std::string& detail);
+    u32 fillBufferToRam(Address destination, u8 value, u32 requestedLength, Address writerPc,
+                        const std::string& sourceTag, const std::string& detail);
+    void logRamCopyWarning(const std::string& sourceTag, Address destination,
+                           u32 requestedLength, const RamCopyBounds& bounds, u32 actualLength);
+    bool gpuWaitTraceEnabled();
+    void traceGpuWaitProgramCounter(Address pc);
+    void traceGpuWaitStatusRead(Address pc, u32 value);
+    void recordGpuPortTrace(Address address, u32 value);
+    std::string formatRecentGpuPortWrites() const;
+    bool displayTimingTraceEnabled();
+    void traceDisplayTimingProgramCounter(Address pc);
+    void traceDisplayTimingSnapshot(const char* source, Address pc);
+    void traceDisplayLineTick(Address pc, u32 callIndex, u16 previousLine,
+                              Gpu::DisplayPhase previousPhase, bool previousOddField);
+    static const char* displayPhaseName(Gpu::DisplayPhase phase);
 
     static Address normalizeAddress(Address address)
     {

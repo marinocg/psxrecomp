@@ -237,6 +237,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
     m_hasPendingCallbackRegisters = false;
+    m_callbackContextCommitGeneration = 0;
     m_pendingCallbackRegisters = {};
     m_pendingCallbackRegisterMask.fill(false);
     m_frameCount = 0;

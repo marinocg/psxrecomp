@@ -153,6 +153,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - COP0 now exposes `cop2Enabled()` (`Status.CU2`) so generated COP2 register accesses can trap correctly when the GTE is disabled.
 - COP0 interrupt wiring now mirrors IRQ-controller pending state into `Cause.IP2`, preserves hardware IP bits when software writes `Cause` via `mtc0`, and gates IRQ delivery/exception entry with `Status.IEc` + `Status.IM2` (plus runtime callback/critical-section guards).
 - IRQ delivery now restores COP0 `Status` via a guaranteed `serviceInterrupts()` epilogue (`rfe`) instead of relying on BIOS `B0:17` to manage COP0 state.
+- The generated callback bridge now commits `HookEntryInt` longjmp-style resumes instead of restoring the pre-callback snapshot, so `v0=1`, `ra`, `sp`, `fp`, `gp`, and `s0..s7` survive `ReturnFromException` back into the resumed context.
 - Boot now seeds minimal COP0 Status defaults for BIOS-style IRQ flow (`IEc=1`, `IM2=1`, `KUc=0`) before entering recompiled code.
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
 - Structured runtime logging with per-category events and configurable verbosity.

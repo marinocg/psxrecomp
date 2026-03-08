@@ -7,6 +7,7 @@ namespace runtime
 
 namespace
 {
+constexpr u16 MODE_CLOCK_SOURCE_MASK = 0x3u << 8;
 constexpr u16 MODE_RESET_ON_TARGET = 1u << 3;
 constexpr u16 MODE_IRQ_ON_TARGET = 1u << 4;
 constexpr u16 MODE_IRQ_ON_OVERFLOW = 1u << 5;
@@ -39,14 +40,9 @@ void raiseTimerInterrupt(const TimerController::InterruptCallback& onInterrupt, 
 
 } // namespace
 
-void TimerController::tickChannel(Channel& channel, size_t index, u32 cpuCycles,
-                                  const InterruptCallback& onInterrupt)
+void TimerController::advanceChannel(Channel& channel, size_t index, u32 steps,
+                                     const InterruptCallback& onInterrupt)
 {
-    const u32 divider = TimerController::dividerForChannel(index, channel);
-    const uint64_t totalCycles = static_cast<uint64_t>(channel.cycleCarry) + cpuCycles;
-    const u32 steps = static_cast<u32>(totalCycles / divider);
-    channel.cycleCarry = static_cast<u32>(totalCycles % divider);
-
     if (steps == 0)
     {
         return;
@@ -113,6 +109,16 @@ void TimerController::tickChannel(Channel& channel, size_t index, u32 cpuCycles,
     }
 
     channel.counter = newCounter;
+}
+
+void TimerController::tickChannel(Channel& channel, size_t index, u32 cpuCycles,
+                                  const InterruptCallback& onInterrupt)
+{
+    const u32 divider = TimerController::dividerForChannel(index, channel);
+    const uint64_t totalCycles = static_cast<uint64_t>(channel.cycleCarry) + cpuCycles;
+    const u32 steps = static_cast<u32>(totalCycles / divider);
+    channel.cycleCarry = static_cast<u32>(totalCycles % divider);
+    advanceChannel(channel, index, steps, onInterrupt);
 }
 
 void TimerController::reset()
@@ -200,7 +206,23 @@ void TimerController::tick(u32 cpuCycles, const InterruptCallback& onInterrupt)
 {
     for (size_t index = 0; index < m_channels.size(); ++index)
     {
+        if (usesDisplayLineClock(index, m_channels[index]))
+        {
+            continue;
+        }
         TimerController::tickChannel(m_channels[index], index, cpuCycles, onInterrupt);
+    }
+}
+
+void TimerController::tickDisplayLine(const InterruptCallback& onInterrupt)
+{
+    for (size_t index = 0; index < m_channels.size(); ++index)
+    {
+        if (!usesDisplayLineClock(index, m_channels[index]))
+        {
+            continue;
+        }
+        advanceChannel(m_channels[index], index, 1, onInterrupt);
     }
 }
 
@@ -220,6 +242,17 @@ u32 TimerController::dividerForChannel(size_t index, const Channel& channel)
         }
     }
     return 1;
+}
+
+bool TimerController::usesDisplayLineClock(size_t index, const Channel& channel)
+{
+    if (index != 1)
+    {
+        return false;
+    }
+
+    const u16 clockSelect = static_cast<u16>((channel.mode & MODE_CLOCK_SOURCE_MASK) >> 8);
+    return clockSelect == 0x1u || clockSelect == 0x3u;
 }
 
 InterruptLine TimerController::interruptLineForTimer(size_t index)

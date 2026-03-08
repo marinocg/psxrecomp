@@ -14,9 +14,9 @@ namespace
 {
 constexpr u32 CYCLES_PER_FRAME = 564480;
 constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
-constexpr u32 VBLANK_CYCLES = CYCLES_PER_FRAME / 10u;
-constexpr u32 VBLANK_MID_CYCLES = VBLANK_CYCLES / 2u;
-constexpr u32 ACTIVE_CYCLES = CYCLES_PER_FRAME - VBLANK_CYCLES;
+constexpr u32 DISPLAY_LINES_PER_FRAME = 263u;
+constexpr u32 DISPLAY_LINE_CYCLES = CYCLES_PER_FRAME / DISPLAY_LINES_PER_FRAME;
+constexpr u32 DISPLAY_LINE_CYCLE_REMAINDER = CYCLES_PER_FRAME % DISPLAY_LINES_PER_FRAME;
 constexpr u32 BIOS_VECTOR_TABLE_POINTER_OFFSET = 24u;
 constexpr std::array<u16, 5> BIOS_CDROM_EVENT_SPECS = {
     0x0010u, // PSX-SPX: BIOS _96_init opens F0000003 specs 10h,20h,40h,80h,8000h
@@ -48,6 +48,7 @@ PsxSystem::PsxSystem()
     : m_ram(MemoryMap::RAM_SIZE), m_scratchpad(MemoryMap::SCRATCHPAD_SIZE),
       m_bios(MemoryMap::BIOS_SIZE)
 {
+    m_stallClassifier.attachSystem(this);
     bindGteRuntimeHooks();
 }
 
@@ -106,6 +107,8 @@ void PsxSystem::reset()
     m_cop0.reset();
     m_gte.reset();
     m_stallClassifier.reset();
+    m_gpuWaitTrace = {};
+    m_displayTimingTrace = {};
     bindGteRuntimeHooks();
     m_criticalSectionDepth = 0;
     m_hookEntryInt = {};
@@ -116,6 +119,7 @@ void PsxSystem::reset()
     m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
     m_hasPendingCallbackRegisters = false;
+    m_callbackContextCommitGeneration = 0;
     m_pendingCallbackRegisters = {};
     m_pendingCallbackRegisterMask.fill(false);
     if (traceIrqFlowEnabled())
@@ -141,6 +145,7 @@ void PsxSystem::reset()
     m_cpuCycles = 0;
     m_gpuDrainCarry = 0;
     m_videoSchedulePrimed = false;
+    m_videoLineScheduleCarry = 0;
     primeVideoSchedule();
     syncCop0InterruptPending();
 
@@ -337,23 +342,55 @@ void PsxSystem::primeVideoSchedule()
         return;
     }
     m_videoSchedulePrimed = true;
-    m_scheduler.schedule(ACTIVE_CYCLES, [this]() { handleVBlankStart(); });
+    u32 lineCycles = DISPLAY_LINE_CYCLES;
+    m_videoLineScheduleCarry += DISPLAY_LINE_CYCLE_REMAINDER;
+    if (m_videoLineScheduleCarry >= DISPLAY_LINES_PER_FRAME)
+    {
+        lineCycles += 1;
+        m_videoLineScheduleCarry -= DISPLAY_LINES_PER_FRAME;
+    }
+    m_scheduler.schedule(lineCycles, [this]() { handleDisplayLineTick(); });
 }
 
-void PsxSystem::handleVBlankStart()
+void PsxSystem::handleDisplayLineTick()
 {
-    m_gpu.tickDisplayLine();
-    m_interrupts.raise(InterruptLine::VBlank);
-    // Keep Cause.IP2 synchronized even before the next serviceInterrupts() call.
-    syncCop0InterruptPending();
-    m_debugOverlay.incrementInterruptsRaised();
-    m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
-    m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
-    ++m_frameCount;
+    const u16 previousLine = m_gpu.displayLine();
+    const Gpu::DisplayPhase previousPhase = m_gpu.displayPhase();
+    const bool previousOddField = m_gpu.oddField();
 
-    m_scheduler.schedule(VBLANK_MID_CYCLES, [this]() { m_gpu.tickDisplayLine(); });
-    m_scheduler.schedule(VBLANK_CYCLES, [this]() { m_gpu.tickDisplayLine(); });
-    m_scheduler.schedule(CYCLES_PER_FRAME, [this]() { handleVBlankStart(); });
+    m_gpu.tickDisplayLine();
+    m_timers.tickDisplayLine(
+        [this](InterruptLine line)
+        {
+            m_interrupts.raise(line);
+            syncCop0InterruptPending();
+            m_debugOverlay.incrementInterruptsRaised();
+        });
+
+    if (previousPhase != Gpu::DisplayPhase::VBlankStart &&
+        m_gpu.displayPhase() == Gpu::DisplayPhase::VBlankStart)
+    {
+        m_interrupts.raise(InterruptLine::VBlank);
+        // Keep Cause.IP2 synchronized even before the next serviceInterrupts() call.
+        syncCop0InterruptPending();
+        m_debugOverlay.incrementInterruptsRaised();
+        m_debugOverlay.setLastFrameCycles(CYCLES_PER_FRAME);
+        m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
+        ++m_frameCount;
+    }
+
+    traceDisplayLineTick(m_debugOverlay.lastProgramCounter(),
+                         static_cast<u32>(m_displayTimingTrace.tickDisplayCalls + 1u),
+                         previousLine, previousPhase, previousOddField);
+
+    u32 lineCycles = DISPLAY_LINE_CYCLES;
+    m_videoLineScheduleCarry += DISPLAY_LINE_CYCLE_REMAINDER;
+    if (m_videoLineScheduleCarry >= DISPLAY_LINES_PER_FRAME)
+    {
+        lineCycles += 1;
+        m_videoLineScheduleCarry -= DISPLAY_LINES_PER_FRAME;
+    }
+    m_scheduler.schedule(lineCycles, [this]() { handleDisplayLineTick(); });
 }
 
 void PsxSystem::callGpuIntrinsic(Address address)
