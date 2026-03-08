@@ -417,6 +417,10 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::CALL:
         // Control-flow ops are lowered in emitControlFlowInstruction above.
         break;
+    default:
+        // GTE ops are handled by emitGteInstruction above; all other unknown
+        // opcodes are silently ignored.
+        break;
     }
 }
 

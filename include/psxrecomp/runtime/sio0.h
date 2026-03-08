@@ -111,7 +111,10 @@ class Sio0
 
     /// Execute the ACK pulse completion: always clear STAT.7; only assert
     /// STAT.9 and fire the IRQ callback when CTRL.12 is set.
-    void fireAckIrqNow();
+    /// @param generation  The protocol generation captured at schedule time;
+    ///                    if it no longer matches m_ackGeneration the transfer
+    ///                    was reset and this callback is stale.
+    void fireAckIrqNow(u32 generation);
 
     // ----- Device routing -----
     /// Identifies the device selected by the first address byte on the bus.
@@ -136,6 +139,8 @@ class Sio0
     ProtoState m_protoState = ProtoState::Idle;
     u8 m_protoByteIndex = 0;      ///< Current data byte within the transfer.
     u16 m_protoButtons = 0xFFFFu; ///< Latched button word for current transfer.
+    u32 m_ackGeneration = 0;      ///< Incremented on every resetProtocol(); used to
+                                  ///< invalidate stale scheduled ACK callbacks.
     InputController* m_input = nullptr;
     Scheduler* m_scheduler = nullptr;
     IrqCallback m_irqCallback;

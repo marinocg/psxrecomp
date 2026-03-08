@@ -48,6 +48,8 @@ void Sio0::resetProtocol()
     m_protoState = ProtoState::Idle;
     m_protoByteIndex = 0;
     m_protoButtons = 0xFFFFu;
+    // Increment generation to invalidate any pending scheduler ACK callbacks.
+    ++m_ackGeneration;
 }
 
 /// JOY_STAT bit definitions used by the protocol layer.
@@ -64,19 +66,25 @@ void Sio0::scheduleAckIrq()
 {
     // Always schedule the ACK-clear event — on real hardware the device
     // pulses /ACK for ~2 µs then releases it regardless of IRQ enable.
+    const u32 gen = m_ackGeneration;
     if (m_scheduler)
     {
-        m_scheduler->schedule(ACK_DELAY_CYCLES, [this]() { fireAckIrqNow(); });
+        m_scheduler->schedule(ACK_DELAY_CYCLES, [this, gen]() { fireAckIrqNow(gen); });
     }
     else
     {
         // No scheduler wired — fire immediately (unit-test fallback).
-        fireAckIrqNow();
+        fireAckIrqNow(gen);
     }
 }
 
-void Sio0::fireAckIrqNow()
+void Sio0::fireAckIrqNow(u32 generation)
 {
+    // Bail out if the protocol was reset after this callback was scheduled.
+    if (generation != m_ackGeneration)
+    {
+        return;
+    }
     // The /ACK pulse has ended: clear STAT.7 unconditionally.
     m_stat &= ~STAT_ACK_LEVEL;
     // Only raise the interrupt when CTRL.12 (IRQ enable) is set.

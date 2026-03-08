@@ -19,9 +19,10 @@ void emitGteGuard(const ir::Instruction& instruction, CppEmitter& emitter)
 }
 } // namespace
 
-bool emitGteInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
-                        const std::unordered_map<std::string, std::string>& blockNames,
-                        LoweringContext& context, CppEmitter& emitter)
+bool emitGteInstruction(
+    const ir::Instruction& instruction, [[maybe_unused]] const ir::BasicBlock& block,
+    [[maybe_unused]] const std::unordered_map<std::string, std::string>& blockNames,
+    LoweringContext& context, CppEmitter& emitter)
 {
     auto writeGteGuardPrefix = [&]() { emitGteGuard(instruction, emitter); };
 

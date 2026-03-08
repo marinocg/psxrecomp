@@ -42,14 +42,6 @@ const char* interruptTraceKindName(InterruptController::TraceEvent::Kind kind)
     }
 }
 
-void appendU32(std::vector<u8>& out, u32 value)
-{
-    out.push_back(static_cast<u8>(value & 0xFF));
-    out.push_back(static_cast<u8>((value >> 8) & 0xFF));
-    out.push_back(static_cast<u8>((value >> 16) & 0xFF));
-    out.push_back(static_cast<u8>((value >> 24) & 0xFF));
-}
-
 } // namespace
 
 PsxSystem::PsxSystem()
