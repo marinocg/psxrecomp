@@ -262,5 +262,24 @@ u32 Cdrom::lastDmaWord() const
     return m_lastDmaWord;
 }
 
+Cdrom::DebugSnapshot Cdrom::debugSnapshot() const
+{
+    DebugSnapshot snapshot;
+    snapshot.currentCommand = m_execution.currentCommand;
+    snapshot.status = readStatus();
+    snapshot.interruptFlags = m_interruptFlags;
+    snapshot.interruptEnable = m_interruptEnable;
+    snapshot.requestControl = m_requestControl;
+    snapshot.mode = m_execution.mode;
+    snapshot.commandFifoSize = m_commandFifo.size();
+    snapshot.responseFifoSize = m_responseFifo.values.size();
+    snapshot.dataFifoSize = m_dataFifo.size();
+    snapshot.pendingIrqCount = m_execution.pendingResponseIrqs.size();
+    snapshot.motorOn = m_execution.motorOn;
+    snapshot.readActive = m_execution.readActive;
+    snapshot.seekActive = m_execution.seekActive;
+    return snapshot;
+}
+
 } // namespace runtime
 } // namespace psxrecomp

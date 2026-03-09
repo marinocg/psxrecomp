@@ -234,6 +234,9 @@ class PsxSystem
      */
     void callBiosVector(u32 vector, u32* regs, size_t regCount);
 
+    /// Format a compact BIOS-facing CD-ROM snapshot for diagnostics.
+    std::string describeBiosCdromState() const;
+
     /**
      * @brief Get the monotonic frame counter (incremented on each VBlank).
      */
@@ -491,6 +494,7 @@ class PsxSystem
     bool gpuWaitTraceEnabled();
     void traceGpuWaitProgramCounter(Address pc);
     void traceGpuWaitStatusRead(Address pc, u32 value);
+    void traceCdCallbackProgramCounter(Address pc);
     void recordGpuPortTrace(Address address, u32 value);
     std::string formatRecentGpuPortWrites() const;
     bool displayTimingTraceEnabled();

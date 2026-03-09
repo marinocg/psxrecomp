@@ -311,16 +311,6 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("return false;");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("inline void failUnsupportedCall(Address target, Address pc)");
-    emitter.openBlock("");
-    emitter.writeLine("static std::unordered_set<Address> warned;");
-    emitter.writeLine("if (warned.insert(target).second)");
-    emitter.openBlock("");
-    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Unsupported CALL target 0x\" << std::hex "
-                      "<< target << \" at PC 0x\" << pc << \" (stubbed)\\n\";");
-    emitter.closeBlock();
-    emitter.closeBlock();
-    emitter.writeBlank();
     emitter.writeLine("[[noreturn]] inline void failUnsupportedJump(Address target, Address pc)");
     emitter.openBlock("");
     emitter.writeLine("std::ostringstream stream;");

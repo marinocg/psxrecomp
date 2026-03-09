@@ -92,7 +92,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Delay slot flagging and target resolution helpers.
 - Function boundary discovery heuristics and indirect jump/jump table detection.
 - Code-vs-data segmentation helpers for mixed sections.
-- Callback/indirect-call target harvesting now distinguishes likely function entries from data pointers, allowing IRQ/draw callback paths (including `gtelab_auto`) to recompile without promoting adjacent `.rodata` blobs into code.
+- Callback/indirect-call target harvesting now iterates across segmentation passes, rescanning initialized pointer tables, referenced descriptor words, jump tables, and code-built callback addresses while still filtering for plausible callable code. This allows IRQ/draw callback paths (including `gtelab_auto`) to recompile without promoting adjacent `.rodata` blobs into code.
 - Entry-function fall-through merge: when the entry point lacks a control-flow terminator before the next prologue, the two regions are merged into a single function boundary.
 - Focused GTE validation demo (`examples/demos/gtelab_auto`) now exercises COP2 transfer/control and transform/lighting instruction mixes (`MTC2/MFC2`, `CTC2/CFC2`, `LWC2/SWC2`, `RTPS/RTPT`, `NCLIP`, `AVSZ3/AVSZ4`, `MVMVA`, and the lighting/color family through shaded primitive output).
 
@@ -125,6 +125,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - COP0 lowering now emits runtime calls for `mfc0`/`mtc0`/`rfe`, and syscall lowering routes non-BIOS syscall codes through COP0 exception entry + vector dispatch.
 - COP2 transfer lowering now emits guarded runtime GTE calls (`gte().mfc2`/`mtc2`/`cfc2`/`ctc2`), dedicated guarded memory-backed data-register transfers for `LWC2`/`SWC2`, and generic guarded `gte().exec(rawEncoding)` lowering for decoded GTE command opcodes.
 - Peephole optimizations, logging hooks, and debug metadata in generated output.
+- Unsupported indirect-call diagnostics now aggregate by target and include recovered pointer-word provenance, which makes missed callable targets easier to distinguish from bad data during validation runs.
 - End-to-end pipeline validation and compile-and-run checks in unit tests.
 - Workflow artifact reporting for unsupported opcode warnings from recompiled demo JSON logs, including per-run trend snapshots and top-family prioritization.
 - Block-external continuation dispatch ensuring cross-block control flow terminates correctly.

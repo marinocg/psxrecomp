@@ -98,6 +98,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen_runner_support_common.cpp
     src/recompiler/codegen_runner_support_presenter.cpp
     src/recompiler/codegen_source.cpp
+    src/recompiler/codegen_source_debug.cpp
     src/recompiler/codegen_source_body.cpp
     src/recompiler/codegen_runner_main.cpp
     src/recompiler/codegen_runner_exception_block.cpp
@@ -109,6 +110,9 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen_runtime_helpers.cpp
     src/recompiler/cpp_emitter.cpp
     src/recompiler/pipeline_analysis_helpers.cpp
+    src/recompiler/pipeline_harvest_internal.cpp
+    src/recompiler/pipeline_harvest_helpers.cpp
+    src/recompiler/pipeline_indirect_call_helpers.cpp
     src/recompiler/pipeline_helpers.cpp
     src/recompiler/pipeline_helpers_manifest.cpp
     src/recompiler/pipeline_helpers_output.cpp
@@ -155,6 +159,7 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system.cpp
     src/runtime/psx_system_accessors.cpp
     src/runtime/psx_system_callbacks.cpp
+    src/runtime/psx_system_cd_callback_trace.cpp
     src/runtime/psx_system_copy_debug.cpp
     src/runtime/psx_system_display_trace.cpp
     src/runtime/psx_system_gpu_wait_trace.cpp

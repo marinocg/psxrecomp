@@ -20,6 +20,23 @@ class Disc;
 class Cdrom
 {
   public:
+    struct DebugSnapshot
+    {
+        u8 currentCommand = 0;
+        u8 status = 0;
+        u8 interruptFlags = 0;
+        u8 interruptEnable = 0;
+        u8 requestControl = 0;
+        u8 mode = 0;
+        size_t commandFifoSize = 0;
+        size_t responseFifoSize = 0;
+        size_t dataFifoSize = 0;
+        size_t pendingIrqCount = 0;
+        bool motorOn = false;
+        bool readActive = false;
+        bool seekActive = false;
+    };
+
     void reset();
     void tick(u32 cpuCycles);
     void setDiscBackend(Disc* disc);
@@ -45,6 +62,7 @@ class Cdrom
     void writeDma(u32 value);
     u32 readDma();
     u32 lastDmaWord() const;
+    DebugSnapshot debugSnapshot() const;
 
     void enqueueDataSector(const std::vector<u8>& data);
     bool hasIrqRequest() const;

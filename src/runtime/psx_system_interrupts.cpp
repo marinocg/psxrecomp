@@ -97,6 +97,30 @@ constexpr std::array<u16, 5> CDROM_IRQ_EVENT_SPECS = {
     0x8000u, // INT5 -> error
 };
 
+bool traceCdCallbackEnabled()
+{
+    if (const char* env = std::getenv("PSXRECOMP_TRACE_CD_CALLBACK"))
+    {
+        return env[0] == '1';
+    }
+    return false;
+}
+
+const char* cdromCommandLabel(u8 command)
+{
+    switch (command)
+    {
+    case 0x01:
+        return "CdlNop";
+    case 0x0A:
+        return "CdlInit";
+    case 0x1C:
+        return "CdlReset";
+    default:
+        return nullptr;
+    }
+}
+
 class IrqExceptionExitGuard
 {
   public:
@@ -126,6 +150,18 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     if (irqType < 1u || irqType > CDROM_IRQ_EVENT_SPECS.size())
     {
         return false;
+    }
+
+    const bool traceCdCallback = traceCdCallbackEnabled();
+    const Cdrom::DebugSnapshot beforeSnapshot = m_cdrom.debugSnapshot();
+    const char* trackedCommand = cdromCommandLabel(beforeSnapshot.currentCommand);
+    if (traceCdCallback)
+    {
+        std::ostringstream msg;
+        msg << "event=cdrom_irq phase=before irq=INT" << std::dec << static_cast<unsigned>(irqType)
+            << " command=" << (trackedCommand != nullptr ? trackedCommand : "Other") << " "
+            << describeBiosCdromState();
+        m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
     }
 
     // INT1 (data-ready): copy sector data for CdAsyncReadSector.
@@ -166,6 +202,18 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     for (u32 address : callbacks)
     {
         invokeCallback(address);
+    }
+
+    if (traceCdCallback)
+    {
+        std::ostringstream msg;
+        msg << "event=cdrom_irq phase=after irq=INT" << std::dec << static_cast<unsigned>(irqType)
+            << " callbacks=" << callbacks.size() << " " << describeBiosCdromState();
+        if (trackedCommand != nullptr && irqType == 3u)
+        {
+            msg << " completion=" << trackedCommand;
+        }
+        m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
     }
 
     validateAllocatorHeapBoundary("CD IRQ callback", static_cast<Address>(irqType));

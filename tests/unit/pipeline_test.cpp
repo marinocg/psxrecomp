@@ -198,6 +198,55 @@ int main()
     }
     assert(hasLiteralFunctionPointerTarget);
 
+    std::filesystem::path detachedSingletonPointerExePath =
+        tempDir / ("psxrecomp_pipeline_detached_singleton_pointer_" + suffix + ".psx");
+    guard.exes.push_back(detachedSingletonPointerExePath);
+    auto detachedSingletonPointerBuffer = buildExeWithDetachedSingletonFunctionPointer();
+    std::ofstream detachedSingletonPointerFile(detachedSingletonPointerExePath,
+                                              std::ios::binary);
+    detachedSingletonPointerFile.write(
+        reinterpret_cast<const char*>(detachedSingletonPointerBuffer.data()),
+        static_cast<std::streamsize>(detachedSingletonPointerBuffer.size()));
+    detachedSingletonPointerFile.close();
+    auto detachedSingletonPointerResult = pipeline.run(detachedSingletonPointerExePath.string());
+    assert(detachedSingletonPointerResult.success);
+    assert(!hasEmptyBoundaryWarning(detachedSingletonPointerResult.warnings));
+    [[maybe_unused]] bool hasDetachedSingletonPointerTarget = false;
+    for (const auto& function : detachedSingletonPointerResult.functions)
+    {
+        if (function.entryAddress == 0x80010080)
+        {
+            hasDetachedSingletonPointerTarget = true;
+        }
+    }
+    assert(hasDetachedSingletonPointerTarget);
+
+    std::filesystem::path detachedResumePointerExePath =
+        tempDir / ("psxrecomp_pipeline_detached_singleton_resume_pointer_" + suffix + ".psx");
+    guard.exes.push_back(detachedResumePointerExePath);
+    auto detachedResumePointerBuffer = buildExeWithDetachedSingletonResumeLabelPointer();
+    std::ofstream detachedResumePointerFile(detachedResumePointerExePath, std::ios::binary);
+    detachedResumePointerFile.write(
+        reinterpret_cast<const char*>(detachedResumePointerBuffer.data()),
+        static_cast<std::streamsize>(detachedResumePointerBuffer.size()));
+    detachedResumePointerFile.close();
+    auto detachedResumePointerResult = pipeline.run(detachedResumePointerExePath.string());
+    assert(detachedResumePointerResult.success);
+    assert(!hasEmptyBoundaryWarning(detachedResumePointerResult.warnings));
+    [[maybe_unused]] bool hasDetachedResumeCoverage = false;
+    for (const auto& function : detachedResumePointerResult.functions)
+    {
+        if (function.entryAddress == 0x80010080)
+        {
+            hasDetachedResumeCoverage = true;
+        }
+        if (function.entryAddress == 0x80010040 && function.endAddress >= 0x80010090)
+        {
+            hasDetachedResumeCoverage = true;
+        }
+    }
+    assert(hasDetachedResumeCoverage);
+
     std::filesystem::path clusteredCodePointerExePath =
         tempDir / ("psxrecomp_pipeline_clustered_code_pointer_" + suffix + ".psx");
     guard.exes.push_back(clusteredCodePointerExePath);

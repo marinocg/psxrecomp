@@ -49,6 +49,7 @@ void PsxSystem::observeProgramCounter(Address pc)
     m_debugOverlay.setLastProgramCounter(pc);
     m_stallClassifier.recordPc(pc);
     traceGpuWaitProgramCounter(pc);
+    traceCdCallbackProgramCounter(pc);
     traceDisplayTimingProgramCounter(pc);
 }
 

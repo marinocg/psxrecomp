@@ -260,6 +260,21 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     metadata.loadAddress = exeImage.header.loadAddress;
     metadata.loadSize = exeImage.header.loadSize;
     metadata.programData = exeImage.programData;
+    metadata.harvestedFunctionEntries = codeLayout.harvestedFunctionEntries;
+    metadata.knownPointerTableWords = codeLayout.knownPointerTableWords;
+    for (const auto& site : codeLayout.indirectCallSites)
+    {
+        ModuleMetadata::IndirectCallSiteEntry entry;
+        entry.callerPc = site.callerPc;
+        entry.containingFunction = site.containingFunction;
+        entry.pointerWordAddress = site.pointerWordAddress;
+        entry.sourceRegister = site.sourceRegister;
+        entry.pointerBaseRegister = site.pointerBaseRegister;
+        entry.pointerOffset = site.pointerOffset;
+        entry.hasStaticPointerWordAddress = site.hasStaticPointerWordAddress;
+        entry.pointerLoadClobbersBase = site.pointerLoadClobbersBase;
+        metadata.indirectCallSites.push_back(entry);
+    }
     metadata.warnings = warnings;
     for (const auto& disc : result.discSet.discs)
     {
