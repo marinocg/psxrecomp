@@ -61,8 +61,8 @@ CallbackContext makeSeededContext()
     return context;
 }
 
-void installSyntheticCallbackHarness(psxrecomp::runtime::PsxSystem& system, CallbackContext& context,
-                                    const CallbackBody& body)
+void installSyntheticCallbackHarness(psxrecomp::runtime::PsxSystem& system,
+                                     CallbackContext& context, const CallbackBody& body)
 {
     using psxrecomp::runtime::PsxSystem;
 
@@ -72,7 +72,8 @@ void installSyntheticCallbackHarness(psxrecomp::runtime::PsxSystem& system, Call
             const auto savedRegs = context.regs;
             const psxrecomp::u32 savedHi = context.hi;
             const psxrecomp::u32 savedLo = context.lo;
-            const psxrecomp::u32 callbackCommitGeneration = system.callbackContextCommitGeneration();
+            const psxrecomp::u32 callbackCommitGeneration =
+                system.callbackContextCommitGeneration();
             const auto callbackContextDisposition =
                 system.consumePendingCallbackRegisters(context.regs);
             const auto shouldCommitCallbackContext =
@@ -108,10 +109,8 @@ void installSyntheticCallbackHarness(psxrecomp::runtime::PsxSystem& system, Call
 }
 
 void installHookEntryIntDescriptor(psxrecomp::runtime::PsxSystem& system,
-                                   psxrecomp::u32 descriptorAddress,
-                                   psxrecomp::u32 resumeAddress,
-                                   psxrecomp::u32 savedSp,
-                                   psxrecomp::u32 savedFp,
+                                   psxrecomp::u32 descriptorAddress, psxrecomp::u32 resumeAddress,
+                                   psxrecomp::u32 savedSp, psxrecomp::u32 savedFp,
                                    psxrecomp::u32 savedGp,
                                    const std::array<psxrecomp::u32, 8>& savedS)
 {
@@ -165,18 +164,18 @@ void testRegularCallbackReturnRestoresCallerRegs()
     psxrecomp::runtime::PsxSystem::CallbackContextDisposition disposition =
         PsxSystem::CallbackContextDisposition::CommitMutated;
 
-    installSyntheticCallbackHarness(
-        system, context,
-        [&disposition](psxrecomp::u32, CallbackContext& callbackContext, PsxSystem& systemRef)
-            -> psxrecomp::u32
-        {
-            disposition = systemRef.consumePendingCallbackRegisters(callbackContext.regs);
-            callbackContext.regs[REG_V0] = 0x12345678u;
-            callbackContext.regs[REG_S0] = 0x11112222u;
-            callbackContext.hi = 0x33334444u;
-            callbackContext.lo = 0x55556666u;
-            return callbackContext.regs[REG_V0];
-        });
+    installSyntheticCallbackHarness(system, context,
+                                    [&disposition](psxrecomp::u32, CallbackContext& callbackContext,
+                                                   PsxSystem& systemRef) -> psxrecomp::u32
+                                    {
+                                        disposition = systemRef.consumePendingCallbackRegisters(
+                                            callbackContext.regs);
+                                        callbackContext.regs[REG_V0] = 0x12345678u;
+                                        callbackContext.regs[REG_S0] = 0x11112222u;
+                                        callbackContext.hi = 0x33334444u;
+                                        callbackContext.lo = 0x55556666u;
+                                        return callbackContext.regs[REG_V0];
+                                    });
 
     const psxrecomp::u32 result = system.invokeCallbackRaw(0x80012000u);
     if (result != 0x12345678u)
@@ -291,14 +290,14 @@ void testConsumePendingCallbackRegistersAppliedExactlyOnce()
         });
 
     triggerVblank(system);
-        require(firstDisposition == PsxSystem::CallbackContextDisposition::CommitMutated,
+    require(firstDisposition == PsxSystem::CallbackContextDisposition::CommitMutated,
             "pending callback regs were not applied on first consume");
-        require(secondDisposition == PsxSystem::CallbackContextDisposition::RestoreSaved,
+    require(secondDisposition == PsxSystem::CallbackContextDisposition::RestoreSaved,
             "pending callback regs applied more than once in same callback");
-        require(context.regs[REG_V0] == 1u, "one-shot consume lost resumed v0");
-        require(context.regs[REG_RA] == resumeAddress, "one-shot consume lost resumed RA");
-        require(context.regs[REG_S0] == 0xABCDEF01u, "post-consume mutation of S0 was not kept");
-        require(context.regs[REG_S1] == 0x10203040u, "post-consume mutation of S1 was not kept");
+    require(context.regs[REG_V0] == 1u, "one-shot consume lost resumed v0");
+    require(context.regs[REG_RA] == resumeAddress, "one-shot consume lost resumed RA");
+    require(context.regs[REG_S0] == 0xABCDEF01u, "post-consume mutation of S0 was not kept");
+    require(context.regs[REG_S1] == 0x10203040u, "post-consume mutation of S1 was not kept");
 
     system.setCallbackInvoker(
         [&system, &context, &thirdDisposition](u32) -> u32
@@ -307,7 +306,7 @@ void testConsumePendingCallbackRegistersAppliedExactlyOnce()
             return 0;
         });
     (void)system.invokeCallbackRaw(0x80012500u);
-        require(thirdDisposition == PsxSystem::CallbackContextDisposition::RestoreSaved,
+    require(thirdDisposition == PsxSystem::CallbackContextDisposition::RestoreSaved,
             "pending callback regs leaked into later callback invocations");
 
     std::cerr << "[PASS] consumePendingCallbackRegisters applies exactly once\n";
@@ -395,12 +394,10 @@ void testB017AbortsFurtherCallbackHandling()
 
     constexpr u32 callback1 = 0x80012A00u;
     constexpr u32 callback2 = 0x80012A10u;
-    const u32 handle1 =
-        system.events().openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
-                                  callback1);
-    const u32 handle2 =
-        system.events().openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
-                                  callback2);
+    const u32 handle1 = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                  EventMode::Callback, callback1);
+    const u32 handle2 = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                  EventMode::Callback, callback2);
     assert(handle1 != 0xFFFFFFFFu);
     assert(handle2 != 0xFFFFFFFFu);
     system.events().enableEvent(handle1);
@@ -426,12 +423,12 @@ void testB017AbortsFurtherCallbackHandling()
         });
 
     triggerVblank(system);
-        require(invoked.size() == 1u && invoked[0] == callback1,
+    require(invoked.size() == 1u && invoked[0] == callback1,
             "B0:17 did not abort further callback handling");
 
     throwOnFirstCallback = false;
     triggerVblank(system);
-        require(invoked.size() == 3u && invoked[1] == callback1 && invoked[2] == callback2,
+    require(invoked.size() == 3u && invoked[1] == callback1 && invoked[2] == callback2,
             "callback delivery did not recover after B0:17 abort");
 
     std::cerr << "[PASS] B0:17 aborts further callback handling correctly\n";
@@ -456,16 +453,15 @@ void testHookEntryIntReturnFromExceptionDispatchesForcedPendingOnce()
     constexpr u32 savedFp = 0x8001F420u;
     constexpr u32 savedGp = 0x8001F440u;
     constexpr std::array<u32, 8> savedS = {
-    0xD0000000u, 0xD0000001u, 0xD0000002u, 0xD0000003u,
-    0xD0000004u, 0xD0000005u, 0xD0000006u, 0xD0000007u,
+        0xD0000000u, 0xD0000001u, 0xD0000002u, 0xD0000003u,
+        0xD0000004u, 0xD0000005u, 0xD0000006u, 0xD0000007u,
     };
 
     installHookEntryIntDescriptor(system, descriptorAddress, resumeAddress, savedSp, savedFp,
-                  savedGp, savedS);
+                                  savedGp, savedS);
 
-    const u32 handle =
-    system.events().openEvent(EventClass::VBlank, EventSpec::Counter, EventMode::Callback,
-                  eventCallback);
+    const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
+                                                 EventMode::Callback, eventCallback);
     assert(handle != 0xFFFFFFFFu);
     system.events().enableEvent(handle);
 
@@ -475,90 +471,89 @@ void testHookEntryIntReturnFromExceptionDispatchesForcedPendingOnce()
     size_t eventCalls = 0;
 
     installSyntheticCallbackHarness(
-    system, context,
-    [&system, &context, &invoked, &resumeCalls, &eventCalls, resumeAddress,
-     eventCallback, savedSp, savedFp, savedGp,
-     savedS](u32 address, CallbackContext& callbackContext, PsxSystem& systemRef) -> u32
-    {
-        invoked.push_back(address);
-        if (address == resumeAddress)
+        system, context,
+        [&system, &context, &invoked, &resumeCalls, &eventCalls, resumeAddress, eventCallback,
+         savedSp, savedFp, savedGp,
+         savedS](u32 address, CallbackContext& callbackContext, PsxSystem& systemRef) -> u32
         {
-        ++resumeCalls;
-        callbackContext.hi = 0x1111AAAau;
-        callbackContext.lo = 0x2222BBBBu;
-        callbackContext.regs[REG_S0] = 0x3333CCCCu;
+            invoked.push_back(address);
+            if (address == resumeAddress)
+            {
+                ++resumeCalls;
+                callbackContext.hi = 0x1111AAAau;
+                callbackContext.lo = 0x2222BBBBu;
+                callbackContext.regs[REG_S0] = 0x3333CCCCu;
 
-        std::array<u32, 32> biosRegs{};
-        biosRegs[9] = 0x17; // B0:ReturnFromException
-        systemRef.callBiosVector(0xB0, biosRegs.data(), biosRegs.size());
-        }
+                std::array<u32, 32> biosRegs{};
+                biosRegs[9] = 0x17; // B0:ReturnFromException
+                systemRef.callBiosVector(0xB0, biosRegs.data(), biosRegs.size());
+            }
 
-        if (address == eventCallback)
-        {
-        ++eventCalls;
-        require(callbackContext.regs[REG_V0] == 1u,
-            "forced-pending callback lost resumed v0");
-        require(callbackContext.regs[REG_RA] == resumeAddress,
-            "forced-pending callback lost resumed RA");
-        require(callbackContext.regs[REG_SP] == savedSp,
-            "forced-pending callback lost resumed SP");
-        require(callbackContext.regs[REG_FP] == savedFp,
-            "forced-pending callback lost resumed FP");
-        require(callbackContext.regs[REG_GP] == savedGp,
-            "forced-pending callback lost resumed GP");
-        for (size_t index = 0; index < savedS.size(); ++index)
-        {
-            const u32 expected = index == 0 ? 0x3333CCCCu : savedS[index];
-            require(callbackContext.regs[REG_S0 + index] == expected,
-                "forced-pending callback lost resumed S register state");
-        }
-        require(callbackContext.hi == 0x1111AAAau,
-            "forced-pending callback lost resumed HI");
-        require(callbackContext.lo == 0x2222BBBBu,
-            "forced-pending callback lost resumed LO");
+            if (address == eventCallback)
+            {
+                ++eventCalls;
+                require(callbackContext.regs[REG_V0] == 1u,
+                        "forced-pending callback lost resumed v0");
+                require(callbackContext.regs[REG_RA] == resumeAddress,
+                        "forced-pending callback lost resumed RA");
+                require(callbackContext.regs[REG_SP] == savedSp,
+                        "forced-pending callback lost resumed SP");
+                require(callbackContext.regs[REG_FP] == savedFp,
+                        "forced-pending callback lost resumed FP");
+                require(callbackContext.regs[REG_GP] == savedGp,
+                        "forced-pending callback lost resumed GP");
+                for (size_t index = 0; index < savedS.size(); ++index)
+                {
+                    const u32 expected = index == 0 ? 0x3333CCCCu : savedS[index];
+                    require(callbackContext.regs[REG_S0 + index] == expected,
+                            "forced-pending callback lost resumed S register state");
+                }
+                require(callbackContext.hi == 0x1111AAAau,
+                        "forced-pending callback lost resumed HI");
+                require(callbackContext.lo == 0x2222BBBBu,
+                        "forced-pending callback lost resumed LO");
 
-        callbackContext.regs[REG_S1] = 0x4444DDDDu;
-        callbackContext.hi = 0x5555EEEEu;
-        callbackContext.lo = 0x6666FFFFu;
-        return 2u;
-        }
+                callbackContext.regs[REG_S1] = 0x4444DDDDu;
+                callbackContext.hi = 0x5555EEEEu;
+                callbackContext.lo = 0x6666FFFFu;
+                return 2u;
+            }
 
-        return callbackContext.regs[REG_V0];
-    });
+            return callbackContext.regs[REG_V0];
+        });
 
     triggerVblank(system);
 
     require(resumeCalls == 1u, "HookEntryInt resume callback did not run exactly once");
     require(eventCalls == 1u, "forced-pending event callback did not run exactly once");
     require(invoked.size() == 2u && invoked[0] == resumeAddress && invoked[1] == eventCallback,
-        "forced-pending dispatch order was incorrect");
+            "forced-pending dispatch order was incorrect");
     require((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) == 0u,
-        "forced-pending dispatch did not acknowledge VBlank");
+            "forced-pending dispatch did not acknowledge VBlank");
 
     system.serviceInterrupts();
     require(resumeCalls == 1u, "HookEntryInt resume callback repeated unexpectedly");
     require(eventCalls == 1u, "forced-pending event callback repeated unexpectedly");
 
-    require(context.regs[REG_V0] == 1u, "caller context lost resumed v0 after forced-pending dispatch");
+    require(context.regs[REG_V0] == 1u,
+            "caller context lost resumed v0 after forced-pending dispatch");
     require(context.regs[REG_RA] == resumeAddress,
-        "caller context lost resumed RA after forced-pending dispatch");
+            "caller context lost resumed RA after forced-pending dispatch");
     require(context.regs[REG_SP] == savedSp,
-        "caller context lost resumed SP after forced-pending dispatch");
+            "caller context lost resumed SP after forced-pending dispatch");
     require(context.regs[REG_FP] == savedFp,
-        "caller context lost resumed FP after forced-pending dispatch");
+            "caller context lost resumed FP after forced-pending dispatch");
     require(context.regs[REG_GP] == savedGp,
-        "caller context lost resumed GP after forced-pending dispatch");
+            "caller context lost resumed GP after forced-pending dispatch");
     require(context.regs[REG_S0] == 0x3333CCCCu,
-        "caller context lost committed S0 after forced-pending dispatch");
+            "caller context lost committed S0 after forced-pending dispatch");
     require(context.regs[REG_S1] == savedS[1],
-        "forced-pending callback mutated caller S1 unexpectedly");
-    require(context.hi == 0x1111AAAau,
-        "forced-pending callback mutated caller HI unexpectedly");
-    require(context.lo == 0x2222BBBBu,
-        "forced-pending callback mutated caller LO unexpectedly");
+            "forced-pending callback mutated caller S1 unexpectedly");
+    require(context.hi == 0x1111AAAau, "forced-pending callback mutated caller HI unexpectedly");
+    require(context.lo == 0x2222BBBBu, "forced-pending callback mutated caller LO unexpectedly");
 
-    std::cerr
-    << "[PASS] HookEntryInt ReturnFromException dispatches forced-pending once and preserves caller context\n";
+    std::cerr << "[PASS] HookEntryInt ReturnFromException dispatches forced-pending once and "
+                 "preserves caller context\n";
 }
 
 void testHookEntryIntFastHeapValidationTripsNearMutation()
@@ -566,12 +561,24 @@ void testHookEntryIntFastHeapValidationTripsNearMutation()
     using psxrecomp::u32;
     using psxrecomp::runtime::PsxSystem;
 
-        require(::setenv("PSXRECOMP_HEAP_VALIDATE", "1", 1) == 0,
+    require(::setenv("PSXRECOMP_HEAP_VALIDATE", "1", 1) == 0,
             "failed to enable PSXRECOMP_HEAP_VALIDATE");
 
     PsxSystem system;
     assert(system.initialize());
     installValidAllocatorHeap(system);
+
+    // Configure a test validator so heap validation is profile-driven.
+    psxrecomp::runtime::ValidatorConfig testValidator;
+    testValidator.name = "test_allocator";
+    testValidator.type = psxrecomp::runtime::ValidatorType::SentinelBlockChain;
+    testValidator.currentRoot = AllocatorScanPointerGlobal;
+    testValidator.backupRoot = AllocatorBackupPointerGlobal;
+    testValidator.header.sizeMask = 0xFFFFFFFCu;
+    testValidator.header.freeBit = 0x1u;
+    testValidator.header.sentinel = HeapSentinel;
+    testValidator.maxNodes = 64;
+    system.diagValidators().configure({testValidator});
 
     constexpr u32 descriptorAddress = 0x80014300u;
     constexpr u32 resumeAddress = 0x80012700u;
@@ -602,9 +609,9 @@ void testHookEntryIntFastHeapValidationTripsNearMutation()
     catch (const std::runtime_error& error)
     {
         threw = true;
-        require(std::string(error.what()).find("Allocator heap validation failed after HookEntryInt") !=
-                std::string::npos,
-            "fast HookEntryInt heap validation threw unexpected error text");
+        require(std::string(error.what()).find("Heap validation failed after HookEntryInt") !=
+                    std::string::npos,
+                "fast HookEntryInt heap validation threw unexpected error text");
     }
     ::unsetenv("PSXRECOMP_HEAP_VALIDATE");
     if (!threw)

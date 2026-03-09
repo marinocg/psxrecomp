@@ -11,7 +11,8 @@ u32 PsxSystem::readMmio32(Address address)
     {
         const u32 val = m_gpu.pollStatus();
         m_stallClassifier.recordMmioAccess(address, val, false);
-        traceGpuWaitStatusRead(m_debugOverlay.lastProgramCounter(), val);
+        m_diagTracepoints.recordMmioRead(address, val, m_debugOverlay.lastProgramCounter(),
+                                         &m_logger);
         return val;
     }
     if (address == Mmio::GPU_GP0)
@@ -134,14 +135,12 @@ void PsxSystem::writeMmio32(Address address, u32 value)
 {
     if (address == Mmio::GPU_GP0)
     {
-        recordGpuPortTrace(address, value);
         m_gpu.writeCommand(value);
         syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::GPU_GP1)
     {
-        recordGpuPortTrace(address, value);
         m_gpu.writeStatus(value);
         syncLevelInterruptSources();
         return;

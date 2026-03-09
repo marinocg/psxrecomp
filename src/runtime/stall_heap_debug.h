@@ -13,21 +13,16 @@ class PsxSystem;
 namespace detail
 {
 
-enum class AllocatorHeapState
-{
-    Uninitialized,
-    Active,
-    Suspicious,
-};
-
+/// Check if the stall report should include heap/validator output.
+/// Returns true if the system has configured validators (profile-driven).
 bool shouldDumpAllocatorHeap(const PsxSystem* system,
                              const RingBuffer<Address, StallClassifier::PC_RING_SIZE>& pcRing);
+
+/// Format a validator report from the diagnostic engine.
 std::string formatAllocatorHeapDump(const PsxSystem& system);
-bool isAllocatorBoundaryFunction(Address address);
+
+/// Check if heap validation is enabled via env var.
 bool fastHeapValidationEnabled();
-AllocatorHeapState classifyAllocatorHeapState(const PsxSystem& system);
-const char* allocatorHeapStateLabel(AllocatorHeapState state);
-std::string validateAllocatorHeap(const PsxSystem& system);
 
 } // namespace detail
 } // namespace runtime

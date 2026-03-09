@@ -1,7 +1,5 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include "stall_heap_debug.h"
-
 #include <algorithm>
 #include <cstring>
 #include <sstream>
@@ -71,14 +69,13 @@ void PsxSystem::logRamCopyWarning(const std::string& sourceTag, Address destinat
 }
 
 u32 PsxSystem::copyBufferToRam(Address destination, const u8* source, u32 actualLength,
-                               u32 requestedLength, Address writerPc,
-                               const std::string& sourceTag, const std::string& detail)
+                               u32 requestedLength, Address writerPc, const std::string& sourceTag,
+                               const std::string& detail)
 {
     const RamCopyBounds bounds = planRamCopy(destination, requestedLength);
-    const u32 copiedLength =
-        (bounds.destinationInRam && source != nullptr)
-            ? std::min(actualLength, bounds.writableLength)
-            : 0u;
+    const u32 copiedLength = (bounds.destinationInRam && source != nullptr)
+                                 ? std::min(actualLength, bounds.writableLength)
+                                 : 0u;
     if (copiedLength > 0)
     {
         std::memcpy(m_ram.data() + bounds.physicalDestination, source, copiedLength);
@@ -97,9 +94,8 @@ u32 PsxSystem::copyBufferToRam(Address destination, const u8* source, u32 actual
     return copiedLength;
 }
 
-u32 PsxSystem::fillBufferToRam(Address destination, u8 value, u32 requestedLength,
-                               Address writerPc, const std::string& sourceTag,
-                               const std::string& detail)
+u32 PsxSystem::fillBufferToRam(Address destination, u8 value, u32 requestedLength, Address writerPc,
+                               const std::string& sourceTag, const std::string& detail)
 {
     const RamCopyBounds bounds = planRamCopy(destination, requestedLength);
     const u32 writtenLength = bounds.destinationInRam ? bounds.writableLength : 0u;
@@ -117,78 +113,64 @@ u32 PsxSystem::fillBufferToRam(Address destination, u8 value, u32 requestedLengt
     m_stallClassifier.recordRamCopyProvenance(
         sourceTag, detail, writerPc,
         bounds.destinationInRam ? canonicalRamAddress(bounds.physicalDestination) : destination,
-        writtenLength, requestedLength, bounds.destinationInRam, bounds.destinationOverflow,
-        false);
+        writtenLength, requestedLength, bounds.destinationInRam, bounds.destinationOverflow, false);
     return writtenLength;
 }
 
 void PsxSystem::validateAllocatorHeapBoundary(const std::string& source, Address relatedAddress)
 {
-    if (!detail::fastHeapValidationEnabled())
+    if (m_diagValidators.validatorCount() == 0)
     {
         return;
     }
 
-    const auto heapState = detail::classifyAllocatorHeapState(*this);
-    const char* heapStateLabel = detail::allocatorHeapStateLabel(heapState);
+    const auto results = m_diagValidators.runAll(m_ram.data(), m_ram.size());
+    bool anyFailed = false;
+    std::ostringstream failureReport;
 
-    if (heapState == detail::AllocatorHeapState::Uninitialized)
+    for (const auto& result : results)
     {
-        std::ostringstream os;
-        os << "heap validation skipped: allocator not initialized"
-           << " boundary=" << source << " result=skipped reason=" << heapStateLabel;
-        if (relatedAddress != 0)
+        if (result.passed)
         {
-            os << " address=0x" << std::hex << relatedAddress;
+            std::ostringstream os;
+            os << "heap validation passed" << " boundary=" << source
+               << " validator=" << result.validatorName << " result=passed";
+            if (relatedAddress != 0)
+            {
+                os << " address=0x" << std::hex << relatedAddress;
+            }
+            if (!result.report.empty())
+            {
+                os << " " << result.report;
+            }
+            m_logger.log(LogLevel::Info, "heap", os.str());
+            continue;
         }
-        m_logger.log(LogLevel::Info, "heap", os.str());
-        return;
+
+        anyFailed = true;
+        failureReport << result.report;
     }
 
-    if (heapState == detail::AllocatorHeapState::Suspicious)
+    if (!anyFailed)
     {
-        std::ostringstream os;
-        os << "Allocator heap validation failed: suspicious allocator state"
-           << " after " << source;
-        if (relatedAddress != 0)
-        {
-            os << " 0x" << std::hex << relatedAddress;
-        }
-        os << "\nresult=failed reason=" << heapStateLabel << "\n";
-        os << detail::formatAllocatorHeapDump(*this);
-        os << m_stallClassifier.formatRecentMemoryActivity();
-        throw std::runtime_error(os.str());
-    }
-
-    const std::string issues = detail::validateAllocatorHeap(*this);
-    if (issues.empty())
-    {
-        std::ostringstream os;
-        os << "heap validation passed"
-           << " boundary=" << source << " result=passed";
-        if (relatedAddress != 0)
-        {
-            os << " address=0x" << std::hex << relatedAddress;
-        }
-        m_logger.log(LogLevel::Info, "heap", os.str());
         return;
     }
 
     std::ostringstream os;
-    os << "Allocator heap validation failed after " << source;
+    os << "Heap validation failed after " << source;
     if (relatedAddress != 0)
     {
         os << " 0x" << std::hex << relatedAddress;
     }
-    os << "\nresult=failed reason=active_heap_invalid\n" << issues;
-    os << detail::formatAllocatorHeapDump(*this);
+    os << "\nresult=failed\n" << failureReport.str();
     os << m_stallClassifier.formatRecentMemoryActivity();
     throw std::runtime_error(os.str());
 }
 
 void PsxSystem::validateAllocatorHeapCallBoundary(Address address)
 {
-    if (detail::isAllocatorBoundaryFunction(address))
+    // If no validators are configured, this is a no-op.
+    if (m_diagValidators.validatorCount() > 0)
     {
         validateAllocatorHeapBoundary("allocator call return", address);
     }

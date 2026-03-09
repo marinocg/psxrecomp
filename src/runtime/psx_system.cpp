@@ -107,8 +107,6 @@ void PsxSystem::reset()
     m_cop0.reset();
     m_gte.reset();
     m_stallClassifier.reset();
-    m_gpuWaitTrace = {};
-    m_displayTimingTrace = {};
     bindGteRuntimeHooks();
     m_criticalSectionDepth = 0;
     m_hookEntryInt = {};
@@ -354,9 +352,7 @@ void PsxSystem::primeVideoSchedule()
 
 void PsxSystem::handleDisplayLineTick()
 {
-    const u16 previousLine = m_gpu.displayLine();
     const Gpu::DisplayPhase previousPhase = m_gpu.displayPhase();
-    const bool previousOddField = m_gpu.oddField();
 
     m_gpu.tickDisplayLine();
     m_timers.tickDisplayLine(
@@ -378,10 +374,6 @@ void PsxSystem::handleDisplayLineTick()
         m_logger.log(LogLevel::Debug, "perf", m_debugOverlay.renderText());
         ++m_frameCount;
     }
-
-    traceDisplayLineTick(m_debugOverlay.lastProgramCounter(),
-                         static_cast<u32>(m_displayTimingTrace.tickDisplayCalls + 1u),
-                         previousLine, previousPhase, previousOddField);
 
     u32 lineCycles = DISPLAY_LINE_CYCLES;
     m_videoLineScheduleCarry += DISPLAY_LINE_CYCLE_REMAINDER;

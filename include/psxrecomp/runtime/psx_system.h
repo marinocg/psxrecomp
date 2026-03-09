@@ -4,6 +4,13 @@
 #include "psxrecomp/runtime/cdrom.h"
 #include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/debug_overlay.h"
+#include "psxrecomp/runtime/diag_boundaries.h"
+#include "psxrecomp/runtime/diag_explainers.h"
+#include "psxrecomp/runtime/diag_metadata_watch.h"
+#include "psxrecomp/runtime/diag_profile.h"
+#include "psxrecomp/runtime/diag_tracepoints.h"
+#include "psxrecomp/runtime/diag_validators.h"
+#include "psxrecomp/runtime/diag_watchpoints.h"
 #include "psxrecomp/runtime/dma.h"
 #include "psxrecomp/runtime/gpu.h"
 #include "psxrecomp/runtime/gte.h"
@@ -200,6 +207,31 @@ class PsxSystem
     Gte& gte();
     StallClassifier& stallClassifier();
 
+    /// Load a diagnostic profile from a JSON file path (or resolve from env/CLI).
+    bool loadDiagProfile(const std::string& path = "");
+
+    /// Access the loaded diagnostic profile.
+    const DiagProfile& diagProfile() const;
+
+    /// Access the diagnostic watchpoint engine.
+    DiagWatchpointEngine& diagWatchpoints();
+
+    /// Access the diagnostic tracepoint engine.
+    DiagTracepointEngine& diagTracepoints();
+
+    /// Access the diagnostic validator engine.
+    DiagValidatorEngine& diagValidators();
+    const DiagValidatorEngine& diagValidators() const;
+
+    /// Access the diagnostic boundary dispatcher.
+    DiagBoundaryDispatcher& diagBoundaries();
+
+    /// Access the diagnostic explainer engine.
+    DiagExplainerEngine& diagExplainers();
+
+    /// Access the diagnostic metadata watch engine.
+    DiagMetadataWatchEngine& diagMetadataWatch();
+
     /// Record the current recompiled program counter and run targeted diagnostics.
     void observeProgramCounter(Address pc);
 
@@ -382,54 +414,8 @@ class PsxSystem
         u32 value = 0;
         uint64_t sequence = 0;
     };
-    struct GpuWaitTraceState
-    {
-        bool configured = false;
-        bool enabled = false;
-        uint64_t sequence = 0;
-        uint64_t helperEntries = 0;
-        std::array<GpuPortTraceEntry, 8> recentWrites{};
-        size_t recentWriteCount = 0;
-        size_t recentWriteHead = 0;
-        bool hasInitialStatus = false;
-        u32 initialStatus = 0;
-        bool hasCompareStatus = false;
-        u32 compareStatus = 0;
-        bool hasLoopStatus = false;
-        u32 loopStatus = 0;
-    };
-    struct DisplayTimingTraceState
-    {
-        bool configured = false;
-        bool enabled = false;
-        uint64_t tickDisplayCalls = 0;
-        bool hasGpuStatus = false;
-        u32 gpuStatus = 0;
-        bool hasTimer1Counter = false;
-        u32 timer1Counter = 0;
-        bool hasDisplayLine = false;
-        u32 displayLine = 0;
-        Gpu::DisplayPhase displayPhase = Gpu::DisplayPhase::ActiveDisplay;
-        bool oddField = false;
-        bool hasHelperLastCounter = false;
-        u32 helperLastCounter = 0;
-        bool hasHelperLastReturn = false;
-        u32 helperLastReturn = 0;
-        bool hasHelperCachedReturn = false;
-        u32 helperCachedReturn = 0;
-        bool hasThreshold = false;
-        u32 threshold = 0;
-        bool hasThresholdCounter = false;
-        u32 thresholdCounter = 0;
-        bool hasThresholdMessage = false;
-        u32 thresholdMessage = 0;
-        bool hasThresholdExceeded = false;
-        bool thresholdExceeded = false;
-    };
     HookEntryIntState m_hookEntryInt;
     BiosCdromState m_biosCdrom;
-    GpuWaitTraceState m_gpuWaitTrace;
-    DisplayTimingTraceState m_displayTimingTrace;
     BiosFileTable m_biosFt;
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
@@ -441,6 +427,15 @@ class PsxSystem
     /// BIOS IRQ priority chains (C0:02 SysEnqIntRP / C0:03 SysDeqIntRP).
     /// Each head is a PSX pointer to a 16-byte structure in RAM.
     std::array<u32, 4> m_irqChainHeads{};
+
+    /// Profile-driven diagnostic engines.
+    DiagProfile m_diagProfile;
+    DiagWatchpointEngine m_diagWatchpoints;
+    DiagTracepointEngine m_diagTracepoints;
+    DiagExplainerEngine m_diagExplainers;
+    DiagValidatorEngine m_diagValidators;
+    DiagBoundaryDispatcher m_diagBoundaries;
+    DiagMetadataWatchEngine m_diagMetadataWatch;
 
     /**
      * @brief Run BIOS IRQ priority chains once (ExceptionHandler model).
@@ -489,20 +484,8 @@ class PsxSystem
                         const std::string& detail);
     u32 fillBufferToRam(Address destination, u8 value, u32 requestedLength, Address writerPc,
                         const std::string& sourceTag, const std::string& detail);
-    void logRamCopyWarning(const std::string& sourceTag, Address destination,
-                           u32 requestedLength, const RamCopyBounds& bounds, u32 actualLength);
-    bool gpuWaitTraceEnabled();
-    void traceGpuWaitProgramCounter(Address pc);
-    void traceGpuWaitStatusRead(Address pc, u32 value);
-    void traceCdCallbackProgramCounter(Address pc);
-    void recordGpuPortTrace(Address address, u32 value);
-    std::string formatRecentGpuPortWrites() const;
-    bool displayTimingTraceEnabled();
-    void traceDisplayTimingProgramCounter(Address pc);
-    void traceDisplayTimingSnapshot(const char* source, Address pc);
-    void traceDisplayLineTick(Address pc, u32 callIndex, u16 previousLine,
-                              Gpu::DisplayPhase previousPhase, bool previousOddField);
-    static const char* displayPhaseName(Gpu::DisplayPhase phase);
+    void logRamCopyWarning(const std::string& sourceTag, Address destination, u32 requestedLength,
+                           const RamCopyBounds& bounds, u32 actualLength);
 
     static Address normalizeAddress(Address address)
     {

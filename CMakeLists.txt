@@ -183,6 +183,15 @@ set(RUNTIME_SOURCES
     src/runtime/stall_classifier.cpp
     src/runtime/stall_heap_debug.cpp
     src/runtime/stall_write_watch.cpp
+    src/runtime/diag_profile.cpp
+    src/runtime/diag_watchpoints.cpp
+    src/runtime/diag_tracepoints.cpp
+    src/runtime/diag_explainers.cpp
+    src/runtime/diag_validators.cpp
+    src/runtime/diag_boundaries.cpp
+    src/runtime/diag_metadata_watch.cpp
+    src/runtime/json_helpers.cpp
+    src/runtime/semantic_audit.cpp
     src/runtime/timers.cpp
 )
 

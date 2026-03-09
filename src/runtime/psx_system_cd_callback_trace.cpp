@@ -1,6 +1,5 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <cstdlib>
 #include <sstream>
 
 namespace psxrecomp
@@ -10,9 +9,6 @@ namespace runtime
 
 namespace
 {
-constexpr Address CrashCdCallbackLoadPc = 0x8003E734u;
-constexpr Address CrashCdCallbackCallPc = 0x8003E73Cu;
-constexpr Address CrashCdCallbackEntryPc = 0x8003EB50u;
 
 const char* cdromCommandName(u8 command)
 {
@@ -72,47 +68,10 @@ const char* biosCdEventLabel(size_t index)
     }
 }
 
-bool traceCdCallbackEnabled()
-{
-    if (const char* env = std::getenv("PSXRECOMP_TRACE_CD_CALLBACK"))
-    {
-        return env[0] == '1';
-    }
-    return false;
-}
 } // namespace
 
-void PsxSystem::traceCdCallbackProgramCounter(Address pc)
-{
-    if (!traceCdCallbackEnabled())
-    {
-        return;
-    }
-
-    std::ostringstream msg;
-    if (pc == CrashCdCallbackLoadPc)
-    {
-        msg << "event=pc_trace phase=descriptor_load pc=0x" << std::hex << pc << " "
-            << describeBiosCdromState();
-        m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
-        return;
-    }
-
-    if (pc == CrashCdCallbackCallPc)
-    {
-        msg << "event=pc_trace phase=jalr pc=0x" << std::hex << pc << " "
-            << describeBiosCdromState();
-        m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
-        return;
-    }
-
-    if (pc == CrashCdCallbackEntryPc)
-    {
-        msg << "event=pc_trace phase=helper_entry pc=0x" << std::hex << pc << " "
-            << describeBiosCdromState();
-        m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
-    }
-}
+// CD callback PC tracing is now driven by DiagTracepointEngine via profiles.
+// See: include/psxrecomp/runtime/diag_tracepoints.h
 
 std::string PsxSystem::describeBiosCdromState() const
 {

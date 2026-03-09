@@ -133,6 +133,24 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
         "std::cerr << \"[psxrecomp][error] Failed to initialize runtime system.\" << \"\\n\";");
     emitter.writeLine("return 1;");
     emitter.closeBlock();
+    emitter.writeLine("if (const char* diagProfileEnv = std::getenv(\"PSXRECOMP_DIAG_PROFILE\"))");
+    emitter.openBlock("");
+    emitter.writeLine("if (diagProfileEnv[0] != '\\0')");
+    emitter.openBlock("");
+    emitter.writeLine("if (!system.loadDiagProfile(diagProfileEnv))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cerr << \"[psxrecomp][warn] Failed to load diagnostic profile: \" "
+        "<< diagProfileEnv << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("else");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "std::cout << \"[psxrecomp] Diagnostic profile loaded: \" "
+        "<< diagProfileEnv << \"\\n\";");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.closeBlock();
     emitter.writeLine("psxrecomp::recompiler::RecompiledModule::configure(system);");
     emitter.writeLine("const std::filesystem::path defaultDiscPath = resourcesDir / \"disc\" / "
                       "\"data_track.bin\";");

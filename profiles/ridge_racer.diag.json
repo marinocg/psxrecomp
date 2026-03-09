@@ -1,0 +1,21 @@
+{
+  "name": "ridge_racer",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [],
+  "tracepoints": [],
+  "validators": [],
+  "boundaries": [],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": []
+}
