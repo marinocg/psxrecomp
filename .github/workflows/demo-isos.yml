@@ -21,11 +21,16 @@ jobs:
 
       - name: Build demos
         run: |
-          make -C examples/demos/helloworld
-          make -C examples/demos/gputest
-          make -C examples/demos/memorytest
           make -C examples/demos/advancedhello
+          make -C examples/demos/cdbrowse
+          make -C examples/demos/cdcrc
+          make -C examples/demos/cdxa
+          make -C examples/demos/cop0lab_auto
           make -C examples/demos/cop0test
+          make -C examples/demos/gputest
+          make -C examples/demos/gtelab_auto
+          make -C examples/demos/helloworld
+          make -C examples/demos/memorytest
 
       - name: Validate ISO root layout
         run: |
@@ -37,11 +42,16 @@ jobs:
           from pathlib import Path
 
           exe_paths = [
-            Path('examples/demos/helloworld/HELLOWLD.EXE'),
-            Path('examples/demos/gputest/GPUTEST.EXE'),
-            Path('examples/demos/memorytest/MEMTEST.EXE'),
             Path('examples/demos/advancedhello/ADVHELLO.EXE'),
+            Path('examples/demos/cdbrowse/CDBROWSE.EXE'),
+            Path('examples/demos/cdcrc/CDCRC.EXE'),
+            Path('examples/demos/cdxa/CDXA.EXE'),
+            Path('examples/demos/cop0lab_auto/COP0LAB.EXE'),
             Path('examples/demos/cop0test/COP0TEST.EXE'),
+            Path('examples/demos/gputest/GPUTEST.EXE'),
+            Path('examples/demos/gtelab_auto/GTELB.EXE'),
+            Path('examples/demos/helloworld/HELLOWLD.EXE'),
+            Path('examples/demos/memorytest/MEMTEST.EXE'),
           ]
 
           import struct
@@ -79,7 +89,12 @@ jobs:
             examples/demos/gputest/GPUTEST.EXE \
             examples/demos/memorytest/MEMTEST.EXE \
             examples/demos/advancedhello/ADVHELLO.EXE \
-            examples/demos/cop0test/COP0TEST.EXE
+            examples/demos/cdbrowse/CDBROWSE.EXE \
+            examples/demos/cdcrc/CDCRC.EXE \
+            examples/demos/cdxa/CDXA.EXE \
+            examples/demos/cop0test/COP0TEST.EXE \
+            examples/demos/cop0lab_auto/COP0LAB.EXE \
+            examples/demos/gtelab_auto/GTELAB.EXE
 
       - name: Upload demo images
         uses: actions/upload-artifact@v4
@@ -87,23 +102,23 @@ jobs:
           name: psxrecomp-demos-ubuntu-latest
           path: |
             examples/demos/helloworld/HELLOWLD.iso
-            examples/demos/helloworld/HELLOWLD.cue
-            examples/demos/helloworld/HELLOWLD.EXE
             examples/demos/gputest/GPUTEST.iso
-            examples/demos/gputest/GPUTEST.cue
-            examples/demos/gputest/GPUTEST.EXE
             examples/demos/memorytest/MEMTEST.iso
-            examples/demos/memorytest/MEMTEST.cue
-            examples/demos/memorytest/MEMTEST.EXE
             examples/demos/advancedhello/ADVHELLO.iso
-            examples/demos/advancedhello/ADVHELLO.cue
-            examples/demos/advancedhello/ADVHELLO.EXE
             examples/demos/cop0test/COP0TEST.iso
-            examples/demos/cop0test/COP0TEST.cue
-            examples/demos/cop0test/COP0TEST.EXE
+            examples/demos/cop0lab_auto/COP0LAB.iso
+            examples/demos/cdbrowse/COP0TEST.iso
+            examples/demos/cdxa/COP0TEST.iso
+            examples/demos/cdcrc/COP0TEST.iso
+            examples/demos/gtelab_auto/COP0TEST.iso
             examples/demos/helloworld/build/*.map
             examples/demos/gputest/build/*.map
             examples/demos/memorytest/build/*.map
             examples/demos/advancedhello/build/*.map
             examples/demos/cop0test/build/*.map
+            examples/demos/cop0lab_auto/build/*.map
+            examples/demos/cdbrowse/build/*.map
+            examples/demos/cdxa/build/*.map
+            examples/demos/cdcrc/build/*.map
+            examples/demos/gtelab_auto/build/*.map
             demo-inspect/*.txt
