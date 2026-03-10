@@ -25,7 +25,6 @@ jobs:
           make -C examples/demos/cdbrowse
           make -C examples/demos/cdcrc
           make -C examples/demos/cdxa
-          make -C examples/demos/cop0lab_auto
           make -C examples/demos/cop0test
           make -C examples/demos/gputest
           make -C examples/demos/gtelab_auto
@@ -46,7 +45,6 @@ jobs:
             Path('examples/demos/cdbrowse/CDBROWSE.EXE'),
             Path('examples/demos/cdcrc/CDCRC.EXE'),
             Path('examples/demos/cdxa/CDXA.EXE'),
-            Path('examples/demos/cop0lab_auto/COP0LAB.EXE'),
             Path('examples/demos/cop0test/COP0TEST.EXE'),
             Path('examples/demos/gputest/GPUTEST.EXE'),
             Path('examples/demos/gtelab_auto/GTELB.EXE'),
@@ -93,7 +91,6 @@ jobs:
             examples/demos/cdcrc/CDCRC.EXE \
             examples/demos/cdxa/CDXA.EXE \
             examples/demos/cop0test/COP0TEST.EXE \
-            examples/demos/cop0lab_auto/COP0LAB.EXE \
             examples/demos/gtelab_auto/GTELAB.EXE
 
       - name: Upload demo images
@@ -106,7 +103,6 @@ jobs:
             examples/demos/memorytest/MEMTEST.iso
             examples/demos/advancedhello/ADVHELLO.iso
             examples/demos/cop0test/COP0TEST.iso
-            examples/demos/cop0lab_auto/COP0LAB.iso
             examples/demos/cdbrowse/COP0TEST.iso
             examples/demos/cdxa/COP0TEST.iso
             examples/demos/cdcrc/COP0TEST.iso
@@ -116,7 +112,6 @@ jobs:
             examples/demos/memorytest/build/*.map
             examples/demos/advancedhello/build/*.map
             examples/demos/cop0test/build/*.map
-            examples/demos/cop0lab_auto/build/*.map
             examples/demos/cdbrowse/build/*.map
             examples/demos/cdxa/build/*.map
             examples/demos/cdcrc/build/*.map
