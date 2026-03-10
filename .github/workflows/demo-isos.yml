@@ -47,7 +47,7 @@ jobs:
             Path('examples/demos/cdxa/CDXA.EXE'),
             Path('examples/demos/cop0test/COP0TEST.EXE'),
             Path('examples/demos/gputest/GPUTEST.EXE'),
-            Path('examples/demos/gtelab_auto/GTELB.EXE'),
+            Path('examples/demos/gtelab_auto/GTELAB.EXE'),
             Path('examples/demos/helloworld/HELLOWLD.EXE'),
             Path('examples/demos/memorytest/MEMTEST.EXE'),
           ]
@@ -103,10 +103,10 @@ jobs:
             examples/demos/memorytest/MEMTEST.iso
             examples/demos/advancedhello/ADVHELLO.iso
             examples/demos/cop0test/COP0TEST.iso
-            examples/demos/cdbrowse/COP0TEST.iso
-            examples/demos/cdxa/COP0TEST.iso
-            examples/demos/cdcrc/COP0TEST.iso
-            examples/demos/gtelab_auto/COP0TEST.iso
+            examples/demos/cdbrowse/CDBROWSE.iso
+            examples/demos/cdxa/CDXA.iso
+            examples/demos/cdcrc/CDCRC.iso
+            examples/demos/gtelab_auto/GTELAB.iso
             examples/demos/helloworld/build/*.map
             examples/demos/gputest/build/*.map
             examples/demos/memorytest/build/*.map
