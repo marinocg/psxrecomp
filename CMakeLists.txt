@@ -87,6 +87,7 @@ set(IR_SOURCES
     src/ir/mips_ir_translation_no_delay.cpp
     src/ir/mips_ir_translation_no_delay_load.cpp
     src/ir/optimizations.cpp
+    src/ir/resume_safety.cpp
     src/ir/ssa.cpp
     src/ir/verify.cpp
 )
@@ -301,6 +302,11 @@ if(BUILD_TESTS)
         tests/unit/ir_passes_test.cpp
     )
     target_link_libraries(ir_passes_test PRIVATE psxrecomp_ir)
+
+    add_psxrecomp_unit_test(resume_safety_test
+        tests/unit/resume_safety_test.cpp
+    )
+    target_link_libraries(resume_safety_test PRIVATE psxrecomp_ir psxrecomp_recompiler)
 
     add_psxrecomp_unit_test(recompiler_codegen_test
         tests/unit/recompiler_codegen_test.cpp

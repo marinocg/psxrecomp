@@ -44,7 +44,12 @@ void PsxSystem::logRamCopyWarning(const std::string& sourceTag, Address destinat
     {
         std::ostringstream os;
         os << sourceTag << " destination outside RAM dst=0x" << std::hex << destination
-           << " len=" << std::dec << requestedLength;
+           << " len=" << std::dec << requestedLength
+           << " (this memory op is a consumer of a bad pointer, not the root cause)";
+        if (m_lastResumeAddress != 0)
+        {
+            os << " resumed_at=0x" << std::hex << m_lastResumeAddress;
+        }
         m_logger.log(LogLevel::Warn, "load", os.str());
         return;
     }
@@ -162,8 +167,17 @@ void PsxSystem::validateAllocatorHeapBoundary(const std::string& source, Address
     {
         os << " 0x" << std::hex << relatedAddress;
     }
+    if (m_lastResumeAddress != 0)
+    {
+        os << " (inside resumed function, resumed_at=0x" << std::hex << m_lastResumeAddress
+           << ")";
+    }
     os << "\nresult=failed\n" << failureReport.str();
     os << m_stallClassifier.formatRecentMemoryActivity();
+    if (m_diagWatchpoints.eventCount() > 0)
+    {
+        os << m_diagWatchpoints.formatSummary();
+    }
     throw std::runtime_error(os.str());
 }
 

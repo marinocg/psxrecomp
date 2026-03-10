@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "inputPath": "Crash Bandicoot (USA).cue",
+  "volumeLabel": "SCUS-94900",
+  "isJoliet": false,
+  "rawSectorSize": 2352,
+  "logicalBlockSize": 2048,
+  "totalSectors": 268743,
+  "bootExecutable": "SCUS_949.00",
+  "tracks": [
+    {
+      "trackNumber": 1,
+      "type": "data",
+      "sectorSize": 2352,
+      "startLba": 0,
+      "pregapLength": 0,
+      "sessionNumber": 1
+    }
+  ],
+  "dataTrack": {
+    "trackNumber": 1,
+    "startLba": 0,
+    "sectorSize": 2352
+  },
+  "stats": {
+    "discFiles": 91,
+    "discDirs": 4
+  }
+}

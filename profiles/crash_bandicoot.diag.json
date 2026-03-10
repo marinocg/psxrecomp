@@ -24,9 +24,30 @@
         "region": "0x80000000-0x80200000"
       },
       "action": "log"
+    },
+    {
+      "name": "ram_base_guard",
+      "kind": "ram_write",
+      "range": "0x80000000-0x800003ff",
+      "action": "log",
+      "comment": "Catches bzero/bcopy consumer-of-bad-pointer writes near RAM base; reports resumed_at context"
+    },
+    {
+      "name": "allocator_region_wide",
+      "kind": "ram_write",
+      "range": "0x80056590-0x800577bf",
+      "action": "log",
+      "comment": "Broad watch over allocator globals; any write logged with resume context"
     }
   ],
   "tracepoints": [
+    {
+      "name": "allocator_main",
+      "pc_range": "0x80011a58-0x80011c88",
+      "registers": ["a0", "a1", "v0", "s0", "s1", "s2"],
+      "log_branches": false,
+      "mmio_reads": []
+    },
     {
       "name": "gpu_wait_window",
       "pc_range": "0x8003e4f0-0x8003e5f0",
@@ -67,7 +88,7 @@
         "free_bit": "0x1",
         "sentinel": "0xfffffffe"
       },
-      "max_nodes": 64
+      "max_nodes": 256
     }
   ],
   "boundaries": [

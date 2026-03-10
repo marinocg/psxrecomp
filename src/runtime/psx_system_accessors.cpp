@@ -183,6 +183,16 @@ DiagMetadataWatchEngine& PsxSystem::diagMetadataWatch()
     return m_diagMetadataWatch;
 }
 
+void PsxSystem::setLastResumeAddress(Address address)
+{
+    m_lastResumeAddress = address;
+}
+
+Address PsxSystem::lastResumeAddress() const
+{
+    return m_lastResumeAddress;
+}
+
 void PsxSystem::setDisc(std::shared_ptr<Disc> disc)
 {
     m_disc = std::move(disc);

@@ -181,7 +181,8 @@ bool DiagWatchpointEngine::shouldWatchRamWrite(Address address, u8 size) const
 }
 
 void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 size,
-                                          u32 oldValue, u32 newValue, RuntimeLogger* logger)
+                                          u32 oldValue, u32 newValue, RuntimeLogger* logger,
+                                          Address resumeAddress)
 {
     const Address physical = normalizePhysical(address);
     const Address writeEnd = physical + size - 1;
@@ -209,6 +210,7 @@ void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 
         event.oldValue = oldValue;
         event.newValue = newValue;
         event.predicateViolated = violated;
+        event.resumeAddress = resumeAddress;
 
         if (m_events.size() >= EVENT_RING_SIZE)
         {
@@ -232,6 +234,10 @@ void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 
                 << static_cast<unsigned>(size) << " old=0x" << std::hex
                 << maskValueForSize(oldValue, size) << " new=0x"
                 << maskValueForSize(newValue, size);
+            if (resumeAddress != 0)
+            {
+                msg << " resumed_at=0x" << std::hex << resumeAddress;
+            }
             if (violated)
             {
                 msg << " VIOLATED";
@@ -267,6 +273,10 @@ std::string DiagWatchpointEngine::formatSummary() const
         if (e.predicateViolated)
         {
             os << " VIOLATED";
+        }
+        if (e.resumeAddress != 0)
+        {
+            os << " resumed_at=0x" << std::hex << e.resumeAddress;
         }
         os << "\n";
     }

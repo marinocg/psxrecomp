@@ -158,13 +158,18 @@ class PsxSystem
         {
             const Address offset = physical - MemoryMap::RAM_BASE;
             const u8 writeSize = static_cast<u8>(sizeof(T));
-            if (m_stallClassifier.shouldWatchRamWrite(physical, writeSize))
+            if (m_stallClassifier.shouldWatchRamWrite(physical, writeSize) ||
+                m_diagWatchpoints.shouldWatchRamWrite(physical, writeSize))
             {
                 const T oldValue = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
                 writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
                 m_stallClassifier.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
                                                  writeSize, static_cast<u32>(oldValue),
                                                  static_cast<u32>(value));
+                m_diagWatchpoints.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
+                                                 writeSize, static_cast<u32>(oldValue),
+                                                 static_cast<u32>(value), nullptr,
+                                                 m_lastResumeAddress);
             }
             else
             {
@@ -231,6 +236,13 @@ class PsxSystem
 
     /// Access the diagnostic metadata watch engine.
     DiagMetadataWatchEngine& diagMetadataWatch();
+
+    /// Set the most recent resume address for diagnostic context.
+    /// Called by generated code when a function is entered via mid-block resume.
+    void setLastResumeAddress(Address address);
+
+    /// Get the most recent resume address (0 = not a resumed execution).
+    Address lastResumeAddress() const;
 
     /// Record the current recompiled program counter and run targeted diagnostics.
     void observeProgramCounter(Address pc);
@@ -436,6 +448,9 @@ class PsxSystem
     DiagValidatorEngine m_diagValidators;
     DiagBoundaryDispatcher m_diagBoundaries;
     DiagMetadataWatchEngine m_diagMetadataWatch;
+
+    /// Last resume address set by generated code (0 = not a resumed entry).
+    Address m_lastResumeAddress = 0;
 
     /**
      * @brief Run BIOS IRQ priority chains once (ExceptionHandler model).
