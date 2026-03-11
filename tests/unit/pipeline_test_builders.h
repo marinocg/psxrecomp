@@ -22,3 +22,6 @@ std::vector<psxrecomp::u8> buildExeWithMixedCodeAndStringPointerTable();
 std::vector<psxrecomp::u8> buildExeWithClusteredPointersToDataTables();
 std::vector<psxrecomp::u8> buildExeWithLocalJumpTableTargets();
 std::vector<psxrecomp::u8> buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads();
+std::vector<psxrecomp::u8> buildExeWithGapAdjacentRegisterCallTarget();
+std::vector<psxrecomp::u8> buildExeWithGapAdjacentPointerCellTarget();
+std::vector<psxrecomp::u8> buildExeWithStoredGapAdjacentDispatchTarget();

@@ -30,6 +30,16 @@ bool looksLikeIndirectTargetEntry(const std::vector<disasm::Instruction>& disass
 bool looksLikeCallableCodeRegion(const std::vector<disasm::Instruction>& disassembled,
                                  const InstructionIndexMap& instructionIndexMap, Address address);
 
+bool isGapAdjacentEntryCandidate(const std::vector<disasm::Instruction>& disassembled,
+                                 const InstructionIndexMap& instructionIndexMap,
+                                 const std::vector<disasm::FunctionBoundary>& knownBoundaries,
+                                 Address address);
+
+bool looksLikeGapAdjacentCallableEntry(
+    const std::vector<disasm::Instruction>& disassembled,
+    const InstructionIndexMap& instructionIndexMap,
+    const std::vector<disasm::FunctionBoundary>& knownBoundaries, Address address);
+
 bool writesRegister(const disasm::Instruction& instruction, Register reg);
 
 std::unordered_set<Address>

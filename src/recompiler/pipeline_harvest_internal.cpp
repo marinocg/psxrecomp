@@ -206,6 +206,118 @@ bool looksLikeCallableCodeRegion(const std::vector<disasm::Instruction>& disasse
     return decodableCount >= 3 && nonNopCount >= 2 && sawControlTransfer;
 }
 
+bool isGapAdjacentEntryCandidate(const std::vector<disasm::Instruction>& disassembled,
+                                 const InstructionIndexMap& instructionIndexMap,
+                                 const std::vector<disasm::FunctionBoundary>& knownBoundaries,
+                                 Address address)
+{
+    auto it = instructionIndexMap.find(address);
+    if (it == instructionIndexMap.end() || knownBoundaries.empty())
+    {
+        return false;
+    }
+
+    const disasm::FunctionBoundary* previousBoundary = nullptr;
+    const disasm::FunctionBoundary* nextBoundary = nullptr;
+    for (const auto& boundary : knownBoundaries)
+    {
+        if (address >= boundary.start && address <= boundary.end)
+        {
+            return false;
+        }
+        if (boundary.end < address)
+        {
+            previousBoundary = &boundary;
+            continue;
+        }
+        if (boundary.start > address)
+        {
+            nextBoundary = &boundary;
+            break;
+        }
+    }
+
+    if (previousBoundary == nullptr || nextBoundary == nullptr)
+    {
+        return false;
+    }
+
+    const Address gapStart = previousBoundary->end + 4;
+    const Address gapEnd = nextBoundary->start - 4;
+    if (gapStart > gapEnd || address != gapStart || address > gapEnd)
+    {
+        return false;
+    }
+
+    constexpr Address kMaxCallableGapBytes = 0x100;
+    const Address gapByteSize = gapEnd - gapStart + 4;
+    if (gapByteSize > kMaxCallableGapBytes)
+    {
+        return false;
+    }
+
+    size_t decodableCount = 0;
+    size_t nonNopCount = 0;
+    for (size_t index = it->second; index < disassembled.size(); ++index)
+    {
+        const auto& instruction = disassembled[index];
+        if (instruction.address > gapEnd || instruction.opcode == disasm::Opcode::UNKNOWN)
+        {
+            break;
+        }
+
+        ++decodableCount;
+        if (instruction.encoding != 0)
+        {
+            ++nonNopCount;
+        }
+    }
+
+    return decodableCount >= 4 && nonNopCount >= 3;
+}
+
+bool looksLikeGapAdjacentCallableEntry(
+    const std::vector<disasm::Instruction>& disassembled,
+    const InstructionIndexMap& instructionIndexMap,
+    const std::vector<disasm::FunctionBoundary>& knownBoundaries, Address address)
+{
+    auto it = instructionIndexMap.find(address);
+    if (it == instructionIndexMap.end() ||
+        !isGapAdjacentEntryCandidate(disassembled, instructionIndexMap, knownBoundaries, address))
+    {
+        return false;
+    }
+
+    Address gapEnd = 0;
+    for (const auto& boundary : knownBoundaries)
+    {
+        if (boundary.start > address)
+        {
+            gapEnd = boundary.start - 4;
+            break;
+        }
+    }
+
+    bool sawControlTransfer = false;
+    for (size_t index = it->second; index < disassembled.size(); ++index)
+    {
+        const auto& instruction = disassembled[index];
+        if (instruction.address > gapEnd || instruction.opcode == disasm::Opcode::UNKNOWN)
+        {
+            break;
+        }
+
+        if (instruction.isReturn() || instruction.isCall() || instruction.isBranch() ||
+            instruction.opcode == disasm::Opcode::JR)
+        {
+            sawControlTransfer = true;
+            break;
+        }
+    }
+
+    return sawControlTransfer;
+}
+
 bool writesRegister(const disasm::Instruction& instruction, Register reg)
 {
     switch (instruction.opcode)
@@ -307,6 +419,31 @@ findReferencedDataWords(const std::vector<disasm::Instruction>& disassembled,
 
         if (!builtAddress.has_value())
         {
+            for (size_t lookAhead = 1; lookAhead <= 6 && index + lookAhead < disassembled.size();
+                 ++lookAhead)
+            {
+                const auto& next = disassembled[index + lookAhead];
+                const bool isMemoryReference =
+                    next.rs == baseRegister &&
+                    (next.opcode == disasm::Opcode::LW || next.opcode == disasm::Opcode::SW ||
+                     next.opcode == disasm::Opcode::LWL || next.opcode == disasm::Opcode::LWR ||
+                     next.opcode == disasm::Opcode::SWL || next.opcode == disasm::Opcode::SWR);
+                if (isMemoryReference)
+                {
+                    const Address referencedAddress = static_cast<Address>(
+                        (hiImm << 16) + static_cast<u32>(static_cast<s32>(next.immediate)));
+                    if (referencedAddress >= baseAddress && referencedAddress + 3 < endAddress &&
+                        (referencedAddress % 4) == 0 &&
+                        isAddressInRanges(segmentation.dataRanges, referencedAddress))
+                    {
+                        referencedWords.insert(referencedAddress);
+                    }
+                }
+                if (writesRegister(next, baseRegister))
+                {
+                    break;
+                }
+            }
             continue;
         }
 

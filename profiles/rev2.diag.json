@@ -6,23 +6,27 @@
   },
   "watchpoints": [
     {
-      "name": "rev2_dispatch_slot",
+      "name": "rev2_dispatch_b_slot",
       "kind": "ram_write",
       "range": "0x80166cc8-0x80166ccb",
-      "predicate": {
-        "type": "aligned_pointer_in_region",
-        "region": "0x80000000-0x80200000"
-      },
       "action": "log"
     },
     {
-      "name": "rev2_dispatch_context",
+      "name": "rev2_dispatch_b_context",
       "kind": "ram_write",
       "range": "0x80166cf8-0x80166cfb",
-      "predicate": {
-        "type": "aligned_pointer_in_region",
-        "region": "0x80000000-0x80200000"
-      },
+      "action": "log"
+    },
+    {
+      "name": "rev2_dispatch_a_slot",
+      "kind": "ram_write",
+      "range": "0x80166570-0x80166573",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dispatch_a_companion",
+      "kind": "ram_write",
+      "range": "0x801665c0-0x801665c3",
       "action": "log"
     }
   ],
@@ -72,7 +76,12 @@
     {
       "name": "rev2_wait_loop",
       "pc_range": "0x160840-0x16088c",
-      "watched_cells": ["0x80166cc8", "0x80166cf8"]
+      "watched_cells": ["0x80166cc8", "0x80166cf8", "0x80166570", "0x801665c0"]
+    },
+    {
+      "name": "rev2_dispatch_call_a",
+      "pc_range": "0x15d7a4-0x15d7c4",
+      "watched_cells": ["0x80166570", "0x801665c0"]
     },
     {
       "name": "rev2_dispatch_call_b",

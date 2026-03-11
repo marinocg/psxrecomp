@@ -1,18 +1,74 @@
 #include "pipeline_harvest_helpers.h"
-
-#include "pipeline_harvest_internal.h"
-
 #include "../disasm/analysis_helpers.h"
-
+#include "pipeline_harvest_internal.h"
+#include "pipeline_memory_reference_helpers.h"
 #include <algorithm>
 #include <unordered_set>
-
 namespace psxrecomp
 {
 namespace recompiler
 {
 namespace detail
 {
+namespace
+{
+bool isWordLoadOpcode(disasm::Opcode opcode)
+{
+    return opcode == disasm::Opcode::LW || opcode == disasm::Opcode::LWL ||
+           opcode == disasm::Opcode::LWR;
+}
+
+bool storeFeedsIndirectCall(const std::vector<disasm::Instruction>& disassembled,
+                            size_t storeInstructionIndex)
+{
+    const auto& storeInstruction = disassembled[storeInstructionIndex];
+    if (!isWordMemoryReferenceOpcode(storeInstruction.opcode))
+    {
+        return false;
+    }
+    const auto staticStoreAddress =
+        resolveStaticMemoryReferenceAddress(disassembled, storeInstructionIndex);
+    for (size_t loadIndex = storeInstructionIndex + 1;
+         loadIndex < disassembled.size() && loadIndex <= storeInstructionIndex + 24; ++loadIndex)
+    {
+        const auto& loadInstruction = disassembled[loadIndex];
+        if (!staticStoreAddress.has_value() && writesRegister(loadInstruction, storeInstruction.rs))
+        {
+            break;
+        }
+        if (!isWordLoadOpcode(loadInstruction.opcode))
+        {
+            continue;
+        }
+        const bool sameSlot =
+            staticStoreAddress.has_value()
+                ? resolveStaticMemoryReferenceAddress(disassembled, loadIndex) == staticStoreAddress
+                : (loadInstruction.rs == storeInstruction.rs &&
+                   loadInstruction.immediate == storeInstruction.immediate);
+        if (!sameSlot)
+        {
+            continue;
+        }
+        for (size_t jalrIndex = loadIndex + 1;
+             jalrIndex < disassembled.size() && jalrIndex <= loadIndex + 8; ++jalrIndex)
+        {
+            const auto& jalrCandidate = disassembled[jalrIndex];
+            if ((jalrCandidate.opcode == disasm::Opcode::JR ||
+                 jalrCandidate.opcode == disasm::Opcode::JALR) &&
+                jalrCandidate.rs == loadInstruction.rt)
+            {
+                return true;
+            }
+            if (writesRegister(jalrCandidate, loadInstruction.rt))
+            {
+                break;
+            }
+        }
+    }
+    return false;
+}
+} // namespace
+
 PointerHarvestResults harvestFunctionPointerSeeds(
     const std::vector<disasm::Instruction>& disassembled, const iso::PsxExeImage& exeImage,
     const disasm::CodeDataSegmentation& segmentation, const std::vector<Address>& entrySeeds,
@@ -22,6 +78,22 @@ PointerHarvestResults harvestFunctionPointerSeeds(
     const InstructionIndexMap instructionIndexMap =
         disasm::detail::buildInstructionIndex(disassembled);
     const Address endAddress = baseAddress + static_cast<Address>(exeImage.programData.size());
+    std::vector<disasm::Instruction> knownCodeInstructions;
+    for (const auto& instruction : disassembled)
+    {
+        if (isAddressInRanges(segmentation.codeRanges, instruction.address))
+        {
+            knownCodeInstructions.push_back(instruction);
+        }
+    }
+    const std::vector<disasm::FunctionBoundary> knownBoundaries =
+        knownCodeInstructions.empty()
+            ? std::vector<disasm::FunctionBoundary>{}
+            : disasm::findFunctionBoundaries(knownCodeInstructions, entrySeeds);
+    std::unordered_set<Address> knownIndirectPointerWords;
+    for (const auto& site : collectIndirectCallSiteMetadata(knownCodeInstructions, knownBoundaries))
+        if (site.hasStaticPointerWordAddress)
+            knownIndirectPointerWords.insert(site.pointerWordAddress);
     const auto referencedDataWords =
         findReferencedDataWords(disassembled, segmentation, baseAddress, endAddress);
     std::unordered_set<Address> existingSeeds(entrySeeds.begin(), entrySeeds.end());
@@ -41,6 +113,11 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         if (isAddressInRanges(segmentation.codeRanges, target))
         {
             score += 2;
+        }
+        if (looksLikeGapAdjacentCallableEntry(disassembled, instructionIndexMap, knownBoundaries,
+                                              target))
+        {
+            score += 3;
         }
         if (looksLikeFunctionEntry(disassembled, instructionIndexMap, target))
         {
@@ -264,7 +341,9 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         if (!referencedWord && !hasNearbyCodePointer &&
             !looksLikeFunctionEntry(disassembled, instructionIndexMap, target) &&
             !looksLikeIndirectTargetEntry(disassembled, instructionIndexMap, target) &&
-            !isAddressInRanges(segmentation.codeRanges, target))
+            !isAddressInRanges(segmentation.codeRanges, target) &&
+            !looksLikeGapAdjacentCallableEntry(disassembled, instructionIndexMap, knownBoundaries,
+                                               target))
         {
             continue;
         }
@@ -320,7 +399,6 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         {
             continue;
         }
-
         bool usedAsRegisterJumpTarget = false;
         bool usedAsStoredPointer = false;
         bool usedAsCallArgument = false;
@@ -334,9 +412,17 @@ PointerHarvestResults harvestFunctionPointerSeeds(
                 usedAsRegisterJumpTarget = true;
                 break;
             }
-            if ((next.opcode == disasm::Opcode::SW || next.opcode == disasm::Opcode::SWL ||
-                 next.opcode == disasm::Opcode::SWR) &&
-                next.rt == addressRegister)
+            if (next.rt == addressRegister &&
+                ((next.rs != Registers::SP &&
+                  [&]()
+                  {
+                      const auto storeWordAddress = resolveStaticMemoryReferenceAddress(
+                          disassembled, builtAddressIndex + lookAhead);
+                      return storeWordAddress.has_value() &&
+                             isKnownIndirectPointerWord(knownIndirectPointerWords,
+                                                        *storeWordAddress);
+                  }()) ||
+                 storeFeedsIndirectCall(disassembled, builtAddressIndex + lookAhead)))
             {
                 usedAsStoredPointer = true;
                 break;
@@ -352,16 +438,24 @@ PointerHarvestResults harvestFunctionPointerSeeds(
                 break;
             }
         }
-
         const Address target = builtAddress.value();
         const bool builtAddressEscapes =
             usedAsRegisterJumpTarget || usedAsStoredPointer || usedAsCallArgument;
+        const bool usedAsDispatchPointer = usedAsRegisterJumpTarget || usedAsStoredPointer;
         const bool strongEntryCandidate =
             looksLikeFunctionEntry(disassembled, instructionIndexMap, target) ||
             looksLikeIndirectTargetEntry(disassembled, instructionIndexMap, target);
+        const bool gapAdjacentEntryCandidate =
+            usedAsDispatchPointer &&
+            isGapAdjacentEntryCandidate(disassembled, instructionIndexMap, knownBoundaries, target);
+        const bool gapAdjacentCallableCandidate =
+            usedAsDispatchPointer &&
+            looksLikeGapAdjacentCallableEntry(disassembled, instructionIndexMap, knownBoundaries,
+                                              target);
         const bool weakCallableCandidate =
-            usedAsRegisterJumpTarget &&
-            looksLikeCallableCodeRegion(disassembled, instructionIndexMap, target);
+            usedAsDispatchPointer &&
+            (looksLikeCallableCodeRegion(disassembled, instructionIndexMap, target) ||
+             gapAdjacentCallableCandidate || gapAdjacentEntryCandidate);
         if (builtAddressEscapes && target >= baseAddress && target < endAddress &&
             (target % 4) == 0 && (strongEntryCandidate || weakCallableCandidate) &&
             existingSeeds.find(target) == existingSeeds.end())

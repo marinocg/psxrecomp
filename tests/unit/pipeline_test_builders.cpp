@@ -453,13 +453,20 @@ std::vector<psxrecomp::u8> buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads()
     const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
     writeLe32(buffer, codeOffset + 0x00, 0x27BDFFF0); // addiu sp, sp, -16
     writeLe32(buffer, codeOffset + 0x04, 0xAFBF000C); // sw ra, 12(sp)
-    writeLe32(buffer, codeOffset + 0x08, 0x3C028001); // lui v0, 0x8001
-    writeLe32(buffer, codeOffset + 0x0C, 0x24420040); // addiu v0, v0, 0x0040
-    writeLe32(buffer, codeOffset + 0x10, 0xAFA20008); // sw v0, 8(sp)
-    writeLe32(buffer, codeOffset + 0x14, 0x8FBF000C); // lw ra, 12(sp)
-    writeLe32(buffer, codeOffset + 0x18, 0x27BD0010); // addiu sp, sp, 16
-    writeLe32(buffer, codeOffset + 0x1C, 0x03E00008); // jr ra
-    writeLe32(buffer, codeOffset + 0x20, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x08, 0x3C018001); // lui at, 0x8001
+    writeLe32(buffer, codeOffset + 0x0C, 0x3C028001); // lui v0, 0x8001
+    writeLe32(buffer, codeOffset + 0x10, 0x24420040); // addiu v0, v0, 0x0040
+    writeLe32(buffer, codeOffset + 0x14, 0xAC220070); // sw v0, 0x0070(at)
+    writeLe32(buffer, codeOffset + 0x18, 0x3C138001); // lui s3, 0x8001
+    writeLe32(buffer, codeOffset + 0x1C, 0x26730070); // addiu s3, s3, 0x0070
+    writeLe32(buffer, codeOffset + 0x20, 0x0260A021); // addu s4, s3, zero
+    writeLe32(buffer, codeOffset + 0x24, 0x8E830000); // lw v1, 0(s4)
+    writeLe32(buffer, codeOffset + 0x28, 0x0060F809); // jalr ra, v1
+    writeLe32(buffer, codeOffset + 0x2C, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x30, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x34, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x38, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x3C, 0x00000000); // nop
 
     // Target begins with a couple of global loads before the actual stack frame.
     writeLe32(buffer, codeOffset + 0x40, 0x3C028001); // lui v0, 0x8001

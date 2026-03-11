@@ -114,6 +114,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_harvest_internal.cpp
     src/recompiler/pipeline_harvest_helpers.cpp
     src/recompiler/pipeline_indirect_call_helpers.cpp
+    src/recompiler/pipeline_memory_reference_helpers.cpp
     src/recompiler/pipeline_helpers.cpp
     src/recompiler/pipeline_helpers_manifest.cpp
     src/recompiler/pipeline_helpers_output.cpp
@@ -431,6 +432,7 @@ if(BUILD_TESTS)
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp
         tests/unit/pipeline_test_builders.cpp
+        tests/unit/pipeline_test_gap_builders.cpp
     )
     target_link_libraries(pipeline_test
         PRIVATE
