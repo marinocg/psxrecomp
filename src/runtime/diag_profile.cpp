@@ -133,6 +133,9 @@ TracepointConfig parseTracepoint(const JsonValue& obj)
     tp.name = obj.getString("name");
     parseAddressRange(obj.getString("pc_range"), tp.pcRangeStart, tp.pcRangeEnd);
     tp.logBranches = obj.getBool("log_branches");
+    tp.captureContext = obj.getBool("capture_context");
+    tp.callerHistogram = obj.getBool("caller_histogram");
+    tp.repeatThreshold = static_cast<u32>(obj.getNumber("repeat_threshold"));
     for (const auto& reg : obj.getArray("registers"))
     {
         if (reg.isString())

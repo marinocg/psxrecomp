@@ -270,6 +270,8 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
         "stream << \"Step budget exhausted after \" << stepCount << \" steps at PC 0x\"");
     emitter.writeLine("       << std::hex << pc << \"\\n\";");
     emitter.writeLine("stream << context.system.stallClassifier().classify();");
+    emitter.writeLine("stream << context.system.diagTracepoints().formatRecentTraces();");
+    emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();

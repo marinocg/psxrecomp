@@ -68,6 +68,9 @@ struct TracepointConfig
     std::vector<std::string> registers;
     bool logBranches = false;
     std::vector<Address> mmioReads;
+    bool captureContext = false;
+    bool callerHistogram = false;
+    u32 repeatThreshold = 0;
 };
 
 /// Validator type enumeration.

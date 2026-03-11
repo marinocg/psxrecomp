@@ -59,7 +59,18 @@ void installSyntheticCallbackBridge(psxrecomp::runtime::PsxSystem& system, Callb
                 if (address == resumeAddress)
                 {
                     context.regs[REG_V0] = 0u;
+                    context.regs[3] = 0x10203040u;  // v1
+                    context.regs[4] = 0x11112222u;  // a0
+                    context.regs[5] = 0x33334444u;  // a1
+                    context.regs[6] = 0x55556666u;  // a2
+                    context.regs[9] = 0x77778888u;  // t1
+                    context.regs[10] = 0x9999AAAAu; // t2
                     context.regs[REG_S0] = 0x55667788u;
+                    context.regs[17] = 0xBBBBCCCCu; // s1
+                    context.regs[18] = 0xDDDDEEEEu; // s2
+                    context.regs[19] = 0xF0F0F0F0u; // s3
+                    context.regs[20] = 0x12344321u; // s4
+                    context.regs[REG_RA] = 0x8001ABCDu;
                     context.hi = 0xCAFEBABEu;
                     context.lo = 0xFACE1234u;
                     system.write<psxrecomp::u32>(0x80015000u, 0x12345678u);
@@ -156,6 +167,16 @@ void testHookEntryIntDoesNotLeakIntoInterruptedContext()
     context.regs.fill(0u);
     context.regs[REG_V0] = 1u;
     context.regs[REG_S0] = 0xAABBCCDDu;
+    context.regs[3] = 0x01010101u;  // v1
+    context.regs[4] = 0x02020202u;  // a0
+    context.regs[5] = 0x03030303u;  // a1
+    context.regs[6] = 0x04040404u;  // a2
+    context.regs[9] = 0x05050505u;  // t1
+    context.regs[10] = 0x06060606u; // t2
+    context.regs[17] = 0x07070707u; // s1
+    context.regs[18] = 0x08080808u; // s2
+    context.regs[19] = 0x09090909u; // s3
+    context.regs[20] = 0x0A0A0A0Au; // s4
     context.regs[REG_RA] = 0x8001021Cu;
     context.regs[REG_SP] = 0x8001FFE0u;
     context.hi = 0x13572468u;
@@ -171,6 +192,26 @@ void testHookEntryIntDoesNotLeakIntoInterruptedContext()
             "HookEntryInt callback leaked resumed v0 into interrupted context");
     require(context.regs[REG_S0] == 0xAABBCCDDu,
             "HookEntryInt callback leaked resumed S0 into interrupted context");
+    require(context.regs[3] == 0x01010101u,
+            "HookEntryInt callback leaked resumed v1 into interrupted context");
+    require(context.regs[4] == 0x02020202u,
+            "HookEntryInt callback leaked resumed a0 into interrupted context");
+    require(context.regs[5] == 0x03030303u,
+            "HookEntryInt callback leaked resumed a1 into interrupted context");
+    require(context.regs[6] == 0x04040404u,
+            "HookEntryInt callback leaked resumed a2 into interrupted context");
+    require(context.regs[9] == 0x05050505u,
+            "HookEntryInt callback leaked resumed t1 into interrupted context");
+    require(context.regs[10] == 0x06060606u,
+            "HookEntryInt callback leaked resumed t2 into interrupted context");
+    require(context.regs[17] == 0x07070707u,
+            "HookEntryInt callback leaked resumed s1 into interrupted context");
+    require(context.regs[18] == 0x08080808u,
+            "HookEntryInt callback leaked resumed s2 into interrupted context");
+    require(context.regs[19] == 0x09090909u,
+            "HookEntryInt callback leaked resumed s3 into interrupted context");
+    require(context.regs[20] == 0x0A0A0A0Au,
+            "HookEntryInt callback leaked resumed s4 into interrupted context");
     require(context.regs[REG_RA] == 0x8001021Cu,
             "HookEntryInt callback leaked resumed RA into interrupted context");
     require(context.hi == 0x13572468u,

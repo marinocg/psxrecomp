@@ -140,6 +140,7 @@ set(RUNTIME_SOURCES
     src/runtime/cdrom_state.cpp
     src/runtime/disc_image.cpp
     src/runtime/cop0.cpp
+    src/runtime/callback_trace.cpp
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gte.cpp
@@ -357,6 +358,11 @@ if(BUILD_TESTS)
         tests/unit/callback_bridge_test.cpp
     )
     target_link_libraries(callback_bridge_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(callback_trace_test
+        tests/unit/callback_trace_test.cpp
+    )
+    target_link_libraries(callback_trace_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(interrupt_service_context_test
         tests/unit/interrupt_service_context_test.cpp

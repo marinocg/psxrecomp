@@ -107,6 +107,7 @@ void PsxSystem::reset()
     m_cop0.reset();
     m_gte.reset();
     m_stallClassifier.reset();
+    m_callbackTrace.reset();
     bindGteRuntimeHooks();
     m_criticalSectionDepth = 0;
     m_hookEntryInt = {};

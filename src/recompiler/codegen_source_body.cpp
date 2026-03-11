@@ -365,7 +365,11 @@ void emitGeneratedSourceBody(CppEmitter& emitter, const ModuleMetadata& metadata
     emitter.openBlock("");
     emitter.writeLine("callRecompiledFunction(context, address);");
     emitter.writeLine("const u32 callbackResult = context.regs[Registers::V0];");
-    emitter.writeLine("if (shouldCommitCallbackContext())");
+    emitter.writeLine("const bool commitCallbackContext = shouldCommitCallbackContext();");
+    emitter.writeLine("system.callbackTrace().recordCommittedRegisterDelta(");
+    emitter.writeLine("    savedRegs, context.regs, savedHi, context.hi, savedLo, context.lo,");
+    emitter.writeLine("    commitCallbackContext);");
+    emitter.writeLine("if (commitCallbackContext)");
     emitter.openBlock("");
     emitter.writeLine("return callbackResult;");
     emitter.closeBlock();
@@ -376,7 +380,11 @@ void emitGeneratedSourceBody(CppEmitter& emitter, const ModuleMetadata& metadata
     emitter.closeBlock();
     emitter.writeLine("catch (...) ");
     emitter.openBlock("");
-    emitter.writeLine("if (!shouldCommitCallbackContext())");
+    emitter.writeLine("const bool commitCallbackContext = shouldCommitCallbackContext();");
+    emitter.writeLine("system.callbackTrace().recordCommittedRegisterDelta(");
+    emitter.writeLine("    savedRegs, context.regs, savedHi, context.hi, savedLo, context.lo,");
+    emitter.writeLine("    commitCallbackContext);");
+    emitter.writeLine("if (!commitCallbackContext)");
     emitter.openBlock("");
     emitter.writeLine("context.regs = savedRegs;");
     emitter.writeLine("context.hi = savedHi;");

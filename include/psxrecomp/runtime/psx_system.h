@@ -1,6 +1,7 @@
 #pragma once
 
 #include "psxrecomp/runtime/bios_file_table.h"
+#include "psxrecomp/runtime/callback_trace.h"
 #include "psxrecomp/runtime/cdrom.h"
 #include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/debug_overlay.h"
@@ -158,18 +159,33 @@ class PsxSystem
         {
             const Address offset = physical - MemoryMap::RAM_BASE;
             const u8 writeSize = static_cast<u8>(sizeof(T));
-            if (m_stallClassifier.shouldWatchRamWrite(physical, writeSize) ||
-                m_diagWatchpoints.shouldWatchRamWrite(physical, writeSize))
+            const bool callbackTraceActive = m_callbackTrace.hasActiveInvocation();
+            const bool shouldTraceWrite =
+                callbackTraceActive || m_stallClassifier.shouldWatchRamWrite(physical, writeSize) ||
+                m_diagWatchpoints.shouldWatchRamWrite(physical, writeSize);
+            if (shouldTraceWrite)
             {
                 const T oldValue = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
                 writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
-                m_stallClassifier.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
-                                                 writeSize, static_cast<u32>(oldValue),
-                                                 static_cast<u32>(value));
-                m_diagWatchpoints.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
-                                                 writeSize, static_cast<u32>(oldValue),
-                                                 static_cast<u32>(value), nullptr,
-                                                 m_lastResumeAddress);
+                if (callbackTraceActive)
+                {
+                    m_callbackTrace.recordRamWrite(0x80000000u | physical, writeSize,
+                                                   static_cast<u32>(oldValue),
+                                                   static_cast<u32>(value));
+                }
+                if (m_stallClassifier.shouldWatchRamWrite(physical, writeSize))
+                {
+                    m_stallClassifier.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
+                                                     writeSize, static_cast<u32>(oldValue),
+                                                     static_cast<u32>(value));
+                }
+                if (m_diagWatchpoints.shouldWatchRamWrite(physical, writeSize))
+                {
+                    m_diagWatchpoints.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
+                                                     writeSize, static_cast<u32>(oldValue),
+                                                     static_cast<u32>(value), nullptr,
+                                                     m_lastResumeAddress);
+                }
             }
             else
             {
@@ -211,6 +227,8 @@ class PsxSystem
     Cop0& cop0();
     Gte& gte();
     StallClassifier& stallClassifier();
+    CallbackTraceEngine& callbackTrace();
+    const CallbackTraceEngine& callbackTrace() const;
 
     /// Load a diagnostic profile from a JSON file path (or resolve from env/CLI).
     bool loadDiagProfile(const std::string& path = "");
@@ -340,7 +358,7 @@ class PsxSystem
      * Uses the installed callback invoker to call into recompiled code.
      * No-op if no invoker is installed.
      */
-    void invokeCallback(u32 address);
+    void invokeCallback(u32 address, u32 descriptorAddress = 0);
 
     /**
      * @brief Invoke a PSX callback and return $v0.
@@ -348,7 +366,7 @@ class PsxSystem
      * Used internally for BIOS IRQ priority-chain emulation.
      * May throw ReturnFromExceptionSignal.
      */
-    u32 invokeCallbackRaw(u32 address);
+    u32 invokeCallbackRaw(u32 address, u32 descriptorAddress = 0);
 
     /**
      * @brief Apply queued HookEntryInt register state to callback registers.
@@ -399,6 +417,7 @@ class PsxSystem
     Cop0 m_cop0;
     Gte m_gte;
     StallClassifier m_stallClassifier;
+    CallbackTraceEngine m_callbackTrace;
     std::shared_ptr<Disc> m_disc;
     DiscSwapInfo m_discSwapInfo;
     bool m_discSwapInfoInitialized = false;

@@ -43,6 +43,8 @@ int main()
     // ---------------------------------------------------------------
     assert(source.find("PSXRECOMP_MAX_STEPS") != std::string::npos);
     assert(source.find("Step budget exhausted") != std::string::npos);
+    assert(source.find("callbackTrace().formatRecentCallbacks") != std::string::npos);
+    assert(source.find("recordCommittedRegisterDelta") != std::string::npos);
     std::cerr << "[PASS] PSXRECOMP_MAX_STEPS present\n";
 
     // ---------------------------------------------------------------

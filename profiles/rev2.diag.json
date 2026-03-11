@@ -32,6 +32,32 @@
   ],
   "tracepoints": [
     {
+      "name": "rev2_delay_helper",
+      "pc_range": "0x15f944-0x15f99c",
+      "registers": ["sp", "ra", "v0", "v1"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 32
+    },
+    {
+      "name": "rev2_delay_caller_init",
+      "pc_range": "0x15ee6c-0x15f0e8",
+      "registers": ["ra", "sp", "v0", "v1"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true
+    },
+    {
+      "name": "rev2_delay_caller_poll",
+      "pc_range": "0x15f0ec-0x15f2a8",
+      "registers": ["ra", "sp", "v0", "v1"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true
+    },
+    {
       "name": "rev2_wait_loop",
       "pc_range": "0x160840-0x16088c",
       "registers": ["sp", "v0", "v1"],

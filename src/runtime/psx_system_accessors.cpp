@@ -119,6 +119,16 @@ StallClassifier& PsxSystem::stallClassifier()
     return m_stallClassifier;
 }
 
+CallbackTraceEngine& PsxSystem::callbackTrace()
+{
+    return m_callbackTrace;
+}
+
+const CallbackTraceEngine& PsxSystem::callbackTrace() const
+{
+    return m_callbackTrace;
+}
+
 bool PsxSystem::loadDiagProfile(const std::string& path)
 {
     const std::string resolved = path.empty() ? DiagProfile::resolveProfilePath() : path;

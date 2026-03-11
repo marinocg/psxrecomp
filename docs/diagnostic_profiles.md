@@ -51,6 +51,15 @@ Current runtime behavior:
 - logs entry into a traced PC range
 - logs exit from a traced PC range
 - logs configured GPU `GP1` MMIO reads while the tracepoint is active
+- optional `capture_context` adds caller PC, resume address, callback generation,
+  and IRQ snapshot to entry/exit logs
+- optional `caller_histogram` keeps a compact caller count summary
+- optional `repeat_threshold` emits a repeat signature when the same caller,
+  callback context, and pending IRQ state re-enter a range repeatedly
+- step-budget stall reports include recent callback-path summaries with
+  callback entry/exit PCs, descriptor/return-site context, IRQ snapshots,
+  callback-generation changes, repeat counts, per-callback RAM write deltas,
+  and committed register deltas
 
 The `registers` and `log_branches` fields are accepted by the profile parser so
 the intent stays documented, but the runtime currently emits entry/exit events
@@ -68,6 +77,9 @@ but they are not required for basic tracepoint/watchpoint workflows.
 
 It focuses on:
 
+- the bounded delay helper at `0x15f944-0x15f99c`
+- its two current caller functions at `0x15ee6c-0x15f0e8` and
+  `0x15f0ec-0x15f2a8`
 - the hot loop around `0x160840-0x16088c`, which includes the stalled PC
   `0x16085c`
 - the two indirect-call windows at `0x15d7b4` and `0x16116c`

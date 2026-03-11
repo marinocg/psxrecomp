@@ -489,7 +489,7 @@ void PsxSystem::invokeHookEntryIntHandler()
         {
             try
             {
-                (void)invokeCallbackRaw(resumeAddress);
+                (void)invokeCallbackRaw(resumeAddress, m_hookEntryInt.descriptorAddress);
             }
             catch (...)
             {
