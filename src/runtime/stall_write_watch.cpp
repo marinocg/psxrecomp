@@ -167,9 +167,9 @@ bool overlapsWatchedWrite(const std::vector<WatchedWriteRange>& ranges, Address 
         return false;
     }
 
-    const Address writeEnd = static_cast<Address>(
-        std::min<u64>(static_cast<u64>(physical) + static_cast<u64>(size) - 1,
-                      static_cast<u64>(MemoryMap::RAM_SIZE - 1)));
+    const Address writeEnd =
+        static_cast<Address>(std::min<u64>(static_cast<u64>(physical) + static_cast<u64>(size) - 1,
+                                           static_cast<u64>(MemoryMap::RAM_SIZE - 1)));
     for (const auto& range : ranges)
     {
         if (writeEnd < range.start)

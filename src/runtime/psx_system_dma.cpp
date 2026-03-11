@@ -155,8 +155,8 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         transferredWords = wordCount;
 
         std::ostringstream detail;
-        detail << "port=" << dmaPortName(port) << " sync=" << syncMode << " words="
-               << wordCount << " base=0x" << std::hex << base;
+        detail << "port=" << dmaPortName(port) << " sync=" << syncMode << " words=" << wordCount
+               << " base=0x" << std::hex << base;
         const u32 requestedBytes = wordCount * sizeof(u32);
         const bool wraps = requestedBytes > (MemoryMap::RAM_SIZE - base);
         if (wraps)
@@ -166,10 +166,10 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                  << " bytes=" << std::dec << requestedBytes << " port=" << dmaPortName(port);
             m_logger.log(LogLevel::Warn, "load", warn.str());
         }
-        m_stallClassifier.recordRamCopyProvenance(
-            std::string("DMA:") + dmaPortName(port), detail.str(),
-            m_debugOverlay.lastProgramCounter(), 0x80000000u | base, requestedBytes,
-            requestedBytes, true, wraps, false);
+        m_stallClassifier.recordRamCopyProvenance(std::string("DMA:") + dmaPortName(port),
+                                                  detail.str(), m_debugOverlay.lastProgramCounter(),
+                                                  0x80000000u | base, requestedBytes,
+                                                  requestedBytes, true, wraps, false);
     }
     else
     {
@@ -274,6 +274,14 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     m_dma.clearTrigger(port);
     m_dma.notifyTransferComplete(port);
     m_debugOverlay.incrementDmaTransfers();
+
+    if (port == DmaPort::Spu)
+    {
+        // libsnd-style callers wait on the SPU completion event after arming
+        // DMA4, so complete it asynchronously on the hardware tick path.
+        m_pendingSpuDmaCompletion = true;
+        m_pendingSpuDmaCompletionCycles = 2048;
+    }
 
     std::ostringstream message;
     message << "DMA transfer on port " << static_cast<int>(port) << " words=" << transferredWords;

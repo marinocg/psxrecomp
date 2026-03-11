@@ -136,6 +136,12 @@ int main()
            std::string::npos);
     assert(source.find("context.cachedRangeFn = range.fn;") != std::string::npos);
     assert(source.find("if (range.fn(context, physical))") != std::string::npos);
+    assert(source.find("const auto interruptSavedRegs = context.regs;") != std::string::npos);
+    assert(source.find("const u32 interruptCallbackCommitGeneration =") != std::string::npos);
+    assert(source.find("context.system.callbackContextCommitGeneration() !=") != std::string::npos);
+    assert(source.find("context.regs = interruptSavedRegs;") != std::string::npos);
+    assert(source.find("context.hi = interruptSavedHi;") != std::string::npos);
+    assert(source.find("context.lo = interruptSavedLo;") != std::string::npos);
     assert(source.find("main_func(context, 0x10004);") == std::string::npos);
     assert(source.find("main_func(context, 0x10007);") == std::string::npos);
     assert(source.find("main_func(context, 0x10006);") == std::string::npos);
@@ -355,7 +361,12 @@ int main()
     runtimeHeader << "    void tickCpuCycles(u32) {}\n";
     runtimeHeader << "    u32 frameCount() const { return 0; }\n";
     runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
-    runtimeHeader << "    void observeProgramCounter(Address pc) { m_overlay.setLastProgramCounter(pc); m_stallClassifier.recordPc(pc); }\n";
+    runtimeHeader << "    void observeProgramCounter(Address pc) { "
+                     "m_overlay.setLastProgramCounter(pc); m_stallClassifier.recordPc(pc); }\n";
+    runtimeHeader
+        << "    void setLastResumeAddress(Address address) { m_lastResumeAddress = address; }\n";
+    runtimeHeader << "    Address lastResumeAddress() const { return m_lastResumeAddress; }\n";
+    runtimeHeader << "    std::string describeBiosCdromState() const { return {}; }\n";
     runtimeHeader << "    void serviceInterrupts() {}\n";
     runtimeHeader << "    void validateAllocatorHeapCallBoundary(Address) {}\n";
     runtimeHeader << "    enum class CallbackContextDisposition { RestoreSaved, CommitMutated };\n";
@@ -374,6 +385,7 @@ int main()
     runtimeHeader << "    Cop0 m_cop0;\n";
     runtimeHeader << "    Gte m_gte;\n";
     runtimeHeader << "    StallClassifier m_stallClassifier;\n";
+    runtimeHeader << "    Address m_lastResumeAddress = 0;\n";
     runtimeHeader << "};\n";
     runtimeHeader << "} }\n";
     runtimeHeader.close();

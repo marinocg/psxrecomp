@@ -169,8 +169,7 @@ void PsxSystem::validateAllocatorHeapBoundary(const std::string& source, Address
     }
     if (m_lastResumeAddress != 0)
     {
-        os << " (inside resumed function, resumed_at=0x" << std::hex << m_lastResumeAddress
-           << ")";
+        os << " (inside resumed function, resumed_at=0x" << std::hex << m_lastResumeAddress << ")";
     }
     os << "\nresult=failed\n" << failureReport.str();
     os << m_stallClassifier.formatRecentMemoryActivity();

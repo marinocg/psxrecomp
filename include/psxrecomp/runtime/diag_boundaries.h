@@ -27,8 +27,7 @@ class DiagBoundaryDispatcher
 
     /// Fire a boundary event, running all configured diagnostics.
     /// Returns true if all validators passed.
-    bool onBoundary(BoundaryKind kind, const u8* ram, size_t ramSize,
-                    RuntimeLogger* logger) const;
+    bool onBoundary(BoundaryKind kind, const u8* ram, size_t ramSize, RuntimeLogger* logger) const;
 
     /// Check if any boundary is configured for the given kind.
     bool hasBoundary(BoundaryKind kind) const;

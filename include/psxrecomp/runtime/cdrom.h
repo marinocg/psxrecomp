@@ -76,6 +76,20 @@ class Cdrom
         std::vector<u8> responses;
     };
 
+    struct PendingCommand
+    {
+        u8 value = 0;
+        bool valid = false;
+        std::deque<u8> params;
+
+        void clear()
+        {
+            value = 0;
+            valid = false;
+            params.clear();
+        }
+    };
+
     static constexpr size_t MAX_PARAMS = 16;
     static constexpr size_t RESPONSE_CAPACITY = 32;
     static constexpr size_t DATA_FIFO_CAPACITY = 4096;
@@ -239,6 +253,7 @@ class Cdrom
     u8 m_index = 0;
     CommandFifo m_commandFifo;
     ResponseFifo m_responseFifo;
+    ResponseFifo m_ackResponseFifo;
     DataFifo m_dataFifo;
     CommandExecutionState m_execution;
     std::deque<std::vector<u8>> m_sectorQueue;
@@ -247,6 +262,7 @@ class Cdrom
     u8 m_interruptFlags = 0;
     u8 m_interruptEnable = 0;
     u8 m_requestControl = 0;
+    PendingCommand m_pendingCommand;
     u32 m_lastDmaWord = 0;
     Disc* m_disc = nullptr;
     std::function<void(const std::vector<int16_t>&)> m_xaAudioSink;
@@ -262,6 +278,9 @@ class Cdrom
     void queueErrorInterrupt(u8 reasonCode);
     void beginDoorOpenTransition(bool closeAfterTransition);
     void writeRequestControl(u8 value);
+    bool canExecutePendingCommand() const;
+    void enqueueCommand(u8 value);
+    void executePendingCommand();
     void queueInterruptEvent(u8 type, std::initializer_list<u8> responses = {});
     void publishNextInterruptEvent();
     void pumpSectorToDataFifo();

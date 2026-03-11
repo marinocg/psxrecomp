@@ -28,6 +28,14 @@ constexpr u8 CDCMD_READN = 0x06;
 constexpr u8 CDCMD_INIT = 0x0A;
 constexpr u8 CDCMD_SETMODE = 0x0E;
 constexpr u8 CDCMD_SEEKL = 0x15;
+
+void drainCdromResponse(Cdrom& cdrom)
+{
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+    {
+        (void)cdrom.readResponse();
+    }
+}
 } // namespace
 
 bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
@@ -108,8 +116,9 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         m_cdrom.writeParam(sector);
         m_cdrom.writeCommand(CDCMD_SETLOC);
 
-        // Acknowledge the INT3 from Setloc before issuing SeekL.
+        // Acknowledge and drain the Setloc response before issuing SeekL.
         m_cdrom.writeInterruptFlags(0x07u);
+        drainCdromResponse(m_cdrom);
         m_cdrom.writeCommand(CDCMD_SEEKL);
 
         regs[2] = 1;
@@ -172,8 +181,8 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
             const RamCopyBounds bounds = planRamCopy(a1, static_cast<u32>(requestedBytes));
             if (!bounds.destinationInRam || bounds.destinationOverflow)
             {
-                logRamCopyWarning("CdAsyncReadSector", a1, static_cast<u32>(requestedBytes),
-                                  bounds, static_cast<u32>(requestedBytes));
+                logRamCopyWarning("CdAsyncReadSector", a1, static_cast<u32>(requestedBytes), bounds,
+                                  static_cast<u32>(requestedBytes));
             }
         }
 
@@ -183,6 +192,7 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         m_cdrom.writeParam(static_cast<u8>(a2 & 0xFF));
         m_cdrom.writeCommand(CDCMD_SETMODE);
         m_cdrom.writeInterruptFlags(0x07u);
+        drainCdromResponse(m_cdrom);
 
         // Start reading.
         m_cdrom.writeCommand(CDCMD_READN);

@@ -30,9 +30,8 @@ struct JsonParser
 
     void skipWhitespace()
     {
-        while (pos < input.size() &&
-               (input[pos] == ' ' || input[pos] == '\t' || input[pos] == '\n' ||
-                input[pos] == '\r'))
+        while (pos < input.size() && (input[pos] == ' ' || input[pos] == '\t' ||
+                                      input[pos] == '\n' || input[pos] == '\r'))
         {
             ++pos;
         }

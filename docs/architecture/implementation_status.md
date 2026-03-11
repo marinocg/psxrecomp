@@ -92,7 +92,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Delay slot flagging and target resolution helpers.
 - Function boundary discovery heuristics and indirect jump/jump table detection.
 - Code-vs-data segmentation helpers for mixed sections.
-- Callback/indirect-call target harvesting now iterates across segmentation passes, rescanning initialized pointer tables, referenced descriptor words, jump tables, and code-built callback addresses while still filtering for plausible callable code. This allows IRQ/draw callback paths (including `gtelab_auto`) to recompile without promoting adjacent `.rodata` blobs into code.
+- Callback/indirect-call target harvesting now iterates across segmentation passes, rescanning initialized pointer tables, referenced descriptor words, jump tables, and code-built callback addresses while distinguishing real register-jump targets from stored/call-argument pointers. Weak "callable region" acceptance is now reserved for true register-jump sites so IRQ/draw callback paths (including `gtelab_auto`) still recompile without promoting adjacent `.rodata` blobs into code.
 - Entry-function fall-through merge: when the entry point lacks a control-flow terminator before the next prologue, the two regions are merged into a single function boundary.
 - Focused GTE validation demo (`examples/demos/gtelab_auto`) now exercises COP2 transfer/control and transform/lighting instruction mixes (`MTC2/MFC2`, `CTC2/CFC2`, `LWC2/SWC2`, `RTPS/RTPT`, `NCLIP`, `AVSZ3/AVSZ4`, `MVMVA`, and the lighting/color family through shaded primitive output).
 
@@ -154,7 +154,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - COP0 now exposes `cop2Enabled()` (`Status.CU2`) so generated COP2 register accesses can trap correctly when the GTE is disabled.
 - COP0 interrupt wiring now mirrors IRQ-controller pending state into `Cause.IP2`, preserves hardware IP bits when software writes `Cause` via `mtc0`, and gates IRQ delivery/exception entry with `Status.IEc` + `Status.IM2` (plus runtime callback/critical-section guards).
 - IRQ delivery now restores COP0 `Status` via a guaranteed `serviceInterrupts()` epilogue (`rfe`) instead of relying on BIOS `B0:17` to manage COP0 state.
-- The generated callback bridge now commits `HookEntryInt` longjmp-style resumes instead of restoring the pre-callback snapshot, so `v0=1`, `ra`, `sp`, `fp`, `gp`, and `s0..s7` survive `ReturnFromException` back into the resumed context.
+- The generated callback bridge now commits `HookEntryInt` longjmp-style resumes for the resumed callback itself, while generated `serviceInterrupts()` guards restore the interrupted CPU register snapshot after IRQ delivery so HookEntryInt callback registers do not leak back into mainline execution after `ReturnFromException`.
 - Boot now seeds minimal COP0 Status defaults for BIOS-style IRQ flow (`IEc=1`, `IM2=1`, `KUc=0`) before entering recompiled code.
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
 - Structured runtime logging with per-category events and configurable verbosity.
@@ -196,6 +196,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Runtime backend switching and frame comparison helpers for validation workflows.
 - Software renderer now covers texture sampling modes (4/8/16-bit), CLUT lookups, texture page selection, semi-transparency modes, mask-bit behavior, dithering toggles, and color modulation paths.
 - Runtime GPU fixes now include DMA6 OTC ordering-table clear, correct GP0 packet lengths for key primitive families, sprite opcode coverage for `0x74-0x77`/`0x7C-0x7F` (SPRT_8/SPRT_16), per-command texture/clut state snapshots, and raw-VRAM-backed texture/CLUT sampling.
+- GPUSTAT timing now follows PSX-SPX display semantics more closely: bit 22 mirrors vertical interlace enable, bit 31 stays low during VBlank and otherwise follows active-display scanline/field state, and bits 25/26/28 now distinguish DMA-data, command-word, and DMA-block readiness instead of treating FIFO drain as the sole readiness signal.
 - Conformance unit coverage now exercises Phase 3 primitive/effect behavior including degenerate lines, quad decomposition, clip/offset rules, texturing, blending, and mask interactions.
 - DMA direction-aware GPU ingestion plus GPU linked-list DMA path handling in runtime DMA transfers.
 - Exhaustive decoder tests now cover valid and malformed GP0/GP1 command packet streams.

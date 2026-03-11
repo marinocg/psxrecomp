@@ -127,8 +127,8 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         std::memmove(scratch.data(), src, a2);
         std::ostringstream detail;
         detail << "src=0x" << std::hex << a0;
-        copyBufferToRam(a1, scratch.data(), a2, a2, m_debugOverlay.lastProgramCounter(),
-                        "A0:bcopy", detail.str());
+        copyBufferToRam(a1, scratch.data(), a2, a2, m_debugOverlay.lastProgramCounter(), "A0:bcopy",
+                        detail.str());
         return true;
     }
     case 0x28: // bzero / memset 0
@@ -152,8 +152,8 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
     {
         std::ostringstream detail;
         detail << "value=0x" << std::hex << (a1 & 0xFF);
-        fillBufferToRam(a0, static_cast<u8>(a1 & 0xFF), a2,
-                        m_debugOverlay.lastProgramCounter(), "A0:memset", detail.str());
+        fillBufferToRam(a0, static_cast<u8>(a1 & 0xFF), a2, m_debugOverlay.lastProgramCounter(),
+                        "A0:memset", detail.str());
         regs[2] = a0;
         return true;
     }

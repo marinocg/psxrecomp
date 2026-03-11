@@ -17,13 +17,13 @@ namespace runtime
 class Gpu
 {
   public:
-        /// Display phase within a single frame.
-        enum class DisplayPhase : u8
-        {
-                ActiveDisplay, ///< bit 22=0, field=current
-                VBlankStart,   ///< bit 22=1, field=current  (entering VBlank)
-                VBlankEnd,     ///< bit 22=1, field=!current (field flips mid-VBlank)
-        };
+    /// Display phase within a single frame.
+    enum class DisplayPhase : u8
+    {
+        ActiveDisplay,
+        VBlankStart,
+        VBlankEnd,
+    };
 
     struct DisplayWindow
     {

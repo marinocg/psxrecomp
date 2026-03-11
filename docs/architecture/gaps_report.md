@@ -71,8 +71,8 @@ master roadmap.
 
 ## Testing & Validation (~46%)
 
-- 22 unit tests now pass consistently, covering ISO parsing, fixture-based pipeline checks, codegen lowering, COP0 semantics, BIOS vector dispatch, runtime system initialization, entry-function merge, and GPU fill-rect PSX-SPX correctness.
-- Current demo verification corpus (ADVHELLO, COP0TEST, GPUTEST, HELLOWLD, MEMTEST) reports `PASS` render checks with per-demo screenshots and summary metadata.
+- 36 unit tests now pass consistently, covering ISO parsing, fixture-based pipeline checks, codegen lowering, COP0 semantics, BIOS vector dispatch, runtime system initialization, entry-function merge, pipeline pointer harvesting, GPU status/fill-rect PSX-SPX correctness, and runtime event timing.
+- Current demo verification corpus (ADVHELLO, COP0TEST, GPUTEST, HELLOWLD, MEMTEST, CDBROWSE, CDCRC, CDXA) reports `PASS` render checks with per-demo screenshots and summary metadata; `GTELAB` remains part of the intended corpus but depends on generating its demo ISO before validation can run.
 - GPU parity groundwork now includes a versioned trace corpus + golden metadata format; however, there is still no automated golden-output emulator parity suite.
 - No standardized catalog of larger real-world demo/game regression inputs in CI.
 - End-to-end runtime playback validation remains mostly manual.

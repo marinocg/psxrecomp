@@ -246,8 +246,8 @@ std::string DiagValidatorEngine::describeChain(const ValidatorConfig& config, Ad
            << rawHeader << " size=0x" << sizeField << " free=" << freeBit << " next=0x" << next
            << "\n";
 
-        if (!isAligned(sizeField, 3u) || sizeField == 0 || sizeField > ramSize ||
-            next <= current || !isPhysicalRamAddress(toPhysical(next), ramSize))
+        if (!isAligned(sizeField, 3u) || sizeField == 0 || sizeField > ramSize || next <= current ||
+            !isPhysicalRamAddress(toPhysical(next), ramSize))
         {
             os << "    chain broken\n";
             return os.str();
@@ -260,8 +260,7 @@ std::string DiagValidatorEngine::describeChain(const ValidatorConfig& config, Ad
 }
 
 ValidationResult DiagValidatorEngine::runSentinelBlockChain(const ValidatorConfig& config,
-                                                            const u8* ram,
-                                                            size_t ramSize) const
+                                                            const u8* ram, size_t ramSize) const
 {
     ValidationResult result;
     result.validatorName = config.name;
@@ -305,8 +304,8 @@ ValidationResult DiagValidatorEngine::runSentinelBlockChain(const ValidatorConfi
     return result;
 }
 
-ValidationResult DiagValidatorEngine::runPointerCell(const ValidatorConfig& config,
-                                                     const u8* ram, size_t ramSize) const
+ValidationResult DiagValidatorEngine::runPointerCell(const ValidatorConfig& config, const u8* ram,
+                                                     size_t ramSize) const
 {
     ValidationResult result;
     result.validatorName = config.name;
@@ -346,15 +345,15 @@ ValidationResult DiagValidatorEngine::runPointerCell(const ValidatorConfig& conf
     return result;
 }
 
-ValidationResult DiagValidatorEngine::runLinkedList(const ValidatorConfig& config,
-                                                    const u8* ram, size_t ramSize) const
+ValidationResult DiagValidatorEngine::runLinkedList(const ValidatorConfig& config, const u8* ram,
+                                                    size_t ramSize) const
 {
     // Linked list is similar to sentinel block chain but without header parsing.
     return runSentinelBlockChain(config, ram, ramSize);
 }
 
-ValidationResult DiagValidatorEngine::runBoundedWalk(const ValidatorConfig& config,
-                                                     const u8* ram, size_t ramSize) const
+ValidationResult DiagValidatorEngine::runBoundedWalk(const ValidatorConfig& config, const u8* ram,
+                                                     size_t ramSize) const
 {
     // Bounded walk reuses the same chain validation with region bounds.
     return runSentinelBlockChain(config, ram, ramSize);

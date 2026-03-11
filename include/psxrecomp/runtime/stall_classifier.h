@@ -171,10 +171,10 @@ class StallClassifier
     static constexpr size_t BIOS_RING_SIZE = 16;
     static constexpr size_t DMA_RING_SIZE = 8;
     static constexpr size_t CDROM_RING_SIZE = 8;
-        static constexpr size_t WATCHED_WRITE_RING_SIZE = 64;
+    static constexpr size_t WATCHED_WRITE_RING_SIZE = 64;
     static constexpr size_t COPY_PROVENANCE_RING_SIZE = 32;
 
-        StallClassifier();
+    StallClassifier();
 
     /// Record a PC observation (call from setProgramCounter).
     void recordPc(Address pc);
@@ -200,8 +200,7 @@ class StallClassifier
     /// Record a bulk RAM copy/load provenance event.
     void recordRamCopyProvenance(std::string source, std::string detail, Address writerPc,
                                  Address destination, u32 actualLength, u32 requestedLength,
-                                 bool destinationInRam, bool destinationOverflow,
-                                 bool shortRead);
+                                 bool destinationInRam, bool destinationOverflow, bool shortRead);
 
     /// Whether `PSXRECOMP_WATCH_WRITE` enabled watched RAM writes.
     bool isWatchingRamWrites() const;
@@ -234,8 +233,7 @@ class StallClassifier
     const RingBuffer<WatchedRamWriteEntry, WATCHED_WRITE_RING_SIZE>& watchedWriteRing() const;
 
     /// Access the RAM copy provenance ring buffer.
-    const RingBuffer<RamCopyProvenanceEntry, COPY_PROVENANCE_RING_SIZE>& copyProvenanceRing()
-        const;
+    const RingBuffer<RamCopyProvenanceEntry, COPY_PROVENANCE_RING_SIZE>& copyProvenanceRing() const;
 
     /// Reset all ring buffers.
     void reset();

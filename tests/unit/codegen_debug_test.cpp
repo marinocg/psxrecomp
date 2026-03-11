@@ -120,7 +120,7 @@ int main()
     // setProgramCounter should update the debug overlay's last PC.
     // ---------------------------------------------------------------
     assert(source.find("debugOverlay") != std::string::npos);
-    assert(source.find("setLastProgramCounter") != std::string::npos);
+    assert(source.find("observeProgramCounter") != std::string::npos);
     std::cerr << "[PASS] debug overlay integration\n";
 
     // ---------------------------------------------------------------

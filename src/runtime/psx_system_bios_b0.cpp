@@ -208,8 +208,9 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         {
             const RamCopyBounds bounds = planRamCopy(a1, length);
             m_stallClassifier.recordRamCopyProvenance(
-                "FileRead", "fd=" + std::to_string(fd) + " path=" +
-                                (path.empty() ? std::string{"<unknown>"} : path),
+                "FileRead",
+                "fd=" + std::to_string(fd) +
+                    " path=" + (path.empty() ? std::string{"<unknown>"} : path),
                 m_debugOverlay.lastProgramCounter(),
                 bounds.destinationInRam ? (0x80000000u | bounds.physicalDestination) : a1, 0,
                 length, bounds.destinationInRam, bounds.destinationOverflow,

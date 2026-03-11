@@ -140,6 +140,8 @@ void PsxSystem::reset()
     }
     m_irqChainHeads = {};
     m_frameCount = 0;
+    m_pendingSpuDmaCompletionCycles = 0;
+    m_pendingSpuDmaCompletion = false;
     m_cpuCycles = 0;
     m_gpuDrainCarry = 0;
     m_videoSchedulePrimed = false;
@@ -284,6 +286,23 @@ void PsxSystem::tickCpuCycles(u32 cpuCycles)
     }
 
     m_spu.tick(cpuCycles);
+    if (m_pendingSpuDmaCompletion)
+    {
+        if (cpuCycles >= m_pendingSpuDmaCompletionCycles)
+        {
+            m_pendingSpuDmaCompletion = false;
+            m_pendingSpuDmaCompletionCycles = 0;
+            auto callbacks = m_events.deliverByClassSpec(EventClass::Spu, EventSpec::CommandDone);
+            for (u32 address : callbacks)
+            {
+                invokeCallback(address);
+            }
+        }
+        else
+        {
+            m_pendingSpuDmaCompletionCycles -= cpuCycles;
+        }
+    }
     m_cdrom.tick(cpuCycles);
     m_gte.tickCpuCycles(cpuCycles);
     m_timers.tick(cpuCycles,

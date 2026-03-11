@@ -202,8 +202,7 @@ int main()
         tempDir / ("psxrecomp_pipeline_detached_singleton_pointer_" + suffix + ".psx");
     guard.exes.push_back(detachedSingletonPointerExePath);
     auto detachedSingletonPointerBuffer = buildExeWithDetachedSingletonFunctionPointer();
-    std::ofstream detachedSingletonPointerFile(detachedSingletonPointerExePath,
-                                              std::ios::binary);
+    std::ofstream detachedSingletonPointerFile(detachedSingletonPointerExePath, std::ios::binary);
     detachedSingletonPointerFile.write(
         reinterpret_cast<const char*>(detachedSingletonPointerBuffer.data()),
         static_cast<std::streamsize>(detachedSingletonPointerBuffer.size()));

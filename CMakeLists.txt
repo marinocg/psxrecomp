@@ -147,6 +147,7 @@ set(RUNTIME_SOURCES
     src/runtime/gte_math.cpp
     src/runtime/gte_ops.cpp
     src/runtime/gpu.cpp
+    src/runtime/gpu_status.cpp
     src/runtime/gpu_transfer.cpp
     src/runtime/gpu_commands.cpp
     src/runtime/gpu_renderer.cpp
@@ -339,6 +340,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(gpu_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(gpu_status_test
+        tests/unit/gpu_status_test.cpp
+    )
+    target_link_libraries(gpu_status_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(runtime_test
         tests/unit/runtime_test.cpp
         tests/unit/runtime_test_sections.cpp
@@ -350,6 +356,11 @@ if(BUILD_TESTS)
         tests/unit/callback_bridge_test.cpp
     )
     target_link_libraries(callback_bridge_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(interrupt_service_context_test
+        tests/unit/interrupt_service_context_test.cpp
+    )
+    target_link_libraries(interrupt_service_context_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(cop0_test
         tests/unit/cop0_test.cpp

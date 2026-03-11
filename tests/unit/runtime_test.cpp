@@ -10,6 +10,18 @@
 
 namespace MemoryMap = psxrecomp::MemoryMap;
 
+namespace
+{
+void ackCdromIrq(psxrecomp::runtime::PsxSystem& system)
+{
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 1u);
+    (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    system.tickCpuCycles(1);
+}
+} // namespace
+
 int main()
 {
     using psxrecomp::Address;
@@ -366,7 +378,9 @@ int main()
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x40);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x0E);
+    ackCdromIrq(system);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
+    ackCdromIrq(system);
     system.runFrame();
 
     Address cdromBase =
@@ -486,7 +500,9 @@ int main()
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x02);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x00);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x02);
+    ackCdromIrq(dmaLoopSystem);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
+    ackCdromIrq(dmaLoopSystem);
 
     const Address dmaLoopCdromBase =
         psxrecomp::runtime::DmaController::ChannelBase +

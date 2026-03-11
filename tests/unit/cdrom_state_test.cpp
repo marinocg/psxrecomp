@@ -62,6 +62,7 @@ int main()
         cdrom.writeReg(0, 0x02u);
 
         cdrom.writeCommand(0x0A); // Init: INT3 visible, INT2 queued.
+        cdrom.writeCommand(0x0C); // Demute remains latched until Init INT2 is cleared.
         cdrom.writeParam(0x01);   // Leave one command parameter queued.
 
         const std::vector<psxrecomp::u8> saved = cdrom.serializeState();
@@ -77,7 +78,9 @@ int main()
         assert(irqType(cdrom) == 0x02u);
         assert(cdrom.readResponse() == 0x02u);
         ack(cdrom);
-        assert(irqType(cdrom) == 0x00u);
+        assert(irqType(cdrom) == 0x03u);
+        assert(cdrom.readResponse() == 0x02u);
+        ack(cdrom);
 
         cdrom.writeCommand(0x14); // GetTD consumes queued track parameter (0x01).
         assert(irqType(cdrom) == 0x03u);

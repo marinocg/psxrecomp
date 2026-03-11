@@ -7,6 +7,15 @@
 #include <fstream>
 #include <vector>
 
+namespace
+{
+void ack(psxrecomp::runtime::Cdrom& cdrom)
+{
+    (void)cdrom.readResponse();
+    cdrom.writeInterruptFlags(0x07u);
+}
+} // namespace
+
 int main()
 {
     using psxrecomp::u8;
@@ -52,7 +61,9 @@ int main()
     cdrom.writeParam(0x02);   // second (BCD)
     cdrom.writeParam(0x00);   // frame  (BCD)
     cdrom.writeCommand(0x02); // Setloc
+    ack(cdrom);
     cdrom.writeCommand(0x06); // ReadN
+    ack(cdrom);
     cdrom.tick(451584);
     assert(cdrom.readDma() == 0x11111111u);
 

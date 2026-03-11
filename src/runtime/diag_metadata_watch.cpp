@@ -51,8 +51,7 @@ void DiagMetadataWatchEngine::recordWrite(Address address, u32 newValue, Address
             {
                 std::ostringstream msg;
                 msg << "metadata_watch=" << config.name << " addr=0x" << std::hex << canonical
-                    << " value=0x" << newValue << " pc=0x" << writerPc
-                    << " violation=alignment";
+                    << " value=0x" << newValue << " pc=0x" << writerPc << " violation=alignment";
                 logger->log(LogLevel::Warn, "metadata_watch", msg.str());
             }
         }
@@ -78,8 +77,8 @@ void DiagMetadataWatchEngine::recordWrite(Address address, u32 newValue, Address
                 if (logger != nullptr)
                 {
                     std::ostringstream msg;
-                    msg << "metadata_watch=" << config.name << " addr=0x" << std::hex
-                        << canonical << " value=0x" << newValue << " pc=0x" << writerPc
+                    msg << "metadata_watch=" << config.name << " addr=0x" << std::hex << canonical
+                        << " value=0x" << newValue << " pc=0x" << writerPc
                         << " violation=zero_size";
                     logger->log(LogLevel::Warn, "metadata_watch", msg.str());
                 }
@@ -162,8 +161,8 @@ std::string DiagMetadataWatchEngine::formatViolations() const
 
     for (const auto& v : m_violations)
     {
-        os << "  [" << v.watchName << "] addr=0x" << std::hex << v.address << " value=0x"
-           << v.value << " pc=0x" << v.writerPc << " reason=" << v.reason << "\n";
+        os << "  [" << v.watchName << "] addr=0x" << std::hex << v.address << " value=0x" << v.value
+           << " pc=0x" << v.writerPc << " reason=" << v.reason << "\n";
     }
     return os.str();
 }

@@ -162,10 +162,9 @@ SemanticAuditReport SemanticAuditTool::audit(const std::string& name, const u8* 
         summary << "Function: " << config.name << " [0x" << std::hex << config.pcStart << "-0x"
                 << config.pcEnd << "]\n";
         summary << "Watched cells: " << std::dec << config.watchedCells.size() << "\n";
-        const size_t instrCount =
-            (config.pcEnd >= config.pcStart)
-                ? (config.pcEnd - config.pcStart + sizeof(u32)) / sizeof(u32)
-                : 0;
+        const size_t instrCount = (config.pcEnd >= config.pcStart)
+                                      ? (config.pcEnd - config.pcStart + sizeof(u32)) / sizeof(u32)
+                                      : 0;
         summary << "Instructions: " << instrCount << "\n";
         report.summary = summary.str();
         return report;
@@ -175,8 +174,7 @@ SemanticAuditReport SemanticAuditTool::audit(const std::string& name, const u8* 
     return report;
 }
 
-std::vector<SemanticAuditReport> SemanticAuditTool::auditAll(const u8* ram,
-                                                             size_t ramSize) const
+std::vector<SemanticAuditReport> SemanticAuditTool::auditAll(const u8* ram, size_t ramSize) const
 {
     std::vector<SemanticAuditReport> reports;
     for (const auto& config : m_configs)
@@ -239,8 +237,8 @@ std::string SemanticAuditTool::disassembleRange(Address start, Address end, cons
         else if (isLoadStore(opcode))
         {
             const char* name = mipsOpName(opcode);
-            os << (name != nullptr ? name : "???") << " " << mipsRegisterName(rt) << ","
-               << std::dec << static_cast<int>(imm) << "(" << mipsRegisterName(rs) << ")";
+            os << (name != nullptr ? name : "???") << " " << mipsRegisterName(rt) << "," << std::dec
+               << static_cast<int>(imm) << "(" << mipsRegisterName(rs) << ")";
         }
         else
         {
@@ -254,8 +252,8 @@ std::string SemanticAuditTool::disassembleRange(Address start, Address end, cons
 }
 
 std::string SemanticAuditTool::annotateAccesses(Address start, Address end,
-                                                const std::vector<Address>& cells,
-                                                const u8* ram, size_t ramSize) const
+                                                const std::vector<Address>& cells, const u8* ram,
+                                                size_t ramSize) const
 {
     if (cells.empty() || start > end)
     {

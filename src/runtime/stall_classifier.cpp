@@ -102,12 +102,12 @@ void StallClassifier::recordRamWrite(Address writerPc, Address address, u8 size,
 void StallClassifier::recordRamCopyProvenance(std::string source, std::string detail,
                                               Address writerPc, Address destination,
                                               u32 actualLength, u32 requestedLength,
-                                              bool destinationInRam,
-                                              bool destinationOverflow, bool shortRead)
+                                              bool destinationInRam, bool destinationOverflow,
+                                              bool shortRead)
 {
     m_copyProvenanceRing.push({std::move(source), std::move(detail), writerPc, destination,
-                               actualLength, requestedLength, destinationInRam,
-                               destinationOverflow, shortRead});
+                               actualLength, requestedLength, destinationInRam, destinationOverflow,
+                               shortRead});
 }
 
 bool StallClassifier::isWatchingRamWrites() const
@@ -348,8 +348,8 @@ std::string StallClassifier::formatRamCopyProvenance() const
     for (size_t i = 0; i < count; ++i)
     {
         const auto& entry = m_copyProvenanceRing.recent(i);
-        os << "  source=" << entry.source << " pc=0x" << std::hex << entry.writerPc
-           << " dst=0x" << entry.destination << " len=" << std::dec << entry.actualLength;
+        os << "  source=" << entry.source << " pc=0x" << std::hex << entry.writerPc << " dst=0x"
+           << entry.destination << " len=" << std::dec << entry.actualLength;
         if (entry.requestedLength != entry.actualLength)
         {
             os << "/" << entry.requestedLength;

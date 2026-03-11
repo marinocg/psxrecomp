@@ -151,7 +151,7 @@ PointerHarvestResults harvestFunctionPointerSeeds(
                 if (isDecodableInstruction(disassembled, instructionIndexMap, target) &&
                     (looksLikeFunctionEntry(disassembled, instructionIndexMap, target) ||
                      looksLikeIndirectTargetEntry(disassembled, instructionIndexMap, target) ||
-                     looksLikeCallableCodeRegion(disassembled, instructionIndexMap, target)))
+                     isAddressInRanges(segmentation.codeRanges, target)))
                 {
                     appendUniqueSorted(results.harvestedPointers, target);
                 }
@@ -242,9 +242,8 @@ PointerHarvestResults harvestFunctionPointerSeeds(
                 continue;
             }
 
-            const Address neighborTarget =
-                static_cast<Address>(readProgramWord(exeImage.programData, baseAddress,
-                                                    neighborAddress));
+            const Address neighborTarget = static_cast<Address>(
+                readProgramWord(exeImage.programData, baseAddress, neighborAddress));
             if (neighborTarget >= baseAddress && neighborTarget < endAddress &&
                 (neighborTarget % 4) == 0 &&
                 isDecodableInstruction(disassembled, instructionIndexMap, neighborTarget))
@@ -322,7 +321,9 @@ PointerHarvestResults harvestFunctionPointerSeeds(
             continue;
         }
 
-        bool usedAsLikelyCodeTarget = false;
+        bool usedAsRegisterJumpTarget = false;
+        bool usedAsStoredPointer = false;
+        bool usedAsCallArgument = false;
         for (size_t lookAhead = 1;
              lookAhead <= 16 && builtAddressIndex + lookAhead < disassembled.size(); ++lookAhead)
         {
@@ -330,20 +331,20 @@ PointerHarvestResults harvestFunctionPointerSeeds(
             if ((next.opcode == disasm::Opcode::JR || next.opcode == disasm::Opcode::JALR) &&
                 next.rs == addressRegister)
             {
-                usedAsLikelyCodeTarget = true;
+                usedAsRegisterJumpTarget = true;
                 break;
             }
             if ((next.opcode == disasm::Opcode::SW || next.opcode == disasm::Opcode::SWL ||
                  next.opcode == disasm::Opcode::SWR) &&
                 next.rt == addressRegister)
             {
-                usedAsLikelyCodeTarget = true;
+                usedAsStoredPointer = true;
                 break;
             }
             if (next.opcode == disasm::Opcode::JAL && addressRegister >= Registers::A0 &&
                 addressRegister <= Registers::A3)
             {
-                usedAsLikelyCodeTarget = true;
+                usedAsCallArgument = true;
                 break;
             }
             if (writesRegister(next, addressRegister))
@@ -353,10 +354,16 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         }
 
         const Address target = builtAddress.value();
-        if (usedAsLikelyCodeTarget && target >= baseAddress && target < endAddress &&
-            (target % 4) == 0 &&
-            (looksLikeFunctionEntry(disassembled, instructionIndexMap, target) ||
-             looksLikeCallableCodeRegion(disassembled, instructionIndexMap, target)) &&
+        const bool builtAddressEscapes =
+            usedAsRegisterJumpTarget || usedAsStoredPointer || usedAsCallArgument;
+        const bool strongEntryCandidate =
+            looksLikeFunctionEntry(disassembled, instructionIndexMap, target) ||
+            looksLikeIndirectTargetEntry(disassembled, instructionIndexMap, target);
+        const bool weakCallableCandidate =
+            usedAsRegisterJumpTarget &&
+            looksLikeCallableCodeRegion(disassembled, instructionIndexMap, target);
+        if (builtAddressEscapes && target >= baseAddress && target < endAddress &&
+            (target % 4) == 0 && (strongEntryCandidate || weakCallableCandidate) &&
             existingSeeds.find(target) == existingSeeds.end())
         {
             results.codeHarvestedPointers.push_back(target);

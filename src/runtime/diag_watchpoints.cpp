@@ -180,8 +180,8 @@ bool DiagWatchpointEngine::shouldWatchRamWrite(Address address, u8 size) const
     return false;
 }
 
-void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 size,
-                                          u32 oldValue, u32 newValue, RuntimeLogger* logger,
+void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 size, u32 oldValue,
+                                          u32 newValue, RuntimeLogger* logger,
                                           Address resumeAddress)
 {
     const Address physical = normalizePhysical(address);
@@ -224,15 +224,13 @@ void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 
             m_trapViolation = true;
         }
 
-        if (logger != nullptr &&
-            (wp.action == WatchpointAction::Log || wp.action == WatchpointAction::Summarize ||
-             violated))
+        if (logger != nullptr && (wp.action == WatchpointAction::Log ||
+                                  wp.action == WatchpointAction::Summarize || violated))
         {
             std::ostringstream msg;
             msg << "watchpoint=" << wp.name << " pc=0x" << std::hex << writerPc << " addr=0x"
-                << (0x80000000u | physical) << " size=" << std::dec
-                << static_cast<unsigned>(size) << " old=0x" << std::hex
-                << maskValueForSize(oldValue, size) << " new=0x"
+                << (0x80000000u | physical) << " size=" << std::dec << static_cast<unsigned>(size)
+                << " old=0x" << std::hex << maskValueForSize(oldValue, size) << " new=0x"
                 << maskValueForSize(newValue, size);
             if (resumeAddress != 0)
             {

@@ -62,7 +62,7 @@ inline constexpr u8 ERR_NO_DISC = 0x40;
 inline constexpr u8 ERR_READ_FAIL = 0x80;
 
 inline constexpr u32 CDROM_STATE_MAGIC = 0x4D524443u; // "CDRM"
-inline constexpr u32 CDROM_STATE_VERSION = 2u;
+inline constexpr u32 CDROM_STATE_VERSION = 4u;
 inline constexpr size_t MAX_SERIALIZED_SECTOR_BYTES = 4096;
 
 struct XaSubheader

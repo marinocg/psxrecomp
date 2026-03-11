@@ -403,6 +403,8 @@ class PsxSystem
     DiscSwapInfo m_discSwapInfo;
     bool m_discSwapInfoInitialized = false;
     u32 m_frameCount = 0;
+    u32 m_pendingSpuDmaCompletionCycles = 0;
+    bool m_pendingSpuDmaCompletion = false;
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState

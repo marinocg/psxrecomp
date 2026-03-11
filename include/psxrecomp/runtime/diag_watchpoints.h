@@ -35,8 +35,7 @@ class DiagWatchpointEngine
     DiagWatchpointEngine();
 
     /// Configure from profile watchpoint definitions and memory map.
-    void configure(const std::vector<WatchpointConfig>& configs,
-                   const DiagMemoryMapConfig& memMap);
+    void configure(const std::vector<WatchpointConfig>& configs, const DiagMemoryMapConfig& memMap);
 
     /// Merge additional watched ranges from PSXRECOMP_WATCH_WRITE env var.
     void mergeEnvWatchedRanges();

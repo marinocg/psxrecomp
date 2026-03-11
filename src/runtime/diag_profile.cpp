@@ -247,8 +247,7 @@ bool DiagProfile::loadFromFile(const std::string& path, RuntimeLogger* logger)
     {
         if (logger != nullptr)
         {
-            logger->log(LogLevel::Warn, "diag_profile",
-                        "could not open profile file: " + path);
+            logger->log(LogLevel::Warn, "diag_profile", "could not open profile file: " + path);
         }
         return false;
     }

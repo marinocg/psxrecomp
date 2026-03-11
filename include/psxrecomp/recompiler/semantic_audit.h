@@ -45,11 +45,9 @@ class SemanticAuditTool
     size_t functionCount() const;
 
   private:
-    std::string disassembleRange(Address start, Address end, const u8* ram,
-                                size_t ramSize) const;
-    std::string annotateAccesses(Address start, Address end,
-                                 const std::vector<Address>& cells, const u8* ram,
-                                 size_t ramSize) const;
+    std::string disassembleRange(Address start, Address end, const u8* ram, size_t ramSize) const;
+    std::string annotateAccesses(Address start, Address end, const std::vector<Address>& cells,
+                                 const u8* ram, size_t ramSize) const;
 
     std::vector<SuspectFunctionConfig> m_configs;
 };

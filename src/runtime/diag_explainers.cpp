@@ -90,9 +90,8 @@ std::string DiagExplainerEngine::explainCdromIrq(u8 flags, u8 enable)
 
 std::string DiagExplainerEngine::explainIrqController(u16 status, u16 mask)
 {
-    static const char* lineNames[] = {"VBlank", "GPU",   "CDROM",  "DMA",   "Timer0",
-                                      "Timer1", "Timer2", "Ctrl/Mem", "SIO", "SPU",
-                                      "Lightpen"};
+    static const char* lineNames[] = {"VBlank", "GPU",      "CDROM", "DMA", "Timer0",  "Timer1",
+                                      "Timer2", "Ctrl/Mem", "SIO",   "SPU", "Lightpen"};
     std::ostringstream os;
     os << "I_STAT=0x" << std::hex << status << " I_MASK=0x" << mask << std::dec;
 
@@ -117,13 +116,11 @@ std::string DiagExplainerEngine::explainIrqController(u16 status, u16 mask)
 
 std::string DiagExplainerEngine::explainDmaChannel(u8 port, u32 control)
 {
-    static const char* portNames[] = {"MDECin", "MDECout", "GPU", "CDROM",
-                                      "SPU",    "PIO",     "OTC"};
+    static const char* portNames[] = {"MDECin", "MDECout", "GPU", "CDROM", "SPU", "PIO", "OTC"};
     std::ostringstream os;
-    const char* portName =
-        (port < 7) ? portNames[port] : "Unknown";
-    os << "DMA" << static_cast<int>(port) << "(" << portName << ") CHCR=0x" << std::hex
-       << control << std::dec;
+    const char* portName = (port < 7) ? portNames[port] : "Unknown";
+    os << "DMA" << static_cast<int>(port) << "(" << portName << ") CHCR=0x" << std::hex << control
+       << std::dec;
     os << " [dir=" << (control & 1 ? "from_ram" : "to_ram");
     os << " step=" << ((control >> 1) & 1 ? "backward" : "forward");
     os << " chop=" << ((control >> 8) & 1);

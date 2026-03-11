@@ -136,6 +136,9 @@ std::vector<u8> Cdrom::serializeState() const
     appendU8(out, m_interruptFlags);
     appendU8(out, m_interruptEnable);
     appendU8(out, m_requestControl);
+    appendBool(out, m_pendingCommand.valid);
+    appendU8(out, m_pendingCommand.value);
+    appendByteDeque(out, m_pendingCommand.params);
     appendU32(out, m_lastDmaWord);
     appendU8(out, m_dataPadByte);
     appendBool(out, m_dataPadValid);
@@ -149,6 +152,7 @@ std::vector<u8> Cdrom::serializeState() const
 
     appendByteDeque(out, m_commandFifo.values);
     appendByteDeque(out, m_responseFifo.values);
+    appendByteDeque(out, m_ackResponseFifo.values);
     appendByteDeque(out, m_dataFifo.values);
 
     appendU8(out, m_execution.currentCommand);
@@ -197,6 +201,9 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     u8 interruptFlags = 0;
     u8 interruptEnable = 0;
     u8 requestControl = 0;
+    bool pendingCommandValid = false;
+    u8 pendingCommandValue = 0;
+    std::deque<u8> pendingCommandParams;
     u32 lastDmaWord = 0;
     u8 dataPadByte = 0;
     bool dataPadValid = false;
@@ -206,6 +213,7 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     std::array<u8, 8> lastGetlocL{};
     std::deque<u8> commandValues;
     std::deque<u8> responseValues;
+    std::deque<u8> ackResponseValues;
     std::deque<u8> dataValues;
     u8 currentCommand = 0;
     u8 mode = 0;
@@ -232,8 +240,12 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
         magic != cdrom_detail::CDROM_STATE_MAGIC || version != cdrom_detail::CDROM_STATE_VERSION ||
         !consumeU8(state, cursor, status) || !consumeU8(state, cursor, index) ||
         !consumeU8(state, cursor, interruptFlags) || !consumeU8(state, cursor, interruptEnable) ||
-        !consumeU8(state, cursor, requestControl) || !consumeU32(state, cursor, lastDmaWord) ||
-        !consumeU8(state, cursor, dataPadByte) || !consumeBool(state, cursor, dataPadValid) ||
+        !consumeU8(state, cursor, requestControl) ||
+        !consumeBool(state, cursor, pendingCommandValid) ||
+        !consumeU8(state, cursor, pendingCommandValue) ||
+        !consumeByteDeque(state, cursor, MAX_PARAMS, pendingCommandParams) ||
+        !consumeU32(state, cursor, lastDmaWord) || !consumeU8(state, cursor, dataPadByte) ||
+        !consumeBool(state, cursor, dataPadValid) ||
         !consumeBool(state, cursor, discBackendInitialized) ||
         !consumeBool(state, cursor, doorOpen) || !consumeU32(state, cursor, doorCloseCycles))
     {
@@ -250,6 +262,7 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
 
     if (!consumeByteDeque(state, cursor, MAX_PARAMS, commandValues) ||
         !consumeByteDeque(state, cursor, RESPONSE_CAPACITY, responseValues) ||
+        !consumeByteDeque(state, cursor, RESPONSE_CAPACITY, ackResponseValues) ||
         !consumeByteDeque(state, cursor, DATA_FIFO_CAPACITY, dataValues) ||
         !consumeU8(state, cursor, currentCommand) || !consumeU8(state, cursor, mode) ||
         !consumeU8(state, cursor, xaFilterFile) || !consumeU8(state, cursor, xaFilterChannel) ||
@@ -313,6 +326,9 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     m_interruptFlags = interruptFlags;
     m_interruptEnable = static_cast<u8>(interruptEnable & 0x1Fu);
     m_requestControl = static_cast<u8>(requestControl & 0xE0u);
+    m_pendingCommand.valid = pendingCommandValid;
+    m_pendingCommand.value = pendingCommandValue;
+    m_pendingCommand.params = std::move(pendingCommandParams);
     m_lastDmaWord = lastDmaWord;
     m_dataPadByte = dataPadByte;
     m_dataPadValid = dataPadValid;
@@ -322,6 +338,7 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     m_lastGetlocL = lastGetlocL;
     m_commandFifo.values = std::move(commandValues);
     m_responseFifo.values = std::move(responseValues);
+    m_ackResponseFifo.values = std::move(ackResponseValues);
     m_dataFifo.values = std::move(dataValues);
     m_execution.currentCommand = currentCommand;
     m_execution.mode = mode;

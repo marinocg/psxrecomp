@@ -98,7 +98,10 @@ void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)
 {
     using psxrecomp::runtime::DmaController;
     using psxrecomp::runtime::DmaPort;
+    using psxrecomp::runtime::EventMode;
     using psxrecomp::runtime::LogLevel;
+    namespace EventClass = psxrecomp::runtime::EventClass;
+    namespace EventSpec = psxrecomp::runtime::EventSpec;
 
     bool sawInfo = false;
     system.logger().setMinLevel(LogLevel::Info);
@@ -125,11 +128,18 @@ void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)
         DmaController::ChannelBase +
         DmaController::ChannelStride * static_cast<psxrecomp::Address>(DmaPort::Spu);
     constexpr psxrecomp::Address spuDmaAddress = 0x00016000u;
+    const psxrecomp::u32 spuEventHandle = system.events().openEvent(
+        EventClass::Spu, EventSpec::CommandDone, EventMode::NoCallback, 0);
+    assert(spuEventHandle != 0xFFFFFFFFu);
+    assert(system.events().enableEvent(spuEventHandle));
     system.write<psxrecomp::u32>(spuDmaAddress, 0xA5A5A5A5u);
     system.write<psxrecomp::u32>(spuBase + 0x0, spuDmaAddress);
     system.write<psxrecomp::u32>(spuBase + 0x4, 0x00000001u);
     system.write<psxrecomp::u32>(spuBase + 0x8, 0x01000001u);
     assert(system.debugOverlay().dmaTransfers() > dmaTransfersBeforeFrame);
+    assert(!system.events().isEventDelivered(spuEventHandle));
+    system.tickCpuCycles(2048);
+    assert(system.events().isEventDelivered(spuEventHandle));
 
     system.runFrame();
     assert(system.debugOverlay().frameCounter() >= 1);
@@ -440,13 +450,13 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07);
     [[maybe_unused]] const psxrecomp::u8 clearedHintStatus =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
-    // INT2 is immediately promoted on ACK (FIFO cleared, pending event loaded).
-    assert((clearedHintStatus & 0x07u) == 0x02u);
+    // ACK clears the current IRQ, but the queued INT2 is not presented until
+    // software drains the preserved response byte from the prior phase.
+    assert((clearedHintStatus & 0x07u) == 0x00u);
     assert((clearedHintStatus & 0xE0u) == 0xE0u);
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
                                              ~static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
-    // INT2 is active so syncLevelInterruptSources() re-raises the CDROM line.
-    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) !=
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) ==
            0u);
 
     setCdromIndex(0);
@@ -454,7 +464,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
     assert((statusAfterAckBeforeRead & (1u << 5)) != 0u);
 
-    // Drain the INT2 response byte (INT2 was promoted immediately on ACK).
+    // Draining the preserved response exposes the queued INT2.
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
     setCdromIndex(1);
     [[maybe_unused]] const psxrecomp::u8 promotedHintStatus =
@@ -469,8 +479,8 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     setCdromIndex(0);
     [[maybe_unused]] const psxrecomp::u8 statusAfterQueuePromote =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
-    // The INT2 response byte was already drained above; FIFO is now empty.
-    assert((statusAfterQueuePromote & (1u << 5)) == 0u);
+    // The promoted INT2 response is still pending at this point.
+    assert((statusAfterQueuePromote & (1u << 5)) != 0u);
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
     [[maybe_unused]] const psxrecomp::u8 statusAfterReadingPromotedResponse =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);

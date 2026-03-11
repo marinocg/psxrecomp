@@ -30,8 +30,7 @@ void DiagTracepointEngine::observePc(Address pc, RuntimeLogger* logger)
 {
     for (auto& range : m_ranges)
     {
-        const bool inRange =
-            pc >= range.config->pcRangeStart && pc <= range.config->pcRangeEnd;
+        const bool inRange = pc >= range.config->pcRangeStart && pc <= range.config->pcRangeEnd;
 
         if (inRange && !range.inside)
         {
@@ -72,8 +71,7 @@ void DiagTracepointEngine::observePc(Address pc, RuntimeLogger* logger)
             if (logger != nullptr)
             {
                 std::ostringstream msg;
-                msg << "tracepoint=" << range.config->name << " event=exit pc=0x" << std::hex
-                    << pc;
+                msg << "tracepoint=" << range.config->name << " event=exit pc=0x" << std::hex << pc;
                 logger->log(LogLevel::Info, "tracepoint", msg.str());
             }
         }
@@ -94,8 +92,8 @@ void DiagTracepointEngine::recordMmioRead(Address mmioAddress, u32 value, Addres
             if (watchAddr == mmioAddress && logger != nullptr)
             {
                 std::ostringstream msg;
-                msg << "tracepoint=" << range.config->name << " event=mmio_read pc=0x"
-                    << std::hex << pc << " addr=0x" << mmioAddress << " value=0x" << value;
+                msg << "tracepoint=" << range.config->name << " event=mmio_read pc=0x" << std::hex
+                    << pc << " addr=0x" << mmioAddress << " value=0x" << value;
                 logger->log(LogLevel::Info, "tracepoint", msg.str());
             }
         }

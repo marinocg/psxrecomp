@@ -30,8 +30,7 @@ class DiagValidatorEngine
     void configure(const std::vector<ValidatorConfig>& configs);
 
     /// Run a named validator against the given RAM snapshot.
-    ValidationResult runValidator(const std::string& name, const u8* ram,
-                                 size_t ramSize) const;
+    ValidationResult runValidator(const std::string& name, const u8* ram, size_t ramSize) const;
 
     /// Run all configured validators.
     std::vector<ValidationResult> runAll(const u8* ram, size_t ramSize) const;
@@ -47,13 +46,13 @@ class DiagValidatorEngine
 
   private:
     ValidationResult runSentinelBlockChain(const ValidatorConfig& config, const u8* ram,
-                                          size_t ramSize) const;
+                                           size_t ramSize) const;
     ValidationResult runPointerCell(const ValidatorConfig& config, const u8* ram,
-                                   size_t ramSize) const;
+                                    size_t ramSize) const;
     ValidationResult runLinkedList(const ValidatorConfig& config, const u8* ram,
-                                  size_t ramSize) const;
-    ValidationResult runBoundedWalk(const ValidatorConfig& config, const u8* ram,
                                    size_t ramSize) const;
+    ValidationResult runBoundedWalk(const ValidatorConfig& config, const u8* ram,
+                                    size_t ramSize) const;
 
     static u32 readWord(const u8* ram, Address physicalAddress, size_t ramSize);
     static bool isPhysicalRamAddress(Address address, size_t ramSize);

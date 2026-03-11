@@ -43,25 +43,71 @@ void traceCdrom(const char* fmt, ...)
 }
 } // namespace
 
+bool Cdrom::canExecutePendingCommand() const
+{
+    return m_pendingCommand.valid && (m_interruptFlags & 0x07u) == 0u && m_responseFifo.empty() &&
+           m_execution.pendingResponseIrqs.empty();
+}
+
+void Cdrom::enqueueCommand(u8 value)
+{
+    m_pendingCommand.value = value;
+    m_pendingCommand.valid = true;
+    m_pendingCommand.params = std::move(m_commandFifo.values);
+    m_commandFifo.clear();
+    m_execution.currentCommand = value;
+}
+
 void Cdrom::writeCommand(u8 value)
 {
     traceCdrom("writeCommand cmd=0x%02X idx=%u params=%zu irq=0x%02X pending=%zu", value, m_index,
                m_commandFifo.size(), m_interruptFlags, m_execution.pendingResponseIrqs.size());
-    m_execution.currentCommand = value;
+    enqueueCommand(value);
+    if (canExecutePendingCommand())
+    {
+        executePendingCommand();
+    }
+    traceCdrom("writeCommand queued cmd=0x%02X irq=0x%02X resp=%zu pending=%zu data=%zu", value,
+               m_interruptFlags, m_responseFifo.values.size(),
+               m_execution.pendingResponseIrqs.size(), m_dataFifo.size());
+}
+
+void Cdrom::executePendingCommand()
+{
+    if (!m_pendingCommand.valid)
+    {
+        return;
+    }
+
+    const u8 value = m_pendingCommand.value;
+    std::deque<u8> params = std::move(m_pendingCommand.params);
+    m_pendingCommand.clear();
+
+    auto popParam = [&params](u8& out) -> bool
+    {
+        if (params.empty())
+        {
+            return false;
+        }
+        out = params.front();
+        params.pop_front();
+        return true;
+    };
+
     switch (value)
     {
     case 0x01: // Getstat
         queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
         break;
     case 0x02: // Setloc
-        if (m_commandFifo.size() >= 3)
+        if (params.size() >= 3)
         {
             u8 minute = 0;
             u8 second = 0;
             u8 frame = 0;
-            (void)m_commandFifo.popFront(minute);
-            (void)m_commandFifo.popFront(second);
-            (void)m_commandFifo.popFront(frame);
+            (void)popParam(minute);
+            (void)popParam(second);
+            (void)popParam(frame);
             m_execution.nextReadLba = cdrom_detail::msfToLba(minute, second, frame);
             m_execution.currentLba = m_execution.nextReadLba;
             traceCdrom("Setloc params=%02X:%02X:%02X -> lba=%u", minute, second, frame,
@@ -162,14 +208,8 @@ void Cdrom::writeCommand(u8 value)
     {
         u8 file = 0;
         u8 channel = 0;
-        if (!m_commandFifo.empty())
-        {
-            (void)m_commandFifo.popFront(file);
-        }
-        if (!m_commandFifo.empty())
-        {
-            (void)m_commandFifo.popFront(channel);
-        }
+        (void)popParam(file);
+        (void)popParam(channel);
         m_execution.xaFilterFile = file;
         m_execution.xaFilterChannel = channel;
         queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
@@ -201,7 +241,7 @@ void Cdrom::writeCommand(u8 value)
     case 0x14: // GetTD
     {
         u8 track = 0;
-        (void)m_commandFifo.popFront(track);
+        (void)popParam(track);
         u8 minute = 0;
         u8 second = 0;
         if (cdrom_detail::bcdToInt(track) == 0)
@@ -256,23 +296,24 @@ void Cdrom::writeCommand(u8 value)
         break;
     }
     case 0x0E: // Setmode
-        if (!m_commandFifo.empty())
+    {
+        u8 mode = 0;
+        if (popParam(mode))
         {
-            u8 mode = 0;
-            (void)m_commandFifo.popFront(mode);
             m_execution.mode = mode;
             m_execution.xaStreamingEnabled = (mode & cdrom_detail::SETMODE_XA_STREAM_ENABLE) != 0;
             m_execution.xaFilterEnabled = (mode & cdrom_detail::SETMODE_XA_FILTER_ENABLE) != 0;
         }
         queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
         break;
+    }
     default:
         queueInterruptEvent(cdrom_detail::INT3, {value});
         break;
     }
-    m_commandFifo.clear();
-    traceCdrom("writeCommand done cmd=0x%02X irq=0x%02X resp=%zu pending=%zu data=%zu", value,
-               m_interruptFlags, m_responseFifo.values.size(),
+
+    traceCdrom("executePendingCommand done cmd=0x%02X irq=0x%02X resp=%zu pending=%zu data=%zu",
+               value, m_interruptFlags, m_responseFifo.values.size(),
                m_execution.pendingResponseIrqs.size(), m_dataFifo.size());
 }
 
@@ -294,12 +335,12 @@ void Cdrom::writeInterruptFlags(u8 value)
         if ((ackMask & currentTypeBit) != 0u)
         {
             m_interruptFlags = static_cast<u8>(m_interruptFlags & 0xF8u);
-            // PSX-SPX: "After acknowledge, the Response Fifo is made empty."
-            // Clear the FIFO unconditionally so publishNextInterruptEvent can
-            // promote the next pending event without being blocked by leftover
-            // response bytes from the just-acknowledged interrupt.
-            m_responseFifo.clear();
+            m_ackResponseFifo.clear();
             publishNextInterruptEvent();
+            if (canExecutePendingCommand())
+            {
+                executePendingCommand();
+            }
         }
     }
 

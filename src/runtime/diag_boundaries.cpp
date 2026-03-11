@@ -72,8 +72,8 @@ bool DiagBoundaryDispatcher::onBoundary(BoundaryKind kind, const u8* ram, size_t
                     if (logger != nullptr)
                     {
                         std::ostringstream msg;
-                        msg << "boundary=" << boundaryKindLabel(kind) << " validator="
-                            << validatorName << " result=FAILED\n"
+                        msg << "boundary=" << boundaryKindLabel(kind)
+                            << " validator=" << validatorName << " result=FAILED\n"
                             << result.report;
                         logger->log(LogLevel::Warn, "boundary", msg.str());
                     }
@@ -90,8 +90,8 @@ bool DiagBoundaryDispatcher::onBoundary(BoundaryKind kind, const u8* ram, size_t
                 else if (logger != nullptr)
                 {
                     std::ostringstream msg;
-                    msg << "boundary=" << boundaryKindLabel(kind) << " validator="
-                        << validatorName << " result=passed";
+                    msg << "boundary=" << boundaryKindLabel(kind) << " validator=" << validatorName
+                        << " result=passed";
                     if (!result.report.empty())
                     {
                         msg << " " << result.report;

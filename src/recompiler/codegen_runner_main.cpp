@@ -139,15 +139,13 @@ void emitRunnerMainFunction(CppEmitter& emitter, const std::string& moduleName)
     emitter.openBlock("");
     emitter.writeLine("if (!system.loadDiagProfile(diagProfileEnv))");
     emitter.openBlock("");
-    emitter.writeLine(
-        "std::cerr << \"[psxrecomp][warn] Failed to load diagnostic profile: \" "
-        "<< diagProfileEnv << \"\\n\";");
+    emitter.writeLine("std::cerr << \"[psxrecomp][warn] Failed to load diagnostic profile: \" "
+                      "<< diagProfileEnv << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("else");
     emitter.openBlock("");
-    emitter.writeLine(
-        "std::cout << \"[psxrecomp] Diagnostic profile loaded: \" "
-        "<< diagProfileEnv << \"\\n\";");
+    emitter.writeLine("std::cout << \"[psxrecomp] Diagnostic profile loaded: \" "
+                      "<< diagProfileEnv << \"\\n\";");
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();

@@ -113,9 +113,8 @@ int main()
             Opcode::LOAD, {Value::makeAddress(0x80020000)}, {temp0}, 0x80002000));
         block.instructions.push_back(builder.makeInstruction(
             Opcode::ADD, {temp0, Value::makeImmediate(4)}, {temp1}, 0x80002000));
-        block.instructions.push_back(
-            builder.makeInstruction(Opcode::STORE, {Value::makeAddress(0x80020004), temp1}, {},
-                                    0x80002000));
+        block.instructions.push_back(builder.makeInstruction(
+            Opcode::STORE, {Value::makeAddress(0x80020004), temp1}, {}, 0x80002000));
         block.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80002004));
 
         auto diagnostics = verifyResumeSafety(function);
@@ -145,9 +144,8 @@ int main()
         block.instructions.push_back(builder.makeInstruction(
             Opcode::ADD, {temp0, Value::makeImmediate(8)}, {temp1}, 0x80003000));
         // One instruction at a different source address
-        block.instructions.push_back(
-            builder.makeInstruction(Opcode::STORE, {Value::makeAddress(0x80030010), temp1}, {},
-                                    0x80003004));
+        block.instructions.push_back(builder.makeInstruction(
+            Opcode::STORE, {Value::makeAddress(0x80030010), temp1}, {}, 0x80003004));
         block.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80003008));
 
         psxrecomp::recompiler::CodeGenerator generator;
@@ -178,11 +176,9 @@ int main()
 
         // Same computation at two different source addresses
         block.instructions.push_back(builder.makeInstruction(
-            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp0},
-            0x80004000));
+            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp0}, 0x80004000));
         block.instructions.push_back(builder.makeInstruction(
-            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp1},
-            0x80004004));
+            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp1}, 0x80004004));
         block.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80004008));
 
         auto stats = psxrecomp::ir::runOptimizations(function);
@@ -212,11 +208,9 @@ int main()
 
         // Same computation, same source address
         block.instructions.push_back(builder.makeInstruction(
-            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp0},
-            0x80005000));
+            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp0}, 0x80005000));
         block.instructions.push_back(builder.makeInstruction(
-            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp1},
-            0x80005000));
+            Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp1}, 0x80005000));
         block.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80005004));
 
         auto stats = psxrecomp::ir::runOptimizations(function);
@@ -248,9 +242,8 @@ int main()
         block.instructions.push_back(
             builder.makeInstruction(Opcode::ADD, {temp0, Value::makeImmediate(1)}, {temp1}));
         // Next sourced instruction at a different address
-        block.instructions.push_back(
-            builder.makeInstruction(Opcode::STORE, {Value::makeAddress(0x80060010), temp1}, {},
-                                    0x80006004));
+        block.instructions.push_back(builder.makeInstruction(
+            Opcode::STORE, {Value::makeAddress(0x80060010), temp1}, {}, 0x80006004));
         block.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80006008));
 
         psxrecomp::recompiler::CodeGenerator generator;
