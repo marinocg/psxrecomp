@@ -66,6 +66,7 @@ void DiagWatchpointEngine::configure(const std::vector<WatchpointConfig>& config
 {
     m_configs = configs;
     m_memMap = memMap;
+    m_envWriteRanges.clear();
     m_events.clear();
     m_trapViolation = false;
 }
@@ -135,43 +136,73 @@ void DiagWatchpointEngine::mergeEnvWatchedRanges()
             continue;
         }
         range.end = std::min<Address>(range.end, MemoryMap::RAM_SIZE - 1);
-        m_envRanges.push_back(range);
+        m_envWriteRanges.push_back(range);
     }
 
-    std::sort(m_envRanges.begin(), m_envRanges.end(),
+    std::sort(m_envWriteRanges.begin(), m_envWriteRanges.end(),
               [](const EnvRange& a, const EnvRange& b) { return a.start < b.start; });
 }
 
 bool DiagWatchpointEngine::shouldWatchRamWrite(Address address, u8 size) const
+{
+    return shouldWatchRamAccess(WatchpointKind::RamWrite, address, size);
+}
+
+bool DiagWatchpointEngine::shouldWatchRamRead(Address address, u8 size) const
+{
+    return shouldWatchRamAccess(WatchpointKind::RamRead, address, size);
+}
+
+void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 size, u32 oldValue,
+                                          u32 newValue, RuntimeLogger* logger,
+                                          Address resumeAddress)
+{
+    recordRamAccess(WatchpointKind::RamWrite, writerPc, address, size, oldValue, newValue,
+                    logger, resumeAddress);
+}
+
+void DiagWatchpointEngine::recordRamRead(Address readerPc, Address address, u8 size, u32 value,
+                                         RuntimeLogger* logger, Address resumeAddress)
+{
+    recordRamAccess(WatchpointKind::RamRead, readerPc, address, size, value, value, logger,
+                    resumeAddress);
+}
+
+bool DiagWatchpointEngine::shouldWatchRamAccess(WatchpointKind kind, Address address, u8 size) const
 {
     const Address physical = normalizePhysical(address);
     if (physical >= MemoryMap::RAM_SIZE)
     {
         return false;
     }
-    const Address writeEnd = physical + size - 1;
+    const Address accessEnd = physical + size - 1;
 
     for (const auto& wp : m_configs)
     {
-        if (wp.kind != WatchpointKind::RamWrite)
+        if (wp.kind != kind)
         {
             continue;
         }
         const Address wpStart = normalizePhysical(wp.rangeStart);
         const Address wpEnd = normalizePhysical(wp.rangeEnd);
-        if (physical <= wpEnd && writeEnd >= wpStart)
+        if (physical <= wpEnd && accessEnd >= wpStart)
         {
             return true;
         }
     }
 
-    for (const auto& range : m_envRanges)
+    if (kind != WatchpointKind::RamWrite)
     {
-        if (writeEnd < range.start)
+        return false;
+    }
+
+    for (const auto& range : m_envWriteRanges)
+    {
+        if (accessEnd < range.start)
         {
             break;
         }
-        if (physical <= range.end && writeEnd >= range.start)
+        if (physical <= range.end && accessEnd >= range.start)
         {
             return true;
         }
@@ -180,22 +211,21 @@ bool DiagWatchpointEngine::shouldWatchRamWrite(Address address, u8 size) const
     return false;
 }
 
-void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 size, u32 oldValue,
-                                          u32 newValue, RuntimeLogger* logger,
-                                          Address resumeAddress)
+void DiagWatchpointEngine::recordRamAccess(WatchpointKind kind, Address accessPc, Address address,
+                                           u8 size, u32 oldValue, u32 newValue,
+                                           RuntimeLogger* logger, Address resumeAddress)
 {
     const Address physical = normalizePhysical(address);
-    const Address writeEnd = physical + size - 1;
-
+    const Address accessEnd = physical + size - 1;
     for (const auto& wp : m_configs)
     {
-        if (wp.kind != WatchpointKind::RamWrite)
+        if (wp.kind != kind)
         {
             continue;
         }
         const Address wpStart = normalizePhysical(wp.rangeStart);
         const Address wpEnd = normalizePhysical(wp.rangeEnd);
-        if (physical > wpEnd || writeEnd < wpStart)
+        if (physical > wpEnd || accessEnd < wpStart)
         {
             continue;
         }
@@ -204,7 +234,8 @@ void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 
 
         WatchpointEvent event;
         event.config = &wp;
-        event.writerPc = writerPc;
+        event.kind = kind;
+        event.accessPc = accessPc;
         event.address = address;
         event.size = size;
         event.oldValue = oldValue;
@@ -228,10 +259,19 @@ void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 
                                   wp.action == WatchpointAction::Summarize || violated))
         {
             std::ostringstream msg;
-            msg << "watchpoint=" << wp.name << " pc=0x" << std::hex << writerPc << " addr=0x"
-                << (0x80000000u | physical) << " size=" << std::dec << static_cast<unsigned>(size)
-                << " old=0x" << std::hex << maskValueForSize(oldValue, size) << " new=0x"
-                << maskValueForSize(newValue, size);
+            msg << "watchpoint=" << wp.name
+                << (kind == WatchpointKind::RamRead ? " kind=read" : " kind=write")
+                << " pc=0x" << std::hex << accessPc << " addr=0x"
+                << (0x80000000u | physical) << " size=" << std::dec << static_cast<unsigned>(size);
+            if (kind == WatchpointKind::RamRead)
+            {
+                msg << " value=0x" << std::hex << maskValueForSize(newValue, size);
+            }
+            else
+            {
+                msg << " old=0x" << std::hex << maskValueForSize(oldValue, size) << " new=0x"
+                    << maskValueForSize(newValue, size);
+            }
             if (resumeAddress != 0)
             {
                 msg << " resumed_at=0x" << std::hex << resumeAddress;
@@ -263,11 +303,19 @@ std::string DiagWatchpointEngine::formatSummary() const
     for (size_t i = 0; i < count; ++i)
     {
         const auto& e = m_events[m_events.size() - 1 - i];
-        os << "  [" << (e.config != nullptr ? e.config->name : "env") << "] pc=0x" << std::hex
-           << e.writerPc << " addr=0x" << (0x80000000u | (e.address & 0x1FFFFFFFu))
-           << " size=" << std::dec << static_cast<unsigned>(e.size) << " old=0x" << std::hex
-           << maskValueForSize(e.oldValue, e.size) << " new=0x"
-           << maskValueForSize(e.newValue, e.size);
+        os << "  [" << (e.config != nullptr ? e.config->name : "env") << "] "
+           << (e.kind == WatchpointKind::RamRead ? "read" : "write") << " pc=0x" << std::hex
+           << e.accessPc << " addr=0x" << (0x80000000u | (e.address & 0x1FFFFFFFu))
+           << " size=" << std::dec << static_cast<unsigned>(e.size);
+        if (e.kind == WatchpointKind::RamRead)
+        {
+            os << " value=0x" << std::hex << maskValueForSize(e.newValue, e.size);
+        }
+        else
+        {
+            os << " old=0x" << std::hex << maskValueForSize(e.oldValue, e.size) << " new=0x"
+               << maskValueForSize(e.newValue, e.size);
+        }
         if (e.predicateViolated)
         {
             os << " VIOLATED";

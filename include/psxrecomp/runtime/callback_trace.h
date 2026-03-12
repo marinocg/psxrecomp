@@ -38,7 +38,11 @@ struct CallbackTraceEntry
     bool cop0InterruptEligibleAfter = false;
     u32 consecutiveRepeatCount = 1;
     u32 totalRamWrites = 0;
+    u32 persistentRamWrites = 0;
+    u32 stackRamWrites = 0;
     std::vector<WriteHotspot> topWriteAddresses;
+    std::vector<WriteHotspot> topPersistentWriteAddresses;
+    std::vector<WriteHotspot> topStackWriteAddresses;
     std::vector<std::string> committedRegisters;
 };
 
@@ -65,6 +69,8 @@ class CallbackTraceEngine
 
     bool hasActiveInvocation() const;
 
+    void setActiveInvocationStackPointer(Address stackPointer);
+
     void recordRamWrite(Address address, u8 size, u32 oldValue, u32 newValue);
 
     void recordCommittedRegisterDelta(const std::array<u32, 32>& before,
@@ -84,7 +90,12 @@ class CallbackTraceEngine
         u32 irqMaskBefore = 0;
         bool cop0InterruptEligibleBefore = false;
         u32 totalRamWrites = 0;
+        u32 persistentRamWrites = 0;
+        u32 stackRamWrites = 0;
+        Address entryStackPointer = 0;
         std::unordered_map<Address, ActiveWriteInfo> ramWrites;
+        std::unordered_map<Address, ActiveWriteInfo> persistentRamWritesByAddress;
+        std::unordered_map<Address, ActiveWriteInfo> stackRamWritesByAddress;
         std::vector<std::string> committedRegisters;
     };
 
@@ -121,7 +132,11 @@ class CallbackTraceEngine
     {
         u32 count = 0;
         u32 totalRamWrites = 0;
+        u32 persistentRamWrites = 0;
+        u32 stackRamWrites = 0;
         std::unordered_map<Address, ActiveWriteInfo> ramWrites;
+        std::unordered_map<Address, ActiveWriteInfo> persistentRamWritesByAddress;
+        std::unordered_map<Address, ActiveWriteInfo> stackRamWritesByAddress;
         std::unordered_map<Address, u32> returnSiteCounts;
         std::unordered_map<std::string, u32> committedRegisterCounts;
     };

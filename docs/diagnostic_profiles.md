@@ -28,13 +28,20 @@ behavior.
 
 ### `watchpoints`
 
-Use RAM write watchpoints when you know a cell or small structure that should
-hold a pointer, counter, or state flag.
+Use RAM watchpoints when you know a cell or small structure that should hold a
+pointer, counter, state flag, or consumer-side latch.
 
-- `kind`: currently `ram_write` is the practical path.
+- `kind`: `ram_write` or `ram_read`.
 - `range`: inclusive RAM range to watch.
 - `predicate`: optional guard such as `aligned_pointer_in_region`.
 - `action`: `log`, `summarize`, `trap`, or `trap_on_first_violation`.
+
+Current runtime behavior:
+
+- `ram_write` events record `old` and `new` values
+- `ram_read` events record the observed `value`
+- step-budget stall reports include the most recent watchpoint events when any
+  profile watchpoint fired during the run
 
 ### `tracepoints`
 
@@ -60,6 +67,9 @@ Current runtime behavior:
   callback entry/exit PCs, descriptor/return-site context, IRQ snapshots,
   callback-generation changes, repeat counts, per-callback RAM write deltas,
   and committed register deltas
+- callback RAM-write summaries now separate likely callback stack traffic from
+  persistent RAM writes so nearby stack frames do not masquerade as game-state
+  latches during investigation
 
 The `registers` and `log_branches` fields are accepted by the profile parser so
 the intent stays documented, but the runtime currently emits entry/exit events
@@ -80,17 +90,26 @@ It focuses on:
 - the bounded delay helper at `0x15f944-0x15f99c`
 - its two current caller functions at `0x15ee6c-0x15f0e8` and
   `0x15f0ec-0x15f2a8`
+- the callback-owned state block at `0x15d8d0-0x15df84`
 - the hot loop around `0x160840-0x16088c`, which includes the stalled PC
   `0x16085c`
 - the two indirect-call windows at `0x15d7b4` and `0x16116c`
 - the two RAM cells currently feeding one of those indirect calls:
   `0x80166cc8` and `0x80166cf8`
+- the callback busy latch at `0x801654ea`
+- the callback counter block around `0x801665b0`
+- the consumer snapshot/compare path around `0x15d630-0x15d704`
+- the delay-helper re-entry branch at `0x15f984-0x15f990`
 
 That combination is useful for answering two questions:
 
 1. Is the runner spinning in the same loop we see in the stall summary?
 2. Which code path last populated the indirect-call slot/context cells before
    the stall?
+3. Is the callback only toggling a short-lived busy latch, or is it also
+   advancing a persistent counter/state word that mainline should consume?
+4. Does the consumer side read the callback-owned state directly, or does it
+   branch on a copied baseline that never reaches the expected value?
 
 ## Typical Docker workflow
 

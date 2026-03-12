@@ -1,5 +1,7 @@
 #include "psxrecomp/runtime/callback_trace.h"
 
+#include "callback_trace_internal.h"
+
 #include <algorithm>
 #include <sstream>
 
@@ -12,10 +14,8 @@ namespace
 {
 
 constexpr size_t MAX_RECENT_CALLBACK_ENTRIES = 24;
-constexpr size_t MAX_SIGNATURE_SUMMARY = 4;
-constexpr size_t MAX_WRITE_SUMMARY = 3;
 constexpr size_t MAX_REGISTER_SUMMARY = 8;
-constexpr size_t MAX_RETURN_SITE_SUMMARY = 4;
+constexpr size_t MAX_SIGNATURE_SUMMARY = callback_trace_internal::MAX_SIGNATURE_SUMMARY;
 
 void appendRecentEntry(std::vector<CallbackTraceEntry>& entries, const CallbackTraceEntry& entry)
 {
@@ -62,114 +62,6 @@ std::string joinRegisterNames(const std::vector<std::string>& names)
         os << ",...";
     }
     return os.str();
-}
-
-std::vector<CallbackTraceEntry::WriteHotspot> summarizeWrites(
-    const std::unordered_map<Address, CallbackTraceEngine::ActiveWriteInfo>& writes)
-{
-    std::vector<std::pair<Address, CallbackTraceEngine::ActiveWriteInfo>> sorted(writes.begin(),
-                                                                                 writes.end());
-    std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs)
-              {
-                  if (lhs.second.count != rhs.second.count)
-                  {
-                      return lhs.second.count > rhs.second.count;
-                  }
-                  return lhs.first < rhs.first;
-              });
-
-    std::vector<CallbackTraceEntry::WriteHotspot> result;
-    const size_t count = std::min<size_t>(sorted.size(), MAX_WRITE_SUMMARY);
-    result.reserve(count);
-    for (size_t index = 0; index < count; ++index)
-    {
-        CallbackTraceEntry::WriteHotspot hotspot;
-        hotspot.address = sorted[index].first;
-        hotspot.count = sorted[index].second.count;
-        hotspot.lastOldValue = sorted[index].second.lastOldValue;
-        hotspot.lastNewValue = sorted[index].second.lastNewValue;
-        result.push_back(hotspot);
-    }
-    return result;
-}
-
-std::string formatWriteSummary(const std::vector<CallbackTraceEntry::WriteHotspot>& writes)
-{
-    if (writes.empty())
-    {
-        return "none";
-    }
-    std::ostringstream os;
-    for (size_t index = 0; index < writes.size(); ++index)
-    {
-        const auto& write = writes[index];
-        if (index != 0)
-        {
-            os << ",";
-        }
-        os << "0x" << std::hex << write.address << "x" << std::dec << write.count << "(0x"
-           << std::hex << write.lastOldValue << "->0x" << write.lastNewValue << ")";
-    }
-    return os.str();
-}
-
-std::vector<std::pair<Address, u32>> summarizeReturnSites(
-    const std::unordered_map<Address, u32>& counts)
-{
-    std::vector<std::pair<Address, u32>> sorted(counts.begin(), counts.end());
-    std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs)
-              {
-                  if (lhs.second != rhs.second)
-                  {
-                      return lhs.second > rhs.second;
-                  }
-                  return lhs.first < rhs.first;
-              });
-    if (sorted.size() > MAX_RETURN_SITE_SUMMARY)
-    {
-        sorted.resize(MAX_RETURN_SITE_SUMMARY);
-    }
-    return sorted;
-}
-
-std::string formatReturnSiteSummary(const std::vector<std::pair<Address, u32>>& sites)
-{
-    if (sites.empty())
-    {
-        return "none";
-    }
-    std::ostringstream os;
-    for (size_t index = 0; index < sites.size(); ++index)
-    {
-        if (index != 0)
-        {
-            os << ",";
-        }
-        os << "0x" << std::hex << sites[index].first << "x" << std::dec << sites[index].second;
-    }
-    return os.str();
-}
-
-std::vector<std::string> summarizeRegisters(const std::unordered_map<std::string, u32>& counts)
-{
-    std::vector<std::pair<std::string, u32>> sorted(counts.begin(), counts.end());
-    std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs)
-              {
-                  if (lhs.second != rhs.second)
-                  {
-                      return lhs.second > rhs.second;
-                  }
-                  return lhs.first < rhs.first;
-              });
-
-    std::vector<std::string> result;
-    const size_t count = std::min<size_t>(sorted.size(), MAX_REGISTER_SUMMARY);
-    result.reserve(count);
-    for (size_t index = 0; index < count; ++index)
-    {
-        result.push_back(sorted[index].first + "x" + std::to_string(sorted[index].second));
-    }
-    return result;
 }
 
 } // namespace
@@ -237,6 +129,15 @@ bool CallbackTraceEngine::hasActiveInvocation() const
     return !m_activeInvocations.empty();
 }
 
+void CallbackTraceEngine::setActiveInvocationStackPointer(Address stackPointer)
+{
+    if (m_activeInvocations.empty())
+    {
+        return;
+    }
+    m_activeInvocations.back().entryStackPointer = stackPointer;
+}
+
 void CallbackTraceEngine::recordRamWrite(Address address, u8 size, u32 oldValue, u32 newValue)
 {
     if (m_activeInvocations.empty())
@@ -250,6 +151,22 @@ void CallbackTraceEngine::recordRamWrite(Address address, u8 size, u32 oldValue,
     info.lastNewValue = newValue;
     info.size = size;
     ++invocation.totalRamWrites;
+
+    std::unordered_map<Address, ActiveWriteInfo>* destination = &invocation.persistentRamWritesByAddress;
+    u32* destinationCount = &invocation.persistentRamWrites;
+    if (callback_trace_internal::isLikelyCallbackStackWrite(address,
+                                                            invocation.entryStackPointer))
+    {
+        destination = &invocation.stackRamWritesByAddress;
+        destinationCount = &invocation.stackRamWrites;
+    }
+
+    ActiveWriteInfo& classifiedInfo = (*destination)[address];
+    ++classifiedInfo.count;
+    classifiedInfo.lastOldValue = oldValue;
+    classifiedInfo.lastNewValue = newValue;
+    classifiedInfo.size = size;
+    ++(*destinationCount);
 }
 
 void CallbackTraceEngine::recordCommittedRegisterDelta(const std::array<u32, 32>& before,
@@ -309,7 +226,13 @@ void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromE
     entry.cop0InterruptEligibleBefore = invocation.cop0InterruptEligibleBefore;
     entry.cop0InterruptEligibleAfter = cop0InterruptEligibleAfter;
     entry.totalRamWrites = invocation.totalRamWrites;
-    entry.topWriteAddresses = summarizeWrites(invocation.ramWrites);
+    entry.persistentRamWrites = invocation.persistentRamWrites;
+    entry.stackRamWrites = invocation.stackRamWrites;
+    entry.topWriteAddresses = callback_trace_internal::summarizeWrites(invocation.ramWrites);
+    entry.topPersistentWriteAddresses =
+        callback_trace_internal::summarizeWrites(invocation.persistentRamWritesByAddress);
+    entry.topStackWriteAddresses =
+        callback_trace_internal::summarizeWrites(invocation.stackRamWritesByAddress);
     entry.committedRegisters = invocation.committedRegisters;
 
     const CallbackRepeatSignature signature = {entry.entryPc, entry.exitPc, entry.descriptorAddress,
@@ -332,10 +255,28 @@ void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromE
                                                          entry.descriptorAddress}];
     ++aggregate.count;
     aggregate.totalRamWrites += entry.totalRamWrites;
+    aggregate.persistentRamWrites += entry.persistentRamWrites;
+    aggregate.stackRamWrites += entry.stackRamWrites;
     ++aggregate.returnSiteCounts[entry.returnSite];
     for (const auto& write : invocation.ramWrites)
     {
         ActiveWriteInfo& info = aggregate.ramWrites[write.first];
+        info.count += write.second.count;
+        info.lastOldValue = write.second.lastOldValue;
+        info.lastNewValue = write.second.lastNewValue;
+        info.size = write.second.size;
+    }
+    for (const auto& write : invocation.persistentRamWritesByAddress)
+    {
+        ActiveWriteInfo& info = aggregate.persistentRamWritesByAddress[write.first];
+        info.count += write.second.count;
+        info.lastOldValue = write.second.lastOldValue;
+        info.lastNewValue = write.second.lastNewValue;
+        info.size = write.second.size;
+    }
+    for (const auto& write : invocation.stackRamWritesByAddress)
+    {
+        ActiveWriteInfo& info = aggregate.stackRamWritesByAddress[write.first];
         info.count += write.second.count;
         info.lastOldValue = write.second.lastOldValue;
         info.lastNewValue = write.second.lastNewValue;
@@ -358,8 +299,12 @@ void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromE
         << entry.callbackGenerationBefore << " gen_after=" << entry.callbackGenerationAfter
         << std::hex << " irq_before=0x" << entry.irqStatusBefore << "/0x" << entry.irqMaskBefore
         << " irq_after=0x" << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter
-        << " writes=" << std::dec << entry.totalRamWrites << " top_writes="
-        << formatWriteSummary(entry.topWriteAddresses) << " regs="
+        << " writes=" << std::dec << entry.totalRamWrites << " persistent_writes="
+        << entry.persistentRamWrites << " stack_writes=" << entry.stackRamWrites
+        << " top_persistent_writes="
+        << callback_trace_internal::formatWriteSummary(entry.topPersistentWriteAddresses)
+        << " top_stack_writes="
+        << callback_trace_internal::formatWriteSummary(entry.topStackWriteAddresses) << " regs="
         << joinRegisterNames(entry.committedRegisters) << " cop0_before="
         << (entry.cop0InterruptEligibleBefore ? 1 : 0) << " cop0_after="
         << (entry.cop0InterruptEligibleAfter ? 1 : 0) << " repeat="
@@ -389,7 +334,12 @@ std::string CallbackTraceEngine::formatRecentCallbacks() const
            << " -> 0x" << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter << std::dec
            << " cop0=" << (entry.cop0InterruptEligibleBefore ? 1 : 0) << "->"
            << (entry.cop0InterruptEligibleAfter ? 1 : 0) << " writes=" << entry.totalRamWrites
-           << " top_writes=" << formatWriteSummary(entry.topWriteAddresses) << " regs="
+           << " persistent_writes=" << entry.persistentRamWrites << " stack_writes="
+           << entry.stackRamWrites << " top_persistent_writes="
+           << callback_trace_internal::formatWriteSummary(entry.topPersistentWriteAddresses)
+           << " top_stack_writes="
+           << callback_trace_internal::formatWriteSummary(entry.topStackWriteAddresses)
+           << " regs="
            << joinRegisterNames(entry.committedRegisters) << " repeat="
            << entry.consecutiveRepeatCount << "\n";
     }
@@ -454,11 +404,22 @@ std::string CallbackTraceEngine::formatRecentCallbacks() const
         os << "Callback state delta [" << (index + 1) << "]: entry=0x" << std::hex
            << item.first.entryPc << " exit=0x" << item.first.exitPc << " descriptor=0x"
            << item.first.descriptorAddress << std::dec << " count=" << item.second.count
-           << " total_writes=" << item.second.totalRamWrites << " top_writes="
-           << formatWriteSummary(summarizeWrites(item.second.ramWrites)) << " regs="
-           << joinRegisterNames(summarizeRegisters(item.second.committedRegisterCounts))
+           << " total_writes=" << item.second.totalRamWrites << " persistent_writes="
+           << item.second.persistentRamWrites << " stack_writes=" << item.second.stackRamWrites
+           << " top_persistent_writes="
+           << callback_trace_internal::formatWriteSummary(
+                  callback_trace_internal::summarizeWrites(
+                      item.second.persistentRamWritesByAddress))
+           << " top_stack_writes="
+           << callback_trace_internal::formatWriteSummary(
+                  callback_trace_internal::summarizeWrites(item.second.stackRamWritesByAddress))
+           << " regs="
+           << joinRegisterNames(
+                  callback_trace_internal::summarizeRegisters(item.second.committedRegisterCounts))
            << " return_sites="
-           << formatReturnSiteSummary(summarizeReturnSites(item.second.returnSiteCounts)) << "\n";
+           << callback_trace_internal::formatReturnSiteSummary(
+                  callback_trace_internal::summarizeReturnSites(item.second.returnSiteCounts))
+           << "\n";
     }
 
     if (m_hasLastSignature)

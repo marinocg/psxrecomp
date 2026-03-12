@@ -127,8 +127,16 @@ class PsxSystem
         Address physical = normalizeAddress(address);
         if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
         {
-            return readFromRegion<T>(m_ram.data(), physical - MemoryMap::RAM_BASE,
-                                     MemoryMap::RAM_SIZE);
+            const Address offset = physical - MemoryMap::RAM_BASE;
+            const u8 readSize = static_cast<u8>(sizeof(T));
+            const T value = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
+            if (m_diagWatchpoints.shouldWatchRamRead(physical, readSize))
+            {
+                m_diagWatchpoints.recordRamRead(m_debugOverlay.lastProgramCounter(), physical,
+                                                readSize, static_cast<u32>(value), nullptr,
+                                                m_lastResumeAddress);
+            }
+            return value;
         }
         if (isInRange(physical, MemoryMap::SCRATCHPAD_BASE, MemoryMap::SCRATCHPAD_SIZE))
         {

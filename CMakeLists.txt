@@ -141,6 +141,7 @@ set(RUNTIME_SOURCES
     src/runtime/disc_image.cpp
     src/runtime/cop0.cpp
     src/runtime/callback_trace.cpp
+    src/runtime/callback_trace_internal.cpp
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gte.cpp
@@ -353,6 +354,11 @@ if(BUILD_TESTS)
         tests/unit/runtime_test_timer_sections.cpp
     )
     target_link_libraries(runtime_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_watchpoints_test
+        tests/unit/diag_watchpoints_test.cpp
+    )
+    target_link_libraries(diag_watchpoints_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(callback_bridge_test
         tests/unit/callback_bridge_test.cpp

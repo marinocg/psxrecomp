@@ -271,6 +271,10 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("       << std::hex << pc << \"\\n\";");
     emitter.writeLine("stream << context.system.stallClassifier().classify();");
     emitter.writeLine("stream << context.system.diagTracepoints().formatRecentTraces();");
+    emitter.writeLine("if (context.system.diagWatchpoints().eventCount() > 0)");
+    emitter.openBlock("");
+    emitter.writeLine("stream << context.system.diagWatchpoints().formatSummary();");
+    emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();

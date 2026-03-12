@@ -352,6 +352,8 @@ void emitGeneratedSourceBody(CppEmitter& emitter, const ModuleMetadata& metadata
     emitter.writeLine("const auto callbackContextDisposition =");
     emitter.writeLine("    system.consumePendingCallbackRegisters(context.regs);");
     emitter.writeLine(
+        "system.callbackTrace().setActiveInvocationStackPointer(context.regs[Registers::SP]);");
+    emitter.writeLine(
         "const auto shouldCommitCallbackContext = [&system, callbackCommitGeneration,");
     emitter.writeLine("                                         callbackContextDisposition]()");
     emitter.openBlock("");

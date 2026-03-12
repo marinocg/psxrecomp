@@ -16,7 +16,8 @@ class RuntimeLogger;
 struct WatchpointEvent
 {
     const WatchpointConfig* config = nullptr;
-    Address writerPc = 0;
+    WatchpointKind kind = WatchpointKind::RamWrite;
+    Address accessPc = 0;
     Address address = 0;
     u8 size = 0;
     u32 oldValue = 0;
@@ -43,10 +44,18 @@ class DiagWatchpointEngine
     /// Check whether a RAM write at the given address should be intercepted.
     bool shouldWatchRamWrite(Address address, u8 size) const;
 
+    /// Check whether a RAM read at the given address should be intercepted.
+    bool shouldWatchRamRead(Address address, u8 size) const;
+
     /// Record a RAM write and evaluate watchpoint predicates.
     /// @param resumeAddress Non-zero when the writer is inside a resumed function entry.
     void recordRamWrite(Address writerPc, Address address, u8 size, u32 oldValue, u32 newValue,
                         RuntimeLogger* logger, Address resumeAddress = 0);
+
+    /// Record a RAM read and evaluate watchpoint predicates.
+    /// @param resumeAddress Non-zero when the reader is inside a resumed function entry.
+    void recordRamRead(Address readerPc, Address address, u8 size, u32 value,
+                       RuntimeLogger* logger, Address resumeAddress = 0);
 
     /// Check whether any watchpoint has fired with a trap action.
     bool hasTrapViolation() const;
@@ -70,13 +79,17 @@ class DiagWatchpointEngine
         Address end = 0;
     };
 
+    bool shouldWatchRamAccess(WatchpointKind kind, Address address, u8 size) const;
+    void recordRamAccess(WatchpointKind kind, Address accessPc, Address address, u8 size,
+                         u32 oldValue, u32 newValue, RuntimeLogger* logger,
+                         Address resumeAddress);
     bool evaluatePredicate(const WatchpointPredicate& pred, u32 value) const;
     Address normalizeAddress(Address address) const;
     bool isAlignedPointerInRegion(u32 value, Address regionStart, Address regionEnd) const;
 
     std::vector<WatchpointConfig> m_configs;
     DiagMemoryMapConfig m_memMap;
-    std::vector<EnvRange> m_envRanges;
+    std::vector<EnvRange> m_envWriteRanges;
     std::vector<WatchpointEvent> m_events;
     bool m_trapViolation = false;
 };

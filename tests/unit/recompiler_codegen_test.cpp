@@ -326,9 +326,15 @@ int main()
     runtimeHeader << "  public:\n";
     runtimeHeader << "    std::string formatRecentTraces() const { return {}; }\n";
     runtimeHeader << "};\n";
+    runtimeHeader << "class DiagWatchpointEngine {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    std::size_t eventCount() const { return 0; }\n";
+    runtimeHeader << "    std::string formatSummary() const { return {}; }\n";
+    runtimeHeader << "};\n";
     runtimeHeader << "class CallbackTraceEngine {\n";
     runtimeHeader << "  public:\n";
     runtimeHeader << "    bool hasActiveInvocation() const { return false; }\n";
+    runtimeHeader << "    void setActiveInvocationStackPointer(Address) {}\n";
     runtimeHeader << "    void recordRamWrite(Address, u8, u32, u32) {}\n";
     runtimeHeader << "    void recordCommittedRegisterDelta(const std::array<u32, 32>&,\n";
     runtimeHeader << "                                      const std::array<u32, 32>&,\n";
@@ -393,6 +399,7 @@ int main()
     runtimeHeader << "    Gte& gte() { return m_gte; }\n";
     runtimeHeader << "    StallClassifier& stallClassifier() { return m_stallClassifier; }\n";
     runtimeHeader << "    DiagTracepointEngine& diagTracepoints() { return m_diagTracepoints; }\n";
+    runtimeHeader << "    DiagWatchpointEngine& diagWatchpoints() { return m_diagWatchpoints; }\n";
     runtimeHeader << "    CallbackTraceEngine& callbackTrace() { return m_callbackTrace; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
@@ -401,6 +408,7 @@ int main()
     runtimeHeader << "    Gte m_gte;\n";
     runtimeHeader << "    StallClassifier m_stallClassifier;\n";
     runtimeHeader << "    DiagTracepointEngine m_diagTracepoints;\n";
+    runtimeHeader << "    DiagWatchpointEngine m_diagWatchpoints;\n";
     runtimeHeader << "    CallbackTraceEngine m_callbackTrace;\n";
     runtimeHeader << "    Address m_lastResumeAddress = 0;\n";
     runtimeHeader << "};\n";
