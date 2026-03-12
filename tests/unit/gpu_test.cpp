@@ -164,7 +164,7 @@ int main()
     // Display window decoding should honor GP1 display start and mode.
     gpu.reset();
     auto displayWindow = gpu.displayWindow();
-    assert(displayWindow.enabled);
+    assert(!displayWindow.enabled);
     assert(displayWindow.x == 0);
     assert(displayWindow.y == 0);
     assert(displayWindow.width == 320);

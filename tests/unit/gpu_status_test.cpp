@@ -4,16 +4,20 @@
 
 namespace
 {
+using psxrecomp::u32;
 using psxrecomp::runtime::Gpu;
 
-constexpr psxrecomp::u32 StatusDmaDataRequest = 1u << 25;
-constexpr psxrecomp::u32 StatusReadyToReceiveCommand = 1u << 26;
-constexpr psxrecomp::u32 StatusReadyToSendToCpu = 1u << 27;
-constexpr psxrecomp::u32 StatusReadyToReceiveDmaBlock = 1u << 28;
-constexpr psxrecomp::u32 StatusDisplayDisable = 1u << 23;
-constexpr psxrecomp::u32 StatusInterlaceGate = 1u << 19;
-constexpr psxrecomp::u32 StatusVerticalInterlace = 1u << 22;
-constexpr psxrecomp::u32 StatusFieldBit = 1u << 31;
+constexpr u32 StatusDmaRequest = 1u << 25;
+constexpr u32 StatusReadyCommand = 1u << 26;
+constexpr u32 StatusReadyVramToCpu = 1u << 27;
+constexpr u32 StatusReadyDmaBlock = 1u << 28;
+constexpr u32 StatusDisplayDisable = 1u << 23;
+constexpr u32 StatusFieldOrAlwaysOne = 1u << 13;
+constexpr u32 StatusReverseFlag = 1u << 14;
+constexpr u32 StatusVerticalInterlace = 1u << 22;
+constexpr u32 StatusFieldBit = 1u << 31;
+constexpr u32 StatusDmaDirectionShift = 29;
+constexpr u32 ResetStatus = 0x14802000u;
 } // namespace
 
 int main()
@@ -21,138 +25,110 @@ int main()
     Gpu gpu;
     gpu.reset();
 
+    assert(gpu.readStatus() == ResetStatus);
+
+    gpu.writeCommand(0xE2001357u);
+    gpu.writeStatus(0x10000002u);
+    assert(gpu.readData() == 0x00001357u);
+    assert((gpu.readStatus() & StatusReadyVramToCpu) == 0);
+
+    gpu.writeCommand(0xE3002468u);
+    gpu.writeStatus(0x10000003u);
+    assert(gpu.readData() == 0x00002468u);
+
+    gpu.writeCommand(0xE400369Cu);
+    gpu.writeStatus(0x10000004u);
+    assert(gpu.readData() == 0x0000369Cu);
+
+    gpu.writeCommand(0xE5001ABCu);
+    gpu.writeStatus(0x10000005u);
+    assert(gpu.readData() == 0x00001ABCu);
+
+    gpu.writeStatus(0x10000007u);
+    assert(gpu.readData() == 0x00000002u);
+    gpu.writeStatus(0x10000008u);
+    assert(gpu.readData() == 0x00000000u);
+
+    const u32 latchBeforeUnsupported = gpu.readData();
+    gpu.writeStatus(0x10000009u);
+    assert(gpu.readData() == latchBeforeUnsupported);
+
+    gpu.writeStatus(0x04000001u);
+    u32 status = gpu.readStatus();
+    assert(((status >> StatusDmaDirectionShift) & 0x3u) == 0x1u);
+    assert((status & StatusDmaRequest) != 0);
+
     while (gpu.fifoDepth() < 64)
     {
         gpu.writeCommand(0x00000000u);
     }
-    const auto statusWhenFull = gpu.readStatus();
-    assert((statusWhenFull & StatusReadyToReceiveCommand) == 0);
-
-    const auto traceBeforeOverflowAttempt = gpu.commandTrace().size();
-    gpu.writeCommand(0x020000FFu);
-    gpu.writeCommand(0x00000000u);
-    gpu.writeCommand(0x00100010u);
-    assert(gpu.fifoDepth() == 64);
-    assert(gpu.commandTrace().size() == traceBeforeOverflowAttempt);
-
-    const auto initialDepth = gpu.fifoDepth();
-    gpu.tickGpu(2);
-    assert(gpu.fifoDepth() <= initialDepth);
+    status = gpu.readStatus();
+    assert((status & StatusDmaRequest) == 0);
+    assert((status & StatusReadyCommand) == 0);
 
     gpu.reset();
-    const auto fifoDepthBeforeOffDma = gpu.fifoDepth();
-    gpu.writeDma(0x12345678u);
-    assert(gpu.fifoDepth() == fifoDepthBeforeOffDma);
-
     gpu.writeStatus(0x04000002u);
-    const auto statusCpuToGp0 = gpu.readStatus();
-    assert(((statusCpuToGp0 >> 29) & 0x3u) == 0x2u);
-    assert((statusCpuToGp0 & StatusReadyToReceiveDmaBlock) != 0);
-    assert((statusCpuToGp0 & StatusDmaDataRequest) != 0);
+    status = gpu.readStatus();
+    assert(((status >> StatusDmaDirectionShift) & 0x3u) == 0x2u);
+    assert((status & StatusDmaRequest) != 0);
+    assert((status & StatusReadyDmaBlock) != 0);
 
-    gpu.writeDma(0xAABBCCDDu);
-    assert(gpu.fifoDepth() == fifoDepthBeforeOffDma + 1);
-    assert(gpu.readData() == 0);
-
-    gpu.writeStatus(0x01000000u);
-    assert(gpu.fifoDepth() == 0);
-
-    gpu.writeStatus(0x04000003u);
-    const auto statusGpuToCpu = gpu.readStatus();
-    assert(((statusGpuToCpu >> 29) & 0x3u) == 0x3u);
-    assert((statusGpuToCpu & StatusReadyToSendToCpu) != 0);
-    assert((statusGpuToCpu & StatusDmaDataRequest) != 0);
-
-    gpu.writeStatus(0x04000001u);
-    assert((gpu.readStatus() & StatusDmaDataRequest) != 0);
-
-    gpu.writeStatus(0x04000000u);
-    assert((gpu.readStatus() & StatusDmaDataRequest) == 0);
-
-    // GPUREAD readiness bit should drop while CPU->VRAM payload transfer is active.
-    gpu.writeStatus(0x04000003u);
     gpu.writeCommand(0xA0000000u);
     gpu.writeCommand(0x00000000u);
     gpu.writeCommand(0x00010002u);
-    assert((gpu.readStatus() & StatusReadyToSendToCpu) == 0);
+    status = gpu.readStatus();
+    assert((status & StatusReadyCommand) == 0);
+    assert((status & StatusReadyDmaBlock) != 0);
+    assert((status & StatusDmaRequest) != 0);
     gpu.writeCommand(0xAAAABBBBu);
+    status = gpu.readStatus();
+    assert((status & StatusReadyCommand) != 0);
+    assert((status & StatusReadyDmaBlock) != 0);
+    assert((status & StatusDmaRequest) != 0);
 
-    gpu.writeStatus(0x03000001u);
-    assert((gpu.readStatus() & StatusDisplayDisable) != 0);
+    gpu.writeStatus(0x04000003u);
+    status = gpu.readStatus();
+    assert(((status >> StatusDmaDirectionShift) & 0x3u) == 0x3u);
+    assert((status & StatusReadyVramToCpu) == 0);
+    assert((status & StatusDmaRequest) == 0);
 
-    gpu.reset();
-    const auto statusAfterReset = gpu.readStatus();
-    assert((statusAfterReset & StatusReadyToReceiveCommand) != 0);
-    assert((statusAfterReset & StatusReadyToReceiveDmaBlock) != 0);
-    assert((statusAfterReset & StatusInterlaceGate) == 0);
-
-    gpu.writeStatus(0x08000024u); // 320x480 interlaced mode
-    const auto statusAfterDisplayModeWrite = gpu.readStatus();
-    assert((statusAfterDisplayModeWrite & StatusInterlaceGate) != 0);
-    assert((statusAfterDisplayModeWrite & StatusReadyToReceiveDmaBlock) != 0);
-    gpu.tickGpu(2);
-    const auto statusAfterDisplayModeSettled = gpu.readStatus();
-    assert((statusAfterDisplayModeSettled & StatusInterlaceGate) != 0);
-    assert((statusAfterDisplayModeSettled & StatusReadyToReceiveCommand) != 0);
-
-    gpu.writeStatus(0x03000001u);
-    assert((gpu.readStatus() & StatusDisplayDisable) != 0);
-    gpu.tickGpu(2);
-    gpu.writeStatus(0x03000000u);
-    assert((gpu.readStatus() & StatusDisplayDisable) == 0);
-
-    gpu.writeStatus(0x04000002u);
-    const auto statusAfterDmaEnable = gpu.readStatus();
-    assert(((statusAfterDmaEnable >> 29) & 0x3u) == 0x2u);
-    assert((statusAfterDmaEnable & StatusDmaDataRequest) != 0);
-    assert((statusAfterDmaEnable & StatusReadyToReceiveDmaBlock) != 0);
-    gpu.tickGpu(2);
-    gpu.writeStatus(0x04000000u);
-    const auto statusAfterDmaDisable = gpu.readStatus();
-    assert(((statusAfterDmaDisable >> 29) & 0x3u) == 0x0u);
-    assert((statusAfterDmaDisable & StatusDmaDataRequest) == 0);
-
-    gpu.tickGpu(2);
-    const auto statusWithEmptyQueue = gpu.readStatus();
-    assert((statusWithEmptyQueue & StatusReadyToReceiveCommand) != 0);
+    gpu.writeCommand(0xC0000000u);
     gpu.writeCommand(0x00000000u);
-    const auto statusWithQueuedCommand = gpu.readStatus();
-    assert((statusWithQueuedCommand & StatusReadyToReceiveCommand) == 0);
-    assert((statusWithQueuedCommand & StatusReadyToReceiveDmaBlock) != 0);
-    gpu.tickGpu(2);
-    const auto statusAfterQueueDrain = gpu.readStatus();
-    assert((statusAfterQueueDrain & StatusReadyToReceiveCommand) != 0);
+    gpu.writeCommand(0x00010002u);
+    status = gpu.readStatus();
+    assert((status & StatusReadyVramToCpu) != 0);
+    assert((status & StatusDmaRequest) != 0);
+    assert(gpu.readData() == 0xAAAABBBBu);
+    status = gpu.readStatus();
+    assert((status & StatusReadyVramToCpu) == 0);
+    assert((status & StatusDmaRequest) == 0);
+
+    gpu.writeStatus(0x03000001u);
+    assert((gpu.readStatus() & StatusDisplayDisable) != 0);
+
+    gpu.writeStatus(0x08000024u);
+    status = gpu.readStatus();
+    assert((status & StatusVerticalInterlace) != 0);
+    assert((status & StatusReadyCommand) != 0);
+    assert((status & StatusReadyDmaBlock) != 0);
+    assert((status & StatusFieldOrAlwaysOne) == 0);
 
     gpu.reset();
-    gpu.writeCommand(0x20000000u);
-    const auto polygonStatus = gpu.readStatus();
-    assert((polygonStatus & StatusReadyToReceiveCommand) == 0);
-    assert((polygonStatus & StatusReadyToReceiveDmaBlock) == 0);
+    assert((gpu.readStatus() & StatusFieldOrAlwaysOne) != 0);
+    gpu.writeStatus(0x08000080u);
+    assert((gpu.readStatus() & StatusReverseFlag) != 0);
+
+    const u32 fieldBeforeTick = gpu.readStatus() & StatusFieldBit;
+    gpu.tickDisplayLine();
+    gpu.tickDisplayLine();
+    const u32 fieldAfterTick = gpu.readStatus() & StatusFieldBit;
+    assert(fieldBeforeTick == fieldAfterTick);
 
     gpu.reset();
-    gpu.writeCommand(0x60000000u);
-    const auto spriteStatus = gpu.readStatus();
-    assert((spriteStatus & StatusReadyToReceiveCommand) == 0);
-    assert((spriteStatus & StatusReadyToReceiveDmaBlock) != 0);
-
-    gpu.writeStatus(0x08000020u); // interlaced 240-line mode
-    const auto beforeLineTick = gpu.readStatus();
-    assert((beforeLineTick & StatusVerticalInterlace) != 0);
+    const u32 progressiveBeforeTick = gpu.readStatus() & StatusFieldBit;
     gpu.tickDisplayLine();
-    gpu.tickDisplayLine();
-    const auto afterLineTick = gpu.readStatus();
-    assert((beforeLineTick & StatusFieldBit) == (afterLineTick & StatusFieldBit));
-
-    gpu.writeStatus(0x00000000u);
-    assert((gpu.readStatus() & StatusFieldBit) == 0);
-
-    gpu.reset();
-    gpu.writeStatus(0x08000000u); // progressive 240-line mode
-    const auto progressiveBeforeTick = gpu.readStatus();
-    assert((progressiveBeforeTick & StatusVerticalInterlace) == 0);
-    gpu.tickDisplayLine();
-    const auto progressiveAfterTick = gpu.readStatus();
-    assert(((progressiveBeforeTick ^ progressiveAfterTick) & StatusFieldBit) != 0);
+    const u32 progressiveAfterTick = gpu.readStatus() & StatusFieldBit;
+    assert(progressiveBeforeTick != progressiveAfterTick);
 
     return 0;
 }

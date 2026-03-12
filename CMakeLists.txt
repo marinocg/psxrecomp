@@ -348,6 +348,16 @@ if(BUILD_TESTS)
     )
     target_link_libraries(gpu_status_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(gpu_polling_test
+        tests/unit/gpu_polling_test.cpp
+    )
+    target_link_libraries(gpu_polling_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(gpu_dma_semantics_test
+        tests/unit/gpu_dma_semantics_test.cpp
+    )
+    target_link_libraries(gpu_dma_semantics_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(runtime_test
         tests/unit/runtime_test.cpp
         tests/unit/runtime_test_sections.cpp

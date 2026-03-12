@@ -155,8 +155,14 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
         case GpuCommandKind::DrawMode:
             if (!command.words.empty())
             {
-                registers.drawModeStatus = static_cast<u16>(command.words[0] & 0x7FFu);
-                registers.texturePage = static_cast<u16>(command.words[0] & 0x7FF);
+                registers.drawModeStatus = static_cast<u16>(command.words[0] & 0xFFFu);
+                registers.texturePage = static_cast<u16>(command.words[0] & 0x7FFu);
+            }
+            break;
+        case GpuCommandKind::TextureWindow:
+            if (!command.words.empty())
+            {
+                registers.textureWindowStatus = command.words[0] & 0x000FFFFFu;
             }
             break;
         case GpuCommandKind::DrawSprite:
@@ -168,18 +174,21 @@ void Gpu::applyRegisterEffects(const GpuCommand& command, Registers& registers)
         case GpuCommandKind::DrawingAreaTopLeft:
             if (!command.words.empty())
             {
+                registers.drawAreaTopLeftStatus = command.words[0] & 0x000FFFFFu;
                 registers.drawAreaTopLeft = static_cast<u16>(command.words[0] & 0xFFFF);
             }
             break;
         case GpuCommandKind::DrawingAreaBottomRight:
             if (!command.words.empty())
             {
+                registers.drawAreaBottomRightStatus = command.words[0] & 0x000FFFFFu;
                 registers.drawAreaBottomRight = static_cast<u16>(command.words[0] & 0xFFFF);
             }
             break;
         case GpuCommandKind::DrawingOffset:
             if (!command.words.empty())
             {
+                registers.drawingOffsetStatus = command.words[0] & 0x003FFFFFu;
                 registers.drawingOffset = static_cast<u16>(command.words[0] & 0xFFFF);
             }
             break;

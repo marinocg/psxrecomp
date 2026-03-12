@@ -13,7 +13,6 @@ namespace runtime
 
 namespace
 {
-constexpr u32 GpuCommandReadyCooldownCycles = 2;
 constexpr u16 ActiveDisplayLines = 240u;
 constexpr u16 DisplayFieldFlipLine = 252u;
 constexpr u16 TotalDisplayLines = 263u;
@@ -35,7 +34,6 @@ void Gpu::reset()
     m_status = STATUS_READY;
     m_readData = 0;
     m_gpuCycles = 0;
-    m_commandReadyCooldown = 0;
     m_oddField = false;
     m_displayPhase = DisplayPhase::ActiveDisplay;
     m_displayLine = 0;
@@ -78,8 +76,12 @@ u32 Gpu::readData()
 
 void Gpu::writeStatus(u32 value)
 {
+    const u8 opcode = static_cast<u8>((value >> 24) & 0xFFu);
+    if (opcode >= 0x10u && opcode <= 0x1Fu)
+    {
+        handleGpuInfoRead(value);
+    }
     appendPacketWord(true, value);
-    m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
 }
 
 void Gpu::restoreStatus(u32 value)
@@ -92,7 +94,6 @@ void Gpu::writeCommand(u32 value)
     if (m_transferState.mode == TransferState::Mode::CpuToVram)
     {
         consumeCpuToVramWord(value);
-        m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
         updateStatusBits();
         return;
     }
@@ -105,7 +106,6 @@ void Gpu::writeCommand(u32 value)
 
     m_fifo.push_back(value);
     appendPacketWord(false, value);
-    m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
     updateStatusBits();
 }
 
@@ -114,26 +114,19 @@ void Gpu::writeDma(u32 value)
     if (m_transferState.mode == TransferState::Mode::CpuToVram)
     {
         consumeCpuToVramWord(value);
-        m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
         updateStatusBits();
         return;
     }
 
-    if (m_registers.dmaDirection == Registers::DmaDirection::CpuToGp0 ||
-        m_registers.dmaDirection == Registers::DmaDirection::Fifo)
+    // GP1(04h) controls the GPUSTAT request bits and DMA bookkeeping, but a
+    // DMA2 RAM->GPU burst still lands on GP0 data/command input.
+    if (m_fifo.size() < MAX_FIFO_DEPTH)
     {
-        // DMA feeds can burst large linked lists. If FIFO saturates we still
-        // need to ingest command words so packet decoding stays in sync.
-        if (m_fifo.size() < MAX_FIFO_DEPTH)
-        {
-            m_fifo.push_back(value);
-        }
-        appendPacketWord(false, value);
-        m_commandReadyCooldown = std::max(m_commandReadyCooldown, GpuCommandReadyCooldownCycles);
-        updateStatusBits();
-        return;
+        m_fifo.push_back(value);
     }
-
+    // DMA feeds can burst large linked lists. If FIFO saturates we still need
+    // to ingest command words so packet decoding stays in sync.
+    appendPacketWord(false, value);
     updateStatusBits();
 }
 
@@ -251,15 +244,6 @@ void Gpu::tickGpu(u32 cycles)
     const u32 wordsToConsume = m_gpuCycles / 2;
     m_gpuCycles %= 2;
 
-    if (m_commandReadyCooldown > cycles)
-    {
-        m_commandReadyCooldown -= cycles;
-    }
-    else
-    {
-        m_commandReadyCooldown = 0;
-    }
-
     for (u32 i = 0; i < wordsToConsume && !m_fifo.empty(); ++i)
     {
         m_fifo.pop_front();
@@ -348,6 +332,7 @@ void Gpu::appendPacketWord(bool fromGp1, u32 value)
     {
         processPacket(m_packet);
         m_packet = {};
+        updateStatusBits();
     }
 }
 
@@ -389,7 +374,6 @@ void Gpu::processPacket(const PacketState& packet)
         if (command.kind == GpuCommandKind::Reset)
         {
             m_gpuCycles = 0;
-            m_commandReadyCooldown = 0;
             m_oddField = false;
             m_displayPhase = DisplayPhase::ActiveDisplay;
         }
@@ -404,6 +388,44 @@ void Gpu::processPacket(const PacketState& packet)
     trimCommandTrace(m_commandTrace, MAX_COMMAND_TRACE);
     m_commandTrace.push_back(command);
     updateStatusBits();
+}
+
+void Gpu::handleGpuInfoRead(u32 value)
+{
+    const u32 internalIndex = value & 0x00FFFFFFu;
+    u32 internalValue = 0;
+    if (tryReadInternalRegister(internalIndex, internalValue))
+    {
+        m_readData = internalValue;
+    }
+}
+
+bool Gpu::tryReadInternalRegister(u32 index, u32& value) const
+{
+    const u32 normalizedIndex = index & 0x0Fu;
+    switch (normalizedIndex)
+    {
+    case 0x02:
+        value = m_registers.textureWindowStatus;
+        return true;
+    case 0x03:
+        value = m_registers.drawAreaTopLeftStatus;
+        return true;
+    case 0x04:
+        value = m_registers.drawAreaBottomRightStatus;
+        return true;
+    case 0x05:
+        value = m_registers.drawingOffsetStatus;
+        return true;
+    case 0x07:
+        value = 0x00000002u;
+        return true;
+    case 0x08:
+        value = 0x00000000u;
+        return true;
+    default:
+        return false;
+    }
 }
 
 void Gpu::updateRendererState()

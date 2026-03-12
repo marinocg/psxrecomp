@@ -113,12 +113,16 @@ class Gpu
         u16 displayXRangeEnd = 0;
         u16 displayYRangeStart = 0;
         u16 displayYRangeEnd = 0;
+        u32 textureWindowStatus = 0;
+        u32 drawAreaTopLeftStatus = 0;
+        u32 drawAreaBottomRightStatus = 0;
+        u32 drawingOffsetStatus = 0;
         u16 drawModeStatus = 0;
         u16 displayWidth = 320;
         u16 displayHeight = 240;
         u8 maskStatus = 0;
         u8 displayModeStatus = 0;
-        bool displayEnabled = true;
+        bool displayEnabled = false;
         bool interlaced = false;
         bool irqPending = false;
         bool forceMaskBit = false;
@@ -165,13 +169,14 @@ class Gpu
     void beginVramToCpuTransfer(const PacketState& packet);
     u32 consumeVramToCpuWord();
     void executeVramToVramBlit(const PacketState& packet);
+    void handleGpuInfoRead(u32 value);
+    bool tryReadInternalRegister(u32 index, u32& value) const;
     void updateStatusBits();
     void updateRendererState();
 
     u32 m_status = 0;
     u32 m_readData = 0;
     u32 m_gpuCycles = 0;
-    u32 m_commandReadyCooldown = 0;
     bool m_oddField = false;
     DisplayPhase m_displayPhase = DisplayPhase::ActiveDisplay;
     u16 m_displayLine = 0;

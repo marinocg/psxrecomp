@@ -9,7 +9,9 @@ void Gpu::updateStatusBits()
 {
     constexpr u32 statusDrawModeMask = 0x000007FFu;
     constexpr u32 statusMaskSettingMask = 0x00001800u;
-    constexpr u32 statusReverseFlag = 1u << 13;
+    constexpr u32 statusFieldOrAlwaysOne = 1u << 13;
+    constexpr u32 statusReverseFlag = 1u << 14;
+    constexpr u32 statusTextureDisable = 1u << 15;
     constexpr u32 statusHorizontalRes2 = 1u << 16;
     constexpr u32 statusHorizontalRes1Mask = 0x3u << 17;
     constexpr u32 statusInterlaceGate = 1u << 19;
@@ -26,8 +28,9 @@ void Gpu::updateStatusBits()
     constexpr u32 statusInterlaceField = 1u << 31;
 
     constexpr u32 statusMirroredMask =
-        statusDrawModeMask | statusMaskSettingMask | statusReverseFlag | statusHorizontalRes2 |
-        statusHorizontalRes1Mask | statusInterlaceGate | statusVideoMode | statusDisplayDepth;
+        statusDrawModeMask | statusMaskSettingMask | statusFieldOrAlwaysOne | statusReverseFlag |
+        statusTextureDisable | statusHorizontalRes2 | statusHorizontalRes1Mask |
+        statusInterlaceGate | statusVideoMode | statusDisplayDepth;
     constexpr u32 statusDynamicMask =
         statusVerticalInterlace | statusDisplayDisable | statusIrqRequest | statusDmaDataRequest |
         statusReadyToReceiveCommand | statusReadyToSendToCpu | statusReadyToReceiveDmaBlock |
@@ -36,9 +39,17 @@ void Gpu::updateStatusBits()
 
     m_status = statusBase;
     m_status |= static_cast<u32>(m_registers.drawModeStatus & statusDrawModeMask);
+    if ((m_registers.drawModeStatus & 0x800u) != 0)
+    {
+        m_status |= statusTextureDisable;
+    }
     m_status |= (static_cast<u32>(m_registers.maskStatus & 0x3u) << 11);
 
     const u32 displayMode = static_cast<u32>(m_registers.displayModeStatus);
+    if (!m_registers.interlaced)
+    {
+        m_status |= statusFieldOrAlwaysOne;
+    }
     if ((displayMode & 0x40u) != 0)
     {
         m_status |= statusHorizontalRes2;
@@ -75,27 +86,28 @@ void Gpu::updateStatusBits()
     }
 
     const bool fifoHasRoom = m_fifo.size() < MAX_FIFO_DEPTH;
-    const bool cpuToVramActive = m_transferState.mode == TransferState::Mode::CpuToVram;
-    const bool commandBusy = m_commandReadyCooldown != 0;
+    const bool cpuToVramActive = m_transferState.mode == TransferState::Mode::CpuToVram &&
+                                 m_transferState.remainingWords > 0;
+    const bool vramToCpuActive = m_transferState.mode == TransferState::Mode::VramToCpu &&
+                                 m_transferState.remainingWords > 0;
     const bool receivingPacket = !m_packet.words.empty();
     const bool polygonOrLinePacket = receivingPacket && m_packet.expectedWords > 1 &&
                                      (m_packet.opcode >= 0x20u && m_packet.opcode <= 0x5Fu);
-    const bool readyForCommandWord =
-        fifoHasRoom && !cpuToVramActive && !receivingPacket && !commandBusy;
+    const bool readyForCommandWord = fifoHasRoom && !cpuToVramActive && !receivingPacket;
     if (readyForCommandWord)
     {
         m_status |= statusReadyToReceiveCommand;
     }
 
-    const bool readyToSend =
-        m_registers.dmaDirection == Registers::DmaDirection::GpuReadToCpu && !cpuToVramActive;
+    const bool readyToSend = vramToCpuActive;
     if (readyToSend)
     {
         m_status |= statusReadyToSendToCpu;
     }
 
-    const bool readyForDmaBlock =
-        cpuToVramActive || (fifoHasRoom && !(receivingPacket && polygonOrLinePacket));
+    const bool readyForDmaBlock = cpuToVramActive ||
+                                  (!cpuToVramActive && fifoHasRoom &&
+                                   !(receivingPacket && polygonOrLinePacket));
     if (readyForDmaBlock)
     {
         m_status |= statusReadyToReceiveDmaBlock;
