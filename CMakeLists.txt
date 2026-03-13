@@ -16,7 +16,7 @@ option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
-# Shared build options (target-scoped)
+#Shared build options(target - scoped)
 add_library(psxrecomp_build_options INTERFACE)
 target_compile_definitions(psxrecomp_build_options INTERFACE
     PSXRECOMP_PROJECT_VERSION="${PROJECT_VERSION}"
@@ -186,6 +186,8 @@ set(RUNTIME_SOURCES
     src/runtime/scheduler.cpp
     src/runtime/sio0.cpp
     src/runtime/spu.cpp
+    src/runtime/spu_registers.cpp
+    src/runtime/spu_transfer.cpp
     src/runtime/spu_audio.cpp
     src/runtime/stall_classifier.cpp
     src/runtime/stall_heap_debug.cpp
@@ -406,6 +408,36 @@ if(BUILD_TESTS)
         tests/unit/spu_test.cpp
     )
     target_link_libraries(spu_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_status_test
+        tests/unit/spu_status_test.cpp
+    )
+    target_link_libraries(spu_status_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_transfer_test
+        tests/unit/spu_transfer_test.cpp
+    )
+    target_link_libraries(spu_transfer_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_adpcm_flags_test
+        tests/unit/spu_adpcm_flags_test.cpp
+    )
+    target_link_libraries(spu_adpcm_flags_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_irq_test
+        tests/unit/spu_irq_test.cpp
+    )
+    target_link_libraries(spu_irq_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_init_regs_test
+        tests/unit/spu_init_regs_test.cpp
+    )
+    target_link_libraries(spu_init_regs_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_regression_test
+        tests/unit/spu_regression_test.cpp
+    )
+    target_link_libraries(spu_regression_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(disc_image_test
         tests/unit/disc_image_test.cpp

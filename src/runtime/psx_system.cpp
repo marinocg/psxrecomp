@@ -337,7 +337,7 @@ void PsxSystem::syncLevelInterruptSources()
 
     raiseIfRequested(m_gpu.irqPending(), InterruptLine::Gpu);
     raiseIfRequested(m_cdrom.hasIrqRequest(), InterruptLine::Cdrom);
-
+    raiseIfRequested(m_spu.hasIrqRequest(), InterruptLine::Spu);
     raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
     syncCop0InterruptPending();
 }

@@ -96,6 +96,46 @@ Commands are written to 0x1F801810:
 - **Memory**: 512KB sound RAM
 - **Effects**: Reverb, ADPCM decompression
 
+### Runtime Conformance Notes
+
+- SPU MMIO is modeled as a 16-bit register bank. `LW`/`SW` over the SPU range
+  are handled as two ordered 16-bit register accesses.
+- SPU byte writes follow the PSX-SPX bus note used by SDK code: odd-byte
+  writes are ignored, even-byte writes hit the addressed 16-bit register.
+- `SPUCNT` and `SPUSTAT` are modeled as an active handshake, not passive
+  storage. `SPUCNT[5:0]` takes effect after a hardware delay, and `SPUSTAT`
+  reports the applied mode bits rather than the most recent CPU write.
+- `SPUSTAT` is treated as CPU read-only. The runtime currently exposes the
+  documented busy flag, DMA read/write request bits, DMA-request summary,
+  IRQ flag, and applied `SPUCNT[5:0]` mode field used by common bring-up loops.
+- `1F801DA6` (transfer address) keeps the visible register value stable while
+  transfers advance an internal current address. The register value is in
+  8-byte units, so the internal SPU RAM byte address is `value * 8`.
+- `1F801DA8` is modeled as the transfer FIFO used by manual writes, and
+  `1F801DAC` transfer control currently supports the normal `0004h` path used
+  by BIOS/libsnd-style manual and DMA transfers.
+- `1F801DA4` is modeled as the SPU IRQ address register in 8-byte units. The
+  runtime latches `SPUSTAT.bit6` when a voice ADPCM fetch or a RAM
+  transfer/DMA access hits that byte address.
+- `PMON`, `NON`, and `EON` update per-voice runtime masks instead of behaving
+  like passive storage, so init-time pitch-mod/noise/reverb setup is visible to
+  later playback paths.
+- `SPUCNT[3:0]` routing bits are part of the delayed low-bit apply path. CD
+  audio output now respects the modeled enable/reverb routing bits, and the
+  external-routing bits are tracked for readback/state fidelity.
+- `ENDX` is modeled as voice status rather than writable storage. `KON` clears
+  the keyed voice bits, and ADPCM loop-end blocks set them once playback
+  reaches the end of the current 28-sample block.
+- ADPCM block flags follow PSX-SPX bit assignments: bit0=`loop-end`,
+  bit1=`loop-repeat`, bit2=`loop-start`. `loop-start` captures the repeat
+  address, `loop-end|loop-repeat` jumps back to the repeat address, and
+  `loop-end` without repeat drives the voice into release/zero-level behavior.
+- `SPUCNT.bit6` is treated as the IRQ enable/acknowledge control, so clearing
+  it drops the latched `SPUSTAT.bit6` flag.
+- Current ADSR and current main-volume reads are backed by live runtime state
+  rather than dead registers, which matches the init/polling patterns used by
+  common SDK code.
+
 ### Audio Formats
 
 - ADPCM: 4-bit compressed

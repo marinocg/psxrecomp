@@ -1,3 +1,4 @@
+#include "psxrecomp/runtime/psx_system.h"
 #include "psxrecomp/runtime/spu.h"
 
 #include <cassert>
@@ -30,6 +31,7 @@ constexpr psxrecomp::u32 packBytes(uint8_t b0, uint8_t b1, uint8_t b2, uint8_t b
 
 int main()
 {
+    using psxrecomp::runtime::PsxSystem;
     Spu spu;
     spu.reset();
 
@@ -113,6 +115,56 @@ int main()
     spu.tick(Spu::SamplesPerTick * 768);
     assert(!spu.voices()[0].isActive ||
            spu.voices()[0].envelopePhase == Spu::Voice::EnvelopePhase::Off);
+
+    // PsxSystem MMIO must preserve SPU bus width semantics.
+    {
+        PsxSystem system;
+        assert(system.initialize());
+        constexpr psxrecomp::u32 spuWindowMask = 0x1FFu;
+
+        const psxrecomp::Address keyOnBase =
+            psxrecomp::runtime::Mmio::SPU_BASE + (Spu::RegisterMap::KeyOnLow & spuWindowMask);
+        const psxrecomp::Address keyOffBase =
+            psxrecomp::runtime::Mmio::SPU_BASE + (Spu::RegisterMap::KeyOffLow & spuWindowMask);
+        const psxrecomp::Address reverbBase =
+            psxrecomp::runtime::Mmio::SPU_BASE + (Spu::RegisterMap::ReverbOnLow & spuWindowMask);
+        const psxrecomp::Address endxBase =
+            psxrecomp::runtime::Mmio::SPU_BASE + (Spu::RegisterMap::EndxLow & spuWindowMask);
+
+        system.writeMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::SPU_BASE + 0x000u,
+                                                 0x2468u);
+        assert(system.spu().voices()[0].leftVolume == 0x2468u);
+        assert(system.readMmioExplicit<psxrecomp::u16>(psxrecomp::runtime::Mmio::SPU_BASE +
+                                                       0x000u) == 0x2468u);
+
+        system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::SPU_BASE + 0x001u, 0x7Fu);
+        assert(system.spu().voices()[0].leftVolume == 0x2468u);
+
+        system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::SPU_BASE + 0x000u, 0x55u);
+        assert(system.spu().voices()[0].leftVolume == 0x0055u);
+
+        system.writeMmioExplicit<psxrecomp::u32>(keyOnBase, 0x00010001u);
+        assert(system.spu().voices()[0].isActive);
+        assert(system.spu().voices()[16].isActive);
+        assert(system.spu().readRegister(Spu::RegisterMap::KeyOnLow) == 0x0001u);
+        assert(system.spu().readRegister(Spu::RegisterMap::KeyOnHigh) == 0x0001u);
+        assert(system.readMmioExplicit<psxrecomp::u32>(keyOnBase) == 0x00010001u);
+
+        system.writeMmioExplicit<psxrecomp::u32>(reverbBase, 0x00010001u);
+        assert(system.spu().voices()[0].reverbEnabled);
+        assert(system.spu().voices()[16].reverbEnabled);
+        assert(system.readMmioExplicit<psxrecomp::u32>(reverbBase) == 0x00010001u);
+
+        system.writeMmioExplicit<psxrecomp::u32>(keyOffBase, 0x00010001u);
+        assert(system.spu().voices()[0].envelopePhase == Spu::Voice::EnvelopePhase::Release);
+        assert(system.spu().voices()[16].envelopePhase == Spu::Voice::EnvelopePhase::Release);
+        assert(system.readMmioExplicit<psxrecomp::u32>(keyOffBase) == 0x00010001u);
+
+        system.writeMmioExplicit<psxrecomp::u32>(endxBase, 0xA55AF00Du);
+        assert(system.spu().readRegister(Spu::RegisterMap::EndxLow) == 0x0000u);
+        assert(system.spu().readRegister(Spu::RegisterMap::EndxHigh) == 0x0000u);
+        assert(system.readMmioExplicit<psxrecomp::u32>(endxBase) == 0x00000000u);
+    }
 
     return 0;
 }

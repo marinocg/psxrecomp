@@ -8,6 +8,37 @@ namespace runtime
 namespace
 {
 
+u16 readSpuHalfword(Spu& spu, Address offset)
+{
+    if (offset >= Mmio::SPU_SIZE)
+    {
+        return 0;
+    }
+    return spu.readRegister(static_cast<u32>(offset));
+}
+
+u32 readSpuWord(Spu& spu, Address offset)
+{
+    const u32 low = static_cast<u32>(readSpuHalfword(spu, offset));
+    const u32 high = static_cast<u32>(readSpuHalfword(spu, offset + 2u));
+    return low | (high << 16);
+}
+
+void writeSpuHalfword(Spu& spu, Address offset, u16 value)
+{
+    if ((offset & 1u) != 0 || offset >= Mmio::SPU_SIZE)
+    {
+        return;
+    }
+    spu.writeRegister(static_cast<u32>(offset), value);
+}
+
+void writeSpuWord(Spu& spu, Address offset, u32 value)
+{
+    writeSpuHalfword(spu, offset, static_cast<u16>(value & 0xFFFFu));
+    writeSpuHalfword(spu, offset + 2u, static_cast<u16>(value >> 16));
+}
+
 void recordMmioReadWatch(DiagWatchpointEngine& watchpoints, RuntimeDebugOverlay& overlay,
                          RuntimeLogger& logger, Address address, u8 size, u32 value,
                          Address resumeAddress)
@@ -95,6 +126,13 @@ u32 PsxSystem::readMmio32(Address address)
     {
         const u32 val = m_sio0.read32(address - Mmio::CONTROLLER_BASE);
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
+        return val;
+    }
+    if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
+    {
+        const u32 val = readSpuWord(m_spu, address - Mmio::SPU_BASE);
         recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
                             m_lastResumeAddress);
         return val;
@@ -274,6 +312,11 @@ void PsxSystem::writeMmio32(Address address, u32 value)
         syncLevelInterruptSources();
         return;
     }
+    if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
+    {
+        writeSpuWord(m_spu, address - Mmio::SPU_BASE, value);
+        return;
+    }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
         m_sio0.write32(address - Mmio::CONTROLLER_BASE, value);
@@ -323,7 +366,7 @@ void PsxSystem::writeMmio16(Address address, u16 value)
     }
     if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
     {
-        m_spu.writeRegister(address - Mmio::SPU_BASE, value);
+        writeSpuHalfword(m_spu, address - Mmio::SPU_BASE, value);
         return;
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
@@ -356,6 +399,15 @@ void PsxSystem::writeMmio8(Address address, u8 value)
 {
     recordMmioWriteWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 1, value,
                          m_lastResumeAddress);
+    if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
+    {
+        const Address offset = address - Mmio::SPU_BASE;
+        if ((offset & 1u) == 0)
+        {
+            writeSpuHalfword(m_spu, offset, static_cast<u16>(value));
+        }
+        return;
+    }
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
         m_stallClassifier.recordMmioAccess(address, value, true);

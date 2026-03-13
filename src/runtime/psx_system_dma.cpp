@@ -118,6 +118,11 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             m_dma.clearTrigger(port);
             return;
         }
+        if (port == DmaPort::Spu && !m_spu.canTransferDma(false))
+        {
+            transferredWords = 0;
+            goto dma_transfer_complete;
+        }
 
         const Address base = channel.baseAddress & 0x1FFFFC;
         const bool decrementAddress = (channel.channelControl & DMA_ADDRESS_DECREMENT) != 0;
@@ -135,6 +140,9 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 break;
             case DmaPort::Cdrom:
                 value = m_cdrom.readDma();
+                break;
+            case DmaPort::Spu:
+                value = m_spu.readDma();
                 break;
             default:
                 m_dma.clearTrigger(port);
@@ -232,6 +240,11 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 m_dma.clearTrigger(port);
                 return;
             }
+            if (port == DmaPort::Spu && !m_spu.canTransferDma(true))
+            {
+                transferredWords = 0;
+                goto dma_transfer_complete;
+            }
 
             const Address base = channel.baseAddress & 0x1FFFFC;
             const bool decrementAddress = (channel.channelControl & DMA_ADDRESS_DECREMENT) != 0;
@@ -271,12 +284,14 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         }
     }
 
+dma_transfer_complete:
     m_dma.clearTrigger(port);
     m_dma.notifyTransferComplete(port);
     m_debugOverlay.incrementDmaTransfers();
 
     if (port == DmaPort::Spu)
     {
+        m_spu.noteDmaTransfer(fromRam, transferredWords);
         // libsnd-style callers wait on the SPU completion event after arming
         // DMA4, so complete it asynchronously on the hardware tick path.
         m_pendingSpuDmaCompletion = true;

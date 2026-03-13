@@ -12,6 +12,10 @@ namespace runtime
 namespace
 {
 constexpr u32 kVoiceRegisterStride = 0x10;
+constexpr u16 kControlCdAudioEnable = 1u << 0;
+constexpr u16 kControlExternalAudioEnable = 1u << 1;
+constexpr u16 kControlCdAudioReverb = 1u << 2;
+constexpr u16 kControlExternalAudioReverb = 1u << 3;
 constexpr float kEnvelopeAttackStep = 0.03f;
 constexpr float kEnvelopeDecayStep = 0.01f;
 constexpr float kEnvelopeReleaseStep = 0.02f;
@@ -65,8 +69,15 @@ void Spu::reset()
     m_cycles = 0;
     m_pendingCycles = 0;
     m_lastDmaWord = 0;
+    m_appliedControlBits = 0;
+    m_pendingControlBits = 0;
+    m_controlApplyCyclesRemaining = 0;
+    m_dmaReadRequestDelayCyclesRemaining = 0;
+    m_busyCyclesRemaining = 0;
+    m_irqFlag = false;
     std::fill(m_ram.begin(), m_ram.end(), 0);
-    m_ramTransferCursor = 0;
+    m_currentTransferAddress = 0;
+    m_transferFifo.clear();
 
     m_mixedAudioBuffer.clear();
     std::fill(m_reverbRing.begin(), m_reverbRing.end(), 0);
@@ -74,30 +85,11 @@ void Spu::reset()
     m_cdAudioRing.clear();
 }
 
-u16 Spu::readRegister(u32 offset) const
-{
-    return m_registers[registerIndex(offset)];
-}
-
-void Spu::writeRegister(u32 offset, u16 value)
-{
-    m_registers[registerIndex(offset)] = value;
-
-    if (offset < VoiceCount * kVoiceRegisterStride)
-    {
-        const size_t voiceIndex = static_cast<size_t>(offset / kVoiceRegisterStride);
-        const u32 voiceOffset = offset % kVoiceRegisterStride;
-        onVoiceRegisterWrite(voiceIndex, voiceOffset, value);
-        return;
-    }
-
-    onGlobalRegisterWrite(offset, value);
-}
-
 void Spu::tick(u32 cycles)
 {
     m_cycles += cycles;
     m_pendingCycles += cycles;
+    tickControlState(cycles);
 
     const u32 samplesToGenerate = m_pendingCycles / CyclesPerSample;
     if (samplesToGenerate == 0)
@@ -150,8 +142,23 @@ void Spu::tick(u32 cycles)
             }
         }
 
-        leftMix += cdLeft;
-        rightMix += cdRight;
+        if ((m_appliedControlBits & kControlCdAudioEnable) != 0u)
+        {
+            leftMix += cdLeft;
+            rightMix += cdRight;
+        }
+        if ((m_appliedControlBits & kControlCdAudioReverb) != 0u)
+        {
+            reverbInput += (cdLeft + cdRight) * 0.5f;
+        }
+        if ((m_appliedControlBits & kControlExternalAudioEnable) != 0u)
+        {
+            // External audio input is not sourced yet, but the routing bit is modeled.
+        }
+        if ((m_appliedControlBits & kControlExternalAudioReverb) != 0u)
+        {
+            // External audio reverb routing is tracked for register fidelity.
+        }
 
         reverbInput *= m_mixSettings.reverbSend;
         const float reverbOut = static_cast<float>(m_reverbRing[m_reverbIndex]) / 32768.0f;
@@ -168,21 +175,6 @@ void Spu::tick(u32 cycles)
 
     mixQueuedSamples();
 }
-
-void Spu::writeDma(u32 value)
-{
-    m_lastDmaWord = value;
-    m_ram[m_ramTransferCursor] = value;
-    m_ramTransferCursor = (m_ramTransferCursor + 1) % m_ram.size();
-}
-
-u32 Spu::readDma()
-{
-    const u32 value = m_ram[m_ramTransferCursor];
-    m_ramTransferCursor = (m_ramTransferCursor + 1) % m_ram.size();
-    return value;
-}
-
 u32 Spu::cyclesElapsed() const
 {
     return m_cycles;
@@ -208,89 +200,9 @@ const std::vector<int16_t>& Spu::mixedAudioBuffer() const
     return m_mixedAudioBuffer;
 }
 
-size_t Spu::registerIndex(u32 offset)
-{
-    return (offset / 2) % 0x100;
-}
-
 Spu::Voice& Spu::voiceAt(size_t voiceIndex)
 {
     return m_voices[voiceIndex % VoiceCount];
-}
-
-void Spu::onGlobalRegisterWrite(u32 offset, u16 value)
-{
-    switch (offset)
-    {
-    case RegisterMap::MainVolumeLeft:
-        m_mixSettings.masterVolumeLeft = std::abs(normalizedSignedVolume(value));
-        break;
-    case RegisterMap::MainVolumeRight:
-        m_mixSettings.masterVolumeRight = std::abs(normalizedSignedVolume(value));
-        break;
-    case RegisterMap::ReverbDepthLeft:
-    case RegisterMap::ReverbDepthRight:
-        m_mixSettings.reverbSend = std::abs(normalizedSignedVolume(value));
-        break;
-    case RegisterMap::KeyOnLow:
-        applyVoiceMask(value, 0, true);
-        break;
-    case RegisterMap::KeyOnHigh:
-        applyVoiceMask(0, value, true);
-        break;
-    case RegisterMap::KeyOffLow:
-        applyVoiceMask(value, 0, false);
-        break;
-    case RegisterMap::KeyOffHigh:
-        applyVoiceMask(0, value, false);
-        break;
-    case RegisterMap::ReverbOnLow:
-    case RegisterMap::ReverbOnHigh:
-    {
-        const u32 mask =
-            static_cast<u32>(m_registers[registerIndex(RegisterMap::ReverbOnLow)]) |
-            (static_cast<u32>(m_registers[registerIndex(RegisterMap::ReverbOnHigh)]) << 16);
-        applyReverbMask(mask);
-        break;
-    }
-    case RegisterMap::RamTransferAddress:
-        m_ramTransferCursor = (static_cast<size_t>(value) / 2) % m_ram.size();
-        break;
-    default:
-        break;
-    }
-}
-
-void Spu::onVoiceRegisterWrite(size_t voiceIndex, u32 voiceOffset, u16 value)
-{
-    Voice& voice = voiceAt(voiceIndex);
-    switch (voiceOffset / 2)
-    {
-    case 0:
-        voice.leftVolume = value;
-        break;
-    case 1:
-        voice.rightVolume = value;
-        break;
-    case 2:
-        voice.pitch = value;
-        break;
-    case 3:
-        voice.startAddress = value;
-        break;
-    case 4:
-        voice.adsrLo = value;
-        break;
-    case 5:
-        voice.adsrHi = value;
-        break;
-    case 7:
-        voice.repeatAddress = value;
-        voice.repeatAddressValid = true;
-        break;
-    default:
-        break;
-    }
 }
 
 void Spu::applyVoiceMask(u16 lowMask, u16 highMask, bool keyOn)
@@ -309,13 +221,15 @@ void Spu::applyVoiceMask(u16 lowMask, u16 highMask, bool keyOn)
             voice.keyOn = true;
             voice.keyOff = false;
             voice.isActive = true;
+            voice.endx = false;
+            voice.blockLoopEnd = false;
+            voice.blockLoopRepeat = false;
             voice.envelopePhase = Voice::EnvelopePhase::Attack;
             voice.envelopeLevel = 0.0f;
             voice.samplePosition = 0.0f;
             voice.currentAddress = voice.startAddress;
             voice.prevSample1 = 0;
             voice.prevSample2 = 0;
-            voice.repeatAddressValid = false;
             voice.decodedSampleIndex = voice.decodedBlock.size();
             voice.blockLoaded = false;
         }
@@ -333,6 +247,23 @@ void Spu::applyReverbMask(u32 voiceMask)
     for (size_t voiceIndex = 0; voiceIndex < VoiceCount; ++voiceIndex)
     {
         voiceAt(voiceIndex).reverbEnabled = (voiceMask & (1u << voiceIndex)) != 0;
+    }
+}
+
+void Spu::applyPitchModulationMask(u32 voiceMask)
+{
+    for (size_t voiceIndex = 0; voiceIndex < VoiceCount; ++voiceIndex)
+    {
+        const bool enabled = voiceIndex != 0 && (voiceMask & (1u << voiceIndex)) != 0;
+        voiceAt(voiceIndex).pitchModulationEnabled = enabled;
+    }
+}
+
+void Spu::applyNoiseMask(u32 voiceMask)
+{
+    for (size_t voiceIndex = 0; voiceIndex < VoiceCount; ++voiceIndex)
+    {
+        voiceAt(voiceIndex).noiseEnabled = (voiceMask & (1u << voiceIndex)) != 0;
     }
 }
 
@@ -372,6 +303,30 @@ void Spu::updateEnvelope(Voice& voice)
     }
 }
 
+void Spu::finishVoiceBlock(Voice& voice)
+{
+    if (voice.blockLoopEnd)
+    {
+        voice.endx = true;
+        voice.currentAddress = voice.repeatAddress;
+        if (!voice.blockLoopRepeat)
+        {
+            voice.keyOn = false;
+            voice.keyOff = true;
+            voice.envelopePhase = Voice::EnvelopePhase::Release;
+            voice.envelopeLevel = 0.0f;
+        }
+    }
+    else
+    {
+        voice.currentAddress = static_cast<u16>(voice.currentAddress + 2);
+    }
+
+    voice.blockLoaded = false;
+    voice.blockLoopEnd = false;
+    voice.blockLoopRepeat = false;
+}
+
 int16_t Spu::nextVoiceSample(Voice& voice)
 {
     if (!voice.blockLoaded || voice.decodedSampleIndex >= voice.decodedBlock.size())
@@ -385,7 +340,7 @@ int16_t Spu::nextVoiceSample(Voice& voice)
     }
 
     const int16_t sample = voice.decodedBlock[voice.decodedSampleIndex];
-    const float pitchStep = std::max(0.25f, static_cast<float>(voice.pitch) / 0x1000f);
+    const float pitchStep = std::max(0.25f, static_cast<float>(voice.pitch) / 4096.0f);
     voice.samplePosition += pitchStep;
 
     while (voice.samplePosition >= 1.0f)
@@ -394,7 +349,11 @@ int16_t Spu::nextVoiceSample(Voice& voice)
         ++voice.decodedSampleIndex;
         if (voice.decodedSampleIndex >= voice.decodedBlock.size())
         {
-            loadAdpcmBlock(voice);
+            finishVoiceBlock(voice);
+            if (voice.isActive)
+            {
+                loadAdpcmBlock(voice);
+            }
             break;
         }
     }
@@ -404,8 +363,8 @@ int16_t Spu::nextVoiceSample(Voice& voice)
 
 void Spu::loadAdpcmBlock(Voice& voice)
 {
-    const size_t byteAddress =
-        (static_cast<size_t>(voice.currentAddress) * 8) % (m_ram.size() * sizeof(u32));
+    const u32 byteAddress = normalizeRamByteAddress(static_cast<u32>(voice.currentAddress) * 8u);
+    maybeTriggerIrqRange(byteAddress, 16u);
 
     const u8 header = readByteFromRam(m_ram, byteAddress + 0);
     const u8 flags = readByteFromRam(m_ram, byteAddress + 1);
@@ -428,30 +387,19 @@ void Spu::loadAdpcmBlock(Voice& voice)
     voice.decodedSampleIndex = 0;
     voice.blockLoaded = true;
 
-    const bool blockEnd = (flags & 0x01) != 0;
-    const bool loopBlock = (flags & 0x02) != 0;
-    if (loopBlock)
+    const bool loopEnd = (flags & 0x01) != 0;
+    const bool loopRepeat = (flags & 0x02) != 0;
+    const bool loopStart = (flags & 0x04) != 0;
+    if (loopStart)
     {
         voice.repeatAddress = voice.currentAddress;
         voice.repeatAddressValid = true;
+        const size_t voiceIndex = static_cast<size_t>(&voice - m_voices.data());
+        m_registers[registerIndex(static_cast<u32>(voiceIndex) * kVoiceRegisterStride + 0x0Eu)] =
+            voice.repeatAddress;
     }
-
-    if (blockEnd)
-    {
-        if (loopBlock && voice.repeatAddressValid)
-        {
-            voice.currentAddress = voice.repeatAddress;
-        }
-        else
-        {
-            voice.isActive = false;
-            voice.envelopePhase = Voice::EnvelopePhase::Off;
-        }
-    }
-    else
-    {
-        voice.currentAddress = static_cast<u16>(voice.currentAddress + 1);
-    }
+    voice.blockLoopEnd = loopEnd;
+    voice.blockLoopRepeat = loopRepeat;
 }
 
 int16_t Spu::decodeAdpcmNibble(int nibble, int shift, int filter, int prev1, int prev2) const
