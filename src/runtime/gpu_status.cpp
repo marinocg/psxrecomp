@@ -105,9 +105,8 @@ void Gpu::updateStatusBits()
         m_status |= statusReadyToSendToCpu;
     }
 
-    const bool readyForDmaBlock = cpuToVramActive ||
-                                  (!cpuToVramActive && fifoHasRoom &&
-                                   !(receivingPacket && polygonOrLinePacket));
+    const bool readyForDmaBlock = cpuToVramActive || (!cpuToVramActive && fifoHasRoom &&
+                                                      !(receivingPacket && polygonOrLinePacket));
     if (readyForDmaBlock)
     {
         m_status |= statusReadyToReceiveDmaBlock;

@@ -46,7 +46,7 @@ if(ENABLE_CLANG_TIDY)
     if(CLANG_TIDY_EXE)
         set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
     else()
-        message(WARNING "ENABLE_CLANG_TIDY is ON but clang-tidy was not found.")
+        message(STATUS "ENABLE_CLANG_TIDY is ON but clang-tidy was not found; continuing without it.")
     endif()
 endif()
 

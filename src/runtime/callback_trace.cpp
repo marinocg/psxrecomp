@@ -152,10 +152,10 @@ void CallbackTraceEngine::recordRamWrite(Address address, u8 size, u32 oldValue,
     info.size = size;
     ++invocation.totalRamWrites;
 
-    std::unordered_map<Address, ActiveWriteInfo>* destination = &invocation.persistentRamWritesByAddress;
+    std::unordered_map<Address, ActiveWriteInfo>* destination =
+        &invocation.persistentRamWritesByAddress;
     u32* destinationCount = &invocation.persistentRamWrites;
-    if (callback_trace_internal::isLikelyCallbackStackWrite(address,
-                                                            invocation.entryStackPointer))
+    if (callback_trace_internal::isLikelyCallbackStackWrite(address, invocation.entryStackPointer))
     {
         destination = &invocation.stackRamWritesByAddress;
         destinationCount = &invocation.stackRamWrites;
@@ -251,8 +251,8 @@ void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromE
     entry.consecutiveRepeatCount = m_lastSignatureRepeatCount;
     appendRecentEntry(m_recentEntries, entry);
 
-    CallbackPathAggregate& aggregate = m_pathAggregates[{entry.entryPc, entry.exitPc,
-                                                         entry.descriptorAddress}];
+    CallbackPathAggregate& aggregate =
+        m_pathAggregates[{entry.entryPc, entry.exitPc, entry.descriptorAddress}];
     ++aggregate.count;
     aggregate.totalRamWrites += entry.totalRamWrites;
     aggregate.persistentRamWrites += entry.persistentRamWrites;
@@ -295,20 +295,20 @@ void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromE
     std::ostringstream msg;
     msg << "event=callback_path entry=0x" << std::hex << entry.entryPc << " exit=0x" << entry.exitPc
         << " descriptor=0x" << entry.descriptorAddress << " return_site=0x" << entry.returnSite
-        << " rfe=" << std::dec << (entry.threwReturnFromException ? 1 : 0) << " gen_before="
-        << entry.callbackGenerationBefore << " gen_after=" << entry.callbackGenerationAfter
-        << std::hex << " irq_before=0x" << entry.irqStatusBefore << "/0x" << entry.irqMaskBefore
-        << " irq_after=0x" << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter
-        << " writes=" << std::dec << entry.totalRamWrites << " persistent_writes="
-        << entry.persistentRamWrites << " stack_writes=" << entry.stackRamWrites
-        << " top_persistent_writes="
+        << " rfe=" << std::dec << (entry.threwReturnFromException ? 1 : 0)
+        << " gen_before=" << entry.callbackGenerationBefore
+        << " gen_after=" << entry.callbackGenerationAfter << std::hex << " irq_before=0x"
+        << entry.irqStatusBefore << "/0x" << entry.irqMaskBefore << " irq_after=0x"
+        << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter << " writes=" << std::dec
+        << entry.totalRamWrites << " persistent_writes=" << entry.persistentRamWrites
+        << " stack_writes=" << entry.stackRamWrites << " top_persistent_writes="
         << callback_trace_internal::formatWriteSummary(entry.topPersistentWriteAddresses)
         << " top_stack_writes="
-        << callback_trace_internal::formatWriteSummary(entry.topStackWriteAddresses) << " regs="
-        << joinRegisterNames(entry.committedRegisters) << " cop0_before="
-        << (entry.cop0InterruptEligibleBefore ? 1 : 0) << " cop0_after="
-        << (entry.cop0InterruptEligibleAfter ? 1 : 0) << " repeat="
-        << entry.consecutiveRepeatCount;
+        << callback_trace_internal::formatWriteSummary(entry.topStackWriteAddresses)
+        << " regs=" << joinRegisterNames(entry.committedRegisters)
+        << " cop0_before=" << (entry.cop0InterruptEligibleBefore ? 1 : 0)
+        << " cop0_after=" << (entry.cop0InterruptEligibleAfter ? 1 : 0)
+        << " repeat=" << entry.consecutiveRepeatCount;
     logger->log(LogLevel::Info, "callback_trace", msg.str());
 }
 
@@ -327,26 +327,26 @@ std::string CallbackTraceEngine::formatRecentCallbacks() const
     {
         const CallbackTraceEntry& entry = m_recentEntries[m_recentEntries.size() - 1 - index];
         os << "  entry=0x" << std::hex << entry.entryPc << " exit=0x" << entry.exitPc
-           << " descriptor=0x" << entry.descriptorAddress << " return_site=0x"
-           << entry.returnSite << " rfe=" << std::dec << (entry.threwReturnFromException ? 1 : 0)
+           << " descriptor=0x" << entry.descriptorAddress << " return_site=0x" << entry.returnSite
+           << " rfe=" << std::dec << (entry.threwReturnFromException ? 1 : 0)
            << " gen=" << entry.callbackGenerationBefore << "->" << entry.callbackGenerationAfter
            << std::hex << " irq=0x" << entry.irqStatusBefore << "/0x" << entry.irqMaskBefore
            << " -> 0x" << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter << std::dec
            << " cop0=" << (entry.cop0InterruptEligibleBefore ? 1 : 0) << "->"
            << (entry.cop0InterruptEligibleAfter ? 1 : 0) << " writes=" << entry.totalRamWrites
-           << " persistent_writes=" << entry.persistentRamWrites << " stack_writes="
-           << entry.stackRamWrites << " top_persistent_writes="
+           << " persistent_writes=" << entry.persistentRamWrites
+           << " stack_writes=" << entry.stackRamWrites << " top_persistent_writes="
            << callback_trace_internal::formatWriteSummary(entry.topPersistentWriteAddresses)
            << " top_stack_writes="
            << callback_trace_internal::formatWriteSummary(entry.topStackWriteAddresses)
-           << " regs="
-           << joinRegisterNames(entry.committedRegisters) << " repeat="
-           << entry.consecutiveRepeatCount << "\n";
+           << " regs=" << joinRegisterNames(entry.committedRegisters)
+           << " repeat=" << entry.consecutiveRepeatCount << "\n";
     }
 
     std::vector<std::pair<CallbackRepeatSignature, u32>> sortedSignatures(m_signatureCounts.begin(),
                                                                           m_signatureCounts.end());
-    std::sort(sortedSignatures.begin(), sortedSignatures.end(), [](const auto& lhs, const auto& rhs)
+    std::sort(sortedSignatures.begin(), sortedSignatures.end(),
+              [](const auto& lhs, const auto& rhs)
               {
                   if (lhs.second != rhs.second)
                   {
@@ -378,9 +378,10 @@ std::string CallbackTraceEngine::formatRecentCallbacks() const
     }
     os << "\n";
 
-    std::vector<std::pair<CallbackPathKey, CallbackPathAggregate>> sortedPaths(m_pathAggregates.begin(),
-                                                                               m_pathAggregates.end());
-    std::sort(sortedPaths.begin(), sortedPaths.end(), [](const auto& lhs, const auto& rhs)
+    std::vector<std::pair<CallbackPathKey, CallbackPathAggregate>> sortedPaths(
+        m_pathAggregates.begin(), m_pathAggregates.end());
+    std::sort(sortedPaths.begin(), sortedPaths.end(),
+              [](const auto& lhs, const auto& rhs)
               {
                   if (lhs.second.count != rhs.second.count)
                   {
@@ -404,12 +405,11 @@ std::string CallbackTraceEngine::formatRecentCallbacks() const
         os << "Callback state delta [" << (index + 1) << "]: entry=0x" << std::hex
            << item.first.entryPc << " exit=0x" << item.first.exitPc << " descriptor=0x"
            << item.first.descriptorAddress << std::dec << " count=" << item.second.count
-           << " total_writes=" << item.second.totalRamWrites << " persistent_writes="
-           << item.second.persistentRamWrites << " stack_writes=" << item.second.stackRamWrites
-           << " top_persistent_writes="
-           << callback_trace_internal::formatWriteSummary(
-                  callback_trace_internal::summarizeWrites(
-                      item.second.persistentRamWritesByAddress))
+           << " total_writes=" << item.second.totalRamWrites
+           << " persistent_writes=" << item.second.persistentRamWrites
+           << " stack_writes=" << item.second.stackRamWrites << " top_persistent_writes="
+           << callback_trace_internal::formatWriteSummary(callback_trace_internal::summarizeWrites(
+                  item.second.persistentRamWritesByAddress))
            << " top_stack_writes="
            << callback_trace_internal::formatWriteSummary(
                   callback_trace_internal::summarizeWrites(item.second.stackRamWritesByAddress))
@@ -426,9 +426,8 @@ std::string CallbackTraceEngine::formatRecentCallbacks() const
     {
         os << "Last callback repeat path: entry=0x" << std::hex << m_lastSignature.entryPc
            << " exit=0x" << m_lastSignature.exitPc << " descriptor=0x"
-           << m_lastSignature.descriptorAddress << " return_site=0x"
-           << m_lastSignature.returnSite << std::dec << " repeat=" << m_lastSignatureRepeatCount
-           << "\n";
+           << m_lastSignature.descriptorAddress << " return_site=0x" << m_lastSignature.returnSite
+           << std::dec << " repeat=" << m_lastSignatureRepeatCount << "\n";
     }
     return os.str();
 }

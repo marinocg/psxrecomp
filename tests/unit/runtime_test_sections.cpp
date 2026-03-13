@@ -128,7 +128,7 @@ void runRuntimeLoggingAndDumpChecks(psxrecomp::runtime::PsxSystem& system)
         DmaController::ChannelBase +
         DmaController::ChannelStride * static_cast<psxrecomp::Address>(DmaPort::Spu);
     constexpr psxrecomp::Address spuDmaAddress = 0x00016000u;
-    const psxrecomp::u32 spuEventHandle = system.events().openEvent(
+    [[maybe_unused]] const psxrecomp::u32 spuEventHandle = system.events().openEvent(
         EventClass::Spu, EventSpec::CommandDone, EventMode::NoCallback, 0);
     assert(spuEventHandle != 0xFFFFFFFFu);
     assert(system.events().enableEvent(spuEventHandle));

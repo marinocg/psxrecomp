@@ -276,10 +276,10 @@ bool isGapAdjacentEntryCandidate(const std::vector<disasm::Instruction>& disasse
     return decodableCount >= 4 && nonNopCount >= 3;
 }
 
-bool looksLikeGapAdjacentCallableEntry(
-    const std::vector<disasm::Instruction>& disassembled,
-    const InstructionIndexMap& instructionIndexMap,
-    const std::vector<disasm::FunctionBoundary>& knownBoundaries, Address address)
+bool looksLikeGapAdjacentCallableEntry(const std::vector<disasm::Instruction>& disassembled,
+                                       const InstructionIndexMap& instructionIndexMap,
+                                       const std::vector<disasm::FunctionBoundary>& knownBoundaries,
+                                       Address address)
 {
     auto it = instructionIndexMap.find(address);
     if (it == instructionIndexMap.end() ||

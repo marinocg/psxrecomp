@@ -1,7 +1,7 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <string>
 #include <stdexcept>
+#include <string>
 
 int main()
 {
@@ -79,8 +79,7 @@ int main()
     }
 
     const std::string mmioSummary = system.diagWatchpoints().formatSummary();
-    if (mmioSummary.find("[interrupt_mask_write] mmio_write pc=0x8015daa4") ==
-        std::string::npos)
+    if (mmioSummary.find("[interrupt_mask_write] mmio_write pc=0x8015daa4") == std::string::npos)
     {
         throw std::runtime_error("missing MMIO write watchpoint PC in summary");
     }
@@ -92,8 +91,7 @@ int main()
     {
         throw std::runtime_error("missing MMIO watchpoint value in summary");
     }
-    if (mmioSummary.find("[interrupt_mask_read] mmio_read pc=0x8015daa8") ==
-        std::string::npos)
+    if (mmioSummary.find("[interrupt_mask_read] mmio_read pc=0x8015daa8") == std::string::npos)
     {
         throw std::runtime_error("missing MMIO read watchpoint PC in summary");
     }

@@ -54,8 +54,8 @@ class DiagWatchpointEngine
 
     /// Record a RAM read and evaluate watchpoint predicates.
     /// @param resumeAddress Non-zero when the reader is inside a resumed function entry.
-    void recordRamRead(Address readerPc, Address address, u8 size, u32 value,
-                       RuntimeLogger* logger, Address resumeAddress = 0);
+    void recordRamRead(Address readerPc, Address address, u8 size, u32 value, RuntimeLogger* logger,
+                       Address resumeAddress = 0);
 
     /// Check whether an MMIO write at the given physical address should be intercepted.
     bool shouldWatchMmioWrite(Address address, u8 size) const;
@@ -96,8 +96,7 @@ class DiagWatchpointEngine
     bool shouldWatchRamAccess(WatchpointKind kind, Address address, u8 size) const;
     bool shouldWatchMmioAccess(WatchpointKind kind, Address address, u8 size) const;
     void recordRamAccess(WatchpointKind kind, Address accessPc, Address address, u8 size,
-                         u32 oldValue, u32 newValue, RuntimeLogger* logger,
-                         Address resumeAddress);
+                         u32 oldValue, u32 newValue, RuntimeLogger* logger, Address resumeAddress);
     void recordMmioAccess(WatchpointKind kind, Address accessPc, Address address, u8 size,
                           u32 value, RuntimeLogger* logger, Address resumeAddress);
     bool evaluatePredicate(const WatchpointPredicate& pred, u32 value) const;

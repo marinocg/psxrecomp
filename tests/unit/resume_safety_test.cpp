@@ -152,7 +152,7 @@ int main()
         std::string source = generator.generateSource(program, "guard_merge_module");
 
         // The resume guard for 0x3000 should appear exactly once (merged).
-        size_t guardCount = countOccurrences(source, "resumeAddress == 0x3000");
+        [[maybe_unused]] size_t guardCount = countOccurrences(source, "resumeAddress == 0x3000");
         assert(guardCount == 1 &&
                "Expected exactly one resume guard for merged same-address instructions");
         std::cerr << "  Test 3 passed: same-address instructions share one resume guard\n";
@@ -181,7 +181,7 @@ int main()
             Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp1}, 0x80004004));
         block.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80004008));
 
-        auto stats = psxrecomp::ir::runOptimizations(function);
+        [[maybe_unused]] auto stats = psxrecomp::ir::runOptimizations(function);
         // CSE should NOT merge these since they're at different source addresses.
         assert(stats.cseReplacements == 0 && "CSE must not merge across source addresses");
 
@@ -213,7 +213,7 @@ int main()
             Opcode::ADD, {Value::makeRegister(29), Value::makeImmediate(16)}, {temp1}, 0x80005000));
         block.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80005004));
 
-        auto stats = psxrecomp::ir::runOptimizations(function);
+        [[maybe_unused]] auto stats = psxrecomp::ir::runOptimizations(function);
         // CSE SHOULD merge these since they share a source address.
         assert(stats.cseReplacements == 1 && "CSE should merge within same source address");
         std::cerr << "  Test 5 passed: CSE merges within same source address\n";
@@ -263,12 +263,12 @@ int main()
         //     ... writeMemory32 ...
         //   }
         size_t guard6000 = source.find("resumeAddress == 0x6000");
-        size_t guard6004 = source.find("resumeAddress == 0x6004");
+        [[maybe_unused]] size_t guard6004 = source.find("resumeAddress == 0x6004");
         assert(guard6000 != std::string::npos);
         assert(guard6004 != std::string::npos);
         assert(guard6000 < guard6004);
         // The ADD operation should appear between guard6000 and guard6004.
-        size_t addOp = source.find("+ 1", guard6000);
+        [[maybe_unused]] size_t addOp = source.find("+ 1", guard6000);
         assert(addOp != std::string::npos && addOp < guard6004 &&
                "Unsourced ADD must be inside the 0x6000 resume guard");
         std::cerr << "  Test 6 passed: unsourced instructions inside preceding guard\n";

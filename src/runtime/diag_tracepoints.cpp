@@ -70,8 +70,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             const bool sameRepeatedSignature =
                 range.entryCallerPc == range.lastRepeatedCallerPc &&
                 range.entryResumeAddress == range.lastRepeatedResumeAddress &&
-                range.entryCallbackCommitGeneration ==
-                    range.lastRepeatedCallbackCommitGeneration &&
+                range.entryCallbackCommitGeneration == range.lastRepeatedCallbackCommitGeneration &&
                 range.entryIrqPendingMasked == range.lastRepeatedIrqPendingMasked;
             if (sameRepeatedSignature)
             {
@@ -118,12 +117,12 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                     range.repeatCount >= range.config->repeatThreshold && !range.repeatLogged)
                 {
                     std::ostringstream repeat;
-                    repeat << "tracepoint=" << range.config->name << " event=repeat count="
-                           << std::dec << range.repeatCount << std::hex << " caller=0x"
-                           << range.entryCallerPc << " resume=0x" << range.entryResumeAddress
-                           << " callback_gen=" << std::dec
-                           << range.entryCallbackCommitGeneration << std::hex
-                           << " irq_pending=0x" << range.entryIrqPendingMasked;
+                    repeat << "tracepoint=" << range.config->name
+                           << " event=repeat count=" << std::dec << range.repeatCount << std::hex
+                           << " caller=0x" << range.entryCallerPc << " resume=0x"
+                           << range.entryResumeAddress << " callback_gen=" << std::dec
+                           << range.entryCallbackCommitGeneration << std::hex << " irq_pending=0x"
+                           << range.entryIrqPendingMasked;
                     logger->log(LogLevel::Info, "tracepoint", repeat.str());
                     range.repeatLogged = true;
                 }
@@ -149,14 +148,13 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             if (logger != nullptr)
             {
                 std::ostringstream msg;
-                msg << "tracepoint=" << range.config->name << " event=exit pc=0x" << std::hex
-                    << pc;
+                msg << "tracepoint=" << range.config->name << " event=exit pc=0x" << std::hex << pc;
                 if (range.config->captureContext)
                 {
-                    msg << " caller=0x" << range.entryCallerPc << " return=0x" << pc
-                        << " resume=0x" << range.entryResumeAddress << " callback_gen="
-                        << std::dec << range.entryCallbackCommitGeneration << std::hex
-                        << " irq_pending=0x" << range.entryIrqPendingMasked;
+                    msg << " caller=0x" << range.entryCallerPc << " return=0x" << pc << " resume=0x"
+                        << range.entryResumeAddress << " callback_gen=" << std::dec
+                        << range.entryCallbackCommitGeneration << std::hex << " irq_pending=0x"
+                        << range.entryIrqPendingMasked;
                 }
                 logger->log(LogLevel::Info, "tracepoint", msg.str());
             }
@@ -244,7 +242,8 @@ std::string DiagTracepointEngine::formatRecentTraces() const
         }
         std::vector<std::pair<Address, u32>> sorted(range.callerHistogram.begin(),
                                                     range.callerHistogram.end());
-        std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs)
+        std::sort(sorted.begin(), sorted.end(),
+                  [](const auto& lhs, const auto& rhs)
                   {
                       if (lhs.second != rhs.second)
                       {

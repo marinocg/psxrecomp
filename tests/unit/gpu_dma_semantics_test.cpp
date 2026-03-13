@@ -8,7 +8,7 @@ using psxrecomp::u32;
 using psxrecomp::runtime::Gpu;
 
 constexpr u32 StatusReadyDmaBlock = 1u << 28;
-}
+} // namespace
 
 int main()
 {

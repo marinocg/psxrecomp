@@ -109,9 +109,9 @@ std::string HookEntryIntTraceEngine::formatRecentInvocations() const
 
     for (auto it = m_recentInvocations.rbegin(); it != m_recentInvocations.rend(); ++it)
     {
-        os << "  descriptor=0x" << std::hex << it->descriptorAddress
-           << " install_pc=0x" << it->installPc << " invoke_pc=0x" << it->invokePc
-           << " desc_resume=0x" << it->descriptorResumeAddress
+        os << "  descriptor=0x" << std::hex << it->descriptorAddress << " install_pc=0x"
+           << it->installPc << " invoke_pc=0x" << it->invokePc << " desc_resume=0x"
+           << it->descriptorResumeAddress
            << " desc_valid=" << (it->descriptorResumeValid ? "yes" : "no");
         if (it->committedResume)
         {

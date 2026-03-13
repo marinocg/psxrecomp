@@ -34,9 +34,9 @@ class HookEntryIntTraceEngine
   public:
     void reset();
     void recordInstall(Address installPc, Address descriptorAddress);
-    void beginInvocation(Address invokePc, Address descriptorAddress, Address descriptorResumeAddress,
-                         bool descriptorResumeValid, u32 savedSp, u32 savedFp, u32 savedGp,
-                         u32 callbackGenerationBefore);
+    void beginInvocation(Address invokePc, Address descriptorAddress,
+                         Address descriptorResumeAddress, bool descriptorResumeValid, u32 savedSp,
+                         u32 savedFp, u32 savedGp, u32 callbackGenerationBefore);
     void noteCommittedResume(Address committedResumeAddress);
     void noteReturnFromException(Address pc);
     void finishInvocation(u32 callbackGenerationAfter);

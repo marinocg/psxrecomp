@@ -167,8 +167,8 @@ void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 
                                           u32 newValue, RuntimeLogger* logger,
                                           Address resumeAddress)
 {
-    recordRamAccess(WatchpointKind::RamWrite, writerPc, address, size, oldValue, newValue,
-                    logger, resumeAddress);
+    recordRamAccess(WatchpointKind::RamWrite, writerPc, address, size, oldValue, newValue, logger,
+                    resumeAddress);
 }
 
 void DiagWatchpointEngine::recordRamRead(Address readerPc, Address address, u8 size, u32 value,
@@ -303,9 +303,9 @@ void DiagWatchpointEngine::recordRamAccess(WatchpointKind kind, Address accessPc
         {
             std::ostringstream msg;
             msg << "watchpoint=" << wp.name
-                << (kind == WatchpointKind::RamRead ? " kind=read" : " kind=write")
-                << " pc=0x" << std::hex << accessPc << " addr=0x"
-                << (0x80000000u | physical) << " size=" << std::dec << static_cast<unsigned>(size);
+                << (kind == WatchpointKind::RamRead ? " kind=read" : " kind=write") << " pc=0x"
+                << std::hex << accessPc << " addr=0x" << (0x80000000u | physical)
+                << " size=" << std::dec << static_cast<unsigned>(size);
             if (kind == WatchpointKind::RamRead)
             {
                 msg << " value=0x" << std::hex << maskValueForSize(newValue, size);
@@ -376,8 +376,8 @@ void DiagWatchpointEngine::recordMmioAccess(WatchpointKind kind, Address accessP
             std::ostringstream msg;
             msg << "watchpoint=" << wp.name
                 << (kind == WatchpointKind::MmioRead ? " kind=mmio_read" : " kind=mmio_write")
-                << " pc=0x" << std::hex << accessPc << " addr=0x" << address << " size="
-                << std::dec << static_cast<unsigned>(size) << " value=0x" << std::hex
+                << " pc=0x" << std::hex << accessPc << " addr=0x" << address << " size=" << std::dec
+                << static_cast<unsigned>(size) << " value=0x" << std::hex
                 << maskValueForSize(value, size);
             if (resumeAddress != 0)
             {
@@ -411,8 +411,7 @@ std::string DiagWatchpointEngine::formatSummary() const
     {
         const auto& e = m_events[m_events.size() - 1 - i];
         os << "  [" << (e.config != nullptr ? e.config->name : "env") << "] ";
-        const bool isRam =
-            e.kind == WatchpointKind::RamRead || e.kind == WatchpointKind::RamWrite;
+        const bool isRam = e.kind == WatchpointKind::RamRead || e.kind == WatchpointKind::RamWrite;
         if (e.kind == WatchpointKind::RamRead)
         {
             os << "read";

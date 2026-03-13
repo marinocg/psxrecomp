@@ -10,8 +10,8 @@ int main()
 
     HookEntryIntTraceEngine trace;
     trace.recordInstall(0x80011000u, 0x80014000u);
-    trace.beginInvocation(0x80012000u, 0x80014000u, 0x80015000u, true, 0x8001FFE0u,
-                          0x8001FFD0u, 0x80011000u, 7u);
+    trace.beginInvocation(0x80012000u, 0x80014000u, 0x80015000u, true, 0x8001FFE0u, 0x8001FFD0u,
+                          0x80011000u, 7u);
     trace.noteCommittedResume(0x80015000u);
     trace.noteReturnFromException(0x80013000u);
     trace.finishInvocation(8u);

@@ -63,9 +63,9 @@ class CallbackTraceEngine
                          u32 callbackGenerationBefore, u32 irqStatusBefore, u32 irqMaskBefore,
                          bool cop0InterruptEligibleBefore);
 
-    void finishInvocation(Address exitPc, bool threwReturnFromException, u32 callbackGenerationAfter,
-                          u32 irqStatusAfter, u32 irqMaskAfter, bool cop0InterruptEligibleAfter,
-                          RuntimeLogger* logger, bool emitLogs);
+    void finishInvocation(Address exitPc, bool threwReturnFromException,
+                          u32 callbackGenerationAfter, u32 irqStatusAfter, u32 irqMaskAfter,
+                          bool cop0InterruptEligibleAfter, RuntimeLogger* logger, bool emitLogs);
 
     bool hasActiveInvocation() const;
 
@@ -144,7 +144,8 @@ class CallbackTraceEngine
     std::vector<ActiveInvocation> m_activeInvocations;
     std::vector<CallbackTraceEntry> m_recentEntries;
     std::unordered_map<CallbackRepeatSignature, u32, CallbackRepeatSignatureHash> m_signatureCounts;
-    std::unordered_map<CallbackPathKey, CallbackPathAggregate, CallbackPathKeyHash> m_pathAggregates;
+    std::unordered_map<CallbackPathKey, CallbackPathAggregate, CallbackPathKeyHash>
+        m_pathAggregates;
     CallbackRepeatSignature m_lastSignature{};
     u32 m_lastSignatureRepeatCount = 0;
     bool m_hasLastSignature = false;

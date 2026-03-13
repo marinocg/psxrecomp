@@ -21,12 +21,13 @@ constexpr Address CALLBACK_STACK_WINDOW_ABOVE = 0x80u;
 
 } // namespace
 
-std::vector<CallbackTraceEntry::WriteHotspot> summarizeWrites(
-    const std::unordered_map<Address, CallbackTraceEngine::ActiveWriteInfo>& writes)
+std::vector<CallbackTraceEntry::WriteHotspot>
+summarizeWrites(const std::unordered_map<Address, CallbackTraceEngine::ActiveWriteInfo>& writes)
 {
     std::vector<std::pair<Address, CallbackTraceEngine::ActiveWriteInfo>> sorted(writes.begin(),
                                                                                  writes.end());
-    std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs)
+    std::sort(sorted.begin(), sorted.end(),
+              [](const auto& lhs, const auto& rhs)
               {
                   if (lhs.second.count != rhs.second.count)
                   {
@@ -70,11 +71,12 @@ std::string formatWriteSummary(const std::vector<CallbackTraceEntry::WriteHotspo
     return os.str();
 }
 
-std::vector<std::pair<Address, u32>> summarizeReturnSites(
-    const std::unordered_map<Address, u32>& counts)
+std::vector<std::pair<Address, u32>>
+summarizeReturnSites(const std::unordered_map<Address, u32>& counts)
 {
     std::vector<std::pair<Address, u32>> sorted(counts.begin(), counts.end());
-    std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs)
+    std::sort(sorted.begin(), sorted.end(),
+              [](const auto& lhs, const auto& rhs)
               {
                   if (lhs.second != rhs.second)
                   {
@@ -110,7 +112,8 @@ std::string formatReturnSiteSummary(const std::vector<std::pair<Address, u32>>& 
 std::vector<std::string> summarizeRegisters(const std::unordered_map<std::string, u32>& counts)
 {
     std::vector<std::pair<std::string, u32>> sorted(counts.begin(), counts.end());
-    std::sort(sorted.begin(), sorted.end(), [](const auto& lhs, const auto& rhs)
+    std::sort(sorted.begin(), sorted.end(),
+              [](const auto& lhs, const auto& rhs)
               {
                   if (lhs.second != rhs.second)
                   {
@@ -138,9 +141,9 @@ bool isLikelyCallbackStackWrite(Address address, Address entryStackPointer)
 
     const Address normalizedAddress = address & 0x1FFFFFFFu;
     const Address normalizedSp = entryStackPointer & 0x1FFFFFFFu;
-    const Address stackStart =
-        (normalizedSp > CALLBACK_STACK_WINDOW_BELOW) ? (normalizedSp - CALLBACK_STACK_WINDOW_BELOW)
-                                                     : 0;
+    const Address stackStart = (normalizedSp > CALLBACK_STACK_WINDOW_BELOW)
+                                   ? (normalizedSp - CALLBACK_STACK_WINDOW_BELOW)
+                                   : 0;
     const Address stackEnd = normalizedSp + CALLBACK_STACK_WINDOW_ABOVE;
     return normalizedAddress >= stackStart && normalizedAddress <= stackEnd;
 }

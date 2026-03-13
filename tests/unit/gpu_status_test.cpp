@@ -49,12 +49,12 @@ int main()
     gpu.writeStatus(0x10000008u);
     assert(gpu.readData() == 0x00000000u);
 
-    const u32 latchBeforeUnsupported = gpu.readData();
+    [[maybe_unused]] const u32 latchBeforeUnsupported = gpu.readData();
     gpu.writeStatus(0x10000009u);
     assert(gpu.readData() == latchBeforeUnsupported);
 
     gpu.writeStatus(0x04000001u);
-    u32 status = gpu.readStatus();
+    [[maybe_unused]] u32 status = gpu.readStatus();
     assert(((status >> StatusDmaDirectionShift) & 0x3u) == 0x1u);
     assert((status & StatusDmaRequest) != 0);
 
@@ -118,16 +118,16 @@ int main()
     gpu.writeStatus(0x08000080u);
     assert((gpu.readStatus() & StatusReverseFlag) != 0);
 
-    const u32 fieldBeforeTick = gpu.readStatus() & StatusFieldBit;
+    [[maybe_unused]] const u32 fieldBeforeTick = gpu.readStatus() & StatusFieldBit;
     gpu.tickDisplayLine();
     gpu.tickDisplayLine();
-    const u32 fieldAfterTick = gpu.readStatus() & StatusFieldBit;
+    [[maybe_unused]] const u32 fieldAfterTick = gpu.readStatus() & StatusFieldBit;
     assert(fieldBeforeTick == fieldAfterTick);
 
     gpu.reset();
-    const u32 progressiveBeforeTick = gpu.readStatus() & StatusFieldBit;
+    [[maybe_unused]] const u32 progressiveBeforeTick = gpu.readStatus() & StatusFieldBit;
     gpu.tickDisplayLine();
-    const u32 progressiveAfterTick = gpu.readStatus() & StatusFieldBit;
+    [[maybe_unused]] const u32 progressiveAfterTick = gpu.readStatus() & StatusFieldBit;
     assert(progressiveBeforeTick != progressiveAfterTick);
 
     return 0;
