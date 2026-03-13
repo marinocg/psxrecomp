@@ -129,6 +129,11 @@ const CallbackTraceEngine& PsxSystem::callbackTrace() const
     return m_callbackTrace;
 }
 
+std::string PsxSystem::formatHookEntryIntResumeTrace() const
+{
+    return m_hookEntryIntTrace.formatRecentInvocations();
+}
+
 bool PsxSystem::loadDiagProfile(const std::string& path)
 {
     const std::string resolved = path.empty() ? DiagProfile::resolveProfilePath() : path;

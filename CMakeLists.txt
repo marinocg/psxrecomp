@@ -155,6 +155,7 @@ set(RUNTIME_SOURCES
     src/runtime/gpu_commands.cpp
     src/runtime/gpu_renderer.cpp
     src/runtime/gpu_renderer_primitives.cpp
+    src/runtime/hook_entry_int_trace.cpp
     src/runtime/input.cpp
     src/runtime/interrupt_controller.cpp
     src/runtime/interrupt_dispatcher.cpp
@@ -168,6 +169,7 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system_copy_debug.cpp
     src/runtime/psx_system_display_trace.cpp
     src/runtime/psx_system_gpu_wait_trace.cpp
+    src/runtime/psx_system_hook_entry_int.cpp
     src/runtime/psx_system_interrupts.cpp
     src/runtime/psx_system_irq_chains.cpp
     src/runtime/psx_system_bios.cpp
@@ -379,6 +381,11 @@ if(BUILD_TESTS)
         tests/unit/callback_trace_test.cpp
     )
     target_link_libraries(callback_trace_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(hook_entry_int_trace_test
+        tests/unit/hook_entry_int_trace_test.cpp
+    )
+    target_link_libraries(hook_entry_int_trace_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(interrupt_service_context_test
         tests/unit/interrupt_service_context_test.cpp

@@ -57,6 +57,20 @@ class DiagWatchpointEngine
     void recordRamRead(Address readerPc, Address address, u8 size, u32 value,
                        RuntimeLogger* logger, Address resumeAddress = 0);
 
+    /// Check whether an MMIO write at the given physical address should be intercepted.
+    bool shouldWatchMmioWrite(Address address, u8 size) const;
+
+    /// Check whether an MMIO read at the given physical address should be intercepted.
+    bool shouldWatchMmioRead(Address address, u8 size) const;
+
+    /// Record an MMIO write observation.
+    void recordMmioWrite(Address writerPc, Address address, u8 size, u32 value,
+                         RuntimeLogger* logger, Address resumeAddress = 0);
+
+    /// Record an MMIO read observation.
+    void recordMmioRead(Address readerPc, Address address, u8 size, u32 value,
+                        RuntimeLogger* logger, Address resumeAddress = 0);
+
     /// Check whether any watchpoint has fired with a trap action.
     bool hasTrapViolation() const;
 
@@ -80,9 +94,12 @@ class DiagWatchpointEngine
     };
 
     bool shouldWatchRamAccess(WatchpointKind kind, Address address, u8 size) const;
+    bool shouldWatchMmioAccess(WatchpointKind kind, Address address, u8 size) const;
     void recordRamAccess(WatchpointKind kind, Address accessPc, Address address, u8 size,
                          u32 oldValue, u32 newValue, RuntimeLogger* logger,
                          Address resumeAddress);
+    void recordMmioAccess(WatchpointKind kind, Address accessPc, Address address, u8 size,
+                          u32 value, RuntimeLogger* logger, Address resumeAddress);
     bool evaluatePredicate(const WatchpointPredicate& pred, u32 value) const;
     Address normalizeAddress(Address address) const;
     bool isAlignedPointerInRegion(u32 value, Address regionStart, Address regionEnd) const;

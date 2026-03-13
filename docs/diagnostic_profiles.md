@@ -28,10 +28,10 @@ behavior.
 
 ### `watchpoints`
 
-Use RAM watchpoints when you know a cell or small structure that should hold a
-pointer, counter, state flag, or consumer-side latch.
+Use watchpoints when you know a RAM cell, MMIO register, or small structure
+that should hold a pointer, counter, state flag, interrupt mask, or consumer-side latch.
 
-- `kind`: `ram_write` or `ram_read`.
+- `kind`: `ram_write`, `ram_read`, `mmio_write`, or `mmio_read`.
 - `range`: inclusive RAM range to watch.
 - `predicate`: optional guard such as `aligned_pointer_in_region`.
 - `action`: `log`, `summarize`, `trap`, or `trap_on_first_violation`.
@@ -40,6 +40,7 @@ Current runtime behavior:
 
 - `ram_write` events record `old` and `new` values
 - `ram_read` events record the observed `value`
+- `mmio_write` and `mmio_read` events record the observed transfer `value`
 - step-budget stall reports include the most recent watchpoint events when any
   profile watchpoint fired during the run
 
@@ -110,6 +111,22 @@ That combination is useful for answering two questions:
    advancing a persistent counter/state word that mainline should consume?
 4. Does the consumer side read the callback-owned state directly, or does it
    branch on a copied baseline that never reaches the expected value?
+
+## Focused rev2 profiles
+
+Use the focused `rev2` profiles when the broad profile has already narrowed the
+problem to one subsystem:
+
+- `profiles/rev2.dispatch.diag.json`: callback dispatch, first-level IRQ
+  handlers, and interrupt-controller state.
+- `profiles/rev2.next.diag.json`: delay-helper churn and the nearby consumer
+  path.
+- `profiles/rev2.dma_setup.diag.json`: DMA setup investigation around the
+  control-object family at `0x801666b0..0x801666d0`, the later programming
+  window at `0x15f410..0x15f68c`, and DMA channel MMIO writes.
+- `profiles/rev2.spu_init.diag.json`: SPU control/status investigation for the
+  same `0x801666b0..0x801666d0` object once it is known to point at the SPU
+  block and `DPCR`.
 
 ## Typical Docker workflow
 

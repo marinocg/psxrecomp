@@ -116,6 +116,7 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         // is owned by PsxSystem::serviceInterrupts().
         if (m_inCallbackInvocation)
         {
+            m_hookEntryIntTrace.noteReturnFromException(m_debugOverlay.lastProgramCounter());
             if (traceIrqFlowEnabled())
             {
                 std::ostringstream msg;
@@ -141,6 +142,7 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     {
         regs[2] = m_hookEntryInt.descriptorAddress;
         m_hookEntryInt.descriptorAddress = a0;
+        m_hookEntryIntTrace.recordInstall(m_debugOverlay.lastProgramCounter(), a0);
 
         std::ostringstream msg;
         msg << "HookEntryInt descriptor=0x" << std::hex << a0;

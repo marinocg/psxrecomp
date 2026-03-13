@@ -73,19 +73,6 @@ std::string formatPendingLineOrder(u32 pendingMasked)
     return out.str();
 }
 
-constexpr size_t REG_V0 = 2;
-constexpr size_t REG_S0 = 16;
-constexpr size_t REG_S7 = 23;
-constexpr size_t REG_GP = 28;
-constexpr size_t REG_SP = 29;
-constexpr size_t REG_FP = 30;
-
-bool isValidHookEntryIntResumeAddress(u32 address)
-{
-    return address >= 0x80000000u && address < (0x80000000u + MemoryMap::RAM_SIZE) &&
-           (address & 0x3u) == 0u;
-}
-constexpr size_t REG_RA = 31;
 constexpr u32 STATUS_IEC_BIT = 1u << 0;
 constexpr u32 STATUS_IM0_IM1_MASK = 0x00000300u;
 constexpr u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
@@ -433,84 +420,6 @@ void PsxSystem::serviceInterrupts()
     syncCop0InterruptPending();
 }
 
-void PsxSystem::invokeHookEntryIntHandler()
-{
-    m_inHookEntryIntHandler = true;
-    try
-    {
-        u32 resumeAddress = 0;
-        bool resumeAddressValid = false;
-        const Address descriptorPhysical = normalizeAddress(m_hookEntryInt.descriptorAddress);
-        if (m_hookEntryInt.descriptorAddress != 0 &&
-            descriptorPhysical <= MemoryMap::RAM_SIZE - 0x30u)
-        {
-            // HookEntryInt is implemented by BIOS as longjmp(setjmp_buf, 1):
-            // restore callee-saved registers and resume at the saved return address with v0=1.
-            resumeAddress =
-                readFromRegion<u32>(m_ram.data(), descriptorPhysical + 0x00u, MemoryMap::RAM_SIZE);
-            resumeAddressValid = isValidHookEntryIntResumeAddress(resumeAddress);
-            if (resumeAddressValid)
-            {
-                m_pendingCallbackRegisters = {};
-                m_pendingCallbackRegisterMask.fill(false);
-                m_pendingCallbackRegisters[REG_V0] = 1; // PSX-SPX: longjmp-style return value.
-                m_pendingCallbackRegisterMask[REG_V0] = true;
-                m_pendingCallbackRegisters[REG_RA] = resumeAddress;
-                m_pendingCallbackRegisterMask[REG_RA] = true;
-                m_pendingCallbackRegisters[REG_SP] = readFromRegion<u32>(
-                    m_ram.data(), descriptorPhysical + 0x04u, MemoryMap::RAM_SIZE);
-                m_pendingCallbackRegisterMask[REG_SP] = true;
-                m_pendingCallbackRegisters[REG_FP] = readFromRegion<u32>(
-                    m_ram.data(), descriptorPhysical + 0x08u, MemoryMap::RAM_SIZE);
-                m_pendingCallbackRegisterMask[REG_FP] = true;
-                for (size_t reg = REG_S0; reg <= REG_S7; ++reg)
-                {
-                    const Address offset =
-                        static_cast<Address>(0x0Cu + (reg - REG_S0) * sizeof(u32));
-                    m_pendingCallbackRegisters[reg] = readFromRegion<u32>(
-                        m_ram.data(), descriptorPhysical + offset, MemoryMap::RAM_SIZE);
-                    m_pendingCallbackRegisterMask[reg] = true;
-                }
-                m_pendingCallbackRegisters[REG_GP] = readFromRegion<u32>(
-                    m_ram.data(), descriptorPhysical + 0x2Cu, MemoryMap::RAM_SIZE);
-                m_pendingCallbackRegisterMask[REG_GP] = true;
-                m_hasPendingCallbackRegisters = true;
-            }
-            else if (resumeAddress != 0)
-            {
-                std::ostringstream msg;
-                msg << "Ignoring HookEntryInt resume address 0x" << std::hex << resumeAddress
-                    << " from descriptor 0x" << m_hookEntryInt.descriptorAddress;
-                m_logger.log(LogLevel::Warn, "bios", msg.str());
-            }
-        }
-
-        if (resumeAddressValid)
-        {
-            try
-            {
-                (void)invokeCallbackRaw(resumeAddress, m_hookEntryInt.descriptorAddress);
-            }
-            catch (...)
-            {
-                validateAllocatorHeapBoundary("HookEntryInt", resumeAddress);
-                throw;
-            }
-            validateAllocatorHeapBoundary("HookEntryInt", resumeAddress);
-        }
-    }
-    catch (...)
-    {
-        m_hasPendingCallbackRegisters = false;
-        m_pendingCallbackRegisterMask.fill(false);
-        m_inHookEntryIntHandler = false;
-        throw;
-    }
-    m_hasPendingCallbackRegisters = false;
-    m_pendingCallbackRegisterMask.fill(false);
-    m_inHookEntryIntHandler = false;
-}
-
 PsxSystem::CallbackContextDisposition
 PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
 {
@@ -526,6 +435,7 @@ PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
             regsInOut[reg] = m_pendingCallbackRegisters[reg];
         }
     }
+    m_hookEntryIntTrace.noteCommittedResume(m_pendingCallbackRegisters[31]);
     m_hasPendingCallbackRegisters = false;
     m_pendingCallbackRegisterMask.fill(false);
     ++m_callbackContextCommitGeneration;

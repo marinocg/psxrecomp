@@ -15,6 +15,7 @@
 #include "psxrecomp/runtime/dma.h"
 #include "psxrecomp/runtime/gpu.h"
 #include "psxrecomp/runtime/gte.h"
+#include "psxrecomp/runtime/hook_entry_int_trace.h"
 #include "psxrecomp/runtime/input.h"
 #include "psxrecomp/runtime/interrupt_controller.h"
 #include "psxrecomp/runtime/interrupt_dispatcher.h"
@@ -133,7 +134,7 @@ class PsxSystem
             if (m_diagWatchpoints.shouldWatchRamRead(physical, readSize))
             {
                 m_diagWatchpoints.recordRamRead(m_debugOverlay.lastProgramCounter(), physical,
-                                                readSize, static_cast<u32>(value), nullptr,
+                                                readSize, static_cast<u32>(value), &m_logger,
                                                 m_lastResumeAddress);
             }
             return value;
@@ -191,7 +192,7 @@ class PsxSystem
                 {
                     m_diagWatchpoints.recordRamWrite(m_debugOverlay.lastProgramCounter(), physical,
                                                      writeSize, static_cast<u32>(oldValue),
-                                                     static_cast<u32>(value), nullptr,
+                                                     static_cast<u32>(value), &m_logger,
                                                      m_lastResumeAddress);
                 }
             }
@@ -237,6 +238,7 @@ class PsxSystem
     StallClassifier& stallClassifier();
     CallbackTraceEngine& callbackTrace();
     const CallbackTraceEngine& callbackTrace() const;
+    std::string formatHookEntryIntResumeTrace() const;
 
     /// Load a diagnostic profile from a JSON file path (or resolve from env/CLI).
     bool loadDiagProfile(const std::string& path = "");
@@ -426,6 +428,7 @@ class PsxSystem
     Gte m_gte;
     StallClassifier m_stallClassifier;
     CallbackTraceEngine m_callbackTrace;
+    HookEntryIntTraceEngine m_hookEntryIntTrace;
     std::shared_ptr<Disc> m_disc;
     DiscSwapInfo m_discSwapInfo;
     bool m_discSwapInfoInitialized = false;

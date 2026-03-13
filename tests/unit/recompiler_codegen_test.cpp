@@ -401,6 +401,7 @@ int main()
     runtimeHeader << "    DiagTracepointEngine& diagTracepoints() { return m_diagTracepoints; }\n";
     runtimeHeader << "    DiagWatchpointEngine& diagWatchpoints() { return m_diagWatchpoints; }\n";
     runtimeHeader << "    CallbackTraceEngine& callbackTrace() { return m_callbackTrace; }\n";
+    runtimeHeader << "    std::string formatHookEntryIntResumeTrace() const { return {}; }\n";
     runtimeHeader << "  private:\n";
     runtimeHeader << "    u8* m_ram;\n";
     runtimeHeader << "    RuntimeDebugOverlay m_overlay;\n";

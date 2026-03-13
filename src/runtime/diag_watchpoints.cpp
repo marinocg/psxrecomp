@@ -153,6 +153,16 @@ bool DiagWatchpointEngine::shouldWatchRamRead(Address address, u8 size) const
     return shouldWatchRamAccess(WatchpointKind::RamRead, address, size);
 }
 
+bool DiagWatchpointEngine::shouldWatchMmioWrite(Address address, u8 size) const
+{
+    return shouldWatchMmioAccess(WatchpointKind::MmioWrite, address, size);
+}
+
+bool DiagWatchpointEngine::shouldWatchMmioRead(Address address, u8 size) const
+{
+    return shouldWatchMmioAccess(WatchpointKind::MmioRead, address, size);
+}
+
 void DiagWatchpointEngine::recordRamWrite(Address writerPc, Address address, u8 size, u32 oldValue,
                                           u32 newValue, RuntimeLogger* logger,
                                           Address resumeAddress)
@@ -166,6 +176,20 @@ void DiagWatchpointEngine::recordRamRead(Address readerPc, Address address, u8 s
 {
     recordRamAccess(WatchpointKind::RamRead, readerPc, address, size, value, value, logger,
                     resumeAddress);
+}
+
+void DiagWatchpointEngine::recordMmioWrite(Address writerPc, Address address, u8 size, u32 value,
+                                           RuntimeLogger* logger, Address resumeAddress)
+{
+    recordMmioAccess(WatchpointKind::MmioWrite, writerPc, address, size, value, logger,
+                     resumeAddress);
+}
+
+void DiagWatchpointEngine::recordMmioRead(Address readerPc, Address address, u8 size, u32 value,
+                                          RuntimeLogger* logger, Address resumeAddress)
+{
+    recordMmioAccess(WatchpointKind::MmioRead, readerPc, address, size, value, logger,
+                     resumeAddress);
 }
 
 bool DiagWatchpointEngine::shouldWatchRamAccess(WatchpointKind kind, Address address, u8 size) const
@@ -208,6 +232,25 @@ bool DiagWatchpointEngine::shouldWatchRamAccess(WatchpointKind kind, Address add
         }
     }
 
+    return false;
+}
+
+bool DiagWatchpointEngine::shouldWatchMmioAccess(WatchpointKind kind, Address address,
+                                                 u8 size) const
+{
+    const Address accessStart = address;
+    const Address accessEnd = accessStart + size - 1;
+    for (const auto& wp : m_configs)
+    {
+        if (wp.kind != kind)
+        {
+            continue;
+        }
+        if (accessStart <= wp.rangeEnd && accessEnd >= wp.rangeStart)
+        {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -285,6 +328,70 @@ void DiagWatchpointEngine::recordRamAccess(WatchpointKind kind, Address accessPc
     }
 }
 
+void DiagWatchpointEngine::recordMmioAccess(WatchpointKind kind, Address accessPc, Address address,
+                                            u8 size, u32 value, RuntimeLogger* logger,
+                                            Address resumeAddress)
+{
+    const Address accessStart = address;
+    const Address accessEnd = accessStart + size - 1;
+    for (const auto& wp : m_configs)
+    {
+        if (wp.kind != kind)
+        {
+            continue;
+        }
+        if (accessStart > wp.rangeEnd || accessEnd < wp.rangeStart)
+        {
+            continue;
+        }
+
+        const bool violated = !wp.predicate.type.empty() && !evaluatePredicate(wp.predicate, value);
+
+        WatchpointEvent event;
+        event.config = &wp;
+        event.kind = kind;
+        event.accessPc = accessPc;
+        event.address = address;
+        event.size = size;
+        event.oldValue = value;
+        event.newValue = value;
+        event.predicateViolated = violated;
+        event.resumeAddress = resumeAddress;
+
+        if (m_events.size() >= EVENT_RING_SIZE)
+        {
+            m_events.erase(m_events.begin());
+        }
+        m_events.push_back(event);
+
+        if (violated && (wp.action == WatchpointAction::Trap ||
+                         wp.action == WatchpointAction::TrapOnFirstViolation))
+        {
+            m_trapViolation = true;
+        }
+
+        if (logger != nullptr && (wp.action == WatchpointAction::Log ||
+                                  wp.action == WatchpointAction::Summarize || violated))
+        {
+            std::ostringstream msg;
+            msg << "watchpoint=" << wp.name
+                << (kind == WatchpointKind::MmioRead ? " kind=mmio_read" : " kind=mmio_write")
+                << " pc=0x" << std::hex << accessPc << " addr=0x" << address << " size="
+                << std::dec << static_cast<unsigned>(size) << " value=0x" << std::hex
+                << maskValueForSize(value, size);
+            if (resumeAddress != 0)
+            {
+                msg << " resumed_at=0x" << std::hex << resumeAddress;
+            }
+            if (violated)
+            {
+                msg << " VIOLATED";
+            }
+            logger->log(LogLevel::Info, "watchpoint", msg.str());
+        }
+    }
+}
+
 bool DiagWatchpointEngine::hasTrapViolation() const
 {
     return m_trapViolation;
@@ -303,11 +410,40 @@ std::string DiagWatchpointEngine::formatSummary() const
     for (size_t i = 0; i < count; ++i)
     {
         const auto& e = m_events[m_events.size() - 1 - i];
-        os << "  [" << (e.config != nullptr ? e.config->name : "env") << "] "
-           << (e.kind == WatchpointKind::RamRead ? "read" : "write") << " pc=0x" << std::hex
-           << e.accessPc << " addr=0x" << (0x80000000u | (e.address & 0x1FFFFFFFu))
-           << " size=" << std::dec << static_cast<unsigned>(e.size);
+        os << "  [" << (e.config != nullptr ? e.config->name : "env") << "] ";
+        const bool isRam =
+            e.kind == WatchpointKind::RamRead || e.kind == WatchpointKind::RamWrite;
         if (e.kind == WatchpointKind::RamRead)
+        {
+            os << "read";
+        }
+        else if (e.kind == WatchpointKind::RamWrite)
+        {
+            os << "write";
+        }
+        else if (e.kind == WatchpointKind::MmioRead)
+        {
+            os << "mmio_read";
+        }
+        else
+        {
+            os << "mmio_write";
+        }
+        os << " pc=0x" << std::hex << e.accessPc << " addr=0x";
+        if (isRam)
+        {
+            os << (0x80000000u | (e.address & 0x1FFFFFFFu));
+        }
+        else
+        {
+            os << e.address;
+        }
+        os << " size=" << std::dec << static_cast<unsigned>(e.size);
+        if (e.kind == WatchpointKind::RamRead || e.kind == WatchpointKind::MmioRead)
+        {
+            os << " value=0x" << std::hex << maskValueForSize(e.newValue, e.size);
+        }
+        else if (e.kind == WatchpointKind::MmioWrite)
         {
             os << " value=0x" << std::hex << maskValueForSize(e.newValue, e.size);
         }

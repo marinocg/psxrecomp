@@ -1,0 +1,107 @@
+{
+  "name": "rev2-next",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_callback_busy_latch",
+      "kind": "ram_write",
+      "range": "0x801654e8-0x801654ef",
+      "action": "log"
+    },
+    {
+      "name": "rev2_callback_counter_block",
+      "kind": "ram_write",
+      "range": "0x80166590-0x801665b4",
+      "action": "log"
+    },
+    {
+      "name": "rev2_callback_counter_reads",
+      "kind": "ram_read",
+      "range": "0x801665b0-0x801665b3",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_hook_descriptor_buffer",
+      "kind": "ram_write",
+      "range": "0x80165520-0x8016554f",
+      "action": "log"
+    },
+    {
+      "name": "rev2_delay_target_ptr",
+      "kind": "ram_read",
+      "range": "0x801666b0-0x801666b3",
+      "action": "summarize"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_delay_burst_setup",
+      "pc_range": "0x15f044-0x15f0a8",
+      "registers": ["a0", "v0", "v1", "s0", "s1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_delay_burst_followup",
+      "pc_range": "0x15f0ac-0x15f140",
+      "registers": ["a0", "v0", "v1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_consumer_snapshot",
+      "pc_range": "0x15d630-0x15d704",
+      "registers": ["a0", "v0", "v1", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_delay_burst_setup",
+      "pc_range": "0x15f044-0x15f0a8",
+      "watched_cells": ["0x801666b0", "0x801665b0", "0x801654ea"]
+    },
+    {
+      "name": "rev2_delay_burst_followup",
+      "pc_range": "0x15f0ac-0x15f140",
+      "watched_cells": ["0x801666b0", "0x801665b0", "0x801654ea"]
+    },
+    {
+      "name": "rev2_consumer_snapshot",
+      "pc_range": "0x15d630-0x15d704",
+      "watched_cells": ["0x801665b0", "0x8016547c", "0x80165480", "0x80165484"]
+    }
+  ]
+}

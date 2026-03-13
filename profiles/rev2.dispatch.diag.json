@@ -1,0 +1,293 @@
+{
+  "name": "rev2-dispatch",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_dispatch_object_writes",
+      "kind": "ram_write",
+      "range": "0x80166550-0x80166578",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dispatch_object_reads",
+      "kind": "ram_read",
+      "range": "0x80166550-0x80166578",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_dispatch_init_block_writes",
+      "kind": "ram_write",
+      "range": "0x80166590-0x801665c4",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dispatch_init_block_reads",
+      "kind": "ram_read",
+      "range": "0x80166590-0x801665c4",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_callback_busy_latch",
+      "kind": "ram_write",
+      "range": "0x801654e8-0x801654ef",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dispatch_handler_slot_reads",
+      "kind": "ram_read",
+      "range": "0x801654ec-0x80165517",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_dispatch_handler_slot_writes",
+      "kind": "ram_write",
+      "range": "0x801654ec-0x80165517",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dispatch_irq_enable_reads",
+      "kind": "ram_read",
+      "range": "0x80165518-0x8016551f",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_dispatch_irq_counter_reads",
+      "kind": "ram_read",
+      "range": "0x80166580-0x80166583",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_dispatch_irq_counter_writes",
+      "kind": "ram_write",
+      "range": "0x80166580-0x80166583",
+      "action": "log"
+    },
+    {
+      "name": "rev2_i_stat_reads",
+      "kind": "mmio_read",
+      "range": "0x1f801070-0x1f801073",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_i_stat_writes",
+      "kind": "mmio_write",
+      "range": "0x1f801070-0x1f801073",
+      "action": "log"
+    },
+    {
+      "name": "rev2_i_mask_reads",
+      "kind": "mmio_read",
+      "range": "0x1f801074-0x1f801077",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_i_mask_writes",
+      "kind": "mmio_write",
+      "range": "0x1f801074-0x1f801077",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma_dicr_reads",
+      "kind": "mmio_read",
+      "range": "0x1f8010f4-0x1f8010f7",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_dma_dicr_writes",
+      "kind": "mmio_write",
+      "range": "0x1f8010f4-0x1f8010f7",
+      "action": "log"
+    },
+    {
+      "name": "rev2_timer1_mode_reads",
+      "kind": "mmio_read",
+      "range": "0x1f801114-0x1f801117",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_timer1_mode_writes",
+      "kind": "mmio_write",
+      "range": "0x1f801114-0x1f801117",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_resume_dispatch_setup",
+      "pc_range": "0x15d8d0-0x15d9a4",
+      "registers": ["v0", "v1", "a0", "s0", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_dispatch_call",
+      "pc_range": "0x15d76c-0x15d798",
+      "registers": ["a0", "a1", "v0", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_dispatch_handler_db78",
+      "pc_range": "0x15db78-0x15dcbc",
+      "registers": ["a0", "a1", "v0", "v1", "s0", "s1", "s2", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_dispatch_callback_irq_branch",
+      "pc_range": "0x15da98-0x15db54",
+      "registers": ["a0", "a1", "a2", "v0", "v1", "s0", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_dispatch_irq_handler_slot",
+      "pc_range": "0x15da5c-0x15da84",
+      "registers": ["v0", "v1", "s0", "s1", "s2", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_dispatch_handler_dcc0",
+      "pc_range": "0x15dcc0-0x15dd5c",
+      "registers": ["a0", "v0", "v1", "s0", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_dispatch_handler_dd60",
+      "pc_range": "0x15dd60-0x15ddd4",
+      "registers": ["a0", "a1", "v0", "v1", "s0", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_dispatch_init_decc",
+      "pc_range": "0x15decc-0x15df20",
+      "registers": ["a0", "a1", "v0", "v1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    },
+    {
+      "name": "rev2_dispatch_init_dfec",
+      "pc_range": "0x15dfec-0x15e034",
+      "registers": ["a0", "a1", "v0", "v1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_resume_dispatch_setup",
+      "pc_range": "0x15d8d0-0x15d9a4",
+      "watched_cells": [
+        "0x80166550",
+        "0x80166570",
+        "0x80166590",
+        "0x801665b0",
+        "0x801665b4",
+        "0x801665c0"
+      ]
+    },
+    {
+      "name": "rev2_dispatch_call",
+      "pc_range": "0x15d76c-0x15d798",
+      "watched_cells": [
+        "0x80166570",
+        "0x80166558",
+        "0x80166560",
+        "0x80166568"
+      ]
+    },
+    {
+      "name": "rev2_dispatch_handler_db78",
+      "pc_range": "0x15db78-0x15dcbc",
+      "watched_cells": [
+        "0x801654e8",
+        "0x801654ec",
+        "0x80166574",
+        "0x80166578"
+      ]
+    },
+    {
+      "name": "rev2_dispatch_callback_irq_branch",
+      "pc_range": "0x15da98-0x15db54",
+      "watched_cells": [
+        "0x80165518",
+        "0x8016551a",
+        "0x801654ec",
+        "0x801654f0",
+        "0x80166574",
+        "0x80166578",
+        "0x80166580"
+      ]
+    },
+    {
+      "name": "rev2_dispatch_handler_dcc0",
+      "pc_range": "0x15dcc0-0x15dd5c",
+      "watched_cells": [
+        "0x801654e8",
+        "0x8016551a",
+        "0x8016551c"
+      ]
+    },
+    {
+      "name": "rev2_dispatch_handler_dd60",
+      "pc_range": "0x15dd60-0x15ddd4",
+      "watched_cells": [
+        "0x801654e8",
+        "0x8016551a",
+        "0x8016551c"
+      ]
+    }
+  ]
+}

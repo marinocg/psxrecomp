@@ -253,6 +253,7 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_callbackContextCommitGeneration = 0;
     m_pendingCallbackRegisters = {};
     m_pendingCallbackRegisterMask.fill(false);
+    m_hookEntryIntTrace.reset();
     m_frameCount = 0;
     m_pendingSpuDmaCompletionCycles = pendingSpuDmaCompletionCycles;
     m_pendingSpuDmaCompletion = pendingSpuDmaCompletion != 0;

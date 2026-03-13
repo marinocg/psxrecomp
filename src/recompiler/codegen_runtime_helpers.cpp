@@ -276,6 +276,7 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("stream << context.system.diagWatchpoints().formatSummary();");
     emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");
+    emitter.writeLine("stream << context.system.formatHookEntryIntResumeTrace();");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
