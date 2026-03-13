@@ -69,6 +69,14 @@ void issueSetfilter(psxrecomp::runtime::PsxSystem& system, psxrecomp::u8 fileNum
     writeCdromParam(system, channelNumber);
     writeCdromCommand(system, 0x0D);
 }
+
+void ackCdromIrq(psxrecomp::runtime::PsxSystem& system)
+{
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 1u);
+    (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07u);
+    system.tickCpuCycles(1);
+}
 } // namespace
 
 int main()
@@ -81,8 +89,10 @@ int main()
         assert(system.initialize());
 
         system.cdrom().enqueueDataSector(makeXaAdpcmSector(0x01, 0x02, 0x21));
-        issueSetmode(system, 0x40);      // XA streaming enable
+        issueSetmode(system, 0x40); // XA streaming enable
+        ackCdromIrq(system);
         writeCdromCommand(system, 0x06); // ReadN
+        ackCdromIrq(system);
 
         system.runFrame(); // CDROM decodes sector after SPU tick in this frame.
         assert(system.spu().queuedCdAudioSamples() > 0);
@@ -118,8 +128,11 @@ int main()
         system.cdrom().enqueueDataSector(makeXaAdpcmSector(0x01, 0x02, 0x21)); // matching
 
         issueSetmode(system, 0x48); // XA streaming + XA filter enable
+        ackCdromIrq(system);
         issueSetfilter(system, 0x01, 0x02);
+        ackCdromIrq(system);
         writeCdromCommand(system, 0x06); // ReadN
+        ackCdromIrq(system);
 
         system.runFrame();
         assert(system.spu().queuedCdAudioSamples() > 0);

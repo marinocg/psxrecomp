@@ -198,6 +198,54 @@ int main()
     }
     assert(hasLiteralFunctionPointerTarget);
 
+    std::filesystem::path detachedSingletonPointerExePath =
+        tempDir / ("psxrecomp_pipeline_detached_singleton_pointer_" + suffix + ".psx");
+    guard.exes.push_back(detachedSingletonPointerExePath);
+    auto detachedSingletonPointerBuffer = buildExeWithDetachedSingletonFunctionPointer();
+    std::ofstream detachedSingletonPointerFile(detachedSingletonPointerExePath, std::ios::binary);
+    detachedSingletonPointerFile.write(
+        reinterpret_cast<const char*>(detachedSingletonPointerBuffer.data()),
+        static_cast<std::streamsize>(detachedSingletonPointerBuffer.size()));
+    detachedSingletonPointerFile.close();
+    auto detachedSingletonPointerResult = pipeline.run(detachedSingletonPointerExePath.string());
+    assert(detachedSingletonPointerResult.success);
+    assert(!hasEmptyBoundaryWarning(detachedSingletonPointerResult.warnings));
+    [[maybe_unused]] bool hasDetachedSingletonPointerTarget = false;
+    for (const auto& function : detachedSingletonPointerResult.functions)
+    {
+        if (function.entryAddress == 0x80010080)
+        {
+            hasDetachedSingletonPointerTarget = true;
+        }
+    }
+    assert(hasDetachedSingletonPointerTarget);
+
+    std::filesystem::path detachedResumePointerExePath =
+        tempDir / ("psxrecomp_pipeline_detached_singleton_resume_pointer_" + suffix + ".psx");
+    guard.exes.push_back(detachedResumePointerExePath);
+    auto detachedResumePointerBuffer = buildExeWithDetachedSingletonResumeLabelPointer();
+    std::ofstream detachedResumePointerFile(detachedResumePointerExePath, std::ios::binary);
+    detachedResumePointerFile.write(
+        reinterpret_cast<const char*>(detachedResumePointerBuffer.data()),
+        static_cast<std::streamsize>(detachedResumePointerBuffer.size()));
+    detachedResumePointerFile.close();
+    auto detachedResumePointerResult = pipeline.run(detachedResumePointerExePath.string());
+    assert(detachedResumePointerResult.success);
+    assert(!hasEmptyBoundaryWarning(detachedResumePointerResult.warnings));
+    [[maybe_unused]] bool hasDetachedResumeCoverage = false;
+    for (const auto& function : detachedResumePointerResult.functions)
+    {
+        if (function.entryAddress == 0x80010080)
+        {
+            hasDetachedResumeCoverage = true;
+        }
+        if (function.entryAddress == 0x80010040 && function.endAddress >= 0x80010090)
+        {
+            hasDetachedResumeCoverage = true;
+        }
+    }
+    assert(hasDetachedResumeCoverage);
+
     std::filesystem::path clusteredCodePointerExePath =
         tempDir / ("psxrecomp_pipeline_clustered_code_pointer_" + suffix + ".psx");
     guard.exes.push_back(clusteredCodePointerExePath);
@@ -218,6 +266,52 @@ int main()
         }
     }
     assert(hasClusteredLabelTarget);
+
+    std::filesystem::path mixedPointerTableExePath =
+        tempDir / ("psxrecomp_pipeline_mixed_pointer_table_" + suffix + ".psx");
+    guard.exes.push_back(mixedPointerTableExePath);
+    auto mixedPointerTableBuffer = buildExeWithMixedCodeAndStringPointerTable();
+    std::ofstream mixedPointerTableFile(mixedPointerTableExePath, std::ios::binary);
+    mixedPointerTableFile.write(reinterpret_cast<const char*>(mixedPointerTableBuffer.data()),
+                                static_cast<std::streamsize>(mixedPointerTableBuffer.size()));
+    mixedPointerTableFile.close();
+    auto mixedPointerTableResult = pipeline.run(mixedPointerTableExePath.string());
+    assert(mixedPointerTableResult.success);
+    assert(!hasEmptyBoundaryWarning(mixedPointerTableResult.warnings));
+    [[maybe_unused]] bool hasMixedPointerCodeTarget = false;
+    for (const auto& function : mixedPointerTableResult.functions)
+    {
+        if (function.entryAddress == 0x80010040)
+        {
+            hasMixedPointerCodeTarget = true;
+        }
+        assert(function.entryAddress != 0x80010080);
+    }
+    assert(hasMixedPointerCodeTarget);
+
+    std::filesystem::path dataTablePointerExePath =
+        tempDir / ("psxrecomp_pipeline_data_table_pointers_" + suffix + ".psx");
+    guard.exes.push_back(dataTablePointerExePath);
+    auto dataTablePointerBuffer = buildExeWithClusteredPointersToDataTables();
+    std::ofstream dataTablePointerFile(dataTablePointerExePath, std::ios::binary);
+    dataTablePointerFile.write(reinterpret_cast<const char*>(dataTablePointerBuffer.data()),
+                               static_cast<std::streamsize>(dataTablePointerBuffer.size()));
+    dataTablePointerFile.close();
+    auto dataTablePointerResult = pipeline.run(dataTablePointerExePath.string());
+    assert(dataTablePointerResult.success);
+    assert(!hasEmptyBoundaryWarning(dataTablePointerResult.warnings));
+    for ([[maybe_unused]] const auto& function : dataTablePointerResult.functions)
+    {
+        assert(function.entryAddress != 0x80010080);
+        assert(function.entryAddress != 0x80010090);
+        assert(function.entryAddress != 0x800100A0);
+    }
+    for ([[maybe_unused]] const auto& warning : dataTablePointerResult.warnings)
+    {
+        assert(warning.find("0x80010080") == std::string::npos);
+        assert(warning.find("0x80010090") == std::string::npos);
+        assert(warning.find("0x800100a0") == std::string::npos);
+    }
 
     std::filesystem::path callbackPointerExePath =
         tempDir / ("psxrecomp_pipeline_callback_pointer_" + suffix + ".psx");
@@ -260,6 +354,75 @@ int main()
         }
     }
     assert(hasPrefixedCallbackTarget);
+
+    std::filesystem::path gapAdjacentTargetExePath =
+        tempDir / ("psxrecomp_pipeline_gap_adjacent_target_" + suffix + ".psx");
+    guard.exes.push_back(gapAdjacentTargetExePath);
+    auto gapAdjacentTargetBuffer = buildExeWithGapAdjacentRegisterCallTarget();
+    std::ofstream gapAdjacentTargetFile(gapAdjacentTargetExePath, std::ios::binary);
+    gapAdjacentTargetFile.write(reinterpret_cast<const char*>(gapAdjacentTargetBuffer.data()),
+                                static_cast<std::streamsize>(gapAdjacentTargetBuffer.size()));
+    gapAdjacentTargetFile.close();
+    auto gapAdjacentTargetResult = pipeline.run(gapAdjacentTargetExePath.string());
+    assert(gapAdjacentTargetResult.success);
+    assert(!hasEmptyBoundaryWarning(gapAdjacentTargetResult.warnings));
+    [[maybe_unused]] bool hasGapAdjacentTarget = false;
+    for (const auto& function : gapAdjacentTargetResult.functions)
+    {
+        if (function.entryAddress == 0x80010038)
+        {
+            hasGapAdjacentTarget = true;
+        }
+    }
+    assert(hasGapAdjacentTarget);
+
+    std::filesystem::path gapAdjacentPointerCellExePath =
+        tempDir / ("psxrecomp_pipeline_gap_adjacent_pointer_cell_" + suffix + ".psx");
+    guard.exes.push_back(gapAdjacentPointerCellExePath);
+    auto gapAdjacentPointerCellBuffer = buildExeWithGapAdjacentPointerCellTarget();
+    std::ofstream gapAdjacentPointerCellFile(gapAdjacentPointerCellExePath, std::ios::binary);
+    gapAdjacentPointerCellFile.write(
+        reinterpret_cast<const char*>(gapAdjacentPointerCellBuffer.data()),
+        static_cast<std::streamsize>(gapAdjacentPointerCellBuffer.size()));
+    gapAdjacentPointerCellFile.close();
+    auto gapAdjacentPointerCellResult = pipeline.run(gapAdjacentPointerCellExePath.string());
+    assert(gapAdjacentPointerCellResult.success);
+    assert(!hasEmptyBoundaryWarning(gapAdjacentPointerCellResult.warnings));
+    [[maybe_unused]] bool hasGapAdjacentPointerCellTarget = false;
+    for (const auto& function : gapAdjacentPointerCellResult.functions)
+    {
+        if (function.entryAddress == 0x80010038)
+        {
+            hasGapAdjacentPointerCellTarget = true;
+        }
+    }
+    assert(hasGapAdjacentPointerCellTarget);
+
+    std::filesystem::path storedGapDispatchExePath =
+        tempDir / ("psxrecomp_pipeline_stored_gap_dispatch_" + suffix + ".psx");
+    guard.exes.push_back(storedGapDispatchExePath);
+    auto storedGapDispatchBuffer = buildExeWithStoredGapAdjacentDispatchTarget();
+    std::ofstream storedGapDispatchFile(storedGapDispatchExePath, std::ios::binary);
+    storedGapDispatchFile.write(reinterpret_cast<const char*>(storedGapDispatchBuffer.data()),
+                                static_cast<std::streamsize>(storedGapDispatchBuffer.size()));
+    storedGapDispatchFile.close();
+    auto storedGapDispatchResult = pipeline.run(storedGapDispatchExePath.string());
+    assert(storedGapDispatchResult.success);
+    assert(!hasEmptyBoundaryWarning(storedGapDispatchResult.warnings));
+    [[maybe_unused]] bool hasStoredGapDispatchTarget = false;
+    for (const auto& function : storedGapDispatchResult.functions)
+    {
+        if (function.entryAddress == 0x80010040)
+        {
+            hasStoredGapDispatchTarget = true;
+        }
+    }
+    assert(hasStoredGapDispatchTarget);
+    std::ifstream storedGapDispatchSource(storedGapDispatchResult.artifacts.sourcePath);
+    std::stringstream storedGapDispatchSourceBuffer;
+    storedGapDispatchSourceBuffer << storedGapDispatchSource.rdbuf();
+    const std::string storedGapDispatchSourceText = storedGapDispatchSourceBuffer.str();
+    assert(storedGapDispatchSourceText.find("0x80010088") != std::string::npos);
 
     std::filesystem::path jumpTableExePath =
         tempDir / ("psxrecomp_pipeline_jump_table_" + suffix + ".psx");

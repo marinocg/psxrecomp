@@ -119,6 +119,95 @@ StallClassifier& PsxSystem::stallClassifier()
     return m_stallClassifier;
 }
 
+CallbackTraceEngine& PsxSystem::callbackTrace()
+{
+    return m_callbackTrace;
+}
+
+const CallbackTraceEngine& PsxSystem::callbackTrace() const
+{
+    return m_callbackTrace;
+}
+
+std::string PsxSystem::formatHookEntryIntResumeTrace() const
+{
+    return m_hookEntryIntTrace.formatRecentInvocations();
+}
+
+bool PsxSystem::loadDiagProfile(const std::string& path)
+{
+    const std::string resolved = path.empty() ? DiagProfile::resolveProfilePath() : path;
+    if (resolved.empty())
+    {
+        return false;
+    }
+
+    if (!m_diagProfile.loadFromFile(resolved, &m_logger))
+    {
+        return false;
+    }
+
+    const auto& data = m_diagProfile.data();
+    m_diagWatchpoints.configure(data.watchpoints, data.memoryMap);
+    m_diagWatchpoints.mergeEnvWatchedRanges();
+    m_diagTracepoints.configure(data.tracepoints);
+    m_diagExplainers.configure(data.explainers);
+    m_diagValidators.configure(data.validators);
+    m_diagBoundaries.configure(data.boundaries, &m_diagValidators, &m_diagExplainers);
+    m_diagMetadataWatch.configure(data.metadataWatches);
+    return true;
+}
+
+const DiagProfile& PsxSystem::diagProfile() const
+{
+    return m_diagProfile;
+}
+
+DiagWatchpointEngine& PsxSystem::diagWatchpoints()
+{
+    return m_diagWatchpoints;
+}
+
+DiagTracepointEngine& PsxSystem::diagTracepoints()
+{
+    return m_diagTracepoints;
+}
+
+DiagValidatorEngine& PsxSystem::diagValidators()
+{
+    return m_diagValidators;
+}
+
+const DiagValidatorEngine& PsxSystem::diagValidators() const
+{
+    return m_diagValidators;
+}
+
+DiagBoundaryDispatcher& PsxSystem::diagBoundaries()
+{
+    return m_diagBoundaries;
+}
+
+DiagExplainerEngine& PsxSystem::diagExplainers()
+{
+    return m_diagExplainers;
+}
+
+DiagMetadataWatchEngine& PsxSystem::diagMetadataWatch()
+{
+    return m_diagMetadataWatch;
+}
+
+void PsxSystem::setLastResumeAddress(Address address)
+{
+    m_lastResumeAddress = address;
+}
+
+Address PsxSystem::lastResumeAddress() const
+{
+    return m_lastResumeAddress;
+}
+
 void PsxSystem::setDisc(std::shared_ptr<Disc> disc)
 {
     m_disc = std::move(disc);

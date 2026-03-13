@@ -157,6 +157,7 @@ examples/
 - Check for timing-sensitive code
 - Verify memory layout matches PSX
 - Test with known-good ROM images first
+- Use diagnostic profiles in `profiles/` via `PSXRECOMP_DIAG_PROFILE` when an issue is game-specific; see `docs/diagnostic_profiles.md`
 
 ## Best Practices
 

@@ -75,6 +75,8 @@ std::vector<u8> PsxSystem::serializeState() const
     state.insert(state.end(), gteState.begin(), gteState.end());
     appendU32(state, static_cast<u32>(mdecState.size()));
     state.insert(state.end(), mdecState.begin(), mdecState.end());
+    appendU32(state, m_pendingSpuDmaCompletionCycles);
+    appendU32(state, m_pendingSpuDmaCompletion ? 1u : 0u);
     return state;
 }
 
@@ -95,6 +97,8 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     u32 cdromStateSize = 0;
     u32 gteStateSize = 0;
     u32 mdecStateSize = 0;
+    u32 pendingSpuDmaCompletionCycles = 0;
+    u32 pendingSpuDmaCompletion = 0;
 
     auto readBlob = [&state, &cursor](u32 blobSize, std::vector<u8>& out)
     {
@@ -157,6 +161,15 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
             return false;
         }
         hasMdecState = true;
+    }
+
+    if (cursor != state.size())
+    {
+        if (!consumeU32(state, cursor, pendingSpuDmaCompletionCycles) ||
+            !consumeU32(state, cursor, pendingSpuDmaCompletion))
+        {
+            return false;
+        }
     }
 
     if (cursor != state.size())
@@ -237,9 +250,13 @@ bool PsxSystem::deserializeState(const std::vector<u8>& state)
     m_inHookEntryIntHandler = false;
     m_inCallbackInvocation = false;
     m_hasPendingCallbackRegisters = false;
+    m_callbackContextCommitGeneration = 0;
     m_pendingCallbackRegisters = {};
     m_pendingCallbackRegisterMask.fill(false);
+    m_hookEntryIntTrace.reset();
     m_frameCount = 0;
+    m_pendingSpuDmaCompletionCycles = pendingSpuDmaCompletionCycles;
+    m_pendingSpuDmaCompletion = pendingSpuDmaCompletion != 0;
     m_cpuCycles = 0;
     m_gpuDrainCarry = 0;
     m_videoSchedulePrimed = false;

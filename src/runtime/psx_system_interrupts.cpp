@@ -2,6 +2,7 @@
 
 #include "irq_trace_utils.h"
 
+#include <array>
 #include <sstream>
 #include <utility>
 
@@ -72,19 +73,6 @@ std::string formatPendingLineOrder(u32 pendingMasked)
     return out.str();
 }
 
-constexpr size_t REG_V0 = 2;
-constexpr size_t REG_S0 = 16;
-constexpr size_t REG_S7 = 23;
-constexpr size_t REG_GP = 28;
-constexpr size_t REG_SP = 29;
-constexpr size_t REG_FP = 30;
-
-bool isValidHookEntryIntResumeAddress(u32 address)
-{
-    return address >= 0x80000000u && address < (0x80000000u + MemoryMap::RAM_SIZE) &&
-           (address & 0x3u) == 0u;
-}
-constexpr size_t REG_RA = 31;
 constexpr u32 STATUS_IEC_BIT = 1u << 0;
 constexpr u32 STATUS_IM0_IM1_MASK = 0x00000300u;
 constexpr u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
@@ -95,6 +83,30 @@ constexpr std::array<u16, 5> CDROM_IRQ_EVENT_SPECS = {
     0x0080u, // INT4 -> end-of-read style event
     0x8000u, // INT5 -> error
 };
+
+bool traceCdCallbackEnabled()
+{
+    if (const char* env = std::getenv("PSXRECOMP_TRACE_CD_CALLBACK"))
+    {
+        return env[0] == '1';
+    }
+    return false;
+}
+
+const char* cdromCommandLabel(u8 command)
+{
+    switch (command)
+    {
+    case 0x01:
+        return "CdlNop";
+    case 0x0A:
+        return "CdlInit";
+    case 0x1C:
+        return "CdlReset";
+    default:
+        return nullptr;
+    }
+}
 
 class IrqExceptionExitGuard
 {
@@ -127,16 +139,34 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         return false;
     }
 
+    const bool traceCdCallback = traceCdCallbackEnabled();
+    const Cdrom::DebugSnapshot beforeSnapshot = m_cdrom.debugSnapshot();
+    const char* trackedCommand = cdromCommandLabel(beforeSnapshot.currentCommand);
+    if (traceCdCallback)
+    {
+        std::ostringstream msg;
+        msg << "event=cdrom_irq phase=before irq=INT" << std::dec << static_cast<unsigned>(irqType)
+            << " command=" << (trackedCommand != nullptr ? trackedCommand : "Other") << " "
+            << describeBiosCdromState();
+        m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
+    }
+
     // INT1 (data-ready): copy sector data for CdAsyncReadSector.
     if (irqType == 1u && m_biosCdrom.asyncReadCount > 0)
     {
         constexpr u32 SECTOR_BYTES = 2048;
         const u32 dstAddr =
             m_biosCdrom.asyncReadBuffer + m_biosCdrom.asyncSectorsRead * SECTOR_BYTES;
+        std::array<u8, SECTOR_BYTES> sectorData{};
         for (u32 i = 0; i < SECTOR_BYTES; ++i)
         {
-            write<u8>(dstAddr + i, m_cdrom.readData());
+            sectorData[static_cast<size_t>(i)] = m_cdrom.readData();
         }
+        std::ostringstream detail;
+        detail << "irq=INT1 sector_index=" << std::dec << m_biosCdrom.asyncSectorsRead
+               << " sectors_remaining=" << m_biosCdrom.asyncReadCount;
+        copyBufferToRam(dstAddr, sectorData.data(), SECTOR_BYTES, SECTOR_BYTES,
+                        m_debugOverlay.lastProgramCounter(), "CdAsyncReadSector", detail.str());
         ++m_biosCdrom.asyncSectorsRead;
         --m_biosCdrom.asyncReadCount;
     }
@@ -145,7 +175,9 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     if (irqType == 3u && m_biosCdrom.asyncResultPtr != 0)
     {
         const u8 stat = m_cdrom.readResponse();
-        write<u8>(m_biosCdrom.asyncResultPtr, stat);
+        copyBufferToRam(m_biosCdrom.asyncResultPtr, &stat, 1, 1,
+                        m_debugOverlay.lastProgramCounter(), "CdAsyncGetStatus",
+                        "irq=INT3 response_byte=0");
         m_biosCdrom.asyncResultPtr = 0;
     }
 
@@ -158,6 +190,20 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     {
         invokeCallback(address);
     }
+
+    if (traceCdCallback)
+    {
+        std::ostringstream msg;
+        msg << "event=cdrom_irq phase=after irq=INT" << std::dec << static_cast<unsigned>(irqType)
+            << " callbacks=" << callbacks.size() << " " << describeBiosCdromState();
+        if (trackedCommand != nullptr && irqType == 3u)
+        {
+            msg << " completion=" << trackedCommand;
+        }
+        m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
+    }
+
+    validateAllocatorHeapBoundary("CD IRQ callback", static_cast<Address>(irqType));
 
     return true;
 }
@@ -374,80 +420,12 @@ void PsxSystem::serviceInterrupts()
     syncCop0InterruptPending();
 }
 
-void PsxSystem::invokeHookEntryIntHandler()
-{
-    m_inHookEntryIntHandler = true;
-    try
-    {
-        u32 resumeAddress = 0;
-        bool resumeAddressValid = false;
-        const Address descriptorPhysical = normalizeAddress(m_hookEntryInt.descriptorAddress);
-        if (m_hookEntryInt.descriptorAddress != 0 &&
-            descriptorPhysical <= MemoryMap::RAM_SIZE - 0x30u)
-        {
-            // HookEntryInt is implemented by BIOS as longjmp(setjmp_buf, 1):
-            // restore callee-saved registers and resume at the saved return address with v0=1.
-            resumeAddress =
-                readFromRegion<u32>(m_ram.data(), descriptorPhysical + 0x00u, MemoryMap::RAM_SIZE);
-            resumeAddressValid = isValidHookEntryIntResumeAddress(resumeAddress);
-            if (resumeAddressValid)
-            {
-                m_pendingCallbackRegisters = {};
-                m_pendingCallbackRegisterMask.fill(false);
-                m_pendingCallbackRegisters[REG_V0] = 1; // PSX-SPX: longjmp-style return value.
-                m_pendingCallbackRegisterMask[REG_V0] = true;
-                m_pendingCallbackRegisters[REG_RA] = resumeAddress;
-                m_pendingCallbackRegisterMask[REG_RA] = true;
-                m_pendingCallbackRegisters[REG_SP] = readFromRegion<u32>(
-                    m_ram.data(), descriptorPhysical + 0x04u, MemoryMap::RAM_SIZE);
-                m_pendingCallbackRegisterMask[REG_SP] = true;
-                m_pendingCallbackRegisters[REG_FP] = readFromRegion<u32>(
-                    m_ram.data(), descriptorPhysical + 0x08u, MemoryMap::RAM_SIZE);
-                m_pendingCallbackRegisterMask[REG_FP] = true;
-                for (size_t reg = REG_S0; reg <= REG_S7; ++reg)
-                {
-                    const Address offset =
-                        static_cast<Address>(0x0Cu + (reg - REG_S0) * sizeof(u32));
-                    m_pendingCallbackRegisters[reg] = readFromRegion<u32>(
-                        m_ram.data(), descriptorPhysical + offset, MemoryMap::RAM_SIZE);
-                    m_pendingCallbackRegisterMask[reg] = true;
-                }
-                m_pendingCallbackRegisters[REG_GP] = readFromRegion<u32>(
-                    m_ram.data(), descriptorPhysical + 0x2Cu, MemoryMap::RAM_SIZE);
-                m_pendingCallbackRegisterMask[REG_GP] = true;
-                m_hasPendingCallbackRegisters = true;
-            }
-            else if (resumeAddress != 0)
-            {
-                std::ostringstream msg;
-                msg << "Ignoring HookEntryInt resume address 0x" << std::hex << resumeAddress
-                    << " from descriptor 0x" << m_hookEntryInt.descriptorAddress;
-                m_logger.log(LogLevel::Warn, "bios", msg.str());
-            }
-        }
-
-        if (resumeAddressValid)
-        {
-            (void)invokeCallbackRaw(resumeAddress);
-        }
-    }
-    catch (...)
-    {
-        m_hasPendingCallbackRegisters = false;
-        m_pendingCallbackRegisterMask.fill(false);
-        m_inHookEntryIntHandler = false;
-        throw;
-    }
-    m_hasPendingCallbackRegisters = false;
-    m_pendingCallbackRegisterMask.fill(false);
-    m_inHookEntryIntHandler = false;
-}
-
-bool PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
+PsxSystem::CallbackContextDisposition
+PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
 {
     if (!m_hasPendingCallbackRegisters)
     {
-        return false;
+        return CallbackContextDisposition::RestoreSaved;
     }
 
     for (size_t reg = 0; reg < m_pendingCallbackRegisters.size(); ++reg)
@@ -457,9 +435,16 @@ bool PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
             regsInOut[reg] = m_pendingCallbackRegisters[reg];
         }
     }
+    m_hookEntryIntTrace.noteCommittedResume(m_pendingCallbackRegisters[31]);
     m_hasPendingCallbackRegisters = false;
     m_pendingCallbackRegisterMask.fill(false);
-    return true;
+    ++m_callbackContextCommitGeneration;
+    return CallbackContextDisposition::CommitMutated;
+}
+
+u32 PsxSystem::callbackContextCommitGeneration() const
+{
+    return m_callbackContextCommitGeneration;
 }
 
 } // namespace runtime

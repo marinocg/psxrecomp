@@ -1,0 +1,137 @@
+{
+  "name": "crash_bandicoot",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "allocator_current_scan",
+      "kind": "ram_write",
+      "range": "0x800577bc-0x800577bf",
+      "predicate": {
+        "type": "aligned_pointer_in_region",
+        "region": "0x80000000-0x80200000"
+      },
+      "action": "trap"
+    },
+    {
+      "name": "allocator_backup_pointer",
+      "kind": "ram_write",
+      "range": "0x80057f38-0x80057f3b",
+      "predicate": {
+        "type": "aligned_pointer_in_region",
+        "region": "0x80000000-0x80200000"
+      },
+      "action": "log"
+    },
+    {
+      "name": "ram_base_guard",
+      "kind": "ram_write",
+      "range": "0x80000000-0x800003ff",
+      "action": "log",
+      "comment": "Catches bzero/bcopy consumer-of-bad-pointer writes near RAM base; reports resumed_at context"
+    },
+    {
+      "name": "allocator_region_wide",
+      "kind": "ram_write",
+      "range": "0x80056590-0x800577bf",
+      "action": "log",
+      "comment": "Broad watch over allocator globals; any write logged with resume context"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "allocator_main",
+      "pc_range": "0x80011a58-0x80011c88",
+      "registers": ["a0", "a1", "v0", "s0", "s1", "s2"],
+      "log_branches": false,
+      "mmio_reads": []
+    },
+    {
+      "name": "gpu_wait_window",
+      "pc_range": "0x8003e4f0-0x8003e5f0",
+      "registers": ["v0", "v1", "a0", "s0", "s1"],
+      "log_branches": true,
+      "mmio_reads": ["0x1f801814"]
+    },
+    {
+      "name": "display_compare_window",
+      "pc_range": "0x80045688-0x80045748",
+      "registers": ["v0", "v1"],
+      "log_branches": false,
+      "mmio_reads": []
+    },
+    {
+      "name": "cd_callback_trace",
+      "pc_range": "0x8003e734-0x8003eb50",
+      "registers": ["v0", "a0"],
+      "log_branches": false,
+      "mmio_reads": []
+    }
+  ],
+  "validators": [
+    {
+      "name": "allocator_chain",
+      "type": "sentinel_block_chain",
+      "enabled_when": {
+        "type": "nonzero_u32",
+        "address": "0x800565b0"
+      },
+      "roots": {
+        "current": "0x800577bc",
+        "backup": "0x80057f38"
+      },
+      "region": "0x80056598-0x801ff000",
+      "header": {
+        "size_mask": "0xfffffffc",
+        "free_bit": "0x1",
+        "sentinel": "0xfffffffe"
+      },
+      "max_nodes": 256
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "irq_callback_return",
+      "run": ["allocator_chain"]
+    },
+    {
+      "kind": "bios_memory_op",
+      "run": ["allocator_chain"]
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "gpustat",
+      "address": "0x1f801814"
+    },
+    {
+      "kind": "cdrom_irq"
+    }
+  ],
+  "metadata_watches": [
+    {
+      "name": "allocator_block_headers",
+      "region": "0x80056598-0x801ff000",
+      "alignment_mask": 3,
+      "sentinel": "0xfffffffe",
+      "size_mask": "0xfffffffc",
+      "check_alignment": true,
+      "check_nonzero_size": true,
+      "check_next_in_region": true
+    }
+  ],
+  "suspect_functions": [
+    {
+      "name": "allocator_main",
+      "pc_range": "0x80011a58-0x80011c88",
+      "watched_cells": ["0x800577bc", "0x80057f38", "0x800565b0"]
+    },
+    {
+      "name": "gpu_wait_helper",
+      "pc_range": "0x8003e4f0-0x8003e620",
+      "watched_cells": []
+    }
+  ]
+}

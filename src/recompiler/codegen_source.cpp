@@ -124,6 +124,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("#include <sstream>");
     emitter.writeLine("#include <stdexcept>");
     emitter.writeLine("#include <string>");
+    emitter.writeLine("#include <unordered_map>");
     emitter.writeLine("#include <unordered_set>");
     emitter.writeLine("#include <vector>");
     emitter.writeBlank();
@@ -201,6 +202,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("};");
     emitter.writeBlank();
 
+    emitGeneratedSourceDebugSupport(emitter, metadata);
     emitGeneratedSourceBody(emitter, metadata, moduleEntryAddress, functionSymbols);
     emitter.writeLines(generateFunctionDefinitions(program));
     emitter.closeBlock();

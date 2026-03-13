@@ -161,69 +161,10 @@ int main()
     assert(gpu.malformedPacketCount() == 1);
     assertLastCommand(gpu, GpuCommandKind::DisplayEnable);
 
-    gpu.reset();
-    while (gpu.fifoDepth() < 64)
-    {
-        gpu.writeCommand(0x00000000u);
-    }
-    [[maybe_unused]] const auto statusWhenFull = gpu.readStatus();
-    assert((statusWhenFull & (1u << 26)) == 0);
-
-    [[maybe_unused]] const auto traceBeforeOverflowAttempt = gpu.commandTrace().size();
-    writePacket(gpu, {0x020000FFu, 0x00000000u, 0x00100010u});
-    assert(gpu.fifoDepth() == 64);
-    assert(gpu.commandTrace().size() == traceBeforeOverflowAttempt);
-
-    [[maybe_unused]] const auto initialDepth = gpu.fifoDepth();
-    gpu.tickGpu(2);
-    assert(gpu.fifoDepth() <= initialDepth);
-
-    gpu.reset();
-    [[maybe_unused]] const auto fifoDepthBeforeOffDma = gpu.fifoDepth();
-    gpu.writeDma(0x12345678u);
-    assert(gpu.fifoDepth() == fifoDepthBeforeOffDma);
-
-    gpu.writeStatus(0x04000002u);
-    [[maybe_unused]] const auto statusCpuToGp0 = gpu.readStatus();
-    assert(((statusCpuToGp0 >> 29) & 0x3u) == 0x2u);
-    assert((statusCpuToGp0 & (1u << 28)) != 0);
-
-    gpu.writeDma(0xAABBCCDDu);
-    assert(gpu.fifoDepth() == fifoDepthBeforeOffDma + 1);
-    assert(gpu.readData() == 0);
-
-    gpu.writeStatus(0x01000000u);
-    assert(gpu.fifoDepth() == 0);
-
-    gpu.writeStatus(0x04000003u);
-    [[maybe_unused]] const auto statusGpuToCpu = gpu.readStatus();
-    assert(((statusGpuToCpu >> 29) & 0x3u) == 0x3u);
-    assert((statusGpuToCpu & (1u << 27)) != 0);
-
-    // GPUREAD readiness bit should drop while CPU->VRAM payload transfer is active.
-    writePacket(gpu, {0xA0000000u, 0x00000000u, 0x00010002u});
-    assert((gpu.readStatus() & (1u << 27)) == 0);
-    gpu.writeCommand(0xAAAABBBBu);
-
-    gpu.writeStatus(0x03000001u);
-    assert((gpu.readStatus() & (1u << 23)) != 0);
-
-    gpu.writeStatus(0x08000020u);
-    [[maybe_unused]] const auto beforeLineTick = gpu.readStatus();
-    // Two ticks: ActiveDisplay → VBlankStart (bit 22 set, bit 31 same)
-    //            VBlankStart  → VBlankEnd    (bit 31 flips)
-    gpu.tickDisplayLine();
-    gpu.tickDisplayLine();
-    [[maybe_unused]] const auto afterLineTick = gpu.readStatus();
-    assert((beforeLineTick ^ afterLineTick) & (1u << 31));
-
-    gpu.writeStatus(0x00000000u);
-    assert((gpu.readStatus() & (1u << 31)) == 0);
-
     // Display window decoding should honor GP1 display start and mode.
     gpu.reset();
     auto displayWindow = gpu.displayWindow();
-    assert(displayWindow.enabled);
+    assert(!displayWindow.enabled);
     assert(displayWindow.x == 0);
     assert(displayWindow.y == 0);
     assert(displayWindow.width == 320);

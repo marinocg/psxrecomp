@@ -116,6 +116,7 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         // is owned by PsxSystem::serviceInterrupts().
         if (m_inCallbackInvocation)
         {
+            m_hookEntryIntTrace.noteReturnFromException(m_debugOverlay.lastProgramCounter());
             if (traceIrqFlowEnabled())
             {
                 std::ostringstream msg;
@@ -141,6 +142,7 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     {
         regs[2] = m_hookEntryInt.descriptorAddress;
         m_hookEntryInt.descriptorAddress = a0;
+        m_hookEntryIntTrace.recordInstall(m_debugOverlay.lastProgramCounter(), a0);
 
         std::ostringstream msg;
         msg << "HookEntryInt descriptor=0x" << std::hex << a0;
@@ -189,9 +191,38 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     case 0x34: // FileRead(fd, dst, length)
     {
         int fd = static_cast<int>(a0);
-        u8* dst = ramPointer(m_ram.data(), a1);
         u32 length = a2;
-        int result = m_biosFt.fileRead(fd, dst, length);
+        const BiosFileDescriptor* file = m_biosFt.getFd(fd);
+        const u32 startPosition = file != nullptr ? file->position : 0u;
+        const u32 startLba = file != nullptr ? file->lba : 0u;
+        const std::string path = file != nullptr ? file->path : std::string{};
+        std::vector<u8> buffer;
+        int result = m_biosFt.fileRead(fd, buffer, length);
+        if (result > 0)
+        {
+            std::ostringstream detail;
+            detail << "fd=" << fd << " path=" << (path.empty() ? "<unknown>" : path)
+                   << " lba=" << startLba << " file_off=" << startPosition;
+            copyBufferToRam(a1, buffer.data(), static_cast<u32>(result), length,
+                            m_debugOverlay.lastProgramCounter(), "FileRead", detail.str());
+        }
+        else
+        {
+            const RamCopyBounds bounds = planRamCopy(a1, length);
+            m_stallClassifier.recordRamCopyProvenance(
+                "FileRead",
+                "fd=" + std::to_string(fd) +
+                    " path=" + (path.empty() ? std::string{"<unknown>"} : path),
+                m_debugOverlay.lastProgramCounter(),
+                bounds.destinationInRam ? (0x80000000u | bounds.physicalDestination) : a1, 0,
+                length, bounds.destinationInRam, bounds.destinationOverflow,
+                result >= 0 && static_cast<u32>(result) < length);
+            if (!bounds.destinationInRam || bounds.destinationOverflow)
+            {
+                logRamCopyWarning("FileRead", a1, length, bounds,
+                                  result > 0 ? static_cast<u32>(result) : 0u);
+            }
+        }
         regs[2] = static_cast<u32>(result);
         return true;
     }

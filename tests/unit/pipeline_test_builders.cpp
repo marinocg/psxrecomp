@@ -235,6 +235,77 @@ std::vector<psxrecomp::u8> buildExeWithLiteralFunctionPointerInData()
     return buffer;
 }
 
+std::vector<psxrecomp::u8> buildExeWithDetachedSingletonFunctionPointer()
+{
+    constexpr psxrecomp::u32 loadSize = 192;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004000); // j 0x80010000
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop
+
+    // Single pointer to a detached helper whose code is separated from the
+    // entrypoint by a long blob of data. The helper must still be harvested.
+    writeLe32(buffer, codeOffset + 0x08, 0x80010080);
+    writeLe32(buffer, codeOffset + 0x0C, 0x11111111);
+    writeLe32(buffer, codeOffset + 0x10, 0x22222222);
+    writeLe32(buffer, codeOffset + 0x14, 0x33333333);
+    writeLe32(buffer, codeOffset + 0x18, 0x44444444);
+
+    // Detached helper target.
+    writeLe32(buffer, codeOffset + 0x80, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x84, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x88, 0x2402002A); // li v0, 42
+    writeLe32(buffer, codeOffset + 0x8C, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x90, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x94, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x98, 0x00000000); // nop
+
+    return buffer;
+}
+
+std::vector<psxrecomp::u8> buildExeWithDetachedSingletonResumeLabelPointer()
+{
+    constexpr psxrecomp::u32 loadSize = 192;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004010); // j 0x80010040
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop
+
+    // Single pointer to a detached internal resume label. This mirrors the
+    // harvest regression where a lone code pointer targeted a non-prologue
+    // detached block that still needed to stay in generated code.
+    writeLe32(buffer, codeOffset + 0x08, 0x80010080);
+    writeLe32(buffer, codeOffset + 0x0C, 0x11111111);
+    writeLe32(buffer, codeOffset + 0x10, 0x22222222);
+    writeLe32(buffer, codeOffset + 0x14, 0x33333333);
+
+    writeLe32(buffer, codeOffset + 0x40, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x44, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x48, 0x08004020); // j 0x80010080
+    writeLe32(buffer, codeOffset + 0x4C, 0x00000000); // nop
+
+    // Detached non-prologue resume label.
+    writeLe32(buffer, codeOffset + 0x80, 0x2402002A); // li v0, 42
+    writeLe32(buffer, codeOffset + 0x84, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x88, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x8C, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x90, 0x00000000); // nop
+
+    return buffer;
+}
+
 std::vector<psxrecomp::u8> buildExeWithClusteredCodePointersInData()
 {
     constexpr psxrecomp::u32 loadSize = 112;
@@ -263,6 +334,73 @@ std::vector<psxrecomp::u8> buildExeWithClusteredCodePointersInData()
     writeLe32(buffer, codeOffset + 0x40, 0x27BD0010); // addiu sp, sp, 16
     writeLe32(buffer, codeOffset + 0x44, 0x03E00008); // jr ra
     writeLe32(buffer, codeOffset + 0x48, 0x00000000); // nop
+
+    return buffer;
+}
+
+std::vector<psxrecomp::u8> buildExeWithMixedCodeAndStringPointerTable()
+{
+    constexpr psxrecomp::u32 loadSize = 160;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004000); // j 0x80010000
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop
+
+    // Pointer table with one far string target and two real code targets.
+    writeLe32(buffer, codeOffset + 0x08, 0x80010080);
+    writeLe32(buffer, codeOffset + 0x0C, 0x80010040);
+    writeLe32(buffer, codeOffset + 0x10, 0x80010050);
+
+    writeLe32(buffer, codeOffset + 0x40, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x44, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x48, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x4C, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x50, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x54, 0x00000000); // nop
+
+    // Far string payload that decodes as non-code words.
+    writeLe32(buffer, codeOffset + 0x80, 0x6C6C6548); // Hell
+    writeLe32(buffer, codeOffset + 0x84, 0x6F77206F); // o wo
+    writeLe32(buffer, codeOffset + 0x88, 0x00000000);
+
+    return buffer;
+}
+
+std::vector<psxrecomp::u8> buildExeWithClusteredPointersToDataTables()
+{
+    constexpr psxrecomp::u32 loadSize = 192;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x08004000); // j 0x80010000
+    writeLe32(buffer, codeOffset + 0x04, 0x00000000); // nop
+
+    // Clustered pointers to numeric data tables whose first words decode as
+    // unsupported/invalid opcodes and must not be harvested as functions.
+    writeLe32(buffer, codeOffset + 0x08, 0x80010080);
+    writeLe32(buffer, codeOffset + 0x0C, 0x80010090);
+    writeLe32(buffer, codeOffset + 0x10, 0x800100A0);
+
+    writeLe32(buffer, codeOffset + 0x80, 0x00000FFF);
+    writeLe32(buffer, codeOffset + 0x84, 0x00000000);
+    writeLe32(buffer, codeOffset + 0x88, 0xFFFFFFFF);
+    writeLe32(buffer, codeOffset + 0x90, 0x00000001);
+    writeLe32(buffer, codeOffset + 0x94, 0x00000001);
+    writeLe32(buffer, codeOffset + 0x98, 0x00000001);
+    writeLe32(buffer, codeOffset + 0xA0, 0x00000FFF);
+    writeLe32(buffer, codeOffset + 0xA4, 0x000007FF);
+    writeLe32(buffer, codeOffset + 0xA8, 0x00000333);
 
     return buffer;
 }
@@ -315,13 +453,20 @@ std::vector<psxrecomp::u8> buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads()
     const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
     writeLe32(buffer, codeOffset + 0x00, 0x27BDFFF0); // addiu sp, sp, -16
     writeLe32(buffer, codeOffset + 0x04, 0xAFBF000C); // sw ra, 12(sp)
-    writeLe32(buffer, codeOffset + 0x08, 0x3C028001); // lui v0, 0x8001
-    writeLe32(buffer, codeOffset + 0x0C, 0x24420040); // addiu v0, v0, 0x0040
-    writeLe32(buffer, codeOffset + 0x10, 0xAFA20008); // sw v0, 8(sp)
-    writeLe32(buffer, codeOffset + 0x14, 0x8FBF000C); // lw ra, 12(sp)
-    writeLe32(buffer, codeOffset + 0x18, 0x27BD0010); // addiu sp, sp, 16
-    writeLe32(buffer, codeOffset + 0x1C, 0x03E00008); // jr ra
-    writeLe32(buffer, codeOffset + 0x20, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x08, 0x3C018001); // lui at, 0x8001
+    writeLe32(buffer, codeOffset + 0x0C, 0x3C028001); // lui v0, 0x8001
+    writeLe32(buffer, codeOffset + 0x10, 0x24420040); // addiu v0, v0, 0x0040
+    writeLe32(buffer, codeOffset + 0x14, 0xAC220070); // sw v0, 0x0070(at)
+    writeLe32(buffer, codeOffset + 0x18, 0x3C138001); // lui s3, 0x8001
+    writeLe32(buffer, codeOffset + 0x1C, 0x26730070); // addiu s3, s3, 0x0070
+    writeLe32(buffer, codeOffset + 0x20, 0x0260A021); // addu s4, s3, zero
+    writeLe32(buffer, codeOffset + 0x24, 0x8E830000); // lw v1, 0(s4)
+    writeLe32(buffer, codeOffset + 0x28, 0x0060F809); // jalr ra, v1
+    writeLe32(buffer, codeOffset + 0x2C, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x30, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x34, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x38, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x3C, 0x00000000); // nop
 
     // Target begins with a couple of global loads before the actual stack frame.
     writeLe32(buffer, codeOffset + 0x40, 0x3C028001); // lui v0, 0x8001

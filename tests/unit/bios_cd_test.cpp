@@ -78,6 +78,10 @@ bool pumpUntilCdromIrq(PsxSystem& system, u32 maxTicks = 50000)
 /// Helper: acknowledge the current CDROM interrupt.
 void ackCdromIrq(PsxSystem& system)
 {
+    if ((system.cdrom().readStatus() & (1u << 5)) != 0u)
+    {
+        (void)system.cdrom().readResponse();
+    }
     system.cdrom().writeInterruptFlags(0x07u);
 }
 

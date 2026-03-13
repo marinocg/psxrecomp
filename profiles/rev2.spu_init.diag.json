@@ -1,0 +1,112 @@
+{
+  "name": "rev2-spu-init",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_spu_control_object_writes",
+      "kind": "ram_write",
+      "range": "0x801666b0-0x801666d0",
+      "action": "log"
+    },
+    {
+      "name": "rev2_spu_control_object_reads",
+      "kind": "ram_read",
+      "range": "0x801666b0-0x801666d0",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_spu_mmio_writes",
+      "kind": "mmio_write",
+      "range": "0x1f801d80-0x1f801db7",
+      "action": "log"
+    },
+    {
+      "name": "rev2_spu_mmio_reads",
+      "kind": "mmio_read",
+      "range": "0x1f801d80-0x1f801db7",
+      "action": "log"
+    },
+    {
+      "name": "rev2_spu_dpcr_writes",
+      "kind": "mmio_write",
+      "range": "0x1f8010f0-0x1f8010f3",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_spu_init",
+      "pc_range": "0x15ee6c-0x15f0e8",
+      "registers": ["a0", "a1", "a2", "v0", "v1", "s0", "s1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    },
+    {
+      "name": "rev2_spu_transfer_programming",
+      "pc_range": "0x15f410-0x15f68c",
+      "registers": ["a0", "a1", "a2", "v0", "v1", "s0", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    },
+    {
+      "name": "rev2_spu_delay_helper",
+      "pc_range": "0x15f944-0x15f99c",
+      "registers": ["v0", "v1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_spu_init",
+      "pc_range": "0x15ee6c-0x15f0e8",
+      "watched_cells": [
+        "0x801666b0",
+        "0x801666c0",
+        "0x801666c8",
+        "0x801666cc",
+        "0x801666d0"
+      ]
+    },
+    {
+      "name": "rev2_spu_transfer_programming",
+      "pc_range": "0x15f410-0x15f68c",
+      "watched_cells": [
+        "0x801666b4",
+        "0x801666b8",
+        "0x801666bc",
+        "0x80166700",
+        "0x80166704",
+        "0x80166708"
+      ]
+    }
+  ]
+}

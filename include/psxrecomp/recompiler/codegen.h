@@ -30,6 +30,17 @@ struct ModuleMetadata
         std::string label;
         std::string path;
     };
+    struct IndirectCallSiteEntry
+    {
+        Address callerPc = 0;
+        Address containingFunction = 0;
+        Address pointerWordAddress = 0;
+        u8 sourceRegister = 0xFF;
+        s8 pointerBaseRegister = -1;
+        s16 pointerOffset = 0;
+        bool hasStaticPointerWordAddress = false;
+        bool pointerLoadClobbersBase = false;
+    };
     std::string discSetName;
     u32 activeDiscIndex = 0;
     Address entryAddress = 0;
@@ -40,6 +51,9 @@ struct ModuleMetadata
     u32 loadSize = 0;
     std::vector<u8> programData;
     std::vector<DiscEntry> discs;
+    std::vector<Address> harvestedFunctionEntries;
+    std::vector<Address> knownPointerTableWords;
+    std::vector<IndirectCallSiteEntry> indirectCallSites;
     std::vector<std::string> warnings;
 };
 

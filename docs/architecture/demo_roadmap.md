@@ -15,7 +15,7 @@ This roadmap tracks the milestones needed to ship a first end-to-end recompiled 
 - [x] Generated runners include register init, RAM init image, and BIOS vector dispatch.
 - [x] Demo corpus selected and reproducible (`ADVHELLO`, `COP0TEST`, `GPUTEST`, `HELLOWLD`, `MEMTEST`, `CDBROWSE`, `CDCRC`, `CDXA`, `GTELAB`).
 - [x] Demo verification artifacts include per-demo screenshots and a machine-readable summary CSV.
-- [x] CD-focused demos (`CDBROWSE`, `CDCRC`, `CDXA`) are tracked as recompile/resource-extraction validation targets while render parity remains pending.
+- [x] CD-focused demos (`CDBROWSE`, `CDCRC`, `CDXA`) now render under the bounded-step validation harness in addition to recompile/resource-extraction checks.
 - [x] `GTELAB` now recompiles, builds, and renders under the bounded-step validation harness, making it a practical end-to-end COP2/GTE regression target instead of a compile-only stretch demo.
 - [ ] Expected-output parity gates against external emulator traces remain pending.
 

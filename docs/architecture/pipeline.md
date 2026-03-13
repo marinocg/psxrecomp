@@ -52,11 +52,21 @@ Challenges:
 - Resolving indirect jumps
 - Detecting function boundaries
 
+Before final function-boundary closure, the pipeline also performs iterative pointer harvesting from
+initialized 32-bit words in the loaded image. Referenced descriptor tables, local jump tables, and
+code-built callback addresses are rescanned after each segmentation pass, and only promoted when
+they still decode as plausible callable code.
+
 ### 4. Control Flow Analysis
 **Input**: Instruction stream  
 **Output**: Control flow graph (CFG)
 
 Builds a graph of basic blocks connected by control flow edges.
+
+If an indirect `JALR` target still cannot be resolved after harvesting, generated diagnostics record
+the caller PC, containing function, source register, whether the target lies inside the executable
+image, whether it was already harvested, and nearby pointer-table words when the originating
+descriptor slot can be recovered.
 
 Basic block properties:
 - Single entry point

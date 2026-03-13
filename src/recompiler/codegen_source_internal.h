@@ -23,5 +23,7 @@ void emitGeneratedSourceBody(CppEmitter& emitter, const ModuleMetadata& metadata
                              Address moduleEntryAddress,
                              const std::vector<std::pair<Address, std::string>>& functionSymbols);
 
+void emitGeneratedSourceDebugSupport(CppEmitter& emitter, const ModuleMetadata& metadata);
+
 } // namespace recompiler
 } // namespace psxrecomp

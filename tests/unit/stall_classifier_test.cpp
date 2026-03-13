@@ -199,6 +199,19 @@ static void testSummaryIncludesAllSections()
     assert(summary.find("Last BIOS") != std::string::npos);
     assert(summary.find("Last DMA") != std::string::npos);
     assert(summary.find("CD-ROM/IRQ") != std::string::npos);
+    assert(summary.find("Recent RAM copy provenance") != std::string::npos);
+}
+
+static void testRamCopyProvenanceSummary()
+{
+    StallClassifier classifier;
+    classifier.recordRamCopyProvenance("FileRead", "path=DATA/BIN.DAT lba=42", 0x80012345u,
+                                       0x80056598u, 512, 2048, true, false, true);
+    const auto summary = classifier.classify();
+    assert(summary.find("source=FileRead") != std::string::npos);
+    assert(summary.find("dst=0x80056598") != std::string::npos);
+    assert(summary.find("512/2048") != std::string::npos);
+    assert(summary.find("short-read") != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +252,7 @@ int main()
     testDetectBiosFileIo();
     testDetectGpuBusy();
     testSummaryIncludesAllSections();
+    testRamCopyProvenanceSummary();
     testResetClearsAll();
 
     std::cout << "All stall classifier tests passed.\n";

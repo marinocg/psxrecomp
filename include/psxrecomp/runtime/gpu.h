@@ -17,6 +17,14 @@ namespace runtime
 class Gpu
 {
   public:
+    /// Display phase within a single frame.
+    enum class DisplayPhase : u8
+    {
+        ActiveDisplay,
+        VBlankStart,
+        VBlankEnd,
+    };
+
     struct DisplayWindow
     {
         u16 x = 0;
@@ -67,6 +75,10 @@ class Gpu
     /// Returns true when the GPU is in the active-display phase (not VBlank).
     bool inActiveDisplay() const;
 
+    DisplayPhase displayPhase() const;
+    bool oddField() const;
+    u16 displayLine() const;
+
   private:
     static constexpr u32 STATUS_READY = 0x14802000;
     static constexpr size_t MAX_FIFO_DEPTH = 64;
@@ -101,9 +113,16 @@ class Gpu
         u16 displayXRangeEnd = 0;
         u16 displayYRangeStart = 0;
         u16 displayYRangeEnd = 0;
+        u32 textureWindowStatus = 0;
+        u32 drawAreaTopLeftStatus = 0;
+        u32 drawAreaBottomRightStatus = 0;
+        u32 drawingOffsetStatus = 0;
+        u16 drawModeStatus = 0;
         u16 displayWidth = 320;
         u16 displayHeight = 240;
-        bool displayEnabled = true;
+        u8 maskStatus = 0;
+        u8 displayModeStatus = 0;
+        bool displayEnabled = false;
         bool interlaced = false;
         bool irqPending = false;
         bool forceMaskBit = false;
@@ -150,22 +169,17 @@ class Gpu
     void beginVramToCpuTransfer(const PacketState& packet);
     u32 consumeVramToCpuWord();
     void executeVramToVramBlit(const PacketState& packet);
+    void handleGpuInfoRead(u32 value);
+    bool tryReadInternalRegister(u32 index, u32& value) const;
     void updateStatusBits();
     void updateRendererState();
-
-    /// Display phase within a single frame.
-    enum class DisplayPhase : u8
-    {
-        ActiveDisplay, ///< bit 22=0, field=current
-        VBlankStart,   ///< bit 22=1, field=current  (entering VBlank)
-        VBlankEnd,     ///< bit 22=1, field=!current (field flips mid-VBlank)
-    };
 
     u32 m_status = 0;
     u32 m_readData = 0;
     u32 m_gpuCycles = 0;
     bool m_oddField = false;
     DisplayPhase m_displayPhase = DisplayPhase::ActiveDisplay;
+    u16 m_displayLine = 0;
 
     Registers m_registers;
     PacketState m_packet;

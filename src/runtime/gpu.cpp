@@ -13,6 +13,10 @@ namespace runtime
 
 namespace
 {
+constexpr u16 ActiveDisplayLines = 240u;
+constexpr u16 DisplayFieldFlipLine = 252u;
+constexpr u16 TotalDisplayLines = 263u;
+
 void trimCommandTrace(std::vector<GpuCommand>& trace, size_t maxSize)
 {
     if (trace.size() < maxSize)
@@ -32,6 +36,7 @@ void Gpu::reset()
     m_gpuCycles = 0;
     m_oddField = false;
     m_displayPhase = DisplayPhase::ActiveDisplay;
+    m_displayLine = 0;
     m_registers = {};
     m_fifo.clear();
     m_vram.assign(VramWordCount, 0);
@@ -71,6 +76,11 @@ u32 Gpu::readData()
 
 void Gpu::writeStatus(u32 value)
 {
+    const u8 opcode = static_cast<u8>((value >> 24) & 0xFFu);
+    if (opcode >= 0x10u && opcode <= 0x1Fu)
+    {
+        handleGpuInfoRead(value);
+    }
     appendPacketWord(true, value);
 }
 
@@ -108,20 +118,15 @@ void Gpu::writeDma(u32 value)
         return;
     }
 
-    if (m_registers.dmaDirection == Registers::DmaDirection::CpuToGp0 ||
-        m_registers.dmaDirection == Registers::DmaDirection::Fifo)
+    // GP1(04h) controls the GPUSTAT request bits and DMA bookkeeping, but a
+    // DMA2 RAM->GPU burst still lands on GP0 data/command input.
+    if (m_fifo.size() < MAX_FIFO_DEPTH)
     {
-        // DMA feeds can burst large linked lists. If FIFO saturates we still
-        // need to ingest command words so packet decoding stays in sync.
-        if (m_fifo.size() < MAX_FIFO_DEPTH)
-        {
-            m_fifo.push_back(value);
-        }
-        appendPacketWord(false, value);
-        updateStatusBits();
-        return;
+        m_fifo.push_back(value);
     }
-
+    // DMA feeds can burst large linked lists. If FIFO saturates we still need
+    // to ingest command words so packet decoding stays in sync.
+    appendPacketWord(false, value);
     updateStatusBits();
 }
 
@@ -249,30 +254,28 @@ void Gpu::tickGpu(u32 cycles)
 
 void Gpu::tickDisplayLine()
 {
-    // Advance through a three-phase VBlank model so that PSn00bSDK
-    // VSync sees the correct bit-22 / bit-31 transitions:
-    //
-    //   ActiveDisplay  → VBlankStart  (bit 22 goes high)
-    //   VBlankStart    → VBlankEnd    (bit 31 flips — field changes)
-    //   VBlankEnd      → ActiveDisplay (bit 22 goes low, next frame)
-    //
-    // Each call to tickDisplayLine() advances one phase. The system
-    // timing scheduler drives these transitions during VBlank.
-    switch (m_displayPhase)
+    const u16 previousLine = m_displayLine;
+    m_displayLine = static_cast<u16>((m_displayLine + 1u) % TotalDisplayLines);
+
+    if (m_displayLine < ActiveDisplayLines)
     {
-    case DisplayPhase::ActiveDisplay:
-        m_displayPhase = DisplayPhase::VBlankStart;
-        break;
-    case DisplayPhase::VBlankStart:
-        // The field toggles in the middle of VBlank, which is exactly
-        // what VSync Phase 3 (BGEZ loop) waits for.
-        m_oddField = !m_oddField;
-        m_displayPhase = DisplayPhase::VBlankEnd;
-        break;
-    case DisplayPhase::VBlankEnd:
         m_displayPhase = DisplayPhase::ActiveDisplay;
-        break;
     }
+    else if (m_displayLine < DisplayFieldFlipLine)
+    {
+        m_displayPhase = DisplayPhase::VBlankStart;
+    }
+    else
+    {
+        m_displayPhase = DisplayPhase::VBlankEnd;
+    }
+
+    // Flip the field exactly once per frame, in the middle of VBlank.
+    if (previousLine < DisplayFieldFlipLine && m_displayLine >= DisplayFieldFlipLine)
+    {
+        m_oddField = !m_oddField;
+    }
+
     {
         std::lock_guard<std::mutex> lock(m_rendererMutex);
         updateRendererState();
@@ -288,6 +291,21 @@ bool Gpu::irqPending() const
 bool Gpu::inActiveDisplay() const
 {
     return m_displayPhase == DisplayPhase::ActiveDisplay;
+}
+
+Gpu::DisplayPhase Gpu::displayPhase() const
+{
+    return m_displayPhase;
+}
+
+bool Gpu::oddField() const
+{
+    return m_oddField;
+}
+
+u16 Gpu::displayLine() const
+{
+    return m_displayLine;
 }
 
 void Gpu::appendPacketWord(bool fromGp1, u32 value)
@@ -314,6 +332,7 @@ void Gpu::appendPacketWord(bool fromGp1, u32 value)
     {
         processPacket(m_packet);
         m_packet = {};
+        updateStatusBits();
     }
 }
 
@@ -356,6 +375,7 @@ void Gpu::processPacket(const PacketState& packet)
         {
             m_gpuCycles = 0;
             m_oddField = false;
+            m_displayPhase = DisplayPhase::ActiveDisplay;
         }
     }
 
@@ -370,84 +390,41 @@ void Gpu::processPacket(const PacketState& packet)
     updateStatusBits();
 }
 
-void Gpu::updateStatusBits()
+void Gpu::handleGpuInfoRead(u32 value)
 {
-    constexpr u32 statusReadyToReceiveCommand = 1u << 26;
-    constexpr u32 statusReadyToSendToCpu = 1u << 27;
-    constexpr u32 statusDmaRequest = 1u << 28;
-    constexpr u32 statusDisplayDisable = 1u << 23;
-    constexpr u32 statusIrqRequest = 1u << 24;
-    constexpr u32 statusDmaDirectionShift = 29;
-    constexpr u32 statusInterlaceField = 1u << 31;
-    constexpr u32 statusDrawingEvenOdd = 1u << 22; // VBlank-in-progress flag
-
-    constexpr u32 statusDynamicMask = statusReadyToReceiveCommand | statusReadyToSendToCpu |
-                                      statusDmaRequest | statusDisplayDisable | statusIrqRequest |
-                                      (0x3u << statusDmaDirectionShift) | statusInterlaceField |
-                                      statusDrawingEvenOdd;
-    const u32 statusBase = STATUS_READY & ~statusDynamicMask;
-
-    m_status = statusBase;
-
-    if (!m_registers.displayEnabled)
+    const u32 internalIndex = value & 0x00FFFFFFu;
+    u32 internalValue = 0;
+    if (tryReadInternalRegister(internalIndex, internalValue))
     {
-        m_status |= statusDisplayDisable;
+        m_readData = internalValue;
     }
-    if (m_registers.irqPending)
-    {
-        m_status |= statusIrqRequest;
-    }
+}
 
-    const bool canAcceptCommands = (m_fifo.size() < MAX_FIFO_DEPTH) &&
-                                   (m_transferState.mode != TransferState::Mode::CpuToVram);
-    if (canAcceptCommands)
+bool Gpu::tryReadInternalRegister(u32 index, u32& value) const
+{
+    const u32 normalizedIndex = index & 0x0Fu;
+    switch (normalizedIndex)
     {
-        m_status |= statusReadyToReceiveCommand;
-    }
-
-    const bool readyToSend = (m_registers.dmaDirection == Registers::DmaDirection::GpuReadToCpu) &&
-                             (m_transferState.mode != TransferState::Mode::CpuToVram);
-    if (readyToSend)
-    {
-        m_status |= statusReadyToSendToCpu;
-    }
-
-    const auto dmaDirectionBits = static_cast<u32>(m_registers.dmaDirection) & 0x3u;
-    m_status |= (dmaDirectionBits << statusDmaDirectionShift);
-
-    bool request = false;
-    switch (m_registers.dmaDirection)
-    {
-    case Registers::DmaDirection::Off:
-        // BIOS gpu_sync() polls GPUSTAT.bit28 even with DMA disabled.
-        // Keep bit28 high when GP0 can accept commands.
-        request = canAcceptCommands;
-        break;
-    case Registers::DmaDirection::Fifo:
-    case Registers::DmaDirection::CpuToGp0:
-        request = canAcceptCommands || m_transferState.mode == TransferState::Mode::CpuToVram;
-        break;
-    case Registers::DmaDirection::GpuReadToCpu:
-        request = readyToSend;
-        break;
-    }
-    if (request)
-    {
-        m_status |= statusDmaRequest;
-    }
-
-    // Bit 31 mirrors odd/even field state and is used by some VSync loops
-    // even in progressive display modes.
-    if (m_oddField)
-    {
-        m_status |= statusInterlaceField;
-    }
-
-    // Bit 22 indicates that the display is currently in VBlank.
-    // PSn00bSDK VSync Phase 1 polls this bit to know when VBlank starts.
-    if (m_displayPhase == DisplayPhase::VBlankStart || m_displayPhase == DisplayPhase::VBlankEnd)
-    {
-        m_status |= statusDrawingEvenOdd;
+    case 0x02:
+        value = m_registers.textureWindowStatus;
+        return true;
+    case 0x03:
+        value = m_registers.drawAreaTopLeftStatus;
+        return true;
+    case 0x04:
+        value = m_registers.drawAreaBottomRightStatus;
+        return true;
+    case 0x05:
+        value = m_registers.drawingOffsetStatus;
+        return true;
+    case 0x07:
+        value = 0x00000002u;
+        return true;
+    case 0x08:
+        value = 0x00000000u;
+        return true;
+    default:
+        return false;
     }
 }
 

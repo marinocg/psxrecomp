@@ -386,7 +386,21 @@ int BiosFileTable::fileSeek(int fd, int offset, int whence)
 
 int BiosFileTable::fileRead(int fd, u8* dst, u32 count)
 {
-    if (fd < 0 || fd >= static_cast<int>(MAX_FDS) || !dst)
+    std::vector<u8> buffer;
+    const int result = fileRead(fd, buffer, count);
+    if (result <= 0)
+    {
+        return result;
+    }
+
+    std::memcpy(dst, buffer.data(), static_cast<size_t>(result));
+    return result;
+}
+
+int BiosFileTable::fileRead(int fd, std::vector<u8>& out, u32 count)
+{
+    out.clear();
+    if (fd < 0 || fd >= static_cast<int>(MAX_FDS))
     {
         return -1;
     }
@@ -412,6 +426,8 @@ int BiosFileTable::fileRead(int fd, u8* dst, u32 count)
         return 0;
     }
 
+    out.resize(toRead);
+
     u32 bytesRead = 0;
     std::array<u8, SECTOR_SIZE> sectorBuf{};
 
@@ -429,11 +445,12 @@ int BiosFileTable::fileRead(int fd, u8* dst, u32 count)
 
         const u32 bytesAvail = SECTOR_SIZE - offsetInSector;
         const u32 chunk = std::min(toRead - bytesRead, bytesAvail);
-        std::memcpy(dst + bytesRead, sectorBuf.data() + offsetInSector, chunk);
+        std::memcpy(out.data() + bytesRead, sectorBuf.data() + offsetInSector, chunk);
         bytesRead += chunk;
     }
 
     f.position += bytesRead;
+    out.resize(bytesRead);
     return static_cast<int>(bytesRead);
 }
 

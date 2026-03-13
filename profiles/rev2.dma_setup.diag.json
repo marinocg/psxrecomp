@@ -1,0 +1,156 @@
+{
+  "name": "rev2-dma-setup",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_dma_first_level_state_writes",
+      "kind": "ram_write",
+      "range": "0x801665c0-0x801665cf",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma_first_level_state_reads",
+      "kind": "ram_read",
+      "range": "0x801665c0-0x801665cf",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_dma_control_object_writes",
+      "kind": "ram_write",
+      "range": "0x801666b0-0x801666d0",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma_control_object_reads",
+      "kind": "ram_read",
+      "range": "0x801666b0-0x801666d0",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_dma_setup_scratch_writes",
+      "kind": "ram_write",
+      "range": "0x80166700-0x8016670b",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma_dpcr_writes",
+      "kind": "mmio_write",
+      "range": "0x1f8010f0-0x1f8010f3",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma_dicr_writes",
+      "kind": "mmio_write",
+      "range": "0x1f8010f4-0x1f8010f7",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma_channel3_writes",
+      "kind": "mmio_write",
+      "range": "0x1f8010b0-0x1f8010bb",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma_channel4_writes",
+      "kind": "mmio_write",
+      "range": "0x1f8010c0-0x1f8010cb",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_dma_setup_caller",
+      "pc_range": "0x15ecec-0x15ed50",
+      "registers": ["a0", "v0", "v1", "s0", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    },
+    {
+      "name": "rev2_dma_control_init",
+      "pc_range": "0x15ee6c-0x15f0e8",
+      "registers": ["a0", "a1", "a2", "v0", "v1", "s0", "s1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    },
+    {
+      "name": "rev2_dma_programming_window",
+      "pc_range": "0x15f410-0x15f68c",
+      "registers": ["a0", "a1", "a2", "v0", "v1", "s0", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    },
+    {
+      "name": "rev2_dma_first_level_handler",
+      "pc_range": "0x15e038-0x15e1b4",
+      "registers": ["a0", "v0", "v1", "s0", "s1", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_dma_control_init",
+      "pc_range": "0x15ee6c-0x15f0e8",
+      "watched_cells": [
+        "0x801666b0",
+        "0x801666b4",
+        "0x801666b8",
+        "0x801666bc",
+        "0x801666c0",
+        "0x801666cc",
+        "0x801666d0"
+      ]
+    },
+    {
+      "name": "rev2_dma_programming_window",
+      "pc_range": "0x15f410-0x15f68c",
+      "watched_cells": [
+        "0x801666b4",
+        "0x801666b8",
+        "0x801666bc",
+        "0x80166700",
+        "0x80166704",
+        "0x80166708"
+      ]
+    },
+    {
+      "name": "rev2_dma_first_level_handler",
+      "pc_range": "0x15e038-0x15e1b4",
+      "watched_cells": [
+        "0x801665c0",
+        "0x801665c4"
+      ]
+    }
+  ]
+}

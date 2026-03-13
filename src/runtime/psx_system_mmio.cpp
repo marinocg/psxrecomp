@@ -5,48 +5,98 @@ namespace psxrecomp
 namespace runtime
 {
 
+namespace
+{
+
+void recordMmioReadWatch(DiagWatchpointEngine& watchpoints, RuntimeDebugOverlay& overlay,
+                         RuntimeLogger& logger, Address address, u8 size, u32 value,
+                         Address resumeAddress)
+{
+    if (!watchpoints.shouldWatchMmioRead(address, size))
+    {
+        return;
+    }
+    watchpoints.recordMmioRead(overlay.lastProgramCounter(), address, size, value, &logger,
+                               resumeAddress);
+}
+
+void recordMmioWriteWatch(DiagWatchpointEngine& watchpoints, RuntimeDebugOverlay& overlay,
+                          RuntimeLogger& logger, Address address, u8 size, u32 value,
+                          Address resumeAddress)
+{
+    if (!watchpoints.shouldWatchMmioWrite(address, size))
+    {
+        return;
+    }
+    watchpoints.recordMmioWrite(overlay.lastProgramCounter(), address, size, value, &logger,
+                                resumeAddress);
+}
+
+} // namespace
+
 u32 PsxSystem::readMmio32(Address address)
 {
     if (address == Mmio::GPU_GP1)
     {
         const u32 val = m_gpu.pollStatus();
         m_stallClassifier.recordMmioAccess(address, val, false);
+        m_diagTracepoints.recordMmioRead(address, val, m_debugOverlay.lastProgramCounter(),
+                                         &m_logger);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
         return val;
     }
     if (address == Mmio::GPU_GP0)
     {
         const u32 val = m_gpu.readData();
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
         return val;
     }
     if (address == Mmio::MDEC_BASE)
     {
         const u32 val = m_mdec.readData();
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
         return val;
     }
     if (address == Mmio::MDEC_BASE + 4)
     {
         const u32 val = m_mdec.readStatus();
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
         return val;
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
-        return m_interrupts.readStatus();
+        const u32 val = m_interrupts.readStatus();
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
+        return val;
     }
     if (address == Mmio::INTERRUPT_MASK)
     {
-        return m_interrupts.readMask();
+        const u32 val = m_interrupts.readMask();
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
+        return val;
     }
     if (isInRange(address, Mmio::DMA_BASE, Mmio::DMA_SIZE))
     {
-        return m_dma.readRegister(address);
+        const u32 val = m_dma.readRegister(address);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
+        return val;
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
         const u32 val = m_sio0.read32(address - Mmio::CONTROLLER_BASE);
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                            m_lastResumeAddress);
         return val;
     }
     // Timer registers: PSn00bSDK reads Timer1 (HBlank counter used for VSync)
@@ -58,11 +108,26 @@ u32 PsxSystem::readMmio32(Address address)
         switch (offset & 0xF)
         {
         case 0x0:
-            return static_cast<u32>(m_timers.readCounter(timerIndex));
+        {
+            const u32 val = static_cast<u32>(m_timers.readCounter(timerIndex));
+            recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                                m_lastResumeAddress);
+            return val;
+        }
         case 0x4:
-            return static_cast<u32>(m_timers.readMode(timerIndex));
+        {
+            const u32 val = static_cast<u32>(m_timers.readMode(timerIndex));
+            recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                                m_lastResumeAddress);
+            return val;
+        }
         case 0x8:
-            return static_cast<u32>(m_timers.readTarget(timerIndex));
+        {
+            const u32 val = static_cast<u32>(m_timers.readTarget(timerIndex));
+            recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, val,
+                                m_lastResumeAddress);
+            return val;
+        }
         default:
             return 0;
         }
@@ -75,20 +140,31 @@ u16 PsxSystem::readMmio16(Address address)
 {
     if (address == Mmio::INTERRUPT_STATUS)
     {
-        return static_cast<u16>(m_interrupts.readStatus() & 0xFFFFu);
+        const u16 val = static_cast<u16>(m_interrupts.readStatus() & 0xFFFFu);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, val,
+                            m_lastResumeAddress);
+        return val;
     }
     if (address == Mmio::INTERRUPT_MASK)
     {
-        return static_cast<u16>(m_interrupts.readMask() & 0xFFFFu);
+        const u16 val = static_cast<u16>(m_interrupts.readMask() & 0xFFFFu);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, val,
+                            m_lastResumeAddress);
+        return val;
     }
     if (isInRange(address, Mmio::SPU_BASE, Mmio::SPU_SIZE))
     {
-        return m_spu.readRegister(address - Mmio::SPU_BASE);
+        const u16 val = m_spu.readRegister(address - Mmio::SPU_BASE);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, val,
+                            m_lastResumeAddress);
+        return val;
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
         const u16 val = m_sio0.read16(address - Mmio::CONTROLLER_BASE);
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, val,
+                            m_lastResumeAddress);
         return val;
     }
     if (isInRange(address, Mmio::TIMER_BASE, Mmio::TIMER_SIZE))
@@ -98,11 +174,26 @@ u16 PsxSystem::readMmio16(Address address)
         switch (offset & 0xF)
         {
         case 0x0:
-            return m_timers.readCounter(timerIndex);
+        {
+            const u16 val = m_timers.readCounter(timerIndex);
+            recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, val,
+                                m_lastResumeAddress);
+            return val;
+        }
         case 0x4:
-            return m_timers.readMode(timerIndex);
+        {
+            const u16 val = m_timers.readMode(timerIndex);
+            recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, val,
+                                m_lastResumeAddress);
+            return val;
+        }
         case 0x8:
-            return m_timers.readTarget(timerIndex);
+        {
+            const u16 val = m_timers.readTarget(timerIndex);
+            recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, val,
+                                m_lastResumeAddress);
+            return val;
+        }
         default:
             return 0;
         }
@@ -117,12 +208,16 @@ u8 PsxSystem::readMmio8(Address address)
     {
         const u8 val = m_cdrom.readReg(static_cast<u8>(address - Mmio::CDROM_BASE));
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 1, val,
+                            m_lastResumeAddress);
         return val;
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
     {
         const u8 val = m_sio0.read8(address - Mmio::CONTROLLER_BASE);
         m_stallClassifier.recordMmioAccess(address, val, false);
+        recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 1, val,
+                            m_lastResumeAddress);
         return val;
     }
 
@@ -131,6 +226,8 @@ u8 PsxSystem::readMmio8(Address address)
 
 void PsxSystem::writeMmio32(Address address, u32 value)
 {
+    recordMmioWriteWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 4, value,
+                         m_lastResumeAddress);
     if (address == Mmio::GPU_GP0)
     {
         m_gpu.writeCommand(value);
@@ -207,6 +304,8 @@ void PsxSystem::writeMmio32(Address address, u32 value)
 
 void PsxSystem::writeMmio16(Address address, u16 value)
 {
+    recordMmioWriteWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 2, value,
+                         m_lastResumeAddress);
     if (address == Mmio::INTERRUPT_STATUS)
     {
         const u32 mergedStatus =
@@ -255,6 +354,8 @@ void PsxSystem::writeMmio16(Address address, u16 value)
 
 void PsxSystem::writeMmio8(Address address, u8 value)
 {
+    recordMmioWriteWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 1, value,
+                         m_lastResumeAddress);
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
         m_stallClassifier.recordMmioAccess(address, value, true);

@@ -263,8 +263,22 @@ OptimizationStats runOptimizations(Function& function)
     for (auto& block : function.blocks)
     {
         std::unordered_map<InstructionKey, u32, InstructionKeyHash> cseMap;
+        // Track the current source address so we can reset the CSE map when
+        // the source address changes.  This prevents CSE from creating
+        // cross-source-address temporary dependencies, which would cause
+        // stale-temporary bugs when the block is entered via a mid-block
+        // resume (the defining instruction would be skipped but the use
+        // would still execute).
+        std::optional<Address> cseSourceAddress;
         for (auto& instruction : block.instructions)
         {
+            // Reset CSE scope when source address changes.
+            if (instruction.sourceAddress.has_value() &&
+                instruction.sourceAddress != cseSourceAddress)
+            {
+                cseMap.clear();
+                cseSourceAddress = instruction.sourceAddress;
+            }
             if (!isPureBinaryOp(instruction.opcode) || instruction.outputs.empty() ||
                 instruction.outputs.front().kind != ValueKind::TEMPORARY)
             {

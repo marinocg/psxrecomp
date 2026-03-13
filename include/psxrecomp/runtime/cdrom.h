@@ -20,6 +20,23 @@ class Disc;
 class Cdrom
 {
   public:
+    struct DebugSnapshot
+    {
+        u8 currentCommand = 0;
+        u8 status = 0;
+        u8 interruptFlags = 0;
+        u8 interruptEnable = 0;
+        u8 requestControl = 0;
+        u8 mode = 0;
+        size_t commandFifoSize = 0;
+        size_t responseFifoSize = 0;
+        size_t dataFifoSize = 0;
+        size_t pendingIrqCount = 0;
+        bool motorOn = false;
+        bool readActive = false;
+        bool seekActive = false;
+    };
+
     void reset();
     void tick(u32 cpuCycles);
     void setDiscBackend(Disc* disc);
@@ -45,6 +62,7 @@ class Cdrom
     void writeDma(u32 value);
     u32 readDma();
     u32 lastDmaWord() const;
+    DebugSnapshot debugSnapshot() const;
 
     void enqueueDataSector(const std::vector<u8>& data);
     bool hasIrqRequest() const;
@@ -56,6 +74,20 @@ class Cdrom
     {
         u8 type = 0;
         std::vector<u8> responses;
+    };
+
+    struct PendingCommand
+    {
+        u8 value = 0;
+        bool valid = false;
+        std::deque<u8> params;
+
+        void clear()
+        {
+            value = 0;
+            valid = false;
+            params.clear();
+        }
     };
 
     static constexpr size_t MAX_PARAMS = 16;
@@ -221,6 +253,7 @@ class Cdrom
     u8 m_index = 0;
     CommandFifo m_commandFifo;
     ResponseFifo m_responseFifo;
+    ResponseFifo m_ackResponseFifo;
     DataFifo m_dataFifo;
     CommandExecutionState m_execution;
     std::deque<std::vector<u8>> m_sectorQueue;
@@ -229,6 +262,7 @@ class Cdrom
     u8 m_interruptFlags = 0;
     u8 m_interruptEnable = 0;
     u8 m_requestControl = 0;
+    PendingCommand m_pendingCommand;
     u32 m_lastDmaWord = 0;
     Disc* m_disc = nullptr;
     std::function<void(const std::vector<int16_t>&)> m_xaAudioSink;
@@ -244,6 +278,9 @@ class Cdrom
     void queueErrorInterrupt(u8 reasonCode);
     void beginDoorOpenTransition(bool closeAfterTransition);
     void writeRequestControl(u8 value);
+    bool canExecutePendingCommand() const;
+    void enqueueCommand(u8 value);
+    void executePendingCommand();
     void queueInterruptEvent(u8 type, std::initializer_list<u8> responses = {});
     void publishNextInterruptEvent();
     void pumpSectorToDataFifo();

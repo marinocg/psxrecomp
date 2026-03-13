@@ -50,6 +50,7 @@ void Cdrom::reset()
     m_index = 0;
     m_commandFifo.clear();
     m_responseFifo.clear();
+    m_ackResponseFifo.clear();
     m_dataFifo.clear();
     m_execution.reset(CDROM_READ_CYCLES);
     m_sectorQueue.clear();
@@ -58,6 +59,7 @@ void Cdrom::reset()
     m_interruptFlags = 0;
     m_interruptEnable = 0;
     m_requestControl = 0;
+    m_pendingCommand.clear();
     m_lastDmaWord = 0;
     m_lastGetlocL.fill(0);
     m_dataPadByte = 0;
@@ -117,6 +119,11 @@ void Cdrom::tick(u32 cpuCycles)
         {
             m_doorCloseCycles -= cpuCycles;
         }
+    }
+
+    if (canExecutePendingCommand())
+    {
+        executePendingCommand();
     }
 
     if (!m_execution.readActive)
@@ -238,6 +245,10 @@ u8 Cdrom::readResponse()
     if (m_responseFifo.empty() && (m_interruptFlags & 0x07u) == 0u)
     {
         publishNextInterruptEvent();
+        if (canExecutePendingCommand())
+        {
+            executePendingCommand();
+        }
     }
     return value;
 }
@@ -260,6 +271,25 @@ void Cdrom::writeDma(u32 value)
 u32 Cdrom::lastDmaWord() const
 {
     return m_lastDmaWord;
+}
+
+Cdrom::DebugSnapshot Cdrom::debugSnapshot() const
+{
+    DebugSnapshot snapshot;
+    snapshot.currentCommand = m_execution.currentCommand;
+    snapshot.status = readStatus();
+    snapshot.interruptFlags = m_interruptFlags;
+    snapshot.interruptEnable = m_interruptEnable;
+    snapshot.requestControl = m_requestControl;
+    snapshot.mode = m_execution.mode;
+    snapshot.commandFifoSize = m_commandFifo.size();
+    snapshot.responseFifoSize = m_responseFifo.values.size();
+    snapshot.dataFifoSize = m_dataFifo.size();
+    snapshot.pendingIrqCount = m_execution.pendingResponseIrqs.size();
+    snapshot.motorOn = m_execution.motorOn;
+    snapshot.readActive = m_execution.readActive;
+    snapshot.seekActive = m_execution.seekActive;
+    return snapshot;
 }
 
 } // namespace runtime

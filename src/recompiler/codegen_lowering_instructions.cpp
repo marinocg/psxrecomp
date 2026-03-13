@@ -264,7 +264,16 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         {
             std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
             emitter.writeLine(dest + " = readMemory32(context.system, " + address + ");");
+            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
+                              sourcePc + ");");
         }
         break;
     case ir::Opcode::LOAD8:

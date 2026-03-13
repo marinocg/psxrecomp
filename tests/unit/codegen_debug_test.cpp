@@ -43,6 +43,9 @@ int main()
     // ---------------------------------------------------------------
     assert(source.find("PSXRECOMP_MAX_STEPS") != std::string::npos);
     assert(source.find("Step budget exhausted") != std::string::npos);
+    assert(source.find("callbackTrace().formatRecentCallbacks") != std::string::npos);
+    assert(source.find("formatHookEntryIntResumeTrace") != std::string::npos);
+    assert(source.find("recordCommittedRegisterDelta") != std::string::npos);
     std::cerr << "[PASS] PSXRECOMP_MAX_STEPS present\n";
 
     // ---------------------------------------------------------------
@@ -120,7 +123,7 @@ int main()
     // setProgramCounter should update the debug overlay's last PC.
     // ---------------------------------------------------------------
     assert(source.find("debugOverlay") != std::string::npos);
-    assert(source.find("setLastProgramCounter") != std::string::npos);
+    assert(source.find("observeProgramCounter") != std::string::npos);
     std::cerr << "[PASS] debug overlay integration\n";
 
     // ---------------------------------------------------------------

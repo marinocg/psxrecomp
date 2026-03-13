@@ -1,6 +1,9 @@
 #include "psxrecomp/runtime/stall_classifier.h"
 #include "psxrecomp/runtime/memory_map.h"
+#include "stall_heap_debug.h"
+#include "stall_write_watch.h"
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
@@ -50,6 +53,10 @@ const char* stallReasonLabel(StallReason reason)
 // StallClassifier — record helpers
 // ---------------------------------------------------------------------------
 
+StallClassifier::StallClassifier() : m_watchedWriteRanges(detail::parseWatchedWriteRangesFromEnv())
+{
+}
+
 void StallClassifier::recordPc(Address pc)
 {
     m_pcRing.push(pc);
@@ -76,6 +83,43 @@ void StallClassifier::recordCdromIrqState(u8 cdromIrqFlags, u16 irqStatus, u16 i
     m_cdromRing.push({cdromIrqFlags, irqStatus, irqMask, cdromHasIrq});
 }
 
+bool StallClassifier::shouldWatchRamWrite(Address address, u8 size) const
+{
+    return detail::overlapsWatchedWrite(m_watchedWriteRanges, address, size);
+}
+
+void StallClassifier::recordRamWrite(Address writerPc, Address address, u8 size, u32 oldValue,
+                                     u32 newValue)
+{
+    if (!shouldWatchRamWrite(address, size))
+    {
+        return;
+    }
+
+    m_watchedWriteRing.push({writerPc, address & 0x1FFFFFFFu, size, oldValue, newValue});
+}
+
+void StallClassifier::recordRamCopyProvenance(std::string source, std::string detail,
+                                              Address writerPc, Address destination,
+                                              u32 actualLength, u32 requestedLength,
+                                              bool destinationInRam, bool destinationOverflow,
+                                              bool shortRead)
+{
+    m_copyProvenanceRing.push({std::move(source), std::move(detail), writerPc, destination,
+                               actualLength, requestedLength, destinationInRam, destinationOverflow,
+                               shortRead});
+}
+
+bool StallClassifier::isWatchingRamWrites() const
+{
+    return !m_watchedWriteRanges.empty();
+}
+
+void StallClassifier::attachSystem(const PsxSystem* system)
+{
+    m_system = system;
+}
+
 void StallClassifier::reset()
 {
     m_pcRing.clear();
@@ -83,6 +127,8 @@ void StallClassifier::reset()
     m_biosRing.clear();
     m_dmaRing.clear();
     m_cdromRing.clear();
+    m_watchedWriteRing.clear();
+    m_copyProvenanceRing.clear();
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +160,18 @@ const RingBuffer<CdromIrqSnapshot, StallClassifier::CDROM_RING_SIZE>&
 StallClassifier::cdromRing() const
 {
     return m_cdromRing;
+}
+
+const RingBuffer<WatchedRamWriteEntry, StallClassifier::WATCHED_WRITE_RING_SIZE>&
+StallClassifier::watchedWriteRing() const
+{
+    return m_watchedWriteRing;
+}
+
+const RingBuffer<RamCopyProvenanceEntry, StallClassifier::COPY_PROVENANCE_RING_SIZE>&
+StallClassifier::copyProvenanceRing() const
+{
+    return m_copyProvenanceRing;
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +319,62 @@ StallReason StallClassifier::classifyMmioAddress(Address address)
     return StallReason::Unknown;
 }
 
+std::string StallClassifier::formatAllocatorHeapDump() const
+{
+    return m_system == nullptr ? std::string{} : detail::formatAllocatorHeapDump(*m_system);
+}
+
+bool StallClassifier::shouldDumpAllocatorHeap() const
+{
+    return detail::shouldDumpAllocatorHeap(m_system, m_pcRing);
+}
+
+std::string StallClassifier::formatWatchedRamWrites() const
+{
+    return detail::formatWatchedRamWrites(m_watchedWriteRing);
+}
+
+std::string StallClassifier::formatRamCopyProvenance() const
+{
+    std::ostringstream os;
+    os << "Recent RAM copy provenance (newest first):\n";
+    if (m_copyProvenanceRing.count() == 0)
+    {
+        os << "  none\n";
+        return os.str();
+    }
+
+    const size_t count = std::min<size_t>(m_copyProvenanceRing.count(), 12);
+    for (size_t i = 0; i < count; ++i)
+    {
+        const auto& entry = m_copyProvenanceRing.recent(i);
+        os << "  source=" << entry.source << " pc=0x" << std::hex << entry.writerPc << " dst=0x"
+           << entry.destination << " len=" << std::dec << entry.actualLength;
+        if (entry.requestedLength != entry.actualLength)
+        {
+            os << "/" << entry.requestedLength;
+        }
+        if (!entry.destinationInRam)
+        {
+            os << " out-of-ram";
+        }
+        if (entry.destinationOverflow)
+        {
+            os << " overflow";
+        }
+        if (entry.shortRead)
+        {
+            os << " short-read";
+        }
+        if (!entry.detail.empty())
+        {
+            os << " " << entry.detail;
+        }
+        os << "\n";
+    }
+    return os.str();
+}
+
 // ---------------------------------------------------------------------------
 // Top-level classify()
 // ---------------------------------------------------------------------------
@@ -283,6 +397,17 @@ std::string StallClassifier::classify() const
     }
 
     return formatSummary(reason);
+}
+
+std::string StallClassifier::formatRecentMemoryActivity() const
+{
+    std::ostringstream os;
+    if (isWatchingRamWrites())
+    {
+        os << formatWatchedRamWrites();
+    }
+    os << formatRamCopyProvenance();
+    return os.str();
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +484,18 @@ std::string StallClassifier::formatSummary(StallReason reason) const
                << " cdHasIrq=" << (e.cdromHasIrq ? "yes" : "no") << "\n";
         }
     }
+
+    if (shouldDumpAllocatorHeap())
+    {
+        os << formatAllocatorHeapDump();
+    }
+
+    if (isWatchingRamWrites())
+    {
+        os << formatWatchedRamWrites();
+    }
+
+    os << formatRamCopyProvenance();
 
     return os.str();
 }

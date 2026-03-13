@@ -27,6 +27,7 @@ class TimerController
     void writeTarget(size_t index, u16 value);
 
     void tick(u32 cpuCycles, const InterruptCallback& onInterrupt);
+    void tickDisplayLine(const InterruptCallback& onInterrupt);
 
   private:
     struct Channel
@@ -41,10 +42,13 @@ class TimerController
 
     std::array<Channel, 3> m_channels = {};
 
+    static void advanceChannel(Channel& channel, size_t index, u32 steps,
+                               const InterruptCallback& onInterrupt);
     static void tickChannel(Channel& channel, size_t index, u32 cpuCycles,
                             const InterruptCallback& onInterrupt);
     static bool isValidIndex(size_t index);
     static u32 dividerForChannel(size_t index, const Channel& channel);
+    static bool usesDisplayLineClock(size_t index, const Channel& channel);
     static InterruptLine interruptLineForTimer(size_t index);
 };
 

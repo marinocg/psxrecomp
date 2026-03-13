@@ -246,6 +246,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         "const size_t idx = static_cast<size_t>((it - startsBegin) - 1);");
                     emitter.writeLine("block = kBlockIds[idx];");
                     emitter.writeLine("resumeAddress = physical;");
+                    emitter.writeLine("context.system.setLastResumeAddress(physical);");
                     emitter.closeBlock();
                 }
             }
@@ -294,6 +295,14 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 continue;
             }
 
+            // Resume-safe instruction emission: group all IR instructions
+            // belonging to the same MIPS source address under a single resume
+            // guard.  Instructions without a source address (continuation ops
+            // of the preceding MIPS instruction) are kept inside the current
+            // guard so they are correctly skipped when resuming past that
+            // source address.
+            bool inResumeGuard = false;
+            std::optional<Address> currentGuardAddress;
             for (const auto& instruction : block.instructions)
             {
                 if (instruction.opcode == ir::Opcode::PHI)
@@ -302,22 +311,45 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 }
                 if (instruction.sourceAddress.has_value())
                 {
-                    std::ostringstream addrLiteral;
-                    addrLiteral << "0x" << std::hex << ((*instruction.sourceAddress) & 0x1FFFFFFFu);
-                    emitter.openBlock(
-                        "if (resumeAddress == 0 || resumeAddress == " + addrLiteral.str() + ")");
-                    emitter.openBlock("if (resumeAddress != 0)");
-                    emitter.writeLine("resumeAddress = 0;");
-                    emitter.closeBlock();
-                    std::ostringstream pcLine;
-                    pcLine << "setProgramCounter(context, 0x" << std::hex
-                           << ((*instruction.sourceAddress) & 0x1FFFFFFFu) << ");";
-                    emitter.writeLine(pcLine.str());
+                    const Address physical = (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                    // Open a new guard only when the source address changes
+                    // (or no guard is open yet).  This coalesces all IR
+                    // instructions from the same MIPS instruction into one
+                    // resume-guard block, preventing stale-temporary reads
+                    // when the block is entered via a mid-block resume.
+                    if (!inResumeGuard || !currentGuardAddress.has_value() ||
+                        *currentGuardAddress != physical)
+                    {
+                        if (inResumeGuard)
+                        {
+                            emitter.closeBlock();
+                        }
+                        std::ostringstream addrLiteral;
+                        addrLiteral << "0x" << std::hex << physical;
+                        emitter.openBlock("if (resumeAddress == 0 || resumeAddress == " +
+                                          addrLiteral.str() + ")");
+                        emitter.openBlock("if (resumeAddress != 0)");
+                        emitter.writeLine("resumeAddress = 0;");
+                        emitter.writeLine("context.system.setLastResumeAddress(0);");
+                        emitter.closeBlock();
+                        std::ostringstream pcLine;
+                        pcLine << "setProgramCounter(context, 0x" << std::hex << physical << ");";
+                        emitter.writeLine(pcLine.str());
+                        currentGuardAddress = physical;
+                        inResumeGuard = true;
+                    }
                     emitInstruction(instruction, block, blockNames, context, emitter);
-                    emitter.closeBlock();
                     continue;
                 }
+                // Instructions without a source address belong to the
+                // preceding MIPS instruction group.  They stay inside the
+                // current resume guard so they are correctly skipped when
+                // execution is resumed past their owning source address.
                 emitInstruction(instruction, block, blockNames, context, emitter);
+            }
+            if (inResumeGuard)
+            {
+                emitter.closeBlock();
             }
             if (block.instructions.empty() ||
                 block.instructions.back().opcode != ir::Opcode::RETURN)

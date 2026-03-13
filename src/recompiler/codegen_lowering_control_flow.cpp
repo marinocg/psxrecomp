@@ -191,12 +191,18 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                     sourcePc = sourceStream.str();
                 }
+                const std::string traceCallPrefix =
+                    "traceInterestingCallsite(context, " + target + ", " + sourcePc;
+                emitter.writeLine(traceCallPrefix + ", false);");
                 emitter.openBlock("if (!callIntrinsic(context.system, " + target +
                                   ", context.regs))");
                 emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
-                emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
+                const std::string unsupportedCallLine =
+                    "failUnsupportedCall(context, " + target + ", " + sourcePc + ");";
+                emitter.writeLine(unsupportedCallLine);
                 emitter.closeBlock();
                 emitter.closeBlock();
+                emitter.writeLine(traceCallPrefix + ", true);");
                 emitter.writeLine("return true;");
             }
             else
@@ -218,11 +224,15 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                 sourcePc = sourceStream.str();
             }
+            emitter.writeLine("traceInterestingCallsite(context, " + target + ", " + sourcePc +
+                              ", false);");
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
-            emitter.writeLine("failUnsupportedCall(" + target + ", " + sourcePc + ");");
+            emitter.writeLine("failUnsupportedCall(context, " + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.closeBlock();
+            emitter.writeLine("traceInterestingCallsite(context, " + target + ", " + sourcePc +
+                              ", true);");
         }
         else
         {

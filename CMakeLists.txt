@@ -46,7 +46,7 @@ if(ENABLE_CLANG_TIDY)
     if(CLANG_TIDY_EXE)
         set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
     else()
-        message(WARNING "ENABLE_CLANG_TIDY is ON but clang-tidy was not found.")
+        message(STATUS "ENABLE_CLANG_TIDY is ON but clang-tidy was not found; continuing without it.")
     endif()
 endif()
 
@@ -87,6 +87,7 @@ set(IR_SOURCES
     src/ir/mips_ir_translation_no_delay.cpp
     src/ir/mips_ir_translation_no_delay_load.cpp
     src/ir/optimizations.cpp
+    src/ir/resume_safety.cpp
     src/ir/ssa.cpp
     src/ir/verify.cpp
 )
@@ -98,6 +99,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen_runner_support_common.cpp
     src/recompiler/codegen_runner_support_presenter.cpp
     src/recompiler/codegen_source.cpp
+    src/recompiler/codegen_source_debug.cpp
     src/recompiler/codegen_source_body.cpp
     src/recompiler/codegen_runner_main.cpp
     src/recompiler/codegen_runner_exception_block.cpp
@@ -109,6 +111,10 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen_runtime_helpers.cpp
     src/recompiler/cpp_emitter.cpp
     src/recompiler/pipeline_analysis_helpers.cpp
+    src/recompiler/pipeline_harvest_internal.cpp
+    src/recompiler/pipeline_harvest_helpers.cpp
+    src/recompiler/pipeline_indirect_call_helpers.cpp
+    src/recompiler/pipeline_memory_reference_helpers.cpp
     src/recompiler/pipeline_helpers.cpp
     src/recompiler/pipeline_helpers_manifest.cpp
     src/recompiler/pipeline_helpers_output.cpp
@@ -134,6 +140,8 @@ set(RUNTIME_SOURCES
     src/runtime/cdrom_state.cpp
     src/runtime/disc_image.cpp
     src/runtime/cop0.cpp
+    src/runtime/callback_trace.cpp
+    src/runtime/callback_trace_internal.cpp
     src/runtime/debug_overlay.cpp
     src/runtime/dma.cpp
     src/runtime/gte.cpp
@@ -142,10 +150,12 @@ set(RUNTIME_SOURCES
     src/runtime/gte_math.cpp
     src/runtime/gte_ops.cpp
     src/runtime/gpu.cpp
+    src/runtime/gpu_status.cpp
     src/runtime/gpu_transfer.cpp
     src/runtime/gpu_commands.cpp
     src/runtime/gpu_renderer.cpp
     src/runtime/gpu_renderer_primitives.cpp
+    src/runtime/hook_entry_int_trace.cpp
     src/runtime/input.cpp
     src/runtime/interrupt_controller.cpp
     src/runtime/interrupt_dispatcher.cpp
@@ -155,6 +165,11 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system.cpp
     src/runtime/psx_system_accessors.cpp
     src/runtime/psx_system_callbacks.cpp
+    src/runtime/psx_system_cd_callback_trace.cpp
+    src/runtime/psx_system_copy_debug.cpp
+    src/runtime/psx_system_display_trace.cpp
+    src/runtime/psx_system_gpu_wait_trace.cpp
+    src/runtime/psx_system_hook_entry_int.cpp
     src/runtime/psx_system_interrupts.cpp
     src/runtime/psx_system_irq_chains.cpp
     src/runtime/psx_system_bios.cpp
@@ -173,6 +188,17 @@ set(RUNTIME_SOURCES
     src/runtime/spu.cpp
     src/runtime/spu_audio.cpp
     src/runtime/stall_classifier.cpp
+    src/runtime/stall_heap_debug.cpp
+    src/runtime/stall_write_watch.cpp
+    src/runtime/diag_profile.cpp
+    src/runtime/diag_watchpoints.cpp
+    src/runtime/diag_tracepoints.cpp
+    src/runtime/diag_explainers.cpp
+    src/runtime/diag_validators.cpp
+    src/runtime/diag_boundaries.cpp
+    src/runtime/diag_metadata_watch.cpp
+    src/runtime/json_helpers.cpp
+    src/runtime/semantic_audit.cpp
     src/runtime/timers.cpp
 )
 
@@ -283,6 +309,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(ir_passes_test PRIVATE psxrecomp_ir)
 
+    add_psxrecomp_unit_test(resume_safety_test
+        tests/unit/resume_safety_test.cpp
+    )
+    target_link_libraries(resume_safety_test PRIVATE psxrecomp_ir psxrecomp_recompiler)
+
     add_psxrecomp_unit_test(recompiler_codegen_test
         tests/unit/recompiler_codegen_test.cpp
         tests/unit/recompiler_codegen_test_sections.cpp
@@ -314,12 +345,52 @@ if(BUILD_TESTS)
     )
     target_link_libraries(gpu_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(gpu_status_test
+        tests/unit/gpu_status_test.cpp
+    )
+    target_link_libraries(gpu_status_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(gpu_polling_test
+        tests/unit/gpu_polling_test.cpp
+    )
+    target_link_libraries(gpu_polling_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(gpu_dma_semantics_test
+        tests/unit/gpu_dma_semantics_test.cpp
+    )
+    target_link_libraries(gpu_dma_semantics_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(runtime_test
         tests/unit/runtime_test.cpp
         tests/unit/runtime_test_sections.cpp
         tests/unit/runtime_test_timer_sections.cpp
     )
     target_link_libraries(runtime_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_watchpoints_test
+        tests/unit/diag_watchpoints_test.cpp
+    )
+    target_link_libraries(diag_watchpoints_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(callback_bridge_test
+        tests/unit/callback_bridge_test.cpp
+    )
+    target_link_libraries(callback_bridge_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(callback_trace_test
+        tests/unit/callback_trace_test.cpp
+    )
+    target_link_libraries(callback_trace_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(hook_entry_int_trace_test
+        tests/unit/hook_entry_int_trace_test.cpp
+    )
+    target_link_libraries(hook_entry_int_trace_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(interrupt_service_context_test
+        tests/unit/interrupt_service_context_test.cpp
+    )
+    target_link_libraries(interrupt_service_context_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(cop0_test
         tests/unit/cop0_test.cpp
@@ -390,6 +461,7 @@ if(BUILD_TESTS)
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp
         tests/unit/pipeline_test_builders.cpp
+        tests/unit/pipeline_test_gap_builders.cpp
     )
     target_link_libraries(pipeline_test
         PRIVATE

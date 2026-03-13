@@ -62,8 +62,19 @@ Commands are written to 0x1F801810:
   area clipping, draw offset, and mask checks from `GP0(E6h)`.
 - `GP0(02h)` aligns X down to 16-pixel boundaries and rounds width up to a
   16-pixel multiple; zero width/height acts as a no-op.
-- `GPUSTAT` bit 22 indicates VBlank phase, and bit 31 odd/even field toggles
-  each frame (used by SDK VSync loops in both progressive and interlaced modes).
+- `GPUSTAT` bit 22 reflects the vertical interlace flag from `GP1(08h)`, not
+  current VBlank state.
+- `GPUREAD` is treated as a latched read register: `GP1(10h)` internal-register
+  queries update it immediately, unsupported indices preserve the previous
+  latch, and `GPUSTAT` bit 27 only describes VRAM-to-CPU transfer readiness.
+- `GP1(04h)` controls the DMA/data-request view reflected in `GPUSTAT`, but
+  DMA2 RAM-to-GPU payload words still enter the GP0 input path even if software
+  toggles `GP1(04h)` around the transfer setup.
+- `GPUSTAT` bit 31 stays low during VBlank; during active display it follows
+  scanline parity in progressive 240-line modes and the current field in
+  interlaced modes, matching the PSX-SPX timing notes used by SDK poll loops.
+- `GP1(00h)` reset returns the control path to the documented post-reset
+  baseline with `GPUSTAT = 0x14802000`.
 - BIOS `A0(4Bh)` (`send_gpu_linked_list`) now follows the DMA2 register path
   (`GP1(04h)=2`, DMA control setup, CHCR start) rather than direct software
   pushing of OT words.

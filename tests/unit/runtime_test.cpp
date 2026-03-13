@@ -2,10 +2,25 @@
 #include "runtime_test_sections.h"
 
 #include <cassert>
+#include <cstdlib>
 #include <optional>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace MemoryMap = psxrecomp::MemoryMap;
+
+namespace
+{
+void ackCdromIrq(psxrecomp::runtime::PsxSystem& system)
+{
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 1u);
+    (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    system.tickCpuCycles(1);
+}
+} // namespace
 
 int main()
 {
@@ -14,6 +29,178 @@ int main()
     using psxrecomp::runtime::DmaPort;
     using psxrecomp::runtime::InterruptLine;
     using psxrecomp::runtime::PsxSystem;
+
+    assert(::setenv("PSXRECOMP_WATCH_WRITE", "0x80056598,0x800577bc-0x800577bf", 1) == 0);
+    {
+        PsxSystem watchedSystem;
+        assert(watchedSystem.initialize());
+        watchedSystem.debugOverlay().setLastProgramCounter(0x80012345u);
+        watchedSystem.write<psxrecomp::u32>(0x80056598u, 0x11223344u);
+        watchedSystem.debugOverlay().setLastProgramCounter(0x80012349u);
+        watchedSystem.write<psxrecomp::u16>(0x800577BCu, 0x5566u);
+        watchedSystem.write<psxrecomp::u32>(0x80058000u, 0xDEADBEEFu);
+
+        const std::string watchedSummary = watchedSystem.stallClassifier().classify();
+        assert(watchedSummary.find("Last watched RAM writes") != std::string::npos);
+        assert(watchedSummary.find("pc=0x80012345") != std::string::npos);
+        assert(watchedSummary.find("pc=0x80012349") != std::string::npos);
+        assert(watchedSummary.find("addr=0x80056598") != std::string::npos);
+        assert(watchedSummary.find("addr=0x800577bc") != std::string::npos);
+        assert(watchedSummary.find("addr=0x80058000") == std::string::npos);
+    }
+    ::unsetenv("PSXRECOMP_WATCH_WRITE");
+
+    if (::setenv("PSXRECOMP_HEAP_VALIDATE", "1", 1) != 0)
+    {
+        throw std::runtime_error("failed to enable PSXRECOMP_HEAP_VALIDATE");
+    }
+    {
+        PsxSystem heapValidateSystem;
+        if (!heapValidateSystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize heap validation runtime test system");
+        }
+
+        // Configure a test validator (SentinelBlockChain, profile-driven).
+        psxrecomp::runtime::ValidatorConfig testValidator;
+        testValidator.name = "test_allocator";
+        testValidator.type = psxrecomp::runtime::ValidatorType::SentinelBlockChain;
+        testValidator.enabledWhen.type = "nonzero_u32";
+        testValidator.enabledWhen.address = 0x800565B0u;
+        testValidator.currentRoot = 0x800577BCu;
+        testValidator.backupRoot = 0x80057F38u;
+        testValidator.header.sizeMask = 0xFFFFFFFCu;
+        testValidator.header.freeBit = 0x1u;
+        testValidator.header.sentinel = 0xFFFFFFFEu;
+        testValidator.maxNodes = 64;
+        heapValidateSystem.diagValidators().configure({testValidator});
+
+        // Allocator not initialized (enable flag at 0x800565B0 is zero).
+        // Validator should skip and report passed with "skipped".
+        bool sawSkipLog = false;
+        heapValidateSystem.logger().setMinLevel(psxrecomp::runtime::LogLevel::Info);
+        heapValidateSystem.logger().setCallback(
+            [&sawSkipLog](const psxrecomp::runtime::LogEvent& event)
+            {
+                if (event.category == "heap" && event.message.find("skipped") != std::string::npos)
+                {
+                    sawSkipLog = true;
+                }
+            });
+        heapValidateSystem.validateAllocatorHeapBoundary("CD IRQ callback", 0x3u);
+        if (!sawSkipLog)
+        {
+            throw std::runtime_error("expected heap validation skip when enable condition not met");
+        }
+
+        // Initialize allocator: enable flag + scan/backup pointers + valid chain.
+        heapValidateSystem.write<psxrecomp::u32>(0x800565B0u, 1u);
+        heapValidateSystem.write<psxrecomp::u32>(0x800577BCu, 0x80060000u);
+        heapValidateSystem.write<psxrecomp::u32>(0x80057F38u, 0x80060000u);
+        heapValidateSystem.write<psxrecomp::u32>(0x80060000u, 0x20u);
+        heapValidateSystem.write<psxrecomp::u32>(0x80060024u, 0xFFFFFFFEu);
+        heapValidateSystem.validateAllocatorHeapCallBoundary(0x80011A58u);
+
+        // Corrupt the heap chain (zero-size header should fail validation).
+        heapValidateSystem.write<psxrecomp::u32>(0x80060000u, 0u);
+        bool heapValidationThrew = false;
+        try
+        {
+            heapValidateSystem.validateAllocatorHeapCallBoundary(0x80011A58u);
+        }
+        catch (const std::runtime_error& error)
+        {
+            heapValidationThrew =
+                std::string(error.what()).find("allocator call return") != std::string::npos;
+        }
+        if (!heapValidationThrew)
+        {
+            throw std::runtime_error("expected allocator call heap validation failure");
+        }
+    }
+    ::unsetenv("PSXRECOMP_HEAP_VALIDATE");
+
+    // GPU wait tracing is now profile-driven via DiagTracepointEngine.
+    {
+        PsxSystem tracepointSystem;
+        if (!tracepointSystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize tracepoint test system");
+        }
+
+        psxrecomp::runtime::TracepointConfig gpuTracepoint;
+        gpuTracepoint.name = "test_gpu_wait";
+        gpuTracepoint.pcRangeStart = 0x8003E400u;
+        gpuTracepoint.pcRangeEnd = 0x8003E600u;
+        gpuTracepoint.mmioReads = {psxrecomp::runtime::Mmio::GPU_GP1};
+        tracepointSystem.diagTracepoints().configure({gpuTracepoint});
+
+        std::vector<std::string> traceLogs;
+        tracepointSystem.logger().setMinLevel(psxrecomp::runtime::LogLevel::Info);
+        tracepointSystem.logger().setCallback(
+            [&traceLogs](const psxrecomp::runtime::LogEvent& event)
+            {
+                if (event.category == "tracepoint")
+                {
+                    traceLogs.push_back(event.message);
+                }
+            });
+
+        // PC outside range → no entry trace.
+        tracepointSystem.observeProgramCounter(0x80040000u);
+
+        // PC inside range → entry trace.
+        tracepointSystem.observeProgramCounter(0x8003E4F0u);
+
+        // MMIO read inside range → mmio_read trace.
+        tracepointSystem.readMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1);
+
+        // PC outside range → exit trace.
+        tracepointSystem.observeProgramCounter(0x80050000u);
+
+        auto hasTraceLog = [&traceLogs](const std::string& needle)
+        {
+            for (const std::string& message : traceLogs)
+            {
+                if (message.find(needle) != std::string::npos)
+                {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        if (!hasTraceLog("event=entry pc=0x8003e4f0"))
+        {
+            throw std::runtime_error("expected tracepoint entry log");
+        }
+        if (!hasTraceLog("event=mmio_read"))
+        {
+            throw std::runtime_error("expected tracepoint mmio_read log");
+        }
+        if (!hasTraceLog("event=exit"))
+        {
+            throw std::runtime_error("expected tracepoint exit log");
+        }
+    }
+
+    // Display timing tracing is now profile-driven via DiagTracepointEngine.
+    // Verify that Timer1 display-line clock still advances normally.
+    {
+        PsxSystem displaySystem;
+        if (!displaySystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize display timing test system");
+        }
+
+        displaySystem.writeMmioExplicit<psxrecomp::u16>(
+            psxrecomp::runtime::Mmio::TIMER_BASE + 0x14u, 0x0100u);
+        displaySystem.tickCpuCycles(564480u);
+        if (displaySystem.timers().readCounter(1) == 0)
+        {
+            throw std::runtime_error("expected Timer1 display-line clock to advance");
+        }
+    }
 
     PsxSystem system;
     assert(system.initialize());
@@ -191,7 +378,9 @@ int main()
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x40);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x0E);
+    ackCdromIrq(system);
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
+    ackCdromIrq(system);
     system.runFrame();
 
     Address cdromBase =
@@ -311,7 +500,9 @@ int main()
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x02);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 2, 0x00);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x02);
+    ackCdromIrq(dmaLoopSystem);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
+    ackCdromIrq(dmaLoopSystem);
 
     const Address dmaLoopCdromBase =
         psxrecomp::runtime::DmaController::ChannelBase +
