@@ -136,7 +136,7 @@ static void testCdRemove()
 }
 
 // ---------------------------------------------------------------
-// Test 3: CdAsyncSetMode (A0:81) issues Setmode and delivers event
+// Test 3: CdAsyncSetMode (A0:81) issues Setmode and delivers ack event
 // ---------------------------------------------------------------
 static void testCdAsyncSetMode()
 {
@@ -152,8 +152,8 @@ static void testCdAsyncSetMode()
     ackCdromIrq(system); // ack Init INT3 -> FIFO cleared -> INT2 promoted
     ackCdromIrq(system); // ack Init INT2 -> FIFO cleared -> nothing pending
 
-    // Open a user event for CommandDone to observe completion.
-    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
+    // Open a user event for CommandAck to observe the INT3 response.
+    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
                                                    EventMode::NoCallback, 0);
     assert(evHandle != 0xFFFFFFFFu);
     system.events().enableEvent(evHandle);
@@ -164,12 +164,12 @@ static void testCdAsyncSetMode()
     callA0(system, 0x81, regs);
     assert(regs[2] == 1);
 
-    // Pump until Setmode INT3 fires; serviceBiosCdromInterrupt delivers CommandDone.
+    // Pump until Setmode INT3 fires; serviceBiosCdromInterrupt delivers CommandAck.
     assert(pumpUntilCdromIrq(system, 200));
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
 
-    std::cerr << "[PASS] CdAsyncSetMode delivers CommandDone event\n";
+    std::cerr << "[PASS] CdAsyncSetMode delivers CommandAck event\n";
 }
 
 // ---------------------------------------------------------------
@@ -190,8 +190,8 @@ static void testCdAsyncGetStatus()
     constexpr u32 resultAddr = 0x8000;
     system.getRam()[resultAddr] = 0xFF; // sentinel
 
-    // Open event for CommandDone.
-    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
+    // Open event for CommandAck.
+    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
                                                    EventMode::NoCallback, 0);
     assert(evHandle != 0xFFFFFFFFu);
     system.events().enableEvent(evHandle);
@@ -202,7 +202,7 @@ static void testCdAsyncGetStatus()
     callA0(system, 0x7C, regs);
     assert(regs[2] == 1);
 
-    // Pump until Getstat INT3 fires; serviceBiosCdromInterrupt copies stat + delivers CommandDone.
+    // Pump until Getstat INT3 fires; serviceBiosCdromInterrupt copies stat + delivers CommandAck.
     assert(pumpUntilCdromIrq(system, 200));
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
@@ -247,10 +247,12 @@ static void testCdAsyncSeekL()
     callA0(system, 0x78, regs);
     assert(regs[2] == 1);
 
-    // SeekL queues INT3 (first response) and INT2 (seek complete) immediately in
-    // our emulator.  INT3 maps to CommandDone via CDROM_IRQ_EVENT_SPECS, so the
-    // event is delivered on the very first pump.  Drain both IRQs (2 rounds).
-    assert(pumpUntilCdromIrq(system, 200)); // SeekL INT3 -> CommandDone delivered
+    // SeekL queues INT3 (ack) and INT2 (seek complete) immediately in our
+    // emulator. CommandDone is delivered on the INT2 completion edge.
+    assert(pumpUntilCdromIrq(system, 200)); // SeekL INT3
+    ackCdromIrq(system);
+    system.serviceInterrupts();
+    assert(pumpUntilCdromIrq(system, 200)); // SeekL INT2 -> CommandDone delivered
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
 
@@ -294,8 +296,8 @@ static void testCdAsyncReadSector()
     ackCdromIrq(system);            // clear INT2 -> nothing pending
     system.serviceInterrupts();
 
-    // Open event for data-ready (INT1 → spec 0x0010 = CommandAck).
-    const u32 dataEvHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
+    // Open event for data-ready (INT1 -> spec 0x0040 = DataReady).
+    const u32 dataEvHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::DataReady,
                                                        EventMode::NoCallback, 0);
     assert(dataEvHandle != 0xFFFFFFFFu);
     system.events().enableEvent(dataEvHandle);
@@ -377,7 +379,7 @@ static void testSdkStyleAsyncCdFlow()
     // 2. Open events for completion + data-ready
     const u32 doneEv = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
                                                  EventMode::NoCallback, 0);
-    const u32 dataEv = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
+    const u32 dataEv = system.events().openEvent(EventClass::Cdrom, EventSpec::DataReady,
                                                  EventMode::NoCallback, 0);
     assert(doneEv != 0xFFFFFFFFu);
     assert(dataEv != 0xFFFFFFFFu);
@@ -397,16 +399,15 @@ static void testSdkStyleAsyncCdFlow()
     callA0(system, 0x78, regs);
     assert(regs[2] == 1);
 
-    // SeekL fires INT3 then INT2 immediately.  Two pump+ack rounds drain both;
-    // CommandDone is delivered by serviceBiosCdromInterrupt on INT3.
-    pumpUntilCdromIrq(system, 200); // SeekL INT3 -> CommandDone delivered
+    // SeekL fires INT3 then INT2 immediately. CommandDone is delivered on INT2.
+    pumpUntilCdromIrq(system, 200); // SeekL INT3
     ackCdromIrq(system);            // clear INT3 -> promote INT2
     system.serviceInterrupts();
-    pumpUntilCdromIrq(system, 200); // SeekL INT2
+    pumpUntilCdromIrq(system, 200); // SeekL INT2 -> CommandDone delivered
     ackCdromIrq(system);            // clear INT2 -> nothing pending
     system.serviceInterrupts();
 
-    // The CommandDone event should be delivered from SeekL INT3.
+    // The CommandDone event should be delivered from SeekL INT2.
     assert(system.events().isEventDelivered(doneEv));
     // Consume the delivery (reset to Enabled for the read phase).
     system.events().testEvent(doneEv);

@@ -49,6 +49,7 @@ inline constexpr size_t MAX_FILTER_SCAN_SECTORS = 32;
 inline constexpr u8 SETMODE_XA_FILTER_ENABLE = 0x08;
 inline constexpr u8 SETMODE_SECTOR_SIZE_2340 = 0x20;
 inline constexpr u8 SETMODE_XA_STREAM_ENABLE = 0x40;
+inline constexpr u8 SETMODE_DOUBLE_SPEED = 0x80;
 
 inline constexpr u8 XA_SUBMODE_AUDIO = 0x04;
 inline constexpr u8 XA_SUBMODE_FORM2 = 0x20;
@@ -62,7 +63,7 @@ inline constexpr u8 ERR_NO_DISC = 0x40;
 inline constexpr u8 ERR_READ_FAIL = 0x80;
 
 inline constexpr u32 CDROM_STATE_MAGIC = 0x4D524443u; // "CDRM"
-inline constexpr u32 CDROM_STATE_VERSION = 4u;
+inline constexpr u32 CDROM_STATE_VERSION = 5u;
 inline constexpr size_t MAX_SERIALIZED_SECTOR_BYTES = 4096;
 
 struct XaSubheader

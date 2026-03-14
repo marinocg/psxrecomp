@@ -78,7 +78,7 @@ bool emitGteInstruction(
             const std::string address = valueToExpr(instruction.inputs[1], context);
             writeGteGuardPrefix();
             emitter.writeLine("context.system.gte().mtc2(static_cast<u8>(" + rd +
-                              "), readMemory32(context.system, " + address + "));");
+                              "), readMemory32(context, " + address + "));");
         }
         break;
     case ir::Opcode::GTE_SWC2:
@@ -88,7 +88,7 @@ bool emitGteInstruction(
             const std::string rd = valueToExpr(instruction.inputs[0], context);
             const std::string address = valueToExpr(instruction.inputs[1], context);
             writeGteGuardPrefix();
-            emitter.writeLine("writeMemory32(context.system, " + address +
+            emitter.writeLine("writeMemory32(context, " + address +
                               ", context.system.gte().mfc2(static_cast<u8>(" + rd + ")));");
         }
         break;

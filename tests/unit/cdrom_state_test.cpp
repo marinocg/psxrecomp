@@ -46,6 +46,12 @@ void drainIrqs(psxrecomp::runtime::Cdrom& cdrom)
     }
     assert(irqType(cdrom) == 0u);
 }
+
+void enableBufferRead(psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeReg(0, 0u);
+    cdrom.writeReg(3, 0x80u);
+}
 } // namespace
 
 int main()
@@ -116,6 +122,7 @@ int main()
         ack(cdrom);
 
         cdrom.tick(kCdromReadCycles * 3u);
+        enableBufferRead(cdrom);
         for (int i = 0; i < 5; ++i)
         {
             (void)cdrom.readData();
@@ -135,6 +142,7 @@ int main()
         cdrom.reset();
         assert(cdrom.deserializeState(saved));
 
+        enableBufferRead(cdrom);
         const std::vector<psxrecomp::u8> expected = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2};
         for ([[maybe_unused]] psxrecomp::u8 value : expected)
         {

@@ -15,6 +15,9 @@ namespace
 constexpr u64 USER_SECTOR_SIZE = 2048;
 constexpr u64 RAW_SECTOR_SIZE = 2352;
 constexpr u64 RAW_USER_OFFSET = 24;
+constexpr std::array<u8, 12> RAW_SYNC_BYTES = {0x00u, 0xFFu, 0xFFu, 0xFFu, 0xFFu, 0xFFu,
+                                               0xFFu, 0xFFu, 0xFFu, 0xFFu, 0xFFu, 0x00u};
+constexpr std::array<u8, 4> MODE2_FORM1_SUBHEADER = {0x00u, 0x00u, 0x08u, 0x00u};
 
 std::string toLowerExt(const std::filesystem::path& path)
 {
@@ -46,6 +49,27 @@ DiscImage::Layout detectLayout(const std::filesystem::path& path, u64 bytes)
         return DiscImage::Layout::User2048;
     }
     return DiscImage::Layout::Auto;
+}
+
+u8 intToBcd(u32 value)
+{
+    return static_cast<u8>(((value / 10u) << 4) | (value % 10u));
+}
+
+void fillSynthesizedMode2Form1Header(u32 lba, std::span<u8, 2352> out)
+{
+    std::fill(out.begin(), out.end(), 0);
+    std::copy(RAW_SYNC_BYTES.begin(), RAW_SYNC_BYTES.end(), out.begin());
+
+    const u32 absoluteFrames = static_cast<u32>(lba) + 150u;
+    const u32 totalSeconds = absoluteFrames / 75u;
+    out[12] = intToBcd(totalSeconds / 60u);
+    out[13] = intToBcd(totalSeconds % 60u);
+    out[14] = intToBcd(absoluteFrames % 75u);
+    out[15] = 0x02u;
+
+    std::copy(MODE2_FORM1_SUBHEADER.begin(), MODE2_FORM1_SUBHEADER.end(), out.begin() + 16);
+    std::copy(MODE2_FORM1_SUBHEADER.begin(), MODE2_FORM1_SUBHEADER.end(), out.begin() + 20);
 }
 } // namespace
 
@@ -168,7 +192,7 @@ bool DiscImage::readRawSector2352(u32 lba, std::span<u8, 2352> out)
     {
         return false;
     }
-    std::fill(out.begin(), out.end(), 0);
+    fillSynthesizedMode2Form1Header(lba, out);
     std::copy(userBytes.begin(), userBytes.end(),
               out.begin() + static_cast<std::ptrdiff_t>(RAW_USER_OFFSET));
     return true;

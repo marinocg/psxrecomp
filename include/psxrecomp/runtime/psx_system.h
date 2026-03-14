@@ -126,9 +126,9 @@ class PsxSystem
     template <typename T> T read(Address address)
     {
         Address physical = normalizeAddress(address);
-        if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
+        if (isMainRamAddress(physical, static_cast<Address>(sizeof(T))))
         {
-            const Address offset = physical - MemoryMap::RAM_BASE;
+            const Address offset = foldMainRamAddress(physical);
             const u8 readSize = static_cast<u8>(sizeof(T));
             const T value = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
             if (m_diagWatchpoints.shouldWatchRamRead(physical, readSize))
@@ -164,9 +164,9 @@ class PsxSystem
     template <typename T> void write(Address address, T value)
     {
         Address physical = normalizeAddress(address);
-        if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
+        if (isMainRamAddress(physical, static_cast<Address>(sizeof(T))))
         {
-            const Address offset = physical - MemoryMap::RAM_BASE;
+            const Address offset = foldMainRamAddress(physical);
             const u8 writeSize = static_cast<u8>(sizeof(T));
             const bool callbackTraceActive = m_callbackTrace.hasActiveInvocation();
             const bool shouldTraceWrite =

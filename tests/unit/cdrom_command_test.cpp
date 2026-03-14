@@ -138,7 +138,7 @@ int main()
 
     cdrom.writeCommand(0x06); // ReadN
     assert(irqType(cdrom) == 0x03);
-    assertResponse(cdrom, {0x22});
+    assertResponse(cdrom, {0x42});
     ack(cdrom);
     cdrom.tick(kCdromReadCycles);
     assert(irqType(cdrom) == 0x01);
@@ -155,7 +155,7 @@ int main()
 
     cdrom.writeCommand(0x1B); // ReadS
     assert(irqType(cdrom) == 0x03);
-    assertResponse(cdrom, {0x22});
+    assertResponse(cdrom, {0x42});
     ack(cdrom);
     cdrom.tick(kCdromReadCycles);
     assert(irqType(cdrom) == 0x01);

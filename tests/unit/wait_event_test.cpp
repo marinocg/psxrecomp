@@ -13,11 +13,21 @@
 namespace EventClass = psxrecomp::runtime::EventClass;
 namespace EventSpec = psxrecomp::runtime::EventSpec;
 using psxrecomp::u32;
+using psxrecomp::runtime::DmaController;
+using psxrecomp::runtime::DmaPort;
 using psxrecomp::runtime::EventMode;
 using psxrecomp::runtime::EventStatus;
 using psxrecomp::runtime::KernelEventTable;
 using psxrecomp::runtime::LogLevel;
 using psxrecomp::runtime::PsxSystem;
+using psxrecomp::runtime::Spu;
+
+constexpr u32 kHandshakeDelayCycles = 0x300u;
+
+static psxrecomp::Address spuRegisterAddress(u32 rawOffset)
+{
+    return psxrecomp::runtime::Mmio::SPU_BASE + (rawOffset & 0x1FFu);
+}
 
 // ---------------------------------------------------------------
 // Helper: call WaitEvent via BIOS B0 vector.
@@ -60,6 +70,8 @@ static void testAlreadyDelivered()
 
     // Should have returned successfully without looping.
     assert(regs[2] == 1);
+    assert(!system.events().isEventDelivered(handle));
+    assert(system.events().getEvent(handle)->status == EventStatus::Enabled);
     std::cerr << "[PASS] WaitEvent returns immediately when already delivered\n";
 }
 
@@ -91,6 +103,8 @@ static void testDeliveredByIrq()
     // WaitEvent should have blocked, ticked hardware until VBlank fired,
     // then the interrupt dispatcher delivered the VBlank event.
     assert(regs[2] == 1);
+    assert(!system.events().isEventDelivered(handle));
+    assert(system.events().getEvent(handle)->status == EventStatus::Enabled);
     std::cerr << "[PASS] WaitEvent blocks and resumes after VBlank delivery\n";
 }
 
@@ -209,7 +223,58 @@ static void testUnDeliverThenWaitBlocks()
 }
 
 // ---------------------------------------------------------------
-// Test 8: isEventDelivered is non-mutating.
+// Test 8: SPU completion event only fires for real DMA4 transfers.
+// ---------------------------------------------------------------
+static void testSpuWaitEventTracksRealDmaCompletion()
+{
+    PsxSystem system;
+    assert(system.initialize());
+
+    const psxrecomp::Address controlReg = spuRegisterAddress(Spu::RegisterMap::Control);
+    const psxrecomp::Address transferAddrReg =
+        spuRegisterAddress(Spu::RegisterMap::RamTransferAddress);
+    const psxrecomp::Address transferCtrlReg =
+        spuRegisterAddress(Spu::RegisterMap::TransferControl);
+    const psxrecomp::Address spuDmaBase =
+        DmaController::ChannelBase +
+        DmaController::ChannelStride * static_cast<psxrecomp::Address>(DmaPort::Spu);
+
+    u32 handle = system.events().openEvent(EventClass::Spu, EventSpec::CommandDone,
+                                           EventMode::NoCallback, 0);
+    assert(handle != 0xFFFFFFFFu);
+    assert(system.events().enableEvent(handle));
+
+    system.writeMmioExplicit<psxrecomp::u16>(transferCtrlReg, 0x0004u);
+    system.writeMmioExplicit<psxrecomp::u16>(transferAddrReg, 0x0000u);
+    system.writeMmioExplicit<psxrecomp::u16>(controlReg, 0x0000u);
+    system.tickCpuCycles(kHandshakeDelayCycles);
+
+    system.write<psxrecomp::u32>(0x00014000u, 0xAABBCCDDu);
+    system.writeMmioExplicit<psxrecomp::u32>(spuDmaBase + 0x0, 0x00014000u);
+    system.writeMmioExplicit<psxrecomp::u32>(spuDmaBase + 0x4, 0x00000001u);
+    system.writeMmioExplicit<psxrecomp::u32>(spuDmaBase + 0x8, 0x01000001u);
+    system.tickCpuCycles(2048u);
+    assert(!system.events().isEventDelivered(handle));
+
+    system.writeMmioExplicit<psxrecomp::u16>(controlReg, 0x0020u);
+    system.tickCpuCycles(kHandshakeDelayCycles);
+    system.writeMmioExplicit<psxrecomp::u32>(spuDmaBase + 0x0, 0x00014000u);
+    system.writeMmioExplicit<psxrecomp::u32>(spuDmaBase + 0x4, 0x00000001u);
+    system.writeMmioExplicit<psxrecomp::u32>(spuDmaBase + 0x8, 0x01000001u);
+    assert(!system.events().isEventDelivered(handle));
+    system.tickCpuCycles(2048u);
+    assert(system.events().isEventDelivered(handle));
+
+    u32 regs[32] = {};
+    callWaitEvent(system, handle, regs);
+    assert(regs[2] == 1);
+    assert(!system.events().isEventDelivered(handle));
+
+    std::cerr << "[PASS] SPU WaitEvent tracks real DMA completion edges\n";
+}
+
+// ---------------------------------------------------------------
+// Test 9: isEventDelivered is non-mutating.
 // ---------------------------------------------------------------
 static void testIsEventDeliveredNonMutating()
 {
@@ -239,6 +304,7 @@ int main()
     testDisabledEvent();
     testCallbackModeNonBlocking();
     testUnDeliverThenWaitBlocks();
+    testSpuWaitEventTracksRealDmaCompletion();
     testIsEventDeliveredNonMutating();
 
     std::cout << "All WaitEvent tests passed.\n";

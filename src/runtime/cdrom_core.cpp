@@ -44,6 +44,15 @@ void traceCdrom(const char* fmt, ...)
 }
 } // namespace
 
+u32 Cdrom::currentReadCycles() const
+{
+    if ((m_execution.mode & cdrom_detail::SETMODE_DOUBLE_SPEED) != 0)
+    {
+        return CDROM_DOUBLE_SPEED_READ_CYCLES;
+    }
+    return CDROM_READ_CYCLES;
+}
+
 void Cdrom::reset()
 {
     m_status = 0;
@@ -54,6 +63,7 @@ void Cdrom::reset()
     m_dataFifo.clear();
     m_execution.reset(CDROM_READ_CYCLES);
     m_sectorQueue.clear();
+    m_bufferedReadSectors.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
     m_interruptFlags = 0;
@@ -104,6 +114,7 @@ void Cdrom::primeBootState(bool discPresent)
     m_execution.seekActive = false;
     m_interruptFlags = 0;
     m_responseFifo.clear();
+    m_bufferedReadSectors.clear();
 }
 
 void Cdrom::tick(u32 cpuCycles)
@@ -126,7 +137,7 @@ void Cdrom::tick(u32 cpuCycles)
         executePendingCommand();
     }
 
-    if (!m_execution.readActive)
+    if (!m_execution.readActive && !m_execution.seekActive)
     {
         return;
     }
@@ -141,11 +152,13 @@ void Cdrom::tick(u32 cpuCycles)
         }
 
         remaining -= m_execution.cyclesUntilSector;
-        m_execution.cyclesUntilSector = CDROM_READ_CYCLES;
+        m_execution.cyclesUntilSector = currentReadCycles();
 
-        pumpSectorToDataFifo();
-        if (m_execution.readActive)
+        if (queueReadSector())
         {
+            m_execution.seekActive = false;
+            m_execution.readActive = true;
+            acceptBufferedReadSector(false);
             queueInterruptEvent(cdrom_detail::INT1, {currentStat()});
         }
     }

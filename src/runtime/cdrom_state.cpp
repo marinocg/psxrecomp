@@ -185,6 +185,12 @@ std::vector<u8> Cdrom::serializeState() const
         appendByteVector(out, sector);
     }
 
+    appendU32(out, static_cast<u32>(m_bufferedReadSectors.size()));
+    for (const std::vector<u8>& sector : m_bufferedReadSectors)
+    {
+        appendByteVector(out, sector);
+    }
+
     appendByteVector(out, m_activeSector);
     appendU32(out, static_cast<u32>(m_activeSectorOffset));
 
@@ -233,6 +239,7 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     bool xaFilterEnabled = false;
     std::deque<IrqEvent> pendingResponseIrqs;
     std::deque<std::vector<u8>> sectorQueue;
+    std::deque<std::vector<u8>> bufferedReadSectors;
     std::vector<u8> activeSector;
     u32 activeSectorOffset = 0;
 
@@ -309,6 +316,22 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
         sectorQueue.push_back(std::move(sector));
     }
 
+    u32 bufferedReadSectorCount = 0;
+    if (!consumeU32(state, cursor, bufferedReadSectorCount) ||
+        bufferedReadSectorCount > MAX_BUFFERED_READ_SECTORS)
+    {
+        return false;
+    }
+    for (u32 i = 0; i < bufferedReadSectorCount; ++i)
+    {
+        std::vector<u8> sector;
+        if (!consumeByteVector(state, cursor, cdrom_detail::MAX_SERIALIZED_SECTOR_BYTES, sector))
+        {
+            return false;
+        }
+        bufferedReadSectors.push_back(std::move(sector));
+    }
+
     if (!consumeByteVector(state, cursor, cdrom_detail::MAX_SERIALIZED_SECTOR_BYTES,
                            activeSector) ||
         !consumeU32(state, cursor, activeSectorOffset) || cursor != state.size())
@@ -358,6 +381,7 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     m_execution.xaFilterEnabled = xaFilterEnabled;
     m_execution.pendingResponseIrqs = std::move(pendingResponseIrqs);
     m_sectorQueue = std::move(sectorQueue);
+    m_bufferedReadSectors = std::move(bufferedReadSectors);
     m_activeSector = std::move(activeSector);
     m_activeSectorOffset = static_cast<size_t>(activeSectorOffset);
     return true;

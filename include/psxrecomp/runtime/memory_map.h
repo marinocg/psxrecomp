@@ -6,6 +6,19 @@ namespace psxrecomp
 {
 namespace runtime
 {
+constexpr Address MAIN_RAM_MIRROR_SIZE = 0x00800000u;
+
+inline constexpr bool isMainRamAddress(Address physical, Address accessSize = 1u)
+{
+    return accessSize != 0u && physical < MAIN_RAM_MIRROR_SIZE &&
+           physical <= MAIN_RAM_MIRROR_SIZE - accessSize;
+}
+
+inline constexpr Address foldMainRamAddress(Address physical)
+{
+    return physical & (MemoryMap::RAM_SIZE - 1u);
+}
+
 namespace Mmio
 {
 constexpr Address DMA_BASE = 0x1F801080;

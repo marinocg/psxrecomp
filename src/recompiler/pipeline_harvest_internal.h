@@ -49,6 +49,12 @@ findReferencedDataWords(const std::vector<disasm::Instruction>& disassembled,
 
 void appendUniqueSorted(std::vector<Address>& values, Address value);
 
+std::vector<Address>
+harvestReturnedCodePointerSeeds(const std::vector<disasm::Instruction>& disassembled,
+                                const InstructionIndexMap& instructionIndexMap,
+                                const std::vector<disasm::FunctionBoundary>& knownBoundaries,
+                                Address baseAddress, Address endAddress);
+
 } // namespace detail
 } // namespace recompiler
 } // namespace psxrecomp

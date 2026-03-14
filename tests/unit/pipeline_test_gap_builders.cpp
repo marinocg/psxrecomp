@@ -156,3 +156,88 @@ std::vector<psxrecomp::u8> buildExeWithStoredGapAdjacentDispatchTarget()
 
     return buffer;
 }
+
+std::vector<psxrecomp::u8> buildExeWithDelaySlotStoredDispatchTarget()
+{
+    constexpr psxrecomp::u32 loadSize = 224;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x04, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x08, 0x3C048001); // lui a0, 0x8001
+    writeLe32(buffer, codeOffset + 0x0C, 0x0C004028); // jal 0x800100A0
+    writeLe32(buffer, codeOffset + 0x10, 0x24840040); // addiu a0, a0, 0x0040
+    writeLe32(buffer, codeOffset + 0x14, 0x3C028001); // lui v0, 0x8001
+    writeLe32(buffer, codeOffset + 0x18, 0x8C220088); // lw v0, 0x0088(v0)
+    writeLe32(buffer, codeOffset + 0x1C, 0x0040F809); // jalr ra, v0
+    writeLe32(buffer, codeOffset + 0x20, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x24, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x28, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x2C, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x30, 0x00000000); // nop
+
+    writeLe32(buffer, codeOffset + 0x40, 0x00851021); // addu v0, a0, a1
+    writeLe32(buffer, codeOffset + 0x44, 0x24420001); // addiu v0, v0, 1
+    writeLe32(buffer, codeOffset + 0x48, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x4C, 0x00000000); // nop
+
+    writeLe32(buffer, codeOffset + 0x88, 0x00000000); // dispatch slot initialized at runtime
+
+    writeLe32(buffer, codeOffset + 0xA0, 0x3C018001); // lui at, 0x8001
+    writeLe32(buffer, codeOffset + 0xA4, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0xA8, 0xAC240088); // sw a0, 0x0088(at)
+
+    return buffer;
+}
+
+std::vector<psxrecomp::u8> buildExeWithReturnedDispatchTargetStore()
+{
+    constexpr psxrecomp::u32 loadSize = 256;
+    std::vector<psxrecomp::u8> buffer(psxrecomp::iso::PsxExeLoader::kHeaderSize + loadSize, 0);
+    std::memcpy(buffer.data(), "PS-X EXE", 8);
+    writeLe32(buffer, 0x10, 0x80010000);
+    writeLe32(buffer, 0x14, 0x80010000);
+    writeLe32(buffer, 0x18, 0x80010000);
+    writeLe32(buffer, 0x1C, loadSize);
+
+    const size_t codeOffset = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, codeOffset + 0x00, 0x27BDFFF0); // addiu sp, sp, -16
+    writeLe32(buffer, codeOffset + 0x04, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x08, 0x0C004028); // jal 0x800100A0
+    writeLe32(buffer, codeOffset + 0x0C, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x10, 0x3C048001); // lui a0, 0x8001
+    writeLe32(buffer, codeOffset + 0x14, 0x0C004030); // jal 0x800100C0
+    writeLe32(buffer, codeOffset + 0x18, 0xAC820088); // sw v0, 0x0088(a0)
+    writeLe32(buffer, codeOffset + 0x1C, 0x3C028001); // lui v0, 0x8001
+    writeLe32(buffer, codeOffset + 0x20, 0x8C220088); // lw v0, 0x0088(v0)
+    writeLe32(buffer, codeOffset + 0x24, 0x0040F809); // jalr ra, v0
+    writeLe32(buffer, codeOffset + 0x28, 0x00000000); // nop
+    writeLe32(buffer, codeOffset + 0x2C, 0x8FBF000C); // lw ra, 12(sp)
+    writeLe32(buffer, codeOffset + 0x30, 0x27BD0010); // addiu sp, sp, 16
+    writeLe32(buffer, codeOffset + 0x34, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x38, 0x00000000); // nop
+
+    writeLe32(buffer, codeOffset + 0x40, 0x00851021); // addu v0, a0, a1
+    writeLe32(buffer, codeOffset + 0x44, 0x24420001); // addiu v0, v0, 1
+    writeLe32(buffer, codeOffset + 0x48, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0x4C, 0x00000000); // nop
+
+    writeLe32(buffer, codeOffset + 0x88, 0x00000000); // dispatch slot initialized at runtime
+
+    writeLe32(buffer, codeOffset + 0xA0, 0x3C028001); // lui v0, 0x8001
+    writeLe32(buffer, codeOffset + 0xA4, 0x24420040); // addiu v0, v0, 0x0040
+    writeLe32(buffer, codeOffset + 0xA8, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0xAC, 0x00000000); // nop
+
+    writeLe32(buffer, codeOffset + 0xC0, 0x24020002); // li v0, 2
+    writeLe32(buffer, codeOffset + 0xC4, 0x03E00008); // jr ra
+    writeLe32(buffer, codeOffset + 0xC8, 0x00000000); // nop
+
+    return buffer;
+}

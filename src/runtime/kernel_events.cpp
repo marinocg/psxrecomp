@@ -179,6 +179,24 @@ bool KernelEventTable::isEventDelivered(u32 handle) const
     return m_events[index].status == EventStatus::Delivered;
 }
 
+bool KernelEventTable::consumeDeliveredEvent(u32 handle)
+{
+    const size_t index = handleToIndex(handle);
+    if (index >= MAX_EVENTS)
+    {
+        return false;
+    }
+
+    auto& event = m_events[index];
+    if (event.mode != EventMode::NoCallback || event.status != EventStatus::Delivered)
+    {
+        return false;
+    }
+
+    event.status = EventStatus::Enabled;
+    return true;
+}
+
 u32 KernelEventTable::interruptLineToEventClass(InterruptLine line)
 {
     switch (line)

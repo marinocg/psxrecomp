@@ -20,7 +20,7 @@ constexpr size_t REG_RA = 31;
 
 bool isValidHookEntryIntResumeAddress(u32 address)
 {
-    return address >= 0x80000000u && address < (0x80000000u + MemoryMap::RAM_SIZE) &&
+    return address >= 0x80000000u && isMainRamAddress(address & 0x1FFFFFFFu, sizeof(u32)) &&
            (address & 0x3u) == 0u;
 }
 
@@ -37,12 +37,13 @@ void PsxSystem::invokeHookEntryIntHandler()
         u32 savedFp = 0;
         u32 savedGp = 0;
         const Address descriptorPhysical = normalizeAddress(m_hookEntryInt.descriptorAddress);
-        if (m_hookEntryInt.descriptorAddress != 0 &&
-            descriptorPhysical <= MemoryMap::RAM_SIZE - 0x30u)
+        const Address descriptorOffset = foldMainRamAddress(descriptorPhysical);
+        if (m_hookEntryInt.descriptorAddress != 0 && isMainRamAddress(descriptorPhysical, 0x30u) &&
+            descriptorOffset <= MemoryMap::RAM_SIZE - 0x30u)
         {
             // PSX-SPX: HookEntryInt resumes like longjmp(setjmp_buf, 1).
             resumeAddress =
-                readFromRegion<u32>(m_ram.data(), descriptorPhysical + 0x00u, MemoryMap::RAM_SIZE);
+                readFromRegion<u32>(m_ram.data(), descriptorOffset + 0x00u, MemoryMap::RAM_SIZE);
             resumeAddressValid = isValidHookEntryIntResumeAddress(resumeAddress);
             if (resumeAddressValid)
             {
@@ -52,11 +53,11 @@ void PsxSystem::invokeHookEntryIntHandler()
                 m_pendingCallbackRegisterMask[REG_V0] = true;
                 m_pendingCallbackRegisters[REG_RA] = resumeAddress;
                 m_pendingCallbackRegisterMask[REG_RA] = true;
-                savedSp = readFromRegion<u32>(m_ram.data(), descriptorPhysical + 0x04u,
+                savedSp = readFromRegion<u32>(m_ram.data(), descriptorOffset + 0x04u,
                                               MemoryMap::RAM_SIZE);
-                savedFp = readFromRegion<u32>(m_ram.data(), descriptorPhysical + 0x08u,
+                savedFp = readFromRegion<u32>(m_ram.data(), descriptorOffset + 0x08u,
                                               MemoryMap::RAM_SIZE);
-                savedGp = readFromRegion<u32>(m_ram.data(), descriptorPhysical + 0x2Cu,
+                savedGp = readFromRegion<u32>(m_ram.data(), descriptorOffset + 0x2Cu,
                                               MemoryMap::RAM_SIZE);
                 m_pendingCallbackRegisters[REG_SP] = savedSp;
                 m_pendingCallbackRegisterMask[REG_SP] = true;
@@ -67,7 +68,7 @@ void PsxSystem::invokeHookEntryIntHandler()
                     const Address offset =
                         static_cast<Address>(0x0Cu + (reg - REG_S0) * sizeof(u32));
                     m_pendingCallbackRegisters[reg] = readFromRegion<u32>(
-                        m_ram.data(), descriptorPhysical + offset, MemoryMap::RAM_SIZE);
+                        m_ram.data(), descriptorOffset + offset, MemoryMap::RAM_SIZE);
                     m_pendingCallbackRegisterMask[reg] = true;
                 }
                 m_pendingCallbackRegisters[REG_GP] = savedGp;

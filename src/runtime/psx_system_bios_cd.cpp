@@ -212,7 +212,7 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
     //
     //   $a0 = mode byte (see PSX-SPX CdlSetmode)
     //
-    // Issues a Setmode command.  INT3 → CommandDone on completion.
+    // Issues a Setmode command. INT3 is the command-acknowledge response.
     // ---------------------------------------------------------------
     case 0x81:
     {

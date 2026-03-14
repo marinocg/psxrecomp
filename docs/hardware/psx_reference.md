@@ -39,6 +39,15 @@ Expansion 2         0x1F802000-0x1F803FFF     8KB         Expansion region 2
 BIOS ROM            0x1FC00000-0x1FC7FFFF     512KB       System BIOS
 ```
 
+PSX-SPX notes that the 2MB main RAM is mirrored across the first 8MB of
+physical address space by default, so `0x00000000-0x007FFFFF` aliases the same
+underlying RAM.
+
+PSX-SPX also documents six extra waitstates for CPU data reads from main RAM.
+Ordinary writes are buffered through the write queue, so the runtime only adds
+extra CPU cycle cost on RAM reads. This keeps software timeouts and VBlank
+polling loops closer to hardware behavior.
+
 ## GPU: Geometry Transform Engine
 
 - **Resolution**: 256x224 to 640x480
@@ -167,6 +176,9 @@ Commands are written to 0x1F801810:
 - `0x1F801803` (R, index 1/3): interrupt flags.
 - `0x1F801803` (W, index 1): interrupt flag acknowledge.
 - IRQ delivery is queued: a later IRQ type becomes visible only after ACK clears the current one.
+- `BFRD` requests accept the sector for the currently pending `INT1` and lock that
+  transfer window, so a fresh request can replace unread tail bytes from the
+  previous sector when software mixes header probes with payload DMA.
 
 ## Controllers
 

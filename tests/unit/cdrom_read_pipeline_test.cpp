@@ -167,8 +167,12 @@ void issueSetloc([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom, psxrecomp::u
 void issueReadN([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
 {
     cdrom.writeCommand(0x06);
-    assert(irqType(cdrom) == 0x03);
-    readSingleResponseAndAck(cdrom);
+}
+
+void enableBufferRead([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeReg(0, 0);
+    cdrom.writeReg(3, 0x80);
 }
 } // namespace
 
@@ -187,12 +191,16 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x01); // LBA=1
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
 
         cdrom.tick(kCdromReadCycles - 1);
         assert(irqType(cdrom) == 0x00);
         cdrom.tick(1);
         assert(irqType(cdrom) == 0x01);
 
+        enableBufferRead(cdrom);
         cdrom.writeReg(0, 0);
         assert(cdrom.readReg(2) == userByte(1, 0));
         cdrom.writeReg(0, 3);
@@ -223,9 +231,76 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
+        enableBufferRead(cdrom);
         assert(cdrom.readData() == static_cast<psxrecomp::u8>((0xA0u + 12u) & 0xFFu));
+        readSingleResponseAndAck(cdrom);
+    }
+
+    // Setmode bit7 should halve the cadence for the first INT1 sector.
+    {
+        Cdrom cdrom;
+        cdrom.reset();
+        cdrom.setDiscBackend(&disc);
+        cdrom.writeInterruptEnable(0x1F);
+        cdrom.writeParam(0x80); // double-speed mode
+        cdrom.writeCommand(0x0E);
+        assert(irqType(cdrom) == 0x03);
+        readSingleResponseAndAck(cdrom);
+
+        issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
+        issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
+
+        cdrom.tick((kCdromReadCycles / 2u) - 1u);
+        assert(irqType(cdrom) == 0x00);
+        cdrom.tick(1);
+        assert(irqType(cdrom) == 0x01);
+        enableBufferRead(cdrom);
+        assert(cdrom.readData() == userByte(0, 0));
+        readSingleResponseAndAck(cdrom);
+    }
+
+    // A fresh BFRD request must accept the newly pending INT1 sector even if the
+    // previous raw-sector transfer left unread tail bytes behind.
+    {
+        Cdrom cdrom;
+        cdrom.reset();
+        cdrom.setDiscBackend(&disc);
+        cdrom.writeInterruptEnable(0x1F);
+        cdrom.writeParam(0x20); // sector size=2340 mode
+        cdrom.writeCommand(0x0E);
+        assert(irqType(cdrom) == 0x03);
+        readSingleResponseAndAck(cdrom);
+
+        issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
+        issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
+        cdrom.tick(kCdromReadCycles);
+        assert(irqType(cdrom) == 0x01);
+
+        enableBufferRead(cdrom);
+        for (size_t i = 0; i < (12u + 2048u); ++i)
+        {
+            (void)cdrom.readData();
+        }
+        readSingleResponseAndAck(cdrom);
+
+        cdrom.tick(kCdromReadCycles);
+        assert(irqType(cdrom) == 0x01);
+
+        cdrom.writeReg(0, 0);
+        cdrom.writeReg(3, 0x00);
+        cdrom.writeReg(3, 0x80);
+        assert(cdrom.readData() == static_cast<psxrecomp::u8>((0xA0u + 1u + 12u) & 0xFFu));
         readSingleResponseAndAck(cdrom);
     }
 
@@ -242,8 +317,12 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
+        enableBufferRead(cdrom);
         assert(cdrom.readData() == userByte(0, 0));
         readSingleResponseAndAck(cdrom);
     }
@@ -269,9 +348,13 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
 
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
+        enableBufferRead(cdrom);
         assert(cdrom.readData() == 0x10);
         assert(cdrom.readData() == 0x11);
         for (size_t i = 2; i < 2324; ++i)
@@ -283,6 +366,7 @@ int main()
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         // Sector1 is filtered out; stream should advance to matching sector2.
+        enableBufferRead(cdrom);
         assert(cdrom.readData() == 0xC0);
         assert(cdrom.readData() == 0xC1);
         readSingleResponseAndAck(cdrom);
@@ -303,9 +387,13 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x03); // LBA=3 (malformed duplicated subheader)
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         // Falls back to regular 2048-byte user payload beginning at raw[24].
+        enableBufferRead(cdrom);
         assert(cdrom.readData() == 0x55);
         assert(cdrom.readData() == 0x56);
         readSingleResponseAndAck(cdrom);
@@ -320,8 +408,12 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
+        enableBufferRead(cdrom);
         for (size_t i = 0; i < 2048; ++i)
         {
             (void)cdrom.readData();
@@ -339,6 +431,9 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x01); // LBA=1
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         assertResponse(cdrom, {0x22});
@@ -354,10 +449,40 @@ int main()
 
         issueSetloc(cdrom, 0x00, 0x02, 0x03); // LBA=3
         issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
+        enableBufferRead(cdrom);
         assert(cdrom.readData() == userByte(3, 0));
         readSingleResponseAndAck(cdrom);
+    }
+
+    // BFRD should lock one buffered sector instead of auto-crossing into the next one.
+    {
+        Cdrom cdrom;
+        cdrom.reset();
+        cdrom.setDiscBackend(&disc);
+        cdrom.writeInterruptEnable(0x1F);
+
+        issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0
+        issueReadN(cdrom);
+        assert(irqType(cdrom) == 0x03);
+        assertResponse(cdrom, {0x42});
+        readSingleResponseAndAck(cdrom);
+
+        cdrom.tick(kCdromReadCycles * 2);
+        assert(irqType(cdrom) == 0x01);
+        enableBufferRead(cdrom);
+        for (size_t i = 0; i < 2048; ++i)
+        {
+            assert(cdrom.readData() == userByte(0, i));
+        }
+        assert(cdrom.readData() == userByte(0, 2040));
+
+        enableBufferRead(cdrom);
+        assert(cdrom.readData() == userByte(1, 0));
     }
 
     return 0;

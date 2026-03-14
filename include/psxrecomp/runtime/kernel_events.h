@@ -194,6 +194,16 @@ class KernelEventTable
     bool isEventDelivered(u32 handle) const;
 
     /**
+     * @brief Consume a delivered polling event and reset it to Enabled.
+     *
+     * Mirrors the PSX BIOS WaitEvent/TestEvent behavior for NoCallback
+     * events, where a successful wait clears the delivered state back to
+     * the waiting/busy state.
+     * @return true if the event was delivered and got consumed.
+     */
+    bool consumeDeliveredEvent(u32 handle);
+
+    /**
      * @brief Map an InterruptLine to the corresponding event class.
      */
     static u32 interruptLineToEventClass(InterruptLine line);

@@ -24,11 +24,13 @@ PsxSystem::RamCopyBounds PsxSystem::planRamCopy(Address destination, u32 request
 {
     RamCopyBounds bounds{};
     bounds.physicalDestination = normalizeAddress(destination);
-    bounds.destinationInRam = bounds.physicalDestination < MemoryMap::RAM_SIZE;
+    bounds.destinationInRam = isMainRamAddress(bounds.physicalDestination);
     if (!bounds.destinationInRam)
     {
         return bounds;
     }
+
+    bounds.physicalDestination = foldMainRamAddress(bounds.physicalDestination);
 
     const u32 remaining = MemoryMap::RAM_SIZE - bounds.physicalDestination;
     bounds.writableLength = std::min(requestedLength, remaining);

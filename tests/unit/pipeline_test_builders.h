@@ -25,3 +25,5 @@ std::vector<psxrecomp::u8> buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads()
 std::vector<psxrecomp::u8> buildExeWithGapAdjacentRegisterCallTarget();
 std::vector<psxrecomp::u8> buildExeWithGapAdjacentPointerCellTarget();
 std::vector<psxrecomp::u8> buildExeWithStoredGapAdjacentDispatchTarget();
+std::vector<psxrecomp::u8> buildExeWithDelaySlotStoredDispatchTarget();
+std::vector<psxrecomp::u8> buildExeWithReturnedDispatchTargetStore();

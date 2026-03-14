@@ -3,12 +3,49 @@
 #include "bios_helpers.h"
 #include "irq_trace_utils.h"
 
+#include <iomanip>
 #include <sstream>
 
 namespace psxrecomp
 {
 namespace runtime
 {
+
+namespace
+{
+
+std::string formatBiosWriteBytes(const u8* data, u32 length)
+{
+    std::ostringstream text;
+    for (u32 i = 0; i < length; ++i)
+    {
+        const unsigned char ch = data[i];
+        if (ch >= 0x20 && ch <= 0x7Eu)
+        {
+            text << static_cast<char>(ch);
+            continue;
+        }
+        switch (ch)
+        {
+        case '\n':
+            text << "\\n";
+            break;
+        case '\r':
+            text << "\\r";
+            break;
+        case '\t':
+            text << "\\t";
+            break;
+        default:
+            text << "\\x" << std::hex << std::setw(2) << std::setfill('0')
+                 << static_cast<unsigned>(ch) << std::dec << std::setfill(' ');
+            break;
+        }
+    }
+    return text.str();
+}
+
+} // namespace
 
 bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
 {
@@ -224,6 +261,30 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
             }
         }
         regs[2] = static_cast<u32>(result);
+        return true;
+    }
+    case 0x35: // FileWrite(fd, src, length)
+    {
+        const int fd = static_cast<int>(a0);
+        const u8* src = ramPointerConst(m_ram.data(), a1);
+        if (fd == 1)
+        {
+            std::ostringstream msg;
+            msg << "BIOS B0 write fd=1 len=" << std::dec << a2 << " data=\""
+                << formatBiosWriteBytes(src, a2) << "\"";
+            m_logger.log(LogLevel::Info, "bios", msg.str());
+            regs[2] = a2;
+            return true;
+        }
+        if (m_biosFt.getFd(fd) != nullptr)
+        {
+            m_logger.log(LogLevel::Warn, "bios",
+                         "BIOS B0 write rejected on read-only ISO file descriptor");
+            regs[2] = 0xFFFFFFFFu;
+            return true;
+        }
+        m_logger.log(LogLevel::Warn, "bios", "BIOS B0 write rejected on unsupported descriptor");
+        regs[2] = 0xFFFFFFFFu;
         return true;
     }
     case 0x36: // FileClose(fd)

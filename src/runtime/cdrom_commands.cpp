@@ -136,9 +136,11 @@ void Cdrom::executePendingCommand()
         }
         m_execution.motorOn = true;
         m_execution.currentLba = m_execution.nextReadLba;
-        m_execution.readActive = true;
-        m_execution.cyclesUntilSector = CDROM_READ_CYCLES;
+        m_execution.readActive = false;
+        m_execution.seekActive = true;
+        m_execution.cyclesUntilSector = currentReadCycles();
         m_dataFifo.clear();
+        m_bufferedReadSectors.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
@@ -154,6 +156,7 @@ void Cdrom::executePendingCommand()
         m_execution.xaPrevRight1 = 0;
         m_execution.xaPrevRight2 = 0;
         m_dataFifo.clear();
+        m_bufferedReadSectors.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
@@ -166,11 +169,13 @@ void Cdrom::executePendingCommand()
     {
         const u8 firstStat = currentStat();
         m_execution.readActive = false;
+        m_execution.seekActive = false;
         m_execution.xaPrevLeft1 = 0;
         m_execution.xaPrevLeft2 = 0;
         m_execution.xaPrevRight1 = 0;
         m_execution.xaPrevRight2 = 0;
         m_dataFifo.clear();
+        m_bufferedReadSectors.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
@@ -194,6 +199,7 @@ void Cdrom::executePendingCommand()
         m_execution.xaPrevRight1 = 0;
         m_execution.xaPrevRight2 = 0;
         m_dataFifo.clear();
+        m_bufferedReadSectors.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
@@ -359,7 +365,7 @@ void Cdrom::writeRequestControl(u8 value)
                m_requestControl, m_dataFifo.size(), m_activeSector.size());
     if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
     {
-        pumpSectorToDataFifo();
+        acceptBufferedReadSector(true);
     }
 }
 
@@ -412,6 +418,7 @@ void Cdrom::queueErrorInterrupt(u8 reasonCode)
     m_execution.readActive = false;
     m_execution.seekActive = false;
     m_dataFifo.clear();
+    m_bufferedReadSectors.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
     m_dataPadValid = false;
@@ -427,6 +434,7 @@ void Cdrom::beginDoorOpenTransition(bool closeAfterTransition)
     m_execution.readActive = false;
     m_execution.seekActive = false;
     m_dataFifo.clear();
+    m_bufferedReadSectors.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
     m_dataPadValid = false;

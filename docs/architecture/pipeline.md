@@ -188,7 +188,7 @@ See [Resource Extraction Layout 1.0](resource_extraction_layout.md) for schemas 
 PSXRecomp maintains the PSX memory layout:
 
 ```
-0x00000000 - 0x001FFFFF: Main RAM (2MB)
+0x00000000 - 0x001FFFFF: Main RAM (2MB, mirrored through 0x007FFFFF)
 0x1F800000 - 0x1F8003FF: Scratchpad (1KB)
 0x1F801000 - 0x1F801FFF: I/O Ports
 0x1FC00000 - 0x1FC7FFFF: BIOS ROM (512KB)

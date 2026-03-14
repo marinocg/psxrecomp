@@ -171,9 +171,12 @@ void PsxSystem::initializeBiosCdromState(u32 handleStorageAddress)
     resetBiosCdromState();
     m_biosCdrom.initialized = true;
     m_biosCdrom.handleStorageAddress = handleStorageAddress;
+    const Address handleStoragePhysical = normalizeAddress(handleStorageAddress);
     const bool hasHandleStorage =
         handleStorageAddress != 0u &&
-        normalizeAddress(handleStorageAddress) <=
+        isMainRamAddress(handleStoragePhysical,
+                         static_cast<Address>(BIOS_CDROM_EVENT_SPECS.size() * sizeof(u32))) &&
+        foldMainRamAddress(handleStoragePhysical) <=
             MemoryMap::RAM_SIZE - static_cast<Address>(BIOS_CDROM_EVENT_SPECS.size() * sizeof(u32));
 
     if (hasHandleStorage)

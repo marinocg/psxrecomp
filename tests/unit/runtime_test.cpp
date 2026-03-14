@@ -213,7 +213,7 @@ int main()
     system.write<psxrecomp::u32>(MemoryMap::RAM_BASE + 0x20, 0x12345678);
     assert(system.read<psxrecomp::u32>(ramMirror) == 0x12345678);
 
-    Address ramOut = MemoryMap::RAM_BASE + MemoryMap::RAM_SIZE;
+    Address ramOut = 0x00800000u;
     system.write<psxrecomp::u32>(ramOut, 0xFACEB00C);
     assert(system.read<psxrecomp::u32>(ramOut) == 0);
 

@@ -292,10 +292,14 @@ dma_transfer_complete:
     if (port == DmaPort::Spu)
     {
         m_spu.noteDmaTransfer(fromRam, transferredWords);
-        // libsnd-style callers wait on the SPU completion event after arming
-        // DMA4, so complete it asynchronously on the hardware tick path.
-        m_pendingSpuDmaCompletion = true;
-        m_pendingSpuDmaCompletionCycles = 2048;
+        if (transferredWords > 0)
+        {
+            // libsnd-style callers wait on the SPU completion event after a
+            // real DMA4 transfer completes, so synthesize the completion edge
+            // asynchronously on the hardware tick path.
+            m_pendingSpuDmaCompletion = true;
+            m_pendingSpuDmaCompletionCycles = 2048;
+        }
     }
 
     std::ostringstream message;

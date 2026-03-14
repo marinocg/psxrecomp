@@ -9,6 +9,8 @@ namespace recompiler
 
 void emitRuntimeSupportHelpers(CppEmitter& emitter)
 {
+    emitter.writeLine("inline void flushCycles(RecompilerContext& context);");
+    emitter.writeBlank();
     emitter.writeLine("inline bool strictAddrErrorsEnabled()");
     emitter.openBlock("");
     emitter.writeLine("#if PSXRECOMP_STRICT_ADDR_ERRORS");
@@ -42,83 +44,122 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.closeBlock();
     emitter.writeBlank();
 
+    emitter.writeLine("inline void accountCpuDataAccessCycles(RecompilerContext& context,");
+    emitter.writeLine("                                      Address address, bool isWrite)");
+    emitter.openBlock("");
+    emitter.writeLine("Address physical = address & 0x1FFFFFFF;");
+    emitter.writeLine("u32 extraCycles = 0;");
+    emitter.openBlock("if (!isWrite && physical < 0x00800000u)");
+    emitter.writeLine("// PSX-SPX: CPU data reads from main RAM take 6 waitstates plus");
+    emitter.writeLine("// the opcode cycle. Writes are buffered through the write queue,");
+    emitter.writeLine("// so do not need the same penalty in the common case.");
+    emitter.writeLine("extraCycles = 6;");
+    emitter.closeBlock();
+    emitter.openBlock("if (extraCycles == 0)");
+    emitter.writeLine("return;");
+    emitter.closeBlock();
+    emitter.writeLine("context.pendingCycles += extraCycles;");
+    emitter.writeLine("static constexpr u32 kCycleFlushThreshold = 2048;");
+    emitter.writeLine("if (context.pendingCycles >= kCycleFlushThreshold)");
+    emitter.openBlock("");
+    emitter.writeLine("flushCycles(context);");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+
     // readMemory32 — straightforward RAM read.
-    emitter.writeLine("inline u32 readMemory32(runtime::PsxSystem& system, Address address)");
+    emitter.writeLine("inline u32 readMemory32(RecompilerContext& context, Address address)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x3u) != 0)");
-    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
-    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.writeLine(
+        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
+    emitter.writeLine(
+        "                  context.system.debugOverlay().lastProgramCounter(), address);");
     emitter.closeBlock();
-    emitter.writeLine("return system.read<u32>(address);");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
+    emitter.writeLine("return context.system.read<u32>(address);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
-        "inline void writeMemory32(runtime::PsxSystem& system, Address address, u32 value)");
+        "inline void writeMemory32(RecompilerContext& context, Address address, u32 value)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x3u) != 0)");
-    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
-    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.writeLine(
+        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
+    emitter.writeLine(
+        "                  context.system.debugOverlay().lastProgramCounter(), address);");
     emitter.closeBlock();
-    emitter.writeLine("system.write<u32>(address, value);");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
+    emitter.writeLine("context.system.write<u32>(address, value);");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // readMemory8 — unsigned byte read.
-    emitter.writeLine("inline u32 readMemory8(runtime::PsxSystem& system, Address address)");
+    emitter.writeLine("inline u32 readMemory8(RecompilerContext& context, Address address)");
     emitter.openBlock("");
-    emitter.writeLine("return static_cast<u32>(system.read<u8>(address));");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
+    emitter.writeLine("return static_cast<u32>(context.system.read<u8>(address));");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // readMemory8s — signed byte read (sign-extend to 32 bits).
-    emitter.writeLine("inline u32 readMemory8s(runtime::PsxSystem& system, Address address)");
+    emitter.writeLine("inline u32 readMemory8s(RecompilerContext& context, Address address)");
     emitter.openBlock("");
-    emitter.writeLine(
-        "return static_cast<u32>(static_cast<s32>(static_cast<s8>(system.read<u8>(address))));");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
+    emitter.writeLine("return static_cast<u32>(static_cast<s32>("
+                      "static_cast<s8>(context.system.read<u8>(address))));");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // readMemory16 — unsigned halfword read.
-    emitter.writeLine("inline u32 readMemory16(runtime::PsxSystem& system, Address address)");
+    emitter.writeLine("inline u32 readMemory16(RecompilerContext& context, Address address)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x1u) != 0)");
-    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
-    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.writeLine(
+        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
+    emitter.writeLine(
+        "                  context.system.debugOverlay().lastProgramCounter(), address);");
     emitter.closeBlock();
-    emitter.writeLine("return static_cast<u32>(system.read<u16>(address));");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
+    emitter.writeLine("return static_cast<u32>(context.system.read<u16>(address));");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // readMemory16s — signed halfword read (sign-extend to 32 bits).
-    emitter.writeLine("inline u32 readMemory16s(runtime::PsxSystem& system, Address address)");
+    emitter.writeLine("inline u32 readMemory16s(RecompilerContext& context, Address address)");
     emitter.openBlock("");
-    emitter.writeLine(
-        "return static_cast<u32>(static_cast<s32>(static_cast<s16>(system.read<u16>(address))));");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
+    emitter.writeLine("return static_cast<u32>(static_cast<s32>("
+                      "static_cast<s16>(context.system.read<u16>(address))));");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // writeMemory8 — byte store.
     emitter.writeLine(
-        "inline void writeMemory8(runtime::PsxSystem& system, Address address, u32 value)");
+        "inline void writeMemory8(RecompilerContext& context, Address address, u32 value)");
     emitter.openBlock("");
-    emitter.writeLine("system.write<u8>(address, static_cast<u8>(value & 0xFF));");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
+    emitter.writeLine("context.system.write<u8>(address, static_cast<u8>(value & 0xFF));");
     emitter.closeBlock();
     emitter.writeBlank();
 
     // writeMemory16 — halfword store.
     emitter.writeLine(
-        "inline void writeMemory16(runtime::PsxSystem& system, Address address, u32 value)");
+        "inline void writeMemory16(RecompilerContext& context, Address address, u32 value)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x1u) != 0)");
-    emitter.writeLine("raiseAddressError(system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
-    emitter.writeLine("                  system.debugOverlay().lastProgramCounter(), address);");
+    emitter.writeLine(
+        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
+    emitter.writeLine(
+        "                  context.system.debugOverlay().lastProgramCounter(), address);");
     emitter.closeBlock();
-    emitter.writeLine("system.write<u16>(address, static_cast<u16>(value & 0xFFFF));");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
+    emitter.writeLine("context.system.write<u16>(address, static_cast<u16>(value & 0xFFFF));");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("inline u32 readMmio32(runtime::PsxSystem& system, Address address)");
+    emitter.writeLine("inline u32 readMmio32(RecompilerContext& context, Address address)");
     emitter.openBlock("");
-    emitter.writeLine("u32 value = system.readMmioExplicit<u32>(address);");
+    emitter.writeLine("u32 value = context.system.readMmioExplicit<u32>(address);");
     emitter.writeLine("static const bool traceMmio = []()");
     emitter.openBlock("");
     emitter.writeLine("if (const char* env = std::getenv(\"PSXRECOMP_TRACE_MMIO\"))");
@@ -132,11 +173,12 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("std::cerr << \"[mmio] read32 0x\" << std::hex << address << \" = 0x\" "
                       "<< value << \"\\n\";");
     emitter.closeBlock();
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
     emitter.writeLine("return value;");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
-        "inline void writeMmio32(runtime::PsxSystem& system, Address address, u32 value)");
+        "inline void writeMmio32(RecompilerContext& context, Address address, u32 value)");
     emitter.openBlock("");
     emitter.writeLine("static const bool traceMmio = []()");
     emitter.openBlock("");
@@ -151,7 +193,8 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeLine("std::cerr << \"[mmio] write32 0x\" << std::hex << address << \" = 0x\" "
                       "<< value << \"\\n\";");
     emitter.closeBlock();
-    emitter.writeLine("system.writeMmioExplicit<u32>(address, value);");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
+    emitter.writeLine("context.system.writeMmioExplicit<u32>(address, value);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline const char* cpuExceptionCodeToString(u32 code)");

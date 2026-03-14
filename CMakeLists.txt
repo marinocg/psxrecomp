@@ -113,6 +113,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_analysis_helpers.cpp
     src/recompiler/pipeline_harvest_internal.cpp
     src/recompiler/pipeline_harvest_helpers.cpp
+    src/recompiler/pipeline_harvest_return_pointer_helpers.cpp
     src/recompiler/pipeline_indirect_call_helpers.cpp
     src/recompiler/pipeline_memory_reference_helpers.cpp
     src/recompiler/pipeline_helpers.cpp
@@ -369,6 +370,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(runtime_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(runtime_ram_mirror_test
+        tests/unit/runtime_ram_mirror_test.cpp
+    )
+    target_link_libraries(runtime_ram_mirror_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(diag_watchpoints_test
         tests/unit/diag_watchpoints_test.cpp
     )
@@ -496,6 +502,20 @@ if(BUILD_TESTS)
         tests/unit/pipeline_test_gap_builders.cpp
     )
     target_link_libraries(pipeline_test
+        PRIVATE
+            psxrecomp_iso
+            psxrecomp_disasm
+            psxrecomp_ir
+            psxrecomp_recompiler
+            psxrecomp_runtime
+    )
+
+    add_psxrecomp_unit_test(pipeline_harvest_regression_test
+        tests/unit/pipeline_harvest_regression_test.cpp
+        tests/unit/pipeline_test_builders.cpp
+        tests/unit/pipeline_test_gap_builders.cpp
+    )
+    target_link_libraries(pipeline_harvest_regression_test
         PRIVATE
             psxrecomp_iso
             psxrecomp_disasm

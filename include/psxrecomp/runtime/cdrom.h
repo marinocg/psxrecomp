@@ -93,9 +93,11 @@ class Cdrom
     static constexpr size_t MAX_PARAMS = 16;
     static constexpr size_t RESPONSE_CAPACITY = 32;
     static constexpr size_t DATA_FIFO_CAPACITY = 4096;
+    static constexpr size_t MAX_BUFFERED_READ_SECTORS = 8;
     static constexpr size_t MAX_QUEUED_SECTORS = 64;
     static constexpr size_t MAX_QUEUED_IRQ_EVENTS = 32;
     static constexpr u32 CDROM_READ_CYCLES = 451584; // 33.8688MHz / 75 sectors/sec (1x)
+    static constexpr u32 CDROM_DOUBLE_SPEED_READ_CYCLES = CDROM_READ_CYCLES / 2u;
 
     struct CommandFifo
     {
@@ -257,6 +259,7 @@ class Cdrom
     DataFifo m_dataFifo;
     CommandExecutionState m_execution;
     std::deque<std::vector<u8>> m_sectorQueue;
+    std::deque<std::vector<u8>> m_bufferedReadSectors;
     std::vector<u8> m_activeSector;
     size_t m_activeSectorOffset = 0;
     u8 m_interruptFlags = 0;
@@ -283,8 +286,10 @@ class Cdrom
     void executePendingCommand();
     void queueInterruptEvent(u8 type, std::initializer_list<u8> responses = {});
     void publishNextInterruptEvent();
-    void pumpSectorToDataFifo();
-    void loadActiveSector();
+    void acceptBufferedReadSector(bool replaceExistingData);
+    bool queueReadSector();
+    bool loadReadSector(std::vector<u8>& outSector);
+    u32 currentReadCycles() const;
 };
 
 } // namespace runtime

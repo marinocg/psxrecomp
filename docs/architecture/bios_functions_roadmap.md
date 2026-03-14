@@ -186,7 +186,7 @@ Implementation sources: `src/runtime/psx_system_bios_a0.cpp`, `src/runtime/psx_s
 - [x] `0x07` — `DeliverEvent(class, spec)` — _Functional: delivers matching kernel events and invokes callbacks_
 - [x] `0x08` — `OpenEvent(class, spec, mode, func)` — _Functional: allocates real kernel event handles_
 - [x] `0x09` — `CloseEvent(event)` — _Functional: closes kernel event handles_
-- [x] `0x0A` — `WaitEvent(event)` — _Functional: blocks for `NoCallback` events while pumping runtime hardware_
+- [x] `0x0A` — `WaitEvent(event)` — _Functional: blocks for `NoCallback` events while pumping runtime hardware and consumes delivered polling events back to the busy/enabled state_
 - [x] `0x0B` — `TestEvent(event)` — _Functional: reports and clears delivered event state_
 - [x] `0x0C` — `EnableEvent(event)` — _Functional: enables an existing kernel event_
 - [x] `0x0D` — `DisableEvent(event)` — _Functional: disables an existing kernel event_
@@ -234,7 +234,7 @@ Implementation sources: `src/runtime/psx_system_bios_a0.cpp`, `src/runtime/psx_s
 - [x] `0x32` — `FileOpen(filename, accessmode)` — _Functional: read-only ISO 9660-backed open over mounted disc contents_
 - [x] `0x33` — `FileSeek(fd, offset, seektype)` — _Functional: seek within read-only BIOS file descriptors_
 - [x] `0x34` — `FileRead(fd, dst, length)` — _Functional: reads bytes from mounted-disc file extents_
-- [ ] `0x35` — `FileWrite(fd, src, length)`
+- [x] `0x35` — `FileWrite(fd, src, length)` — _Functional: writes to BIOS stdout (`fd=1`) and rejects writes to read-only ISO file descriptors_
 - [x] `0x36` — `FileClose(fd)` — _Functional: closes BIOS file descriptors_
 - [ ] `0x37` — `FileIoctl(fd, cmd, arg)`
 - [ ] `0x38` — `exit(exitcode)`

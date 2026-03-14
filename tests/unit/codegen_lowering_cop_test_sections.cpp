@@ -82,8 +82,8 @@ void runCodegenLoweringCopTests()
         assert(source.find("context.system.gte().mfc2") != std::string::npos);
         assert(source.find("context.system.gte().ctc2") != std::string::npos);
         assert(source.find("context.system.gte().cfc2") != std::string::npos);
-        assert(source.find("readMemory32(context.system, 0x80011000)") != std::string::npos);
-        assert(source.find("writeMemory32(context.system, 0x80011004, "
+        assert(source.find("readMemory32(context, 0x80011000)") != std::string::npos);
+        assert(source.find("writeMemory32(context, 0x80011004, "
                            "context.system.gte().mfc2(static_cast<u8>(8)))") != std::string::npos);
         assert(source.find("context.system.gte().exec(static_cast<u32>(" +
                            std::to_string(static_cast<psxrecomp::s32>(0x4A280030u)) + "))") !=

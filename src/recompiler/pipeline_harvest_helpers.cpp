@@ -355,7 +355,6 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         knownPointerWords.insert(address);
     }
 
-    size_t harvestedFromCode = 0;
     for (size_t index = 0; index < disassembled.size(); ++index)
     {
         const auto& instruction = disassembled[index];
@@ -401,7 +400,10 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         }
         bool usedAsRegisterJumpTarget = false;
         bool usedAsStoredPointer = false;
-        bool usedAsCallArgument = false;
+        bool usedAsCallArgument =
+            builtAddressIndex > 0 &&
+            disassembled[builtAddressIndex - 1].opcode == disasm::Opcode::JAL &&
+            addressRegister >= Registers::A0 && addressRegister <= Registers::A3;
         for (size_t lookAhead = 1;
              lookAhead <= 16 && builtAddressIndex + lookAhead < disassembled.size(); ++lookAhead)
         {
@@ -462,10 +464,12 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         {
             results.codeHarvestedPointers.push_back(target);
             existingSeeds.insert(target);
-            ++harvestedFromCode;
         }
     }
-    (void)harvestedFromCode;
+    for (const Address target : harvestReturnedCodePointerSeeds(
+             disassembled, instructionIndexMap, knownBoundaries, baseAddress, endAddress))
+        if (existingSeeds.insert(target).second)
+            results.codeHarvestedPointers.push_back(target);
 
     results.knownPointerTableWords.assign(knownPointerWords.begin(), knownPointerWords.end());
     std::sort(results.harvestedPointers.begin(), results.harvestedPointers.end());
