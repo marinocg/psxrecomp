@@ -435,8 +435,8 @@ class PsxSystem
     u32 m_frameCount = 0;
     u32 m_pendingSpuDmaCompletionCycles = 0;
     bool m_pendingSpuDmaCompletion = false;
-    u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
-    u32 m_irqBlockedConsecutive = 0;   ///< Diagnostic counter for persistent IRQ delivery blockage
+    u32 m_criticalSectionDepth = 0;  ///< Tracks nested Enter/ExitCriticalSection syscalls
+    u32 m_irqBlockedConsecutive = 0; ///< Diagnostic counter for persistent IRQ delivery blockage
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState
     {
@@ -467,7 +467,6 @@ class PsxSystem
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
     bool m_hasPendingCallbackRegisters = false;
-    u32 m_irqServiceDepth = 0; ///< Depth guard for in-flight IRQ service re-entry.
     u32 m_callbackContextCommitGeneration = 0;
     std::array<u32, 32> m_pendingCallbackRegisters{};
     std::array<bool, 32> m_pendingCallbackRegisterMask{};
@@ -516,10 +515,9 @@ class PsxSystem
     /**
      * @brief Inner IRQ service work: chains, CD-ROM, HookEntryInt, kernel events.
      *
-     * Called both from the fresh exception entry path and from the in-flight
-     * service path (when already inside a callback/exception context).  The
-     * caller is responsible for exception entry/exit (exceptionEnter/rfe) and
-     * for the m_irqServiceDepth guard when using the in-flight path.
+     * Only called from the fresh exception entry path inside serviceInterrupts().
+     * The caller is responsible for exception entry/exit (exceptionEnter/rfe via
+     * IrqExceptionExitGuard).
      */
     void serviceIrqWork(u32 pendingMasked);
 

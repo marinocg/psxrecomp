@@ -1,23 +1,24 @@
 /**
  * @file irq_service_split_test.cpp
- * @brief Tests for the fresh-vs-in-flight IRQ service split (PR-RV13).
+ * @brief Tests for the PSX-SPX "no nested exceptions" rule (PR-RV13).
+ *
+ * PSX-SPX states the BIOS kernel does not support nested exceptions.
+ * The runtime must never call exceptionEnter() while already inside
+ * BIOS exception handling (m_inCallbackInvocation == true).
  *
  * Covers:
- *  - No fresh nested exceptionEnter when already in exception+callback mode
- *  - In-flight service path delivers kernel events when callback is active
- *  - Deadlock state (pending + in_callback + exception_mode) no longer blocks
+ *  - Nested exception entry is blocked when already in exception+callback mode
+ *  - Normal first IRQ still enters the exception handler once (regression)
  */
 #include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <array>
 #include <cassert>
 #include <iostream>
 
 using psxrecomp::u32;
 using psxrecomp::runtime::Cop0;
 using psxrecomp::runtime::InterruptLine;
-using psxrecomp::runtime::LogLevel;
 using psxrecomp::runtime::PsxSystem;
 namespace EventClass = psxrecomp::runtime::EventClass;
 namespace EventSpec = psxrecomp::runtime::EventSpec;
@@ -98,136 +99,68 @@ static void testNoFreshExceptionEnterDuringCallback()
 }
 
 // ---------------------------------------------------------------
-// Test B: In-flight service delivers kernel events while inside callback
+// Test B: Normal first IRQ still enters the exception handler once
+//
+// PSX-SPX regression: when no exception is currently active and a
+// pending IRQ is present, serviceInterrupts() must call exceptionEnter()
+// exactly once so the IRQ is dispatched normally.
 //
 // Set up:
-//   - COP0 in exception mode (isInExceptionMode=true)
+//   - COP0 NOT in exception mode (fresh state, IEc=1, IM2 enabled)
 //   - VBlank IRQ raised and masked
-//   - Kernel event for VBlank with a Callback pointing to vblankEventAddr
-//   - Callback invoker: outer callback calls serviceInterrupts(); inner
-//     callback (vblankEventAddr) records that it was called
+//   - Kernel event for VBlank in Callback mode
 //
 // Verify:
-//   - vblankEventCallback is invoked from the in-flight path (even though
-//     m_inCallbackInvocation=true when serviceInterrupts is called)
-//   - the old "pending + in_callback + exception_mode = do nothing" path
-//     is no longer taken
+//   - Callback is invoked (exception was entered and IRQ dispatched)
+//   - COP0 was in exception mode during the callback (exceptionEnter called)
+//   - COP0 returns to normal mode after serviceInterrupts() (rfe called)
 // ---------------------------------------------------------------
-static void testInFlightDeliversKernelEventFromCallback()
+static void testNormalFirstIrqEntersOnce()
 {
     PsxSystem system;
     assert(system.initialize());
 
-    // Put COP0 into exception mode so irqTakeEligible=false.
+    // Starting state: IEc=1, KUp=0, IM2 enabled — not in exception mode.
     system.cop0().mtc0(Cop0::RegisterIndex::Status, 0x040Bu);
-    system.cop0().exceptionEnter(Cop0::ExceptionCode::Interrupt, 0x80001000u, false);
-    assert(system.cop0().isInExceptionMode());
+    assert(!system.cop0().isInExceptionMode());
 
-    // Raise VBlank with the mask enabled.
+    // Enable VBlank mask and raise the IRQ.
     system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
     system.interrupts().raise(InterruptLine::VBlank);
 
     // Open a VBlank kernel event in Callback mode.
-    constexpr u32 vblankEventAddr = 0x80014000u;
+    constexpr u32 vblankCallbackAddr = 0x80015000u;
     const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
-                                                  EventMode::Callback, vblankEventAddr);
+                                                  EventMode::Callback, vblankCallbackAddr);
     assert(system.events().enableEvent(handle));
 
-    constexpr u32 outerAddr = 0x80012000u;
-
-    bool vblankEventInvoked = false;
-    system.setCallbackInvoker(
-        [&](u32 address) -> u32
-        {
-            if (address == outerAddr)
-            {
-                // m_inCallbackInvocation=true, COP0 in exception mode.
-                // serviceInterrupts must use the in-flight path and deliver the event.
-                system.serviceInterrupts();
-            }
-            if (address == vblankEventAddr)
-            {
-                vblankEventInvoked = true;
-            }
-            return 0;
-        });
-
-    system.invokeCallback(outerAddr);
-
-    assert(vblankEventInvoked);
-    std::cerr << "[PASS] In-flight path delivers kernel event from inside callback\n";
-}
-
-// ---------------------------------------------------------------
-// Test C: Deadlock state no longer triggers irq_blocked_diagnostic
-//
-// The specific deadlock state is:
-//   pending IRQ + m_inCallbackInvocation=true + COP0 in exception mode
-//
-// Before the fix, this produced "pending forever, do nothing" and
-// eventually logged irq_blocked_diagnostic (Error level).  After the fix,
-// the in-flight path makes progress and the counter never reaches 64.
-//
-// Verify by installing a logger callback and asserting no Error-level
-// irq_blocked_diagnostic is logged across 128 serviceInterrupts() calls
-// from within a callback while in exception mode.
-// ---------------------------------------------------------------
-static void testDeadlockStateNoLongerLogsBlockedDiagnostic()
-{
-    PsxSystem system;
-    assert(system.initialize());
-
-    system.cop0().mtc0(Cop0::RegisterIndex::Status, 0x040Bu);
-    system.cop0().exceptionEnter(Cop0::ExceptionCode::Interrupt, 0x80001000u, false);
-
-    system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
-    system.interrupts().raise(InterruptLine::VBlank);
-
-    constexpr u32 vblankEventAddr = 0x80014100u;
-    const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
-                                                  EventMode::Callback, vblankEventAddr);
-    assert(system.events().enableEvent(handle));
-
-    bool blockedDiagLogged = false;
-    system.logger().setCallback(
-        [&](const psxrecomp::runtime::LogEvent& event)
-        {
-            if (event.level == LogLevel::Error &&
-                event.message.find("irq_blocked_diagnostic") != std::string::npos)
-            {
-                blockedDiagLogged = true;
-            }
-        });
-    system.logger().setMinLevel(LogLevel::Error);
-
-    constexpr u32 outerAddr = 0x80012100u;
-    int serviceCallsFromCallback = 0;
+    bool callbackInvoked = false;
+    bool inExceptionModeInsideCallback = false;
 
     system.setCallbackInvoker(
         [&](u32 address) -> u32
         {
-            if (address == outerAddr)
+            if (address == vblankCallbackAddr)
             {
-                // Call serviceInterrupts 128 times from inside the callback
-                // while COP0 is in exception mode.  The in-flight path should
-                // service the VBlank and drain it within the first few calls.
-                for (int i = 0; i < 128; ++i)
-                {
-                    system.serviceInterrupts();
-                    ++serviceCallsFromCallback;
-                }
+                callbackInvoked = true;
+                // exceptionEnter() must have been called before dispatching the
+                // callback, so COP0 must report exception mode here.
+                inExceptionModeInsideCallback = system.cop0().isInExceptionMode();
             }
-            // Accept the vblankEventAddr callback silently.
             return 0;
         });
 
-    system.invokeCallback(outerAddr);
+    // serviceInterrupts from outside any callback — fresh exception path.
+    system.serviceInterrupts();
 
-    assert(serviceCallsFromCallback == 128);
-    assert(!blockedDiagLogged);
+    // The callback must have fired (exception was entered, IRQ dispatched).
+    assert(callbackInvoked);
+    // COP0 must have been in exception mode during the callback.
+    assert(inExceptionModeInsideCallback);
+    // After serviceInterrupts returns, rfe() must have restored normal mode.
+    assert(!system.cop0().isInExceptionMode());
 
-    std::cerr << "[PASS] Deadlock state (pending+callback+exception) no longer logs "
-                 "irq_blocked_diagnostic\n";
+    std::cerr << "[PASS] Normal first IRQ enters once: exceptionEnter called, rfe called on exit\n";
 }
 
 } // namespace
@@ -235,8 +168,7 @@ static void testDeadlockStateNoLongerLogsBlockedDiagnostic()
 int main()
 {
     testNoFreshExceptionEnterDuringCallback();
-    testInFlightDeliversKernelEventFromCallback();
-    testDeadlockStateNoLongerLogsBlockedDiagnostic();
+    testNormalFirstIrqEntersOnce();
 
     std::cerr << "\nAll IRQ service split tests passed.\n";
     return 0;

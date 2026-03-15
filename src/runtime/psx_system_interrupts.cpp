@@ -523,20 +523,19 @@ void PsxSystem::serviceInterrupts()
     const bool cop0IrqPending = pendingMasked != 0u || swPending;
     const bool irqTakeEligible = m_cop0.shouldTakeInterruptException();
 
-    // Fresh exception entry: COP0 must be ready to take an interrupt and no
-    // callback may currently be executing (we are not yet inside any handler).
+    // Fresh exception entry: COP0 must be ready to take an interrupt and the
+    // machine must not already be inside BIOS exception handling.
+    // PSX-SPX explicitly states the kernel does not support nested exceptions,
+    // so we never call exceptionEnter() while m_inCallbackInvocation is true.
     const bool canEnterFreshIrqException =
         cop0IrqPending && m_criticalSectionDepth == 0 && !m_inCallbackInvocation && irqTakeEligible;
 
-    // In-flight service: we are already inside a callback/exception context.
-    // Service pending IRQ work without entering a new COP0 exception.
-    // m_irqServiceDepth == 0 prevents accidental recursive full dispatch.
-    const bool canContinueCurrentIrqService =
-        cop0IrqPending && m_criticalSectionDepth == 0 && m_irqServiceDepth == 0 &&
-        m_inCallbackInvocation && m_cop0.isInExceptionMode();
+    // Whether fresh entry was denied because exception handling is already active.
+    const bool freshEntryDeniedInCallback =
+        cop0IrqPending && m_inCallbackInvocation && !canEnterFreshIrqException;
 
     // Diagnostic: detect persistent IRQ delivery blockage.
-    if (cop0IrqPending && !canEnterFreshIrqException && !canContinueCurrentIrqService)
+    if (cop0IrqPending && !canEnterFreshIrqException)
     {
         ++m_irqBlockedConsecutive;
         if (m_irqBlockedConsecutive == 64u)
@@ -549,7 +548,8 @@ void PsxSystem::serviceInterrupts()
                 << " in_hook=" << (m_inHookEntryIntHandler ? 1 : 0)
                 << " take_eligible=" << (irqTakeEligible ? 1 : 0)
                 << " exception_mode=" << (m_cop0.isInExceptionMode() ? 1 : 0)
-                << " irq_service_depth=" << m_irqServiceDepth << " pc=0x" << std::hex
+                << " fresh_entry_denied_in_callback=" << (freshEntryDeniedInCallback ? 1 : 0)
+                << " pc=0x" << std::hex
                 << m_debugOverlay.lastProgramCounter() << " timer2_counter=" << std::dec
                 << m_timers.readCounter(2) << " timer2_hw_target=" << m_timers.readTarget(2)
                 << " sw_target_0x80188F8C=0x" << std::hex
@@ -586,7 +586,7 @@ void PsxSystem::serviceInterrupts()
             << " cop0_sw_pending=" << (swPending ? 1 : 0)
             << " cop0_irq_take_eligible=" << (irqTakeEligible ? 1 : 0)
             << " can_enter_fresh=" << (canEnterFreshIrqException ? 1 : 0)
-            << " can_continue_current=" << (canContinueCurrentIrqService ? 1 : 0);
+            << " fresh_entry_denied_in_callback=" << (freshEntryDeniedInCallback ? 1 : 0);
         m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
 
@@ -612,38 +612,24 @@ void PsxSystem::serviceInterrupts()
         return;
     }
 
-    if (!canEnterFreshIrqException && !canContinueCurrentIrqService)
+    if (!canEnterFreshIrqException)
     {
-        // Keep pending state visible via Cause.IP bits, but do not dispatch
-        // BIOS/IRQ callbacks: COP0 interrupt masks do not allow a fresh
-        // exception entry, and we are not currently inside an exception that
-        // could service this work in-flight.
+        // Keep pending state visible via Cause.IP bits but do not dispatch.
+        // PSX-SPX: the kernel does not support nested exceptions.  When we
+        // are already inside BIOS exception handling (m_inCallbackInvocation)
+        // or COP0 masks prevent a new entry, we must not call exceptionEnter()
+        // again.  The IRQ will be serviced on the next call from outside the
+        // current exception flow.
         syncCop0InterruptPending();
         return;
     }
 
-    if (canEnterFreshIrqException)
-    {
-        // Enter a fresh COP0 interrupt exception and service all pending work.
-        // rfe() is issued by IrqExceptionExitGuard when this scope exits.
-        m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt,
-                              m_debugOverlay.lastProgramCounter(), false);
-        IrqExceptionExitGuard irqExitGuard(m_cop0);
-        serviceIrqWork(pendingMasked);
-    }
-    else
-    {
-        // In-flight path: already inside a COP0 exception/callback context.
-        // Service pending IRQ work without entering a new exception or calling
-        // rfe().  The depth guard prevents accidental recursive full dispatch.
-        struct DepthGuard
-        {
-            u32& depth;
-            explicit DepthGuard(u32& d) : depth(d) { ++depth; }
-            ~DepthGuard() { --depth; }
-        } depthGuard(m_irqServiceDepth);
-        serviceIrqWork(pendingMasked);
-    }
+    // Enter a fresh COP0 interrupt exception and service all pending work.
+    // rfe() is issued by IrqExceptionExitGuard when this scope exits.
+    m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt,
+                          m_debugOverlay.lastProgramCounter(), false);
+    IrqExceptionExitGuard irqExitGuard(m_cop0);
+    serviceIrqWork(pendingMasked);
 }
 
 PsxSystem::CallbackContextDisposition
