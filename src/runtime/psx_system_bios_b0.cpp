@@ -1,5 +1,7 @@
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <cstdio>
+
 #include "bios_helpers.h"
 #include "irq_trace_utils.h"
 
@@ -53,6 +55,18 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     const u32 a1 = regs[5];
     const u32 a2 = regs[6];
     const u32 a3 = regs[7];
+
+    // Temporary trace - skip the repeating DeliverEvent/RFE/WaitEvent pattern
+    if (functionId != 0x07 && functionId != 0x17 && functionId != 0x0a && functionId != 0x0b)
+    {
+        static int sBiosBCount = 0;
+        if (sBiosBCount < 500)
+        {
+            ++sBiosBCount;
+            std::fprintf(stderr, "[bios] B(0x%02x) a0=0x%08x a1=0x%08x a2=0x%08x a3=0x%08x\n",
+                         functionId, a0, a1, a2, a3);
+        }
+    }
 
     switch (functionId)
     {

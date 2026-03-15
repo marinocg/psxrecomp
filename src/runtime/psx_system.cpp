@@ -262,6 +262,39 @@ void PsxSystem::boot()
     initializeBiosCdromState(0u);
 
     m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
+
+    // Diagnostic: dump the game's interrupt handler table if it resides in
+    // the loaded EXE region. Helps verify CDROM handler registration.
+    constexpr u32 HandlerTableBase = 0x801654EC;
+    constexpr u32 HandlerEntries = 11;
+    const Address htPhysical = normalizeAddress(HandlerTableBase);
+    if (isMainRamAddress(htPhysical, HandlerEntries * sizeof(u32)))
+    {
+        std::ostringstream msg;
+        msg << "handler_table_dump base=0x" << std::hex << HandlerTableBase;
+        for (u32 i = 0; i < HandlerEntries; ++i)
+        {
+            const u32 addr = HandlerTableBase + i * 4;
+            const u32 val = read<u32>(addr);
+            msg << " [" << std::dec << i << "]=0x" << std::hex << val;
+        }
+        m_logger.log(LogLevel::Info, "boot_diag", msg.str());
+    }
+
+    // Diagnostic: dump CD driver hardware pointers from EXE data section
+    {
+        std::ostringstream msg;
+        msg << "cd_hw_ptrs";
+        constexpr u32 addrs[] = {0x80163CEC, 0x80163CF0, 0x80163CF4, 0x80163D18, 0x8016531C};
+        const char* names[] = {"D3_MADR_ptr", "D3_BCR_ptr", "D3_CHCR_ptr", "DICR_ptr",
+                               "CD_STATUS_ptr"};
+        for (int i = 0; i < 5; ++i)
+        {
+            const u32 val = read<u32>(addrs[i]);
+            msg << " " << names[i] << "=0x" << std::hex << val;
+        }
+        m_logger.log(LogLevel::Info, "boot_diag", msg.str());
+    }
 }
 
 void PsxSystem::runFrame()
@@ -339,7 +372,19 @@ void PsxSystem::syncLevelInterruptSources()
     };
 
     raiseIfRequested(m_gpu.irqPending(), InterruptLine::Gpu);
-    raiseIfRequested(m_cdrom.hasIrqRequest(), InterruptLine::Cdrom);
+    const bool cdromIrq = m_cdrom.hasIrqRequest();
+    raiseIfRequested(cdromIrq, InterruptLine::Cdrom);
+    if (cdromIrq)
+    {
+        static int sCdromIrqCount = 0;
+        if (sCdromIrqCount < 5)
+        {
+            std::fprintf(stderr, "[diag] syncLevel cdromIrq=true IF=0x%02X IE=0x%02X I_STAT=0x%04X I_MASK=0x%04X\n",
+                         m_cdrom.readInterruptFlags(), m_cdrom.readInterruptEnable(),
+                         m_interrupts.readStatus(), m_interrupts.readMask());
+            ++sCdromIrqCount;
+        }
+    }
     raiseIfRequested(m_spu.hasIrqRequest(), InterruptLine::Spu);
     raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
     syncCop0InterruptPending();

@@ -436,6 +436,7 @@ class PsxSystem
     u32 m_pendingSpuDmaCompletionCycles = 0;
     bool m_pendingSpuDmaCompletion = false;
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
+    u32 m_irqBlockedConsecutive = 0;   ///< Diagnostic counter for persistent IRQ delivery blockage
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState
     {
@@ -446,10 +447,12 @@ class PsxSystem
         bool initialized = false;
         u32 handleStorageAddress = 0;
         std::array<u32, 5> eventHandles{};
-        u32 asyncResultPtr = 0;   ///< Destination for CdAsyncGetStatus result.
-        u32 asyncReadBuffer = 0;  ///< Destination buffer for sector reads.
-        u32 asyncReadCount = 0;   ///< Sectors remaining to read.
-        u32 asyncSectorsRead = 0; ///< Sectors copied so far.
+        u32 asyncResultPtr = 0;       ///< Destination for CdAsyncGetStatus result.
+        u32 asyncReadBuffer = 0;      ///< Destination buffer for sector reads.
+        u32 asyncReadCount = 0;       ///< Sectors remaining to read.
+        u32 asyncSectorsRead = 0;     ///< Sectors copied so far.
+        u32 asyncReadMode = 0;        ///< Full mode word passed to CdAsyncReadSector (bit8=ReadS).
+        u32 asyncReadSectorBytes = 0; ///< Effective bytes per sector for the active read.
     };
     struct GpuPortTraceEntry
     {
@@ -464,6 +467,7 @@ class PsxSystem
     bool m_inHookEntryIntHandler = false;
     bool m_inCallbackInvocation = false;
     bool m_hasPendingCallbackRegisters = false;
+    u32 m_irqServiceDepth = 0; ///< Depth guard for in-flight IRQ service re-entry.
     u32 m_callbackContextCommitGeneration = 0;
     std::array<u32, 32> m_pendingCallbackRegisters{};
     std::array<bool, 32> m_pendingCallbackRegisterMask{};
@@ -471,6 +475,25 @@ class PsxSystem
     /// BIOS IRQ priority chains (C0:02 SysEnqIntRP / C0:03 SysDeqIntRP).
     /// Each head is a PSX pointer to a 16-byte structure in RAM.
     std::array<u32, 4> m_irqChainHeads{};
+
+    /// Snapshot of MMIO-valued words near each chain struct, captured at
+    /// SysEnqIntRP time. Used to restore EXE-initialized I/O register
+    /// pointers that may be corrupted by buffer overruns before the chain
+    /// handler reads them. Key = RAM address, Value = original word.
+    static constexpr u32 IRQ_CHAIN_DATA_SNAPSHOT_WORDS = 16;
+    struct IrqChainSnapshot
+    {
+        u32 baseAddress = 0;
+        std::array<u32, IRQ_CHAIN_DATA_SNAPSHOT_WORDS> words{};
+    };
+    std::array<IrqChainSnapshot, 4> m_irqChainSnapshots{};
+    void saveIrqChainSnapshot(u32 priority, u32 structAddress);
+    void restoreIrqChainSnapshot(u32 priority);
+
+    /// BIOS heap state (A0:39 InitHeap / A0:33 malloc / A0:34 free).
+    u32 m_biosHeapBase = 0;
+    u32 m_biosHeapSize = 0;
+    u32 m_biosHeapCursor = 0;
 
     /// Profile-driven diagnostic engines.
     DiagProfile m_diagProfile;
@@ -489,6 +512,16 @@ class PsxSystem
      * @return true if a handler executed ReturnFromException (abort lower-priority processing).
      */
     bool dispatchIrqChains();
+
+    /**
+     * @brief Inner IRQ service work: chains, CD-ROM, HookEntryInt, kernel events.
+     *
+     * Called both from the fresh exception entry path and from the in-flight
+     * service path (when already inside a callback/exception context).  The
+     * caller is responsible for exception entry/exit (exceptionEnter/rfe) and
+     * for the m_irqServiceDepth guard when using the in-flight path.
+     */
+    void serviceIrqWork(u32 pendingMasked);
 
     /**
      * @brief Prime periodic VBlank/display events.

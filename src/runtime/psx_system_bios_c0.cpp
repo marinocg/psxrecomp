@@ -51,6 +51,11 @@ bool PsxSystem::callBiosVectorC0(u32 functionId, u32* regs)
             write<u32>(a1 + 0x00, previousHead);
             m_irqChainHeads[a0] = a1;
             regs[2] = 1;
+
+            // Snapshot the data region around the chain struct so that
+            // MMIO pointers (0x1F80xxxx) used by the handlers can be
+            // restored if a buffer overrun zeroes them later.
+            saveIrqChainSnapshot(a0, a1);
         }
         else
         {

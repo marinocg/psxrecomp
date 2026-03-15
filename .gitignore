@@ -103,3 +103,5 @@ docs/latex/
 __pycache__/
 docker-results/
 
+.claude/
+output/

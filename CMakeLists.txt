@@ -400,6 +400,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(interrupt_service_context_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(irq_service_split_test
+        tests/unit/irq_service_split_test.cpp
+    )
+    target_link_libraries(irq_service_split_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(cop0_test
         tests/unit/cop0_test.cpp
     )
@@ -495,6 +500,11 @@ if(BUILD_TESTS)
         tests/unit/bios_cd_test.cpp
     )
     target_link_libraries(bios_cd_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(bios_cd_int1_test
+        tests/unit/bios_cd_int1_test.cpp
+    )
+    target_link_libraries(bios_cd_int1_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp

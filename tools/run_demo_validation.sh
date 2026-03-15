@@ -10,7 +10,7 @@ SUMMARY="$OUT_ROOT/summary.csv"
 RENDER_COMPARE="$OUT_ROOT/render_compare.csv"
 
 render_demos=(ADVHELLO COP0TEST COP0LAB GPUTEST HELLOWLD MEMTEST CDBROWSE CDCRC CDXA GTELAB)
-step_overrides=("CDBROWSE:200000000")
+step_overrides=("CDBROWSE:200000000" "COP0TEST:50000000")
 
 declare -A DEMO_ISOS=(
   [ADVHELLO]="$ROOT/examples/demos/advancedhello/ADVHELLO.iso"

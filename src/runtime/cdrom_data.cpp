@@ -134,6 +134,39 @@ void Cdrom::acceptBufferedReadSector(bool replaceExistingData)
     m_activeSectorOffset = m_activeSector.size();
 }
 
+void Cdrom::loadNextSectorToFifo()
+{
+    // Enable buffer reads (matching what the real BIOS does before reading
+    // sector data) and load the next buffered sector into the data FIFO.
+    m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
+    acceptBufferedReadSector(true);
+}
+
+void Cdrom::enableDataRead()
+{
+    const bool wasEnabled =
+        (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0;
+    m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
+    if (!wasEnabled)
+    {
+        // Replicate the BFRD 0→1 rising-edge behaviour from writeRequestControl:
+        // load the active sector into the data FIFO so readData() returns valid
+        // bytes for the current INT1 without needing a hardware register write.
+        if (!m_activeSector.empty())
+        {
+            m_dataFifo.clear();
+            m_activeSectorOffset = 0;
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
+                                     DATA_FIFO_CAPACITY);
+            m_activeSectorOffset = m_activeSector.size();
+        }
+        else
+        {
+            acceptBufferedReadSector(true);
+        }
+    }
+}
+
 bool Cdrom::queueReadSector()
 {
     std::vector<u8> sector;

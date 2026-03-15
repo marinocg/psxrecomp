@@ -57,6 +57,17 @@ class Cdrom
     void writeInterruptFlags(u8 value);
     void writeInterruptEnable(u8 value);
 
+    /// Load the next buffered read sector into the data FIFO so that
+    /// subsequent readData()/readDma() calls return valid sector data.
+    /// Used by the BIOS async-read path after consuming the current sector.
+    void loadNextSectorToFifo();
+
+    /// Enable data-buffer reads (set REQUEST_ENABLE_BUFFER_READ) and populate
+    /// the data FIFO from the active sector if the bit was previously clear.
+    /// Equivalent to the BIOS writing 0x80 to the request register before
+    /// reading sector data. Must be called before readData() in the INT1 path.
+    void enableDataRead();
+
     void primeBootState(bool discPresent);
 
     void writeDma(u32 value);

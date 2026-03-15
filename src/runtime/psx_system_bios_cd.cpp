@@ -21,13 +21,48 @@ namespace runtime
 
 namespace
 {
+bool traceCdCallbackEnabled()
+{
+    if (const char* env = std::getenv("PSXRECOMP_TRACE_CD_CALLBACK"))
+    {
+        return env[0] == '1';
+    }
+    return false;
+}
+
 /// CD-ROM command bytes (PSX-SPX nomenclature).
 constexpr u8 CDCMD_GETSTAT = 0x01;
 constexpr u8 CDCMD_SETLOC = 0x02;
 constexpr u8 CDCMD_READN = 0x06;
+constexpr u8 CDCMD_READS = 0x1B;
 constexpr u8 CDCMD_INIT = 0x0A;
 constexpr u8 CDCMD_SETMODE = 0x0E;
 constexpr u8 CDCMD_SEEKL = 0x15;
+
+/// PSX-SPX CdAsyncReadSector mode: compute effective bytes-per-sector.
+///   bit4 set  → 0x918 (XA ADPCM/sub-header data)
+///   bit5 set  → 0x924 (whole sector minus sync, 2340 bytes)
+///   neither   → 0x800 (2048 bytes, user data only)
+u32 computeCdAsyncSectorBytes(u32 mode)
+{
+    if (mode & 0x10u)
+    {
+        return 0x918u;
+    }
+    if (mode & 0x20u)
+    {
+        return 0x924u;
+    }
+    return 0x800u;
+}
+
+/// PSX-SPX CdAsyncReadSector mode: select read command.
+///   bit8 set  → ReadS (0x1B, for streaming/XA sectors)
+///   bit8 clear → ReadN (0x06, for normal sectors)
+u8 computeCdAsyncReadCommand(u32 mode)
+{
+    return (mode & 0x100u) ? CDCMD_READS : CDCMD_READN;
+}
 
 void drainCdromResponse(Cdrom& cdrom)
 {
@@ -65,6 +100,8 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         m_biosCdrom.asyncReadBuffer = 0;
         m_biosCdrom.asyncReadCount = 0;
         m_biosCdrom.asyncSectorsRead = 0;
+        m_biosCdrom.asyncReadMode = 0;
+        m_biosCdrom.asyncReadSectorBytes = 0;
 
         // Acknowledge any lingering CDROM interrupt so the new Init
         // command can be issued cleanly.
@@ -89,6 +126,8 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
         m_biosCdrom.asyncReadBuffer = 0;
         m_biosCdrom.asyncReadCount = 0;
         m_biosCdrom.asyncSectorsRead = 0;
+        m_biosCdrom.asyncReadMode = 0;
+        m_biosCdrom.asyncReadSectorBytes = 0;
         regs[2] = 1;
         m_logger.log(LogLevel::Debug, "bios", "CdRemove (A0 0x56)");
         return true;
@@ -154,21 +193,38 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
     //
     //   $a0 = number of sectors to read
     //   $a1 = pointer to destination buffer in RAM
-    //   $a2 = read mode (passed to Setmode before ReadN)
+    //   $a2 = read mode (low 8 bits → Setmode; bit8 → ReadN vs ReadS)
     //
-    // Issues Setmode($a2), then ReadN.  Each INT1 (data-ready) causes
-    // the interrupt handler to copy one 2048-byte sector to the
-    // destination buffer.  CdAsyncReadSector stores the bookkeeping
-    // so the handler knows where to write.
+    // Issues Setmode(a2 & 0xFF), then ReadN or ReadS depending on
+    // a2 bit8.  Effective bytes per sector are also mode-dependent:
+    //   bit4 set  → 0x918 bytes
+    //   bit5 set  → 0x924 bytes
+    //   neither   → 0x800 bytes
+    // Each INT1 (data-ready) causes the interrupt handler to copy one
+    // sector of the computed size to the destination buffer.
     // ---------------------------------------------------------------
     case 0x7E:
     {
+        const u8 readCmd = computeCdAsyncReadCommand(a2);
+        const u32 sectorBytes = computeCdAsyncSectorBytes(a2);
+
+        if (traceCdCallbackEnabled())
+        {
+            std::ostringstream msg;
+            msg << "event=cd_async_read_sector_start"
+                << " cmd=" << ((readCmd == CDCMD_READS) ? "ReadS" : "ReadN") << " mode=0x"
+                << std::hex << a2 << " count=" << std::dec << a0 << " dst=0x" << std::hex << a1
+                << " sector_bytes=" << sectorBytes;
+            m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
+        }
+
         m_biosCdrom.asyncReadBuffer = a1;
         m_biosCdrom.asyncReadCount = a0;
         m_biosCdrom.asyncSectorsRead = 0;
+        m_biosCdrom.asyncReadMode = a2;
+        m_biosCdrom.asyncReadSectorBytes = sectorBytes;
 
-        constexpr u32 SectorBytes = 2048;
-        const u64 requestedBytes = static_cast<u64>(a0) * SectorBytes;
+        const u64 requestedBytes = static_cast<u64>(a0) * sectorBytes;
         if (a0 == 0 || requestedBytes > MemoryMap::RAM_SIZE)
         {
             std::ostringstream warn;
@@ -188,20 +244,21 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
 
         m_cdrom.writeInterruptFlags(0x07u);
 
-        // Set mode first.
-        m_cdrom.writeParam(static_cast<u8>(a2 & 0xFF));
+        // Set mode first (low 8 bits only — bit8 is ReadN/ReadS selector, not a Setmode bit).
+        m_cdrom.writeParam(static_cast<u8>(a2 & 0xFFu));
         m_cdrom.writeCommand(CDCMD_SETMODE);
         m_cdrom.writeInterruptFlags(0x07u);
         drainCdromResponse(m_cdrom);
 
-        // Start reading.
-        m_cdrom.writeCommand(CDCMD_READN);
+        // Start reading with the mode-selected command.
+        m_cdrom.writeCommand(readCmd);
 
         regs[2] = 1;
         {
             std::ostringstream msg;
-            msg << "CdAsyncReadSector (A0 0x7E) count=" << a0 << " dst=0x" << std::hex << a1
-                << " mode=0x" << (a2 & 0xFF);
+            msg << "CdAsyncReadSector (A0 0x7E) count=" << std::dec << a0 << " dst=0x" << std::hex
+                << a1 << " mode=0x" << a2 << " cmd=0x" << static_cast<unsigned>(readCmd)
+                << " sectorBytes=0x" << sectorBytes;
             m_logger.log(LogLevel::Debug, "bios", msg.str());
         }
         return true;

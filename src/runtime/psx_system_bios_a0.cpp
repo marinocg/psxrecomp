@@ -1,5 +1,7 @@
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <cstdio>
+
 #include "bios_helpers.h"
 
 #include <cctype>
@@ -45,6 +47,18 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
     const u32 a0 = regs[4];
     const u32 a1 = regs[5];
     const u32 a2 = regs[6];
+
+    // Temporary trace for interesting BIOS A calls (skip repeated timer/event calls)
+    if (functionId != 0x13 && functionId != 0x3C)
+    {
+        static int sBiosACount = 0;
+        if (sBiosACount < 500)
+        {
+            ++sBiosACount;
+            std::fprintf(stderr, "[bios] A(0x%02x) a0=0x%08x a1=0x%08x a2=0x%08x\n",
+                         functionId, a0, a1, a2);
+        }
+    }
 
     switch (functionId)
     {
@@ -157,14 +171,28 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         regs[2] = a0;
         return true;
     }
-    case 0x33: // malloc - simple bump allocator stub
+    case 0x33: // malloc
     {
-        static u32 heapTop = 0x801F0000u;
-        u32 size = (a0 + 7) & ~7u; // 8-byte align
-        if (size > 0 && heapTop >= (0x80010000u + size))
+        u32 size = (a0 + 3) & ~3u; // 4-byte align
+        if (m_biosHeapBase != 0 && size > 0 &&
+            m_biosHeapCursor + size <= m_biosHeapBase + m_biosHeapSize)
         {
-            heapTop -= size;
-            regs[2] = heapTop;
+            regs[2] = m_biosHeapCursor;
+            m_biosHeapCursor += size;
+        }
+        else if (size > 0)
+        {
+            // Fallback bump allocator for games that skip InitHeap.
+            static u32 fallbackTop = 0x801F0000u;
+            if (fallbackTop >= (0x80010000u + size))
+            {
+                fallbackTop -= size;
+                regs[2] = fallbackTop;
+            }
+            else
+            {
+                regs[2] = 0;
+            }
         }
         else
         {
@@ -176,7 +204,14 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         return true;
     case 0x39: // InitHeap
     {
-        m_logger.log(LogLevel::Debug, "bios", "InitHeap acknowledged");
+        m_biosHeapBase = a0;
+        m_biosHeapSize = a1;
+        m_biosHeapCursor = a0;
+        {
+            std::ostringstream msg;
+            msg << "InitHeap base=0x" << std::hex << a0 << " size=0x" << a1;
+            m_logger.log(LogLevel::Debug, "bios", msg.str());
+        }
         return true;
     }
     case 0x3C: // putchar

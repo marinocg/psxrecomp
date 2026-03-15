@@ -65,12 +65,12 @@ bool pumpUntilCdromIrq(PsxSystem& system, u32 maxTicks = 50000)
     for (u32 i = 0; i < maxTicks; ++i)
     {
         system.tickCpuCycles(2048);
-        system.serviceInterrupts();
         if (system.cdrom().hasIrqRequest())
         {
             system.serviceInterrupts();
             return true;
         }
+        system.serviceInterrupts();
     }
     return false;
 }
@@ -152,8 +152,8 @@ static void testCdAsyncSetMode()
     ackCdromIrq(system); // ack Init INT3 -> FIFO cleared -> INT2 promoted
     ackCdromIrq(system); // ack Init INT2 -> FIFO cleared -> nothing pending
 
-    // Open a user event for CommandAck to observe the INT3 response.
-    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
+    // Open a user event for CommandDone (INT3 maps to CDROM_IRQ_EVENT_SPECS[2] = 0x0020).
+    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
                                                    EventMode::NoCallback, 0);
     assert(evHandle != 0xFFFFFFFFu);
     system.events().enableEvent(evHandle);
@@ -164,12 +164,12 @@ static void testCdAsyncSetMode()
     callA0(system, 0x81, regs);
     assert(regs[2] == 1);
 
-    // Pump until Setmode INT3 fires; serviceBiosCdromInterrupt delivers CommandAck.
+    // Pump until Setmode INT3 fires; serviceBiosCdromInterrupt delivers CommandDone.
     assert(pumpUntilCdromIrq(system, 200));
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
 
-    std::cerr << "[PASS] CdAsyncSetMode delivers CommandAck event\n";
+    std::cerr << "[PASS] CdAsyncSetMode delivers CommandDone event\n";
 }
 
 // ---------------------------------------------------------------
@@ -190,8 +190,8 @@ static void testCdAsyncGetStatus()
     constexpr u32 resultAddr = 0x8000;
     system.getRam()[resultAddr] = 0xFF; // sentinel
 
-    // Open event for CommandAck.
-    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
+    // Open event for CommandDone (INT3 maps to CDROM_IRQ_EVENT_SPECS[2] = 0x0020).
+    const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
                                                    EventMode::NoCallback, 0);
     assert(evHandle != 0xFFFFFFFFu);
     system.events().enableEvent(evHandle);
@@ -202,7 +202,7 @@ static void testCdAsyncGetStatus()
     callA0(system, 0x7C, regs);
     assert(regs[2] == 1);
 
-    // Pump until Getstat INT3 fires; serviceBiosCdromInterrupt copies stat + delivers CommandAck.
+    // Pump until Getstat INT3 fires; serviceBiosCdromInterrupt copies stat + delivers CommandDone.
     assert(pumpUntilCdromIrq(system, 200));
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
@@ -296,8 +296,8 @@ static void testCdAsyncReadSector()
     ackCdromIrq(system);            // clear INT2 -> nothing pending
     system.serviceInterrupts();
 
-    // Open event for data-ready (INT1 -> spec 0x0040 = DataReady).
-    const u32 dataEvHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::DataReady,
+    // Open event for INT1 (data-ready) — CDROM_IRQ_EVENT_SPECS[0] = 0x0010 = CommandAck.
+    const u32 dataEvHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
                                                        EventMode::NoCallback, 0);
     assert(dataEvHandle != 0xFFFFFFFFu);
     system.events().enableEvent(dataEvHandle);
@@ -379,7 +379,7 @@ static void testSdkStyleAsyncCdFlow()
     // 2. Open events for completion + data-ready
     const u32 doneEv = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
                                                  EventMode::NoCallback, 0);
-    const u32 dataEv = system.events().openEvent(EventClass::Cdrom, EventSpec::DataReady,
+    const u32 dataEv = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
                                                  EventMode::NoCallback, 0);
     assert(doneEv != 0xFFFFFFFFu);
     assert(dataEv != 0xFFFFFFFFu);
@@ -448,6 +448,146 @@ static void testSdkStyleAsyncCdFlow()
     std::cerr << "[PASS] SDK-style async CD flow (init → seek → read → event)\n";
 }
 
+// ---------------------------------------------------------------
+// Helper: full read-sector setup (init → drain init irqs → seek → drain seek irqs).
+// Returns with the CDROM ready for a ReadSector call.
+// ---------------------------------------------------------------
+static void setupForRead(PsxSystem& system, u32 locAddr, u8 minute, u8 second, u8 frame)
+{
+    u8* ram = system.getRam();
+    ram[locAddr + 0] = minute;
+    ram[locAddr + 1] = second;
+    ram[locAddr + 2] = frame;
+    ram[locAddr + 3] = 0x00;
+
+    u32 regs[32] = {};
+    callA0(system, 0x54, regs); // CdInit
+    ackCdromIrq(system);        // INT3
+    pumpUntilCdromIrq(system, 500);
+    ackCdromIrq(system); // INT2
+
+    std::fill(std::begin(regs), std::end(regs), 0u);
+    regs[4] = locAddr;
+    callA0(system, 0x78, regs); // CdAsyncSeekL
+    pumpUntilCdromIrq(system, 200);
+    ackCdromIrq(system); // INT3
+    system.serviceInterrupts();
+    pumpUntilCdromIrq(system, 200);
+    ackCdromIrq(system); // INT2
+    system.serviceInterrupts();
+}
+
+// ---------------------------------------------------------------
+// Test 9: CdAsyncReadSector mode-aware command selection (ReadN vs ReadS)
+//
+// Verifies that A0:7E issues ReadN (0x06) when mode.bit8=0 and
+// ReadS (0x1B) when mode.bit8=1, for each of the 6 mode combinations
+// documented in PSX-SPX.
+// ---------------------------------------------------------------
+static void testCdAsyncReadSectorCommandSelection()
+{
+    struct TestCase
+    {
+        u32 mode;
+        u8 expectedCommand; // 0x06=ReadN, 0x1B=ReadS
+        const char* label;
+    };
+
+    constexpr TestCase cases[] = {
+        {0x000, 0x06, "mode=0x000 → ReadN"}, {0x020, 0x06, "mode=0x020 → ReadN"},
+        {0x010, 0x06, "mode=0x010 → ReadN"}, {0x100, 0x1B, "mode=0x100 → ReadS"},
+        {0x120, 0x1B, "mode=0x120 → ReadS"}, {0x110, 0x1B, "mode=0x110 → ReadS"},
+    };
+
+    for (const auto& tc : cases)
+    {
+        PsxSystem system;
+        auto disc = std::make_shared<TestDisc>();
+        initWithDisc(system, disc);
+
+        setupForRead(system, 0xA000, 0x00, 0x02, 0x00);
+
+        u32 regs[32] = {};
+        regs[4] = 1;
+        regs[5] = 0xB000;
+        regs[6] = tc.mode;
+        callA0(system, 0x7E, regs);
+        assert(regs[2] == 1);
+
+        // The read command is written after drainCdromResponse(Setmode).
+        // It should be the last executed command in the CDROM snapshot.
+        const auto snapshot = system.cdrom().debugSnapshot();
+        assert(snapshot.currentCommand == tc.expectedCommand);
+    }
+
+    std::cerr << "[PASS] CdAsyncReadSector selects ReadN vs ReadS based on mode.bit8\n";
+}
+
+// ---------------------------------------------------------------
+// Test 10: CdAsyncReadSector mode-aware sector byte count
+//
+// Verifies that INT1 copies the correct number of bytes for each of
+// the 6 mode combinations.  The destination buffer is filled with a
+// sentinel (0x42) before the read; bytes within the expected range
+// are overwritten, bytes beyond it remain 0x42.
+// ---------------------------------------------------------------
+static void testCdAsyncReadSectorSectorBytes()
+{
+    struct TestCase
+    {
+        u32 mode;
+        u32 expectedSectorBytes;
+        const char* label;
+    };
+
+    constexpr TestCase cases[] = {
+        {0x000, 0x800, "mode=0x000 → 0x800 bytes"}, {0x020, 0x924, "mode=0x020 → 0x924 bytes"},
+        {0x010, 0x918, "mode=0x010 → 0x918 bytes"}, {0x100, 0x800, "mode=0x100 → 0x800 bytes"},
+        {0x120, 0x924, "mode=0x120 → 0x924 bytes"}, {0x110, 0x918, "mode=0x110 → 0x918 bytes"},
+    };
+
+    for (const auto& tc : cases)
+    {
+        PsxSystem system;
+        auto disc = std::make_shared<TestDisc>();
+        initWithDisc(system, disc);
+
+        setupForRead(system, 0xA000, 0x00, 0x02, 0x00);
+
+        // Sentinel fill: 0x42 bytes past the expected sector, so we can detect the boundary.
+        constexpr u32 readDst = 0xB000;
+        constexpr u32 sentinelSize = 0x924 + 16; // enough to cover the largest sector + guard
+        u8* ram = system.getRam();
+        std::memset(ram + readDst, 0x42, sentinelSize);
+
+        u32 regs[32] = {};
+        regs[4] = 1;
+        regs[5] = readDst;
+        regs[6] = tc.mode;
+        callA0(system, 0x7E, regs);
+        assert(regs[2] == 1);
+
+        // Drain Setmode INT3 and ReadN/ReadS INT3, then pump for INT1.
+        ackCdromIrq(system);
+        system.serviceInterrupts();
+        ackCdromIrq(system);
+
+        const bool gotData = pumpUntilCdromIrq(system, 5000);
+        assert(gotData);
+
+        // Verify the sector was written: check the first byte and last byte of the
+        // expected range are no longer the 0x42 sentinel.  TestDisc LBA 0 data is
+        // (0 ^ i) == i, so byte 0 == 0x00 and byte (expectedSectorBytes-1) is
+        // either a data byte or a 0x00 pad byte — neither equals 0x42.
+        // The guard byte immediately after the range must remain 0x42.
+        assert(ram[readDst + 0] != 0x42u);
+        assert(ram[readDst + tc.expectedSectorBytes - 1] != 0x42u);
+        assert(ram[readDst + tc.expectedSectorBytes] == 0x42u);
+    }
+
+    std::cerr << "[PASS] CdAsyncReadSector copies correct sector byte count for each mode\n";
+}
+
 int main()
 {
     testCdInit();
@@ -458,6 +598,8 @@ int main()
     testCdAsyncReadSector();
     testCdInitSubFunc();
     testSdkStyleAsyncCdFlow();
+    testCdAsyncReadSectorCommandSelection();
+    testCdAsyncReadSectorSectorBytes();
 
     std::cerr << "\nAll BIOS CD tests passed.\n";
     return 0;

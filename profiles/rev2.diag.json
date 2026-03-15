@@ -6,6 +6,30 @@
   },
   "watchpoints": [
     {
+      "name": "rev2_cd_status",
+      "kind": "ram_write",
+      "range": "0x8016549a-0x8016549b",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_callback_ptr",
+      "kind": "ram_write",
+      "range": "0x80166cec-0x80166cef",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_total_sectors",
+      "kind": "ram_write",
+      "range": "0x80166cf4-0x80166cfb",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_state_ptr",
+      "kind": "ram_write",
+      "range": "0x80166d38-0x80166d3f",
+      "action": "log"
+    },
+    {
       "name": "rev2_dispatch_b_slot",
       "kind": "ram_write",
       "range": "0x80166cc8-0x80166ccb",
@@ -33,6 +57,12 @@
       "name": "rev2_callback_busy_latch",
       "kind": "ram_write",
       "range": "0x801654e8-0x801654ef",
+      "action": "log"
+    },
+    {
+      "name": "rev2_hook_entry_int_descriptor",
+      "kind": "ram_write",
+      "range": "0x80165520-0x8016552f",
       "action": "log"
     },
     {
@@ -132,6 +162,16 @@
       "mmio_reads": [],
       "capture_context": true,
       "repeat_threshold": 32
+    },
+    {
+      "name": "rev2_post_stream_dispatch",
+      "pc_range": "0x154700-0x154780",
+      "registers": ["v0", "a0", "a1", "ra"],
+      "log_branches": false,
+      "mmio_reads": ["0x1f801040"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 16
     }
   ],
   "validators": [],
@@ -154,6 +194,15 @@
   ],
   "metadata_watches": [],
   "suspect_functions": [
+    {
+      "name": "rev2_post_stream_dispatch",
+      "pc_range": "0x154700-0x154780",
+      "watched_cells": [
+        "0x80165520",
+        "0x80165524",
+        "0x801665b0"
+      ]
+    },
     {
       "name": "rev2_wait_loop",
       "pc_range": "0x160840-0x16088c",

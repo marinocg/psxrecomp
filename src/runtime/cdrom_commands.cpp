@@ -360,18 +360,51 @@ void Cdrom::writeInterruptFlags(u8 value)
 
 void Cdrom::writeRequestControl(u8 value)
 {
+    const u8 oldReq = m_requestControl;
     m_requestControl = static_cast<u8>(value & 0xE0u);
     traceCdrom("writeRequestControl value=0x%02X req=0x%02X data=%zu active=%zu", value,
                m_requestControl, m_dataFifo.size(), m_activeSector.size());
-    if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+
+    const bool bfrdRising =
+        (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+        (oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0;
+
+    if (bfrdRising)
     {
-        acceptBufferedReadSector(true);
+        // PSX-SPX: setting BFRD makes the active sector's data available
+        // via the data FIFO. Re-populate from the active sector (the one
+        // that caused the current INT1), NOT from the buffered-sectors
+        // queue. Advancing to the next sector happens when INT1 is
+        // acknowledged and publishNextInterruptEvent fires.
+        // Only reload on the 0→1 transition; re-writing 0x80 when already
+        // set must not reset the FIFO mid-DMA.
+        if (!m_activeSector.empty())
+        {
+            m_dataFifo.clear();
+            m_activeSectorOffset = 0;
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
+                                     DATA_FIFO_CAPACITY);
+            m_activeSectorOffset = m_activeSector.size();
+        }
+        else
+        {
+            // No active sector yet — try to accept the first buffered one.
+            acceptBufferedReadSector(true);
+        }
+    }
+    else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+             (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
+    {
+        // PSX-SPX: clearing BFRD resets the data FIFO to zero.
+        m_dataFifo.clear();
     }
 }
 
 void Cdrom::writeInterruptEnable(u8 value)
 {
     m_interruptEnable = static_cast<u8>(value & 0x1Fu);
+    // DIAG: trace IE changes
+    traceCdrom("writeInterruptEnable value=0x%02X ie=0x%02X", value, m_interruptEnable);
 }
 
 bool Cdrom::hasIrqRequest() const
@@ -478,6 +511,24 @@ void Cdrom::publishNextInterruptEvent()
     {
         pushResponse(byte);
     }
+
+    // When publishing INT1 (data-ready), advance the active sector to the
+    // next buffered sector so the data FIFO will contain the correct data
+    // for this interrupt when the game requests it via the request register.
+    if (event.type == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
+    {
+        m_dataFifo.clear();
+        m_activeSector = std::move(m_bufferedReadSectors.front());
+        m_bufferedReadSectors.pop_front();
+        m_activeSectorOffset = 0;
+        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+        {
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
+                                     DATA_FIFO_CAPACITY);
+            m_activeSectorOffset = m_activeSector.size();
+        }
+    }
+
     if (!event.responses.empty())
     {
         traceCdrom("publishNextInterruptEvent type=%u resp=%zu first=0x%02X pending=%zu",
