@@ -469,7 +469,8 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
     }
 
     // HookEntryInt runs after kernel events. Demo SDKs use it as their primary
-    // hardware IRQ fan-out path. IRQ status bits must still be visible here.
+    // hardware IRQ fan-out path. IRQ status bits must still be visible here
+    // so the game handler can determine which interrupt fired.
     if (pendingForHook != 0u && m_criticalSectionDepth == 0 &&
         m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
     {
@@ -492,11 +493,32 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
                              "event=return_from_exception source=hook_entry_int");
             }
             // Kernel events were already delivered above; no re-delivery needed.
+            // Acknowledge any IRQ bits that were pending when this exception
+            // entered — the BIOS RFE path effectively drains them.
+            for (u32 bit = 1; bit < (1u << 11); bit <<= 1)
+            {
+                if ((pendingForHook & bit) != 0)
+                {
+                    m_interrupts.writeStatus(~bit);
+                }
+            }
             syncCop0InterruptPending();
             return;
         }
     }
 
+    // Acknowledge remaining IRQ bits that were pending when this exception
+    // started.  On real hardware the chain handlers and HookEntryInt code
+    // would have written I_STAT to clear them; in the recompiled environment
+    // the game's MMIO writes may not reach our interrupt controller model,
+    // so we clean up here to prevent infinite re-delivery.
+    for (u32 bit = 1; bit < (1u << 11); bit <<= 1)
+    {
+        if ((pendingForHook & bit) != 0)
+        {
+            m_interrupts.writeStatus(~bit);
+        }
+    }
     syncCop0InterruptPending();
 }
 
