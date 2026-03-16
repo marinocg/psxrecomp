@@ -258,6 +258,7 @@ void PsxSystem::boot()
                BIOS_B0_HANDLER_TABLE_ADDRESS);
 
     m_cdrom.primeBootState(m_disc != nullptr);
+    m_spu.primeBootState();
 
     initializeBiosCdromState(0u);
 
@@ -379,9 +380,11 @@ void PsxSystem::syncLevelInterruptSources()
         static int sCdromIrqCount = 0;
         if (sCdromIrqCount < 5)
         {
-            std::fprintf(stderr, "[diag] syncLevel cdromIrq=true IF=0x%02X IE=0x%02X I_STAT=0x%04X I_MASK=0x%04X\n",
-                         m_cdrom.readInterruptFlags(), m_cdrom.readInterruptEnable(),
-                         m_interrupts.readStatus(), m_interrupts.readMask());
+            std::fprintf(
+                stderr,
+                "[diag] syncLevel cdromIrq=true IF=0x%02X IE=0x%02X I_STAT=0x%04X I_MASK=0x%04X\n",
+                m_cdrom.readInterruptFlags(), m_cdrom.readInterruptEnable(),
+                m_interrupts.readStatus(), m_interrupts.readMask());
             ++sCdromIrqCount;
         }
     }

@@ -434,7 +434,7 @@ void testB017AbortsFurtherCallbackHandling()
     std::cerr << "[PASS] B0:17 aborts further callback handling correctly\n";
 }
 
-void testHookEntryIntReturnFromExceptionDispatchesForcedPendingOnce()
+void testKernelEventsBeforeHookEntryInt()
 {
     using psxrecomp::u32;
     using psxrecomp::runtime::EventMode;
@@ -472,11 +472,22 @@ void testHookEntryIntReturnFromExceptionDispatchesForcedPendingOnce()
 
     installSyntheticCallbackHarness(
         system, context,
-        [&system, &context, &invoked, &resumeCalls, &eventCalls, resumeAddress, eventCallback,
-         savedSp, savedFp, savedGp,
-         savedS](u32 address, CallbackContext& callbackContext, PsxSystem& systemRef) -> u32
+        [&system, &invoked, &resumeCalls, &eventCalls, resumeAddress,
+         eventCallback](u32 address, CallbackContext& callbackContext, PsxSystem& systemRef) -> u32
         {
             invoked.push_back(address);
+            if (address == eventCallback)
+            {
+                // PSX-accurate: kernel events fire before HookEntryInt, so the
+                // callback sees the original caller context — not the resumed
+                // HookEntryInt context.
+                ++eventCalls;
+                callbackContext.regs[REG_S1] = 0x4444DDDDu;
+                callbackContext.hi = 0x5555EEEEu;
+                callbackContext.lo = 0x6666FFFFu;
+                return 2u;
+            }
+
             if (address == resumeAddress)
             {
                 ++resumeCalls;
@@ -489,71 +500,37 @@ void testHookEntryIntReturnFromExceptionDispatchesForcedPendingOnce()
                 systemRef.callBiosVector(0xB0, biosRegs.data(), biosRegs.size());
             }
 
-            if (address == eventCallback)
-            {
-                ++eventCalls;
-                require(callbackContext.regs[REG_V0] == 1u,
-                        "forced-pending callback lost resumed v0");
-                require(callbackContext.regs[REG_RA] == resumeAddress,
-                        "forced-pending callback lost resumed RA");
-                require(callbackContext.regs[REG_SP] == savedSp,
-                        "forced-pending callback lost resumed SP");
-                require(callbackContext.regs[REG_FP] == savedFp,
-                        "forced-pending callback lost resumed FP");
-                require(callbackContext.regs[REG_GP] == savedGp,
-                        "forced-pending callback lost resumed GP");
-                for (size_t index = 0; index < savedS.size(); ++index)
-                {
-                    const u32 expected = index == 0 ? 0x3333CCCCu : savedS[index];
-                    require(callbackContext.regs[REG_S0 + index] == expected,
-                            "forced-pending callback lost resumed S register state");
-                }
-                require(callbackContext.hi == 0x1111AAAau,
-                        "forced-pending callback lost resumed HI");
-                require(callbackContext.lo == 0x2222BBBBu,
-                        "forced-pending callback lost resumed LO");
-
-                callbackContext.regs[REG_S1] = 0x4444DDDDu;
-                callbackContext.hi = 0x5555EEEEu;
-                callbackContext.lo = 0x6666FFFFu;
-                return 2u;
-            }
-
             return callbackContext.regs[REG_V0];
         });
 
     triggerVblank(system);
 
+    require(eventCalls == 1u, "kernel event callback did not run exactly once");
     require(resumeCalls == 1u, "HookEntryInt resume callback did not run exactly once");
-    require(eventCalls == 1u, "forced-pending event callback did not run exactly once");
-    require(invoked.size() == 2u && invoked[0] == resumeAddress && invoked[1] == eventCallback,
-            "forced-pending dispatch order was incorrect");
+    // PSX-accurate ordering: kernel events fire before HookEntryInt.
+    require(invoked.size() == 2u && invoked[0] == eventCallback && invoked[1] == resumeAddress,
+            "kernel-events-before-HookEntryInt dispatch order was incorrect");
     require((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) == 0u,
-            "forced-pending dispatch did not acknowledge VBlank");
+            "VBlank was not acknowledged after dispatch");
 
     system.serviceInterrupts();
     require(resumeCalls == 1u, "HookEntryInt resume callback repeated unexpectedly");
-    require(eventCalls == 1u, "forced-pending event callback repeated unexpectedly");
+    require(eventCalls == 1u, "kernel event callback repeated unexpectedly");
 
-    require(context.regs[REG_V0] == 1u,
-            "caller context lost resumed v0 after forced-pending dispatch");
-    require(context.regs[REG_RA] == resumeAddress,
-            "caller context lost resumed RA after forced-pending dispatch");
-    require(context.regs[REG_SP] == savedSp,
-            "caller context lost resumed SP after forced-pending dispatch");
-    require(context.regs[REG_FP] == savedFp,
-            "caller context lost resumed FP after forced-pending dispatch");
-    require(context.regs[REG_GP] == savedGp,
-            "caller context lost resumed GP after forced-pending dispatch");
-    require(context.regs[REG_S0] == 0x3333CCCCu,
-            "caller context lost committed S0 after forced-pending dispatch");
-    require(context.regs[REG_S1] == savedS[1],
-            "forced-pending callback mutated caller S1 unexpectedly");
-    require(context.hi == 0x1111AAAau, "forced-pending callback mutated caller HI unexpectedly");
-    require(context.lo == 0x2222BBBBu, "forced-pending callback mutated caller LO unexpectedly");
+    // After both phases, the caller context reflects HookEntryInt's resumed
+    // state plus the resume body's mutations. The event callback's mutations
+    // were discarded (RestoreSaved disposition).
+    require(context.regs[REG_V0] == 1u, "caller context lost resumed v0 after dispatch");
+    require(context.regs[REG_RA] == resumeAddress, "caller context lost resumed RA after dispatch");
+    require(context.regs[REG_SP] == savedSp, "caller context lost resumed SP after dispatch");
+    require(context.regs[REG_FP] == savedFp, "caller context lost resumed FP after dispatch");
+    require(context.regs[REG_GP] == savedGp, "caller context lost resumed GP after dispatch");
+    require(context.regs[REG_S0] == 0x3333CCCCu, "caller context lost committed S0 after dispatch");
+    require(context.regs[REG_S1] == savedS[1], "event callback mutated caller S1 unexpectedly");
+    require(context.hi == 0x1111AAAau, "event callback mutated caller HI unexpectedly");
+    require(context.lo == 0x2222BBBBu, "event callback mutated caller LO unexpectedly");
 
-    std::cerr << "[PASS] HookEntryInt ReturnFromException dispatches forced-pending once and "
-                 "preserves caller context\n";
+    std::cerr << "[PASS] kernel events before HookEntryInt with correct caller context\n";
 }
 
 void testHookEntryIntFastHeapValidationTripsNearMutation()
@@ -631,7 +608,7 @@ int main()
     testConsumePendingCallbackRegistersAppliedExactlyOnce();
     testPendingCallbackRegsSurviveExceptionResumePath();
     testB017AbortsFurtherCallbackHandling();
-    testHookEntryIntReturnFromExceptionDispatchesForcedPendingOnce();
+    testKernelEventsBeforeHookEntryInt();
     testHookEntryIntFastHeapValidationTripsNearMutation();
 
     std::cerr << "All callback bridge tests passed.\n";

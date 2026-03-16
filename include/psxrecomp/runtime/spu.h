@@ -126,6 +126,7 @@ class Spu
     Spu();
 
     void reset();
+    void primeBootState();
 
     u16 readRegister(u32 offset) const;
     void writeRegister(u32 offset, u16 value);

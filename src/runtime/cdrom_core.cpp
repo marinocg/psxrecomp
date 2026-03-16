@@ -234,7 +234,7 @@ u8 Cdrom::readStatus() const
     {
         status |= cdrom_detail::STATUS_PARAM_FIFO_WRITE_READY;
     }
-    if (!m_responseFifo.empty())
+    if (!m_responseFifo.empty() || !m_ackResponseFifo.empty())
     {
         status |= cdrom_detail::STATUS_RESPONSE_READY;
     }
@@ -251,7 +251,21 @@ u8 Cdrom::readResponse()
     u8 value = 0;
     if (!m_responseFifo.popFront(value))
     {
-        return 0;
+        // Active FIFO is empty; drain from the ack buffer instead.
+        if (!m_ackResponseFifo.popFront(value))
+        {
+            return 0;
+        }
+        // When the ack buffer is fully drained, the next queued interrupt can be promoted.
+        if (m_ackResponseFifo.empty())
+        {
+            publishNextInterruptEvent();
+            if (canExecutePendingCommand())
+            {
+                executePendingCommand();
+            }
+        }
+        return value;
     }
     traceCdrom("readResponse value=0x%02X remaining=%zu irq=0x%02X", value,
                m_responseFifo.values.size(), m_interruptFlags);

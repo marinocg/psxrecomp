@@ -99,6 +99,11 @@ int main()
         require(system.readMmioExplicit<u32>(keyOnBase) == 0x00010001u,
                 "32-bit SPU key-on readback mismatched");
 
+        // Clear boot state set by primeBootState() so delayed-SPUSTAT tests
+        // start from a known-zero baseline.
+        system.writeMmioExplicit<u16>(controlReg, kSpuControlStop);
+        system.tickCpuCycles(kHandshakeDelayCycles);
+
         // Delayed SPUCNT -> SPUSTAT.
         system.writeMmioExplicit<u16>(controlReg, kSpuControlManualWrite);
         require((system.readMmioExplicit<u16>(statusReg) & 0x003Fu) == 0u,

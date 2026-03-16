@@ -53,8 +53,11 @@ int main()
     const Address spuDmaBase = DmaController::ChannelBase +
                                DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);
 
+    // Clear boot state set by primeBootState() so we start from a clean SPUSTAT.
+    system.writeMmioExplicit<u16>(controlReg, 0x0000u);
+    system.tickCpuCycles(kHandshakeDelayCycles);
     const u16 initialStatus = system.readMmioExplicit<u16>(statusReg);
-    require((initialStatus & 0x7FFu) == 0u, "SPUSTAT should reset with modeled bits clear");
+    require((initialStatus & 0x7FFu) == 0u, "SPUSTAT should be clear after control reset");
 
     system.writeMmioExplicit<u16>(controlReg, 0x0010u);
     require((system.readMmioExplicit<u16>(statusReg) & 0x3Fu) == 0u,

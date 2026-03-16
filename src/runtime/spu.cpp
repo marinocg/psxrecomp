@@ -85,6 +85,22 @@ void Spu::reset()
     m_cdAudioRing.clear();
 }
 
+void Spu::primeBootState()
+{
+    // Simulate post-BIOS SPU state: transfer control normal (0x0004) and
+    // control bits set to DMA-write mode (bits [5:4] = 0b10 = 0x0020) with
+    // SPU enable (bit 15) and IRQ enable (bit 6) active. The BIOS sets these
+    // during boot; apply them immediately without the normal cycle delay so
+    // that DMA transfers work as soon as the runtime is initialized.
+    m_registers[registerIndex(RegisterMap::TransferControl)] = 0x0004u;
+    constexpr u16 kBootControlBits =
+        0x8061u; // SpuEnable | IrqEnable | DmaWriteMode | CdAudioEnable
+    m_registers[registerIndex(RegisterMap::Control)] = kBootControlBits;
+    m_pendingControlBits = kBootControlBits & 0x003Fu;
+    m_appliedControlBits = m_pendingControlBits;
+    m_controlApplyCyclesRemaining = 0;
+}
+
 void Spu::tick(u32 cycles)
 {
     m_cycles += cycles;

@@ -344,6 +344,17 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     system.events().closeEvent(irqGateEventHandle);
     system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
 
+    // Configure SPU for DMA write mode (simulates post-BIOS state):
+    // TransferControl = 0x0004 (normal), Control bits 5:4 = 0b10 (DMA write).
+    const Address spuTransferCtrlAddr =
+        psxrecomp::runtime::Mmio::SPU_BASE +
+        (psxrecomp::runtime::Spu::RegisterMap::TransferControl & 0x1FFu);
+    const Address spuControlAddr = psxrecomp::runtime::Mmio::SPU_BASE +
+                                   (psxrecomp::runtime::Spu::RegisterMap::Control & 0x1FFu);
+    system.writeMmioExplicit<psxrecomp::u16>(spuTransferCtrlAddr, 0x0004u);
+    system.writeMmioExplicit<psxrecomp::u16>(spuControlAddr, 0x8060u);
+    system.tickCpuCycles(0x300u); // wait for control-apply delay
+
     Address spuBase = DmaController::ChannelBase +
                       DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);
     system.write<psxrecomp::u32>(0x00011000, 0xABCDEF01);

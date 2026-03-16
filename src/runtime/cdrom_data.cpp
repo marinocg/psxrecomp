@@ -76,13 +76,41 @@ u32 Cdrom::readDma()
         }
     }
 
+    // DMA reads are hardware-level and bypass the BFRD gate. When the FIFO runs
+    // dry, advance to the next available sector for seamless streaming DMA
+    // without requiring a software ACK or tick() cycle to pre-stage data.
+    if (m_dataFifo.empty())
+    {
+        if (!m_bufferedReadSectors.empty())
+        {
+            // Advance from the pre-buffered pool.
+            m_activeSector = std::move(m_bufferedReadSectors.front());
+            m_bufferedReadSectors.pop_front();
+            m_activeSectorOffset = 0;
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
+            m_activeSectorOffset = m_activeSector.size();
+            updateDataPadForActiveSector();
+        }
+        else if (m_execution.readActive || m_execution.seekActive)
+        {
+            // No pre-buffered sector: load directly from the source.
+            std::vector<u8> sector;
+            if (loadReadSector(sector))
+            {
+                m_activeSector = std::move(sector);
+                m_activeSectorOffset = 0;
+                m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
+                                         DATA_FIFO_CAPACITY);
+                m_activeSectorOffset = m_activeSector.size();
+                updateDataPadForActiveSector();
+                m_execution.seekActive = false;
+                m_execution.readActive = true;
+            }
+        }
+    }
+
     const auto consumeDataByte = [this]() -> u8
     {
-        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
-        {
-            return 0;
-        }
-
         u8 byte = 0;
         if (m_dataFifo.popFront(byte))
         {
@@ -113,6 +141,27 @@ void Cdrom::enqueueDataSector(const std::vector<u8>& data)
     m_sectorQueue.push_back(data);
 }
 
+void Cdrom::updateDataPadForActiveSector()
+{
+    if (m_activeSector.empty())
+    {
+        m_dataPadValid = false;
+        return;
+    }
+    const bool wholeSectorMode = (m_execution.mode & cdrom_detail::SETMODE_SECTOR_SIZE_2340) != 0;
+    size_t padIndex = m_activeSector.size() - 1;
+    if (wholeSectorMode && m_activeSector.size() >= 0x924u)
+    {
+        padIndex = 0x924u - 4u;
+    }
+    else if (!wholeSectorMode && m_activeSector.size() >= 0x800u)
+    {
+        padIndex = 0x800u - 8u;
+    }
+    m_dataPadByte = m_activeSector[padIndex];
+    m_dataPadValid = true;
+}
+
 void Cdrom::acceptBufferedReadSector(bool replaceExistingData)
 {
     if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0 ||
@@ -132,6 +181,7 @@ void Cdrom::acceptBufferedReadSector(bool replaceExistingData)
     m_activeSectorOffset = 0;
     m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
     m_activeSectorOffset = m_activeSector.size();
+    updateDataPadForActiveSector();
 }
 
 void Cdrom::loadNextSectorToFifo()
@@ -144,8 +194,7 @@ void Cdrom::loadNextSectorToFifo()
 
 void Cdrom::enableDataRead()
 {
-    const bool wasEnabled =
-        (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0;
+    const bool wasEnabled = (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0;
     m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
     if (!wasEnabled)
     {
@@ -156,9 +205,9 @@ void Cdrom::enableDataRead()
         {
             m_dataFifo.clear();
             m_activeSectorOffset = 0;
-            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
-                                     DATA_FIFO_CAPACITY);
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
             m_activeSectorOffset = m_activeSector.size();
+            updateDataPadForActiveSector();
         }
         else
         {
@@ -262,8 +311,10 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
         }
         else
         {
-            traceCdrom("loadActiveSector no disc");
-            queueErrorInterrupt(cdrom_detail::ERR_NO_DISC);
+            // Sector queue exhausted with no disc backend — stop reading without
+            // issuing an error interrupt so previously buffered sectors are preserved.
+            traceCdrom("loadActiveSector queue exhausted, no disc");
+            m_execution.readActive = false;
             return false;
         }
 
@@ -370,22 +421,10 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
 
     if (!outSector.empty())
     {
-        size_t padIndex = outSector.size() - 1;
-        if (wholeSectorMode && outSector.size() >= 0x924u)
-        {
-            padIndex = 0x924u - 4u;
-        }
-        else if (!wholeSectorMode && outSector.size() >= 0x800u)
-        {
-            padIndex = 0x800u - 8u;
-        }
-        m_dataPadByte = outSector[padIndex];
-        m_dataPadValid = true;
-        traceCdrom("loadActiveSector active_bytes=%zu pad=0x%02X", outSector.size(), m_dataPadByte);
+        traceCdrom("loadActiveSector active_bytes=%zu", outSector.size());
         return true;
     }
 
-    m_dataPadValid = false;
     traceCdrom("loadActiveSector no active sector after scan");
     return false;
 }

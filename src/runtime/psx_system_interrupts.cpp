@@ -77,9 +77,9 @@ constexpr u32 STATUS_IEC_BIT = 1u << 0;
 constexpr u32 STATUS_IM0_IM1_MASK = 0x00000300u;
 constexpr u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
 constexpr std::array<u16, 5> CDROM_IRQ_EVENT_SPECS = {
-    0x0010u, // INT1 -> data-ready style event
-    0x0020u, // INT2 -> command completion
-    0x0020u, // INT3 -> command completion for single-response commands (eg. Getstat)
+    0x0010u, // INT1 -> data-ready (CommandAck / 0x0010)
+    0x0020u, // INT2 -> complete (CommandDone / 0x0020)
+    0x0020u, // INT3 -> acknowledge; delivers CommandDone (0x0020) per PSX-SPX BIOS handler
     0x0080u, // INT4 -> end-of-read style event
     0x8000u, // INT5 -> error
 };
@@ -151,6 +151,16 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
     }
 
+    // INT1 (data-ready): the real BIOS INT1 handler always writes 0x80 (BFRD)
+    // to the request register so sector data is available for DMA. enableDataRead()
+    // replicates the 0→1 rising edge: it sets BFRD and loads the active sector into
+    // the data FIFO, making bytes visible to readData()/readDma() even when no BIOS
+    // async read is in progress (e.g. for direct software DMA setups).
+    if (irqType == 1u)
+    {
+        m_cdrom.enableDataRead();
+    }
+
     // INT1 (data-ready): copy sector data for CdAsyncReadSector.
     if (irqType == 1u && m_biosCdrom.asyncReadCount > 0)
     {
@@ -168,12 +178,7 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         const char* readCmdLabel = (m_biosCdrom.asyncReadMode & 0x100u) ? "ReadS" : "ReadN";
         const u32 dstAddr =
             m_biosCdrom.asyncReadBuffer + m_biosCdrom.asyncSectorsRead * sectorBytes;
-        // Enable data-buffer reads (request register bit 7 = BFRD) before
-        // accessing the FIFO. On real hardware the BIOS writes 0x80 to the
-        // request register here, triggering the 0→1 transition that loads
-        // the active sector into the data FIFO. Without this, readData()
-        // returns 0x00 because REQUEST_ENABLE_BUFFER_READ is clear.
-        m_cdrom.enableDataRead();
+        // enableDataRead() was already called above for all INT1s.
         std::vector<u8> sectorData(sectorBytes);
         for (u32 i = 0; i < sectorBytes; ++i)
         {
@@ -432,8 +437,39 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
         }
     }
 
-    // HookEntryInt must run while the remaining IRQ status bits are still
-    // visible. Demo SDKs use it as their primary hardware IRQ fan-out path.
+    const u32 pendingAfterChains = m_interrupts.readStatus() & m_interrupts.readMask();
+
+    if (pendingAfterChains != 0 && traceIrqFlowEnabled())
+    {
+        std::ostringstream msg;
+        msg << "event=irq_dispatch_order source=service_interrupts pending_masked=0x" << std::hex
+            << pendingAfterChains << " lines=" << formatPendingLineOrder(pendingAfterChains);
+        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+    }
+
+    // Kernel event delivery (OpenEvent/EnableEvent model).
+    // Runs before HookEntryInt: PSX-accurate ordering matches the BIOS exception
+    // handler which dispatches kernel events prior to calling HookEntryInt.
+    // A callback may execute ReturnFromException to abort further handling.
+    // COP0 Status restore is handled by the caller's epilogue.
+    try
+    {
+        m_dispatcher.servicePendingMask(m_interrupts, m_events, m_criticalSectionDepth,
+                                        pendingForKernelEvents, &m_logger);
+    }
+    catch (const ReturnFromExceptionSignal&)
+    {
+        if (traceIrqFlowEnabled())
+        {
+            m_logger.log(LogLevel::Info, "irq_trace",
+                         "event=return_from_exception source=dispatcher_pending");
+        }
+        syncCop0InterruptPending();
+        return;
+    }
+
+    // HookEntryInt runs after kernel events. Demo SDKs use it as their primary
+    // hardware IRQ fan-out path. IRQ status bits must still be visible here.
     if (pendingForHook != 0u && m_criticalSectionDepth == 0 &&
         m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
     {
@@ -455,51 +491,10 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
                 m_logger.log(LogLevel::Info, "irq_trace",
                              "event=return_from_exception source=hook_entry_int");
             }
-            try
-            {
-                m_dispatcher.servicePendingMask(m_interrupts, m_events, m_criticalSectionDepth,
-                                                pendingForKernelEvents, &m_logger);
-            }
-            catch (const ReturnFromExceptionSignal&)
-            {
-                if (traceIrqFlowEnabled())
-                {
-                    m_logger.log(LogLevel::Info, "irq_trace",
-                                 "event=return_from_exception source=dispatcher_pending");
-                }
-            }
+            // Kernel events were already delivered above; no re-delivery needed.
             syncCop0InterruptPending();
             return;
         }
-    }
-
-    const u32 pendingAfterHook = m_interrupts.readStatus() & m_interrupts.readMask();
-
-    if (pendingAfterHook != 0 && traceIrqFlowEnabled())
-    {
-        std::ostringstream msg;
-        msg << "event=irq_dispatch_order source=service_interrupts pending_masked=0x" << std::hex
-            << pendingAfterHook << " lines=" << formatPendingLineOrder(pendingAfterHook);
-        m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-    }
-
-    // Kernel event delivery (OpenEvent/EnableEvent model).
-    // A callback may execute ReturnFromException to abort further handling.
-    // COP0 Status restore is handled by the caller's epilogue.
-    try
-    {
-        m_dispatcher.servicePendingMask(m_interrupts, m_events, m_criticalSectionDepth,
-                                        pendingForKernelEvents, &m_logger);
-    }
-    catch (const ReturnFromExceptionSignal&)
-    {
-        if (traceIrqFlowEnabled())
-        {
-            m_logger.log(LogLevel::Info, "irq_trace",
-                         "event=return_from_exception source=dispatcher_pending");
-        }
-        syncCop0InterruptPending();
-        return;
     }
 
     syncCop0InterruptPending();
@@ -549,11 +544,10 @@ void PsxSystem::serviceInterrupts()
                 << " take_eligible=" << (irqTakeEligible ? 1 : 0)
                 << " exception_mode=" << (m_cop0.isInExceptionMode() ? 1 : 0)
                 << " fresh_entry_denied_in_callback=" << (freshEntryDeniedInCallback ? 1 : 0)
-                << " pc=0x" << std::hex
-                << m_debugOverlay.lastProgramCounter() << " timer2_counter=" << std::dec
-                << m_timers.readCounter(2) << " timer2_hw_target=" << m_timers.readTarget(2)
-                << " sw_target_0x80188F8C=0x" << std::hex
-                << readFromRegion<u32>(m_ram.data(), 0x00088F8Cu, MemoryMap::RAM_SIZE)
+                << " pc=0x" << std::hex << m_debugOverlay.lastProgramCounter()
+                << " timer2_counter=" << std::dec << m_timers.readCounter(2)
+                << " timer2_hw_target=" << m_timers.readTarget(2) << " sw_target_0x80188F8C=0x"
+                << std::hex << readFromRegion<u32>(m_ram.data(), 0x00088F8Cu, MemoryMap::RAM_SIZE)
                 << " sw_duration_0x80188F90=0x"
                 << readFromRegion<u32>(m_ram.data(), 0x00088F90u, MemoryMap::RAM_SIZE)
                 << " vblank_cb_table=[";
@@ -626,8 +620,8 @@ void PsxSystem::serviceInterrupts()
 
     // Enter a fresh COP0 interrupt exception and service all pending work.
     // rfe() is issued by IrqExceptionExitGuard when this scope exits.
-    m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt,
-                          m_debugOverlay.lastProgramCounter(), false);
+    m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, m_debugOverlay.lastProgramCounter(),
+                          false);
     IrqExceptionExitGuard irqExitGuard(m_cop0);
     serviceIrqWork(pendingMasked);
 }

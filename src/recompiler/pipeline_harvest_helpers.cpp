@@ -443,7 +443,11 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         const Address target = builtAddress.value();
         const bool builtAddressEscapes =
             usedAsRegisterJumpTarget || usedAsStoredPointer || usedAsCallArgument;
-        const bool usedAsDispatchPointer = usedAsRegisterJumpTarget || usedAsStoredPointer;
+        // A call argument counts as a dispatch pointer: the callee typically
+        // stores it for later indirect dispatch, but the store site is beyond
+        // the local storeFeedsIndirectCall lookahead window.
+        const bool usedAsDispatchPointer =
+            usedAsRegisterJumpTarget || usedAsStoredPointer || usedAsCallArgument;
         const bool strongEntryCandidate =
             looksLikeFunctionEntry(disassembled, instructionIndexMap, target) ||
             looksLikeIndirectTargetEntry(disassembled, instructionIndexMap, target);

@@ -144,7 +144,7 @@ void Cdrom::executePendingCommand()
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
-        queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
+        queueInterruptEvent(cdrom_detail::INT3, {currentStat(), currentStat()});
         break;
     case 0x08: // Stop
     {
@@ -341,7 +341,14 @@ void Cdrom::writeInterruptFlags(u8 value)
         if ((ackMask & currentTypeBit) != 0u)
         {
             m_interruptFlags = static_cast<u8>(m_interruptFlags & 0xF8u);
+            // Move any unread response bytes into the ack buffer.
+            // The next queued interrupt is not promoted until software drains these.
             m_ackResponseFifo.clear();
+            u8 preserved;
+            while (m_responseFifo.popFront(preserved))
+            {
+                m_ackResponseFifo.push(preserved, RESPONSE_CAPACITY);
+            }
             publishNextInterruptEvent();
             if (canExecutePendingCommand())
             {
@@ -365,9 +372,8 @@ void Cdrom::writeRequestControl(u8 value)
     traceCdrom("writeRequestControl value=0x%02X req=0x%02X data=%zu active=%zu", value,
                m_requestControl, m_dataFifo.size(), m_activeSector.size());
 
-    const bool bfrdRising =
-        (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
-        (oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0;
+    const bool bfrdRising = (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+                            (oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0;
 
     if (bfrdRising)
     {
@@ -382,9 +388,9 @@ void Cdrom::writeRequestControl(u8 value)
         {
             m_dataFifo.clear();
             m_activeSectorOffset = 0;
-            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
-                                     DATA_FIFO_CAPACITY);
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
             m_activeSectorOffset = m_activeSector.size();
+            updateDataPadForActiveSector();
         }
         else
         {
@@ -392,8 +398,17 @@ void Cdrom::writeRequestControl(u8 value)
             acceptBufferedReadSector(true);
         }
     }
-    else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
-             (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
+    else if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+    {
+        // BFRD already set (1→1): if the FIFO has been exhausted, accept the next
+        // buffered sector. replaceExistingData=false ensures we never disturb an
+        // in-progress DMA transfer that still has bytes remaining in the FIFO.
+        if (m_dataFifo.empty())
+        {
+            acceptBufferedReadSector(false);
+        }
+    }
+    else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
     {
         // PSX-SPX: clearing BFRD resets the data FIFO to zero.
         m_dataFifo.clear();
@@ -497,7 +512,7 @@ void Cdrom::queueInterruptEvent(u8 type, std::initializer_list<u8> responses)
 
 void Cdrom::publishNextInterruptEvent()
 {
-    if ((m_interruptFlags & 0x07u) != 0 || !m_responseFifo.empty() ||
+    if ((m_interruptFlags & 0x07u) != 0 || !m_responseFifo.empty() || !m_ackResponseFifo.empty() ||
         m_execution.pendingResponseIrqs.empty())
     {
         return;
@@ -517,15 +532,19 @@ void Cdrom::publishNextInterruptEvent()
     // for this interrupt when the game requests it via the request register.
     if (event.type == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
     {
-        m_dataFifo.clear();
         m_activeSector = std::move(m_bufferedReadSectors.front());
         m_bufferedReadSectors.pop_front();
         m_activeSectorOffset = 0;
-        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+        // Auto-load into the FIFO only when it is already drained. This
+        // prevents a mid-transfer overwrite while preserving data across
+        // state-save/restore. Also auto-enable BFRD so that DMA can read
+        // sector data without software explicitly setting the request register.
+        if (m_dataFifo.empty())
         {
-            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
-                                     DATA_FIFO_CAPACITY);
+            m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
             m_activeSectorOffset = m_activeSector.size();
+            updateDataPadForActiveSector();
         }
     }
 

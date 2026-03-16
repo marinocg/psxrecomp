@@ -2,8 +2,16 @@
  * @file bios_cd_int1_test.cpp
  * @brief INT1 handler hardening tests (PR-RV11).
  *
- * Covers: 2-sector address advance, FIFO no-spill, and completion path
- * (CDCMD_PAUSE on last sector / preload on non-last).
+ * Covers:
+ *  - 2-sector address advance (0x800, 0x924, 0x918 modes)
+ *  - FIFO no-spill (0x800, 0x924, 0x918 modes)
+ *  - Completion path (CDCMD_PAUSE on last sector / preload on non-last)
+ *  - Full end-to-end async read flow
+ *
+ * Mode mapping (CdAsyncReadSector a2 parameter):
+ *  - 0x00 → 0x800 bytes (2048 user data, ReadN)
+ *  - 0x20 → 0x924 bytes (2340 whole-sector, ReadN; bit5 = SECTOR_SIZE_2340)
+ *  - 0x10 → 0x918 bytes (2328 XA sub-header; bit4; real FIFO = 0x800 + pad fill)
  */
 #include "psxrecomp/runtime/disc.h"
 #include "psxrecomp/runtime/psx_system.h"
@@ -331,12 +339,132 @@ static void testCdAsyncFullReadFlow()
         << "[PASS] Full async read flow: CdInit -> SeekL -> ReadSector(3) -> INT1x3 -> Pause\n";
 }
 
+// ---------------------------------------------------------------
+// Test 15: 0x924-mode — address advance + copy length + FIFO no-spill
+//
+// mode=0x20 (bit5 = SECTOR_SIZE_2340) → 0x924 bytes/sector.
+// TestDisc implements readUserSector only; the CDROM falls back to the
+// whole-sector layout (2340 bytes, user data at byte offset 4, sync/ECC
+// areas zeroed).
+//
+// Verify:
+//   - After 1st INT1: sector 0 written at dst (first byte changed)
+//   - After 1st INT1: last byte at dst+0x923 changed (full 0x924 copied)
+//   - After 1st INT1: dst+0x924 still sentinel (no spill past sector size)
+//   - After 2nd INT1: sector 1 written at dst+0x924 (correct stride)
+// ---------------------------------------------------------------
+static void testCdAsyncReadSector0x924ModeAddressAndNoSpill()
+{
+    PsxSystem system;
+    auto disc = std::make_shared<TestDisc>();
+    system.setDisc(disc);
+    assert(system.initialize());
+    system.interrupts().writeMask(system.interrupts().readMask() |
+                                  static_cast<u32>(InterruptLine::Cdrom));
+
+    setupForRead(system, 0xA000, 0x00, 0x02, 0x00); // seek to LBA 0
+
+    constexpr u32 readDst = 0xB000;
+    constexpr u32 sectorBytes = 0x924;
+    u8* ram = system.getRam();
+    std::memset(ram + readDst, 0xFF, sectorBytes * 2 + 0x800);
+
+    u32 regs[32] = {};
+    regs[4] = 2;
+    regs[5] = readDst;
+    regs[6] = 0x20; // bit5 = SECTOR_SIZE_2340 → 0x924 bytes/sector
+    callA0(system, 0x7E, regs);
+    assert(regs[2] == 1);
+
+    ackCdromIrq(system);
+    system.serviceInterrupts();
+    ackCdromIrq(system);
+
+    // First INT1: sector 0 (LBA 0) copied.
+    assert(pumpUntilCdromIrq(system, 5000));
+    // Byte 0 of the 2340-byte sector is 0x00 (sync/header placeholder) ≠ 0xFF.
+    assert(ram[readDst] != 0xFF);
+    // Byte 0x923 is in the ECC placeholder area (all 0x00) ≠ 0xFF.
+    assert(ram[readDst + sectorBytes - 1] != 0xFF);
+    // Byte at dst+0x924: sector 1 slot must be untouched (no spill).
+    assert(ram[readDst + sectorBytes] == 0xFF);
+
+    // Second INT1: sector 1 (LBA 1) copied at dst+0x924.
+    assert(pumpUntilCdromIrq(system, 5000));
+    assert(ram[readDst + sectorBytes] != 0xFF);
+
+    std::cerr << "[PASS] 0x924-mode: address advance dst+0x924, full 2340 bytes copied, no spill\n";
+}
+
+// ---------------------------------------------------------------
+// Test 16: 0x918-mode — address advance + copy length + FIFO no-spill
+//
+// mode=0x10 (bit4 = XA) → 0x918 bytes/sector.
+// The CDROM mode register gets 0x10; bit5 is clear so wholeSectorMode=false.
+// The FIFO holds 0x800 real user bytes; readData() returns a pad byte for
+// indices [0x800, 0x918).  Pad byte for LBA 0 = 0xF8 ≠ sentinel (0xFF).
+//
+// Verify:
+//   - After 1st INT1: sector 0 written at dst (first byte changed)
+//   - After 1st INT1: last byte at dst+0x917 is pad (0xF8, ≠ 0xFF) confirming
+//     0x918 bytes were drained, not just 0x800
+//   - After 1st INT1: dst+0x918 still sentinel (no spill)
+//   - After 2nd INT1: sector 1 written at dst+0x918 (correct stride)
+// ---------------------------------------------------------------
+static void testCdAsyncReadSector0x918ModeAddressAndNoSpill()
+{
+    PsxSystem system;
+    auto disc = std::make_shared<TestDisc>();
+    system.setDisc(disc);
+    assert(system.initialize());
+    system.interrupts().writeMask(system.interrupts().readMask() |
+                                  static_cast<u32>(InterruptLine::Cdrom));
+
+    setupForRead(system, 0xA000, 0x00, 0x02, 0x00); // seek to LBA 0
+
+    constexpr u32 readDst = 0xB000;
+    constexpr u32 sectorBytes = 0x918;
+    u8* ram = system.getRam();
+    std::memset(ram + readDst, 0xFF, sectorBytes * 2 + 0x800);
+
+    u32 regs[32] = {};
+    regs[4] = 2;
+    regs[5] = readDst;
+    regs[6] = 0x10; // bit4 = XA → 0x918 bytes/sector
+    callA0(system, 0x7E, regs);
+    assert(regs[2] == 1);
+
+    ackCdromIrq(system);
+    system.serviceInterrupts();
+    ackCdromIrq(system);
+
+    // First INT1: sector 0 (LBA 0) copied.
+    assert(pumpUntilCdromIrq(system, 5000));
+    // First user byte = (0^0)&0xFF = 0x00 ≠ 0xFF.
+    assert(ram[readDst] != 0xFF);
+    // Last byte at dst+0x917 is a pad byte.  For LBA 0 the pad byte is
+    // outSector[0x7F8] = (0 ^ 0x7F8) & 0xFF = 0xF8 ≠ 0xFF, proving
+    // that 0x918 (not just 0x800) bytes were written.
+    assert(ram[readDst + sectorBytes - 1] != 0xFF);
+    // Byte at dst+0x918: sector 1 slot must be untouched (no spill).
+    assert(ram[readDst + sectorBytes] == 0xFF);
+
+    // Second INT1: sector 1 (LBA 1) copied at dst+0x918.
+    assert(pumpUntilCdromIrq(system, 5000));
+    // First user byte of LBA 1 = (1^0)&0xFF = 0x01 ≠ 0xFF.
+    assert(ram[readDst + sectorBytes] != 0xFF);
+
+    std::cerr << "[PASS] 0x918-mode: address advance dst+0x918, full 2328 bytes copied, no spill\n";
+}
+
 int main()
 {
     testCdAsyncReadSector2SectorAddressAdvance();
     testCdAsyncReadSectorFifoNoSpill();
     testCdAsyncReadSectorCompletionPath();
     testCdAsyncFullReadFlow();
+    testCdAsyncReadSector0x924ModeAddressAndNoSpill();
+    testCdAsyncReadSector0x918ModeAddressAndNoSpill();
 
     std::cerr << "\nAll INT1 hardening tests passed.\n";
     return 0;

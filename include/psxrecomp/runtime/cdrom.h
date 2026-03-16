@@ -298,6 +298,7 @@ class Cdrom
     void queueInterruptEvent(u8 type, std::initializer_list<u8> responses = {});
     void publishNextInterruptEvent();
     void acceptBufferedReadSector(bool replaceExistingData);
+    void updateDataPadForActiveSector();
     bool queueReadSector();
     bool loadReadSector(std::vector<u8>& outSector);
     u32 currentReadCycles() const;

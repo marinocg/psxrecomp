@@ -11,7 +11,11 @@ namespace
 {
 void ack(psxrecomp::runtime::Cdrom& cdrom)
 {
-    (void)cdrom.readResponse();
+    // Drain all response bytes before acknowledging, so none are left in the ack buffer.
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+    {
+        (void)cdrom.readResponse();
+    }
     cdrom.writeInterruptFlags(0x07u);
 }
 

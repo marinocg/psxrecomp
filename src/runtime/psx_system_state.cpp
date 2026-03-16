@@ -287,8 +287,9 @@ void PsxSystem::callBiosSyscall(u32 code, u32* regs, size_t regCount)
         const u32 subcommand = regCount > 4 ? regs[4] : 0;
         if (subcommand == 1)
         {
-            // EnterCriticalSection: just track depth, no COP0 change (testing revert)
-            regs[2] = 1;
+            // EnterCriticalSection: return prior interrupt-enable state (1=was enabled, 0=was
+            // disabled).
+            regs[2] = (m_criticalSectionDepth > 0) ? 0u : 1u;
             ++m_criticalSectionDepth;
             stream << "BIOS EnterCriticalSection depth=" << m_criticalSectionDepth;
             m_logger.log(LogLevel::Debug, "bios", stream.str());
@@ -296,11 +297,15 @@ void PsxSystem::callBiosSyscall(u32 code, u32* regs, size_t regCount)
         }
         if (subcommand == 2)
         {
-            // ExitCriticalSection: just track depth, no COP0 change (testing revert)
-            regs[2] = 1;
+            // ExitCriticalSection: return 1 if depth decremented, 0 if already at 0.
             if (m_criticalSectionDepth > 0)
             {
                 --m_criticalSectionDepth;
+                regs[2] = 1;
+            }
+            else
+            {
+                regs[2] = 0;
             }
             stream << "BIOS ExitCriticalSection depth=" << m_criticalSectionDepth;
             m_logger.log(LogLevel::Debug, "bios", stream.str());
