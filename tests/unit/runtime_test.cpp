@@ -389,6 +389,9 @@ int main()
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
     ackCdromIrq(system);
     system.runFrame();
+    // Set BFRD so DMA3 can access the sector data accepted for host read.
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x80u);
 
     Address cdromBase =
         psxrecomp::runtime::DmaController::ChannelBase +
@@ -481,6 +484,11 @@ int main()
     boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1,
                                                         0x06);
     boundedQueueSystem.runFrame();
+    // Set BFRD to gate the DMA read on the host-side data-ready signal.
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
+                                                        0u);
+    boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
+                                                        0x80u);
     [[maybe_unused]] const psxrecomp::u32 boundedWord = boundedQueueSystem.cdrom().readDma();
     assert((boundedWord & 0xFFu) == 16u);
 
@@ -510,6 +518,15 @@ int main()
     ackCdromIrq(dmaLoopSystem);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
     ackCdromIrq(dmaLoopSystem);
+    // Tick three sector cycles so all three enqueued sectors are loaded and INT1
+    // is published for the first sector.  The remaining sectors stay buffered
+    // and will be advanced automatically by readDma() at each sector boundary.
+    dmaLoopSystem.tickCpuCycles(451584u * 3u); // CDROM_READ_CYCLES * 3
+    // Set BFRD to gate DMA on the host-side data-ready signal.  This loads the
+    // first sector (m_activeSector from INT1 promotion) into the data FIFO.
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
+                                                   0x80u);
 
     const Address dmaLoopCdromBase =
         psxrecomp::runtime::DmaController::ChannelBase +

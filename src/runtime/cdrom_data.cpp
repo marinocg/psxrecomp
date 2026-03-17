@@ -76,29 +76,28 @@ u32 Cdrom::readDma()
         }
     }
 
-    // DMA reads are hardware-level and bypass the BFRD gate. When the FIFO runs
-    // dry, serve from the active sector first (which was positioned by the most
-    // recent publishNextInterruptEvent), then advance to the next available
-    // sector from the pre-buffered pool, and finally load directly from the
-    // source if needed for seamless streaming DMA.
+    // Gate all DMA reads on BFRD (REQUEST_ENABLE_BUFFER_READ, bit 7 of the
+    // REQUEST register written at bank 0, offset 3).  This mirrors the CPU
+    // RDDATA path: per PSX-SPX the host-visible DRQSTS signal in the status
+    // register is only asserted when BFRD=1 and the data FIFO has bytes to
+    // serve.  DMA3 obeys the same gate so no software bypass is possible.
+    if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
+    {
+        return 0;
+    }
+
+    // When BFRD is set and the FIFO is exhausted, automatically advance to the
+    // next buffered sector to support seamless streaming DMA across sector
+    // boundaries.  The writeRequestControl path already loaded the first sector
+    // on the BFRD 0->1 edge, so this branch is only reached mid-stream.
     if (m_dataFifo.empty())
     {
         if (!m_bufferedReadSectors.empty())
         {
-            // Advance from the pre-buffered pool.
+            // Advance from the pre-buffered pool to the next streaming sector.
             m_activeSector = std::move(m_bufferedReadSectors.front());
             m_bufferedReadSectors.pop_front();
             m_activeSectorOffset = 0;
-            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
-            m_activeSectorOffset = m_activeSector.size();
-            updateDataPadForActiveSector();
-        }
-        else if (!m_activeSector.empty() && m_activeSectorOffset < m_activeSector.size())
-        {
-            // Active sector was positioned by publishNextInterruptEvent but the
-            // data has not yet been loaded into the FIFO (BFRD was not set before
-            // DMA fired).  Reload from the active sector so DMA still serves the
-            // correct sector without advancing to the next one in the queue.
             m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
             m_activeSectorOffset = m_activeSector.size();
             updateDataPadForActiveSector();
