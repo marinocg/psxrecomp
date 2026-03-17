@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/mdec.h"
 
 #include <algorithm>
+#include <string>
 
 namespace psxrecomp
 {
@@ -9,8 +10,8 @@ namespace runtime
 
 namespace
 {
-constexpr u32 MDEC_STATE_MAGIC = 0x4345444Du; // "MDEC"
-constexpr u32 MDEC_STATE_VERSION = 1u;
+constexpr u32 MDEC_STATE_MAGIC   = 0x4345444Du; // "MDEC"
+constexpr u32 MDEC_STATE_VERSION = 2u;
 
 void appendU16(std::vector<u8>& out, u16 value)
 {
@@ -69,6 +70,9 @@ void Mdec::reset()
     m_commandBusy = false;
     m_decodeStubActive = false;
     m_statusLow16OverrideValid = false;
+    m_lastCommandKind = CommandKind::None;
+    m_commandPhase    = CommandPhase::Idle;
+    m_lifetimeStats   = LifetimeStats{};
     m_luminanceQuantTable.fill(0);
     m_colorQuantTable.fill(0);
     m_scaleTable.fill(0);
@@ -143,15 +147,20 @@ void Mdec::writeControl(u32 value)
 {
     if ((value & (1u << 31)) != 0)
     {
+        // Hardware warm reset: abort any active command and restore documented
+        // idle status, but preserve lifetime diagnostic statistics so an
+        // end-of-run report can answer whether MDEC(1) was ever issued.
+        const LifetimeStats savedStats = m_lifetimeStats;
         reset();
+        m_lifetimeStats            = savedStats;
         m_statusLow16OverrideValid = true;
-        m_statusLow16Override = 0x0000u;
-        m_outputDepth = 0;
-        m_currentBlock = 4;
+        m_statusLow16Override      = 0x0000u;
+        m_outputDepth              = 0;
+        m_currentBlock             = 4;
         return;
     }
 
-    m_dmaInEnabled = (value & (1u << 30)) != 0;
+    m_dmaInEnabled  = (value & (1u << 30)) != 0;
     m_dmaOutEnabled = (value & (1u << 29)) != 0;
 }
 
@@ -168,15 +177,21 @@ u32 Mdec::readDma()
     {
         value = m_outputFifo.front();
         m_outputFifo.pop_front();
+        m_lifetimeStats.anyDma1Drain = true;
     }
     else if (m_placeholderOutputWords > 0)
     {
         --m_placeholderOutputWords;
+        m_lifetimeStats.anyDma1Drain = true;
     }
 
     if (!hasOutputData())
     {
         m_currentBlock = (m_outputDepth <= 1) ? 4u : 0u;
+        if (m_commandPhase == CommandPhase::OutputAvailable)
+        {
+            m_commandPhase = CommandPhase::OutputDrained;
+        }
     }
 
     m_lastDmaWord = value;
@@ -196,6 +211,27 @@ bool Mdec::dmaInRequest() const
 bool Mdec::dmaOutRequest() const
 {
     return m_dmaOutEnabled && hasOutputData();
+}
+
+Mdec::LifetimeStats Mdec::lifetimeStats() const
+{
+    return m_lifetimeStats;
+}
+
+Mdec::CommandPhase Mdec::currentPhase() const
+{
+    return m_commandPhase;
+}
+
+Mdec::CommandKind Mdec::lastCommandKind() const
+{
+    return m_lastCommandKind;
+}
+
+// static
+bool Mdec::commandIsOutputCapable(CommandKind kind)
+{
+    return kind == CommandKind::DecodeMacroblock;
 }
 
 std::vector<u8> Mdec::serializeState() const
@@ -219,6 +255,14 @@ std::vector<u8> Mdec::serializeState() const
     appendU32(state, m_commandBusy ? 1u : 0u);
     appendU32(state, m_decodeStubActive ? 1u : 0u);
     appendU32(state, m_statusLow16OverrideValid ? 1u : 0u);
+    // Version-2 additions: lifecycle phase, command kind, lifetime stats.
+    appendU32(state, static_cast<u32>(m_commandPhase));
+    appendU32(state, static_cast<u32>(m_lastCommandKind));
+    appendU32(state, m_lifetimeStats.decodeCommandsIssued);
+    appendU32(state, m_lifetimeStats.quantTableCommandsIssued);
+    appendU32(state, m_lifetimeStats.scaleTableCommandsIssued);
+    appendU32(state, m_lifetimeStats.anyDecodeReachedOutputAvailable ? 1u : 0u);
+    appendU32(state, m_lifetimeStats.anyDma1Drain ? 1u : 0u);
     appendU32(state, static_cast<u32>(m_parameterWords.size()));
     for (u32 word : m_parameterWords)
     {
@@ -276,10 +320,33 @@ bool Mdec::deserializeState(const std::vector<u8>& state)
         return true;
     };
 
+    u32 commandPhaseRaw = 0;
+    u32 lastCommandKindRaw = 0;
+    u32 lifetimeDecodeIssued = 0;
+    u32 lifetimeQuantIssued  = 0;
+    u32 lifetimeScaleIssued  = 0;
+
     if (!consumeBool(candidate.m_outputSigned) || !consumeBool(candidate.m_outputBit15) ||
         !consumeBool(candidate.m_dmaInEnabled) || !consumeBool(candidate.m_dmaOutEnabled) ||
         !consumeBool(candidate.m_commandBusy) || !consumeBool(candidate.m_decodeStubActive) ||
         !consumeBool(candidate.m_statusLow16OverrideValid) ||
+        !consumeU32(state, cursor, commandPhaseRaw) ||
+        !consumeU32(state, cursor, lastCommandKindRaw) ||
+        !consumeU32(state, cursor, lifetimeDecodeIssued) ||
+        !consumeU32(state, cursor, lifetimeQuantIssued) ||
+        !consumeU32(state, cursor, lifetimeScaleIssued))
+    {
+        return false;
+    }
+
+    candidate.m_commandPhase  = static_cast<CommandPhase>(commandPhaseRaw & 0xFFu);
+    candidate.m_lastCommandKind = static_cast<CommandKind>(lastCommandKindRaw & 0xFFu);
+    candidate.m_lifetimeStats.decodeCommandsIssued     = lifetimeDecodeIssued;
+    candidate.m_lifetimeStats.quantTableCommandsIssued = lifetimeQuantIssued;
+    candidate.m_lifetimeStats.scaleTableCommandsIssued = lifetimeScaleIssued;
+
+    if (!consumeBool(candidate.m_lifetimeStats.anyDecodeReachedOutputAvailable) ||
+        !consumeBool(candidate.m_lifetimeStats.anyDma1Drain) ||
         !consumeU32(state, cursor, parameterWordCount))
     {
         return false;
@@ -368,42 +435,76 @@ void Mdec::log(LogLevel level, const std::string& message) const
     }
 }
 
+// static
+Mdec::CommandKind Mdec::classifyCommand(u32 commandWord)
+{
+    switch ((commandWord >> 29) & 0x7u)
+    {
+    case 0:  return CommandKind::None;
+    case 1:  return CommandKind::DecodeMacroblock;
+    case 2:  return CommandKind::SetQuantTable;
+    case 3:  return CommandKind::SetScaleTable;
+    default: return CommandKind::Invalid;
+    }
+}
+
 void Mdec::beginCommand(u32 value)
 {
     const u32 command = (value >> 29) & 0x7u;
 
-    m_lastCommandWord = value;
+    m_lastCommandKind  = classifyCommand(value);
+    m_lastCommandWord  = value;
     m_parameterWords.clear();
     m_outputFifo.clear();
-    m_placeholderOutputWords = 0;
-    m_decodeStubActive = false;
+    m_placeholderOutputWords   = 0;
+    m_decodeStubActive         = false;
     m_statusLow16OverrideValid = false;
-    m_outputDepth = static_cast<u8>((value >> 27) & 0x3u);
+    m_outputDepth  = static_cast<u8>((value >> 27) & 0x3u);
     m_outputSigned = (value & (1u << 26)) != 0;
-    m_outputBit15 = (value & (1u << 25)) != 0;
+    m_outputBit15  = (value & (1u << 25)) != 0;
     m_currentBlock = (m_outputDepth <= 1) ? 4u : 0u;
 
     switch (command)
     {
     case 1:
+        ++m_lifetimeStats.decodeCommandsIssued;
         m_commandBusy = true;
         m_remainingParameterWords = static_cast<u16>(value & 0xFFFFu);
         if (m_remainingParameterWords == 0)
         {
             finishCommand();
         }
+        else
+        {
+            m_commandPhase = CommandPhase::AwaitingParameters;
+            log(LogLevel::Info,
+                "MDEC(1) DecodeMacroblock accepted: params=" +
+                    std::to_string(m_remainingParameterWords) +
+                    " depth=" + std::to_string(m_outputDepth) +
+                    " output-capable=true");
+        }
         return;
     case 2:
+        ++m_lifetimeStats.quantTableCommandsIssued;
         m_commandBusy = true;
         m_remainingParameterWords = (value & 0x1u) != 0 ? 32u : 16u;
+        m_commandPhase = CommandPhase::AwaitingParameters;
+        log(LogLevel::Info,
+            "MDEC(2) SetQuantTable accepted: params=" +
+                std::to_string(m_remainingParameterWords) +
+                " output-capable=false");
         return;
     case 3:
+        ++m_lifetimeStats.scaleTableCommandsIssued;
         m_commandBusy = true;
         m_remainingParameterWords = 32u;
+        m_commandPhase = CommandPhase::AwaitingParameters;
+        log(LogLevel::Info, "MDEC(3) SetScaleTable accepted: params=32 output-capable=false");
         return;
     default:
         m_commandBusy = false;
         m_remainingParameterWords = 0;
+        m_commandPhase = CommandPhase::Idle;
         m_statusLow16OverrideValid = true;
         m_statusLow16Override = static_cast<u16>(value & 0xFFFFu);
         return;
@@ -448,15 +549,24 @@ void Mdec::finishCommand()
 
     m_commandBusy = false;
     m_remainingParameterWords = 0;
+    // Non-decode commands have no output; lifecycle returns to idle immediately.
+    if (m_commandPhase != CommandPhase::OutputAvailable)
+    {
+        m_commandPhase = CommandPhase::Idle;
+    }
 }
 
 void Mdec::finishDecodeCommand()
 {
-    m_decodeStubActive = true;
+    m_decodeStubActive       = true;
     m_placeholderOutputWords = placeholderWordsForDecode();
-    m_currentBlock = (m_outputDepth <= 1) ? 4u : 0u;
-    log(LogLevel::Warn,
-        "Decode command received without MDEC decode implementation; returning placeholder output");
+    m_currentBlock           = (m_outputDepth <= 1) ? 4u : 0u;
+    m_commandPhase           = CommandPhase::OutputAvailable;
+    m_lifetimeStats.anyDecodeReachedOutputAvailable = true;
+    log(LogLevel::Info,
+        "MDEC(1) decode complete (stub): output-available words=" +
+            std::to_string(m_placeholderOutputWords) +
+            " depth=" + std::to_string(m_outputDepth));
 }
 
 void Mdec::finishQuantTableCommand()

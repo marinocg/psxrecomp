@@ -641,6 +641,11 @@ if(BUILD_TESTS)
         tests/unit/mdec_dma_test.cpp
     )
     target_link_libraries(mdec_dma_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mdec_lifecycle_test
+        tests/unit/mdec_lifecycle_test.cpp
+    )
+    target_link_libraries(mdec_lifecycle_test PRIVATE psxrecomp_runtime)
 endif()
 
 # Examples

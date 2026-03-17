@@ -404,14 +404,15 @@ int main()
 
     // MDEC MMIO presence + DMA0/1 scaffolding should be observable even before
     // real decode output exists.
-    bool sawMdecWarning = false;
-    system.logger().setMinLevel(psxrecomp::runtime::LogLevel::Warn);
+    bool sawMdecDecodeLog = false;
+    system.logger().setMinLevel(psxrecomp::runtime::LogLevel::Info);
     system.logger().setCallback(
-        [&sawMdecWarning](const psxrecomp::runtime::LogEvent& event)
+        [&sawMdecDecodeLog](const psxrecomp::runtime::LogEvent& event)
         {
-            if (event.level == psxrecomp::runtime::LogLevel::Warn && event.category == "mdec")
+            if (event.level == psxrecomp::runtime::LogLevel::Info && event.category == "mdec" &&
+                event.message.find("MDEC(1)") != std::string::npos)
             {
-                sawMdecWarning = true;
+                sawMdecDecodeLog = true;
             }
         });
 
@@ -437,7 +438,7 @@ int main()
     system.write<psxrecomp::u32>(mdecInBase + 0x0, mdecParamSource);
     system.write<psxrecomp::u32>(mdecInBase + 0x4, 0x00010001u);
     system.write<psxrecomp::u32>(mdecInBase + 0x8, 0x01000201u);
-    assert(sawMdecWarning);
+    assert(sawMdecDecodeLog);
 
     assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 29)) == 0u);
     assert((system.readMmioExplicit<psxrecomp::u32>(mdecStatus) & (1u << 27)) != 0u);
