@@ -77,8 +77,10 @@ u32 Cdrom::readDma()
     }
 
     // DMA reads are hardware-level and bypass the BFRD gate. When the FIFO runs
-    // dry, advance to the next available sector for seamless streaming DMA
-    // without requiring a software ACK or tick() cycle to pre-stage data.
+    // dry, serve from the active sector first (which was positioned by the most
+    // recent publishNextInterruptEvent), then advance to the next available
+    // sector from the pre-buffered pool, and finally load directly from the
+    // source if needed for seamless streaming DMA.
     if (m_dataFifo.empty())
     {
         if (!m_bufferedReadSectors.empty())
@@ -87,6 +89,16 @@ u32 Cdrom::readDma()
             m_activeSector = std::move(m_bufferedReadSectors.front());
             m_bufferedReadSectors.pop_front();
             m_activeSectorOffset = 0;
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
+            m_activeSectorOffset = m_activeSector.size();
+            updateDataPadForActiveSector();
+        }
+        else if (!m_activeSector.empty() && m_activeSectorOffset < m_activeSector.size())
+        {
+            // Active sector was positioned by publishNextInterruptEvent but the
+            // data has not yet been loaded into the FIFO (BFRD was not set before
+            // DMA fired).  Reload from the active sector so DMA still serves the
+            // correct sector without advancing to the next one in the queue.
             m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
             m_activeSectorOffset = m_activeSector.size();
             updateDataPadForActiveSector();

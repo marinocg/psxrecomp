@@ -513,11 +513,22 @@ void Cdrom::queueInterruptEvent(u8 type, std::initializer_list<u8> responses)
 
 void Cdrom::publishNextInterruptEvent()
 {
-    if ((m_interruptFlags & 0x07u) != 0 || !m_responseFifo.empty() || !m_ackResponseFifo.empty() ||
+    // Only advance the queue when no interrupt is currently active and the
+    // response FIFO is completely clear.  The ack buffer is intentionally
+    // excluded from the guard: the game may have written HCLRCTL before
+    // draining the response FIFO (the BIOS ack-before-read pattern), and
+    // blocking on those leftover bytes would prevent INT1 from being
+    // delivered until the game reads them — which it may never do.
+    if ((m_interruptFlags & 0x07u) != 0 || !m_responseFifo.empty() ||
         m_execution.pendingResponseIrqs.empty())
     {
         return;
     }
+
+    // Discard any leftover ack bytes from the previous interrupt.  The game
+    // had the opportunity to drain them; promotion must not be blocked by
+    // bytes left behind by an ack-before-read sequence.
+    m_ackResponseFifo.clear();
 
     IrqEvent event = std::move(m_execution.pendingResponseIrqs.front());
     m_execution.pendingResponseIrqs.pop_front();
@@ -529,24 +540,18 @@ void Cdrom::publishNextInterruptEvent()
     }
 
     // When publishing INT1 (data-ready), advance the active sector to the
-    // next buffered sector so the data FIFO will contain the correct data
-    // for this interrupt when the game requests it via the request register.
+    // next buffered sector ready for the game to request via
+    // writeRequestControl.  BFRD and m_dataFifo are deliberately NOT touched
+    // here: the game must gate data visibility through the host-side
+    // request/ack/data-ready progression described in PSX-SPX.  The sector
+    // is held in m_activeSector; writeRequestControl will fill m_dataFifo
+    // on the 0->1 BFRD transition.
     if (event.type == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
     {
         m_activeSector = std::move(m_bufferedReadSectors.front());
         m_bufferedReadSectors.pop_front();
         m_activeSectorOffset = 0;
-        // Auto-load into the FIFO only when it is already drained. This
-        // prevents a mid-transfer overwrite while preserving data across
-        // state-save/restore. Also auto-enable BFRD so that DMA can read
-        // sector data without software explicitly setting the request register.
-        if (m_dataFifo.empty())
-        {
-            m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
-            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
-            m_activeSectorOffset = m_activeSector.size();
-            updateDataPadForActiveSector();
-        }
+        updateDataPadForActiveSector();
     }
 
     if (!event.responses.empty())

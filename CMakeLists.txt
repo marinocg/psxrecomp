@@ -492,6 +492,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(cdrom_bank_trace_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(cdrom_host_protocol_test
+        tests/unit/cdrom_host_protocol_test.cpp
+    )
+    target_link_libraries(cdrom_host_protocol_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(sio0_test
         tests/unit/sio0_test.cpp
         tests/unit/sio0_irq_bus_test_sections.cpp
