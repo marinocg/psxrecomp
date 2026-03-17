@@ -435,8 +435,7 @@ class PsxSystem
     u32 m_frameCount = 0;
     u32 m_pendingSpuDmaCompletionCycles = 0;
     bool m_pendingSpuDmaCompletion = false;
-    u32 m_criticalSectionDepth = 0;  ///< Tracks nested Enter/ExitCriticalSection syscalls
-    u32 m_irqBlockedConsecutive = 0; ///< Diagnostic counter for persistent IRQ delivery blockage
+    u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState
     {
@@ -470,6 +469,12 @@ class PsxSystem
     u32 m_callbackContextCommitGeneration = 0;
     std::array<u32, 32> m_pendingCallbackRegisters{};
     std::array<bool, 32> m_pendingCallbackRegisterMask{};
+
+    /// PSX-SPX: ChangeClearRCnt(t, flag) auto-clear policy.
+    /// When flag=1, the kernel timer/VBlank handler acknowledges the IRQ and
+    /// immediately returns from exception without calling chain handlers.
+    /// Index 0=Timer0, 1=Timer1, 2=Timer2, 3=VBlank.
+    std::array<bool, 4> m_changeClearRCntPolicy{};
 
     /// BIOS IRQ priority chains (C0:02 SysEnqIntRP / C0:03 SysDeqIntRP).
     /// Each head is a PSX pointer to a 16-byte structure in RAM.

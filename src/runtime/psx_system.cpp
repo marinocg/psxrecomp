@@ -375,19 +375,6 @@ void PsxSystem::syncLevelInterruptSources()
     raiseIfRequested(m_gpu.irqPending(), InterruptLine::Gpu);
     const bool cdromIrq = m_cdrom.hasIrqRequest();
     raiseIfRequested(cdromIrq, InterruptLine::Cdrom);
-    if (cdromIrq)
-    {
-        static int sCdromIrqCount = 0;
-        if (sCdromIrqCount < 5)
-        {
-            std::fprintf(
-                stderr,
-                "[diag] syncLevel cdromIrq=true IF=0x%02X IE=0x%02X I_STAT=0x%04X I_MASK=0x%04X\n",
-                m_cdrom.readInterruptFlags(), m_cdrom.readInterruptEnable(),
-                m_interrupts.readStatus(), m_interrupts.readMask());
-            ++sCdromIrqCount;
-        }
-    }
     raiseIfRequested(m_spu.hasIrqRequest(), InterruptLine::Spu);
     raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
     syncCop0InterruptPending();

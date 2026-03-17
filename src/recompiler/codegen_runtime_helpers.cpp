@@ -288,7 +288,8 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.openBlock("");
     emitter.writeLine("RecompilerContext& context;");
     emitter.writeLine("explicit CycleScope(RecompilerContext& ctx) : context(ctx) {}");
-    emitter.writeLine("~CycleScope() { flushCycles(context); }");
+    emitter.writeLine(
+        "~CycleScope() { try { flushCycles(context); } catch (...) {} }");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");

@@ -1,5 +1,7 @@
 #include "psxrecomp/runtime/hook_entry_int_trace.h"
 
+#include <algorithm>
+#include <cstring>
 #include <sstream>
 
 namespace psxrecomp
@@ -21,6 +23,27 @@ void appendRecent(std::vector<HookEntryIntTraceEntry>& entries, const HookEntryI
     entries.push_back(entry);
 }
 
+const char* invalidReasonLabel(DescriptorInvalidReason reason)
+{
+    switch (reason)
+    {
+    case DescriptorInvalidReason::Valid:
+        return "valid";
+    case DescriptorInvalidReason::NeverInitialized:
+        return "never_initialized";
+    case DescriptorInvalidReason::Zeroed:
+        return "zeroed";
+    case DescriptorInvalidReason::Clobbered:
+        return "clobbered";
+    case DescriptorInvalidReason::UnalignedAddress:
+        return "unaligned";
+    case DescriptorInvalidReason::InvalidAddress:
+        return "invalid_address";
+    default:
+        return "unknown";
+    }
+}
+
 } // namespace
 
 void HookEntryIntTraceEngine::reset()
@@ -28,17 +51,55 @@ void HookEntryIntTraceEngine::reset()
     m_lastInstall.reset();
     m_activeInvocation.reset();
     m_recentInvocations.clear();
+    m_hasInstallSnapshot = false;
+    m_installSnapshot.fill(0);
 }
 
 void HookEntryIntTraceEngine::recordInstall(Address installPc, Address descriptorAddress)
 {
     m_lastInstall = InstallInfo{installPc, descriptorAddress};
+    m_hasInstallSnapshot = false;
+}
+
+void HookEntryIntTraceEngine::snapshotDescriptorAtInstall(const u8* ram, Address descriptorOffset,
+                                                          u32 ramSize)
+{
+    if (descriptorOffset + 0x30u > ramSize)
+    {
+        m_hasInstallSnapshot = false;
+        return;
+    }
+    std::memcpy(m_installSnapshot.data(), ram + descriptorOffset, 0x30u);
+    m_hasInstallSnapshot = true;
+}
+
+bool HookEntryIntTraceEngine::wasDescriptorClobberedSinceInstall(const u8* ram,
+                                                                 Address descriptorOffset,
+                                                                 u32 ramSize) const
+{
+    if (!m_hasInstallSnapshot || descriptorOffset + 0x30u > ramSize)
+    {
+        return false;
+    }
+    return std::memcmp(m_installSnapshot.data(), ram + descriptorOffset, 0x30u) != 0;
+}
+
+bool HookEntryIntTraceEngine::readInstallSnapshot(Address wordOffset, u32& value) const
+{
+    if (!m_hasInstallSnapshot || wordOffset + sizeof(u32) > 0x30u)
+    {
+        return false;
+    }
+    std::memcpy(&value, m_installSnapshot.data() + wordOffset, sizeof(u32));
+    return true;
 }
 
 void HookEntryIntTraceEngine::beginInvocation(Address invokePc, Address descriptorAddress,
                                               Address descriptorResumeAddress,
                                               bool descriptorResumeValid, u32 savedSp, u32 savedFp,
-                                              u32 savedGp, u32 callbackGenerationBefore)
+                                              u32 savedGp, const std::array<u32, 8>& savedS,
+                                              DescriptorInvalidReason invalidReason,
+                                              u32 callbackGenerationBefore)
 {
     HookEntryIntTraceEntry entry;
     entry.invokePc = invokePc;
@@ -48,6 +109,8 @@ void HookEntryIntTraceEngine::beginInvocation(Address invokePc, Address descript
     entry.savedSp = savedSp;
     entry.savedFp = savedFp;
     entry.savedGp = savedGp;
+    entry.savedS = savedS;
+    entry.invalidReason = invalidReason;
     entry.callbackGenerationBefore = callbackGenerationBefore;
     if (m_lastInstall.has_value() && m_lastInstall->descriptorAddress == descriptorAddress)
     {
@@ -113,6 +176,10 @@ std::string HookEntryIntTraceEngine::formatRecentInvocations() const
            << it->installPc << " invoke_pc=0x" << it->invokePc << " desc_resume=0x"
            << it->descriptorResumeAddress
            << " desc_valid=" << (it->descriptorResumeValid ? "yes" : "no");
+        if (!it->descriptorResumeValid)
+        {
+            os << " reason=" << invalidReasonLabel(it->invalidReason);
+        }
         if (it->committedResume)
         {
             os << " committed_resume=0x" << it->committedResumeAddress;

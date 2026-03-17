@@ -3,1206 +3,428 @@
   "root": "",
   "entries": [
     {
-      "path": "S0",
+      "path": "BIN",
       "type": "dir",
       "flags": "0x02",
+      "extents": [
+        {
+          "lba": 1174,
+          "bytes": 2048,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/C_HAI.BIN",
+      "type": "file",
+      "bytes": 42240,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1175,
+          "bytes": 42240,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON.BIN",
+      "type": "file",
+      "bytes": 202080,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1196,
+          "bytes": 202080,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_ACC.BIN",
+      "type": "file",
+      "bytes": 35200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1295,
+          "bytes": 35200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_ASE.BIN",
+      "type": "file",
+      "bytes": 4800,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1313,
+          "bytes": 4800,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_FUKU.BIN",
+      "type": "file",
+      "bytes": 8000,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1316,
+          "bytes": 8000,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_HANA.BIN",
+      "type": "file",
+      "bytes": 7200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1320,
+          "bytes": 7200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_KAM2.BIN",
+      "type": "file",
+      "bytes": 14080,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1324,
+          "bytes": 14080,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_KAMI.BIN",
+      "type": "file",
+      "bytes": 35200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1331,
+          "bytes": 35200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_KAO.BIN",
+      "type": "file",
+      "bytes": 35200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1349,
+          "bytes": 35200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_KUTI.BIN",
+      "type": "file",
+      "bytes": 11200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1367,
+          "bytes": 11200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_K_AD.BIN",
+      "type": "file",
+      "bytes": 11200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1373,
+          "bytes": 11200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_K_KI.BIN",
+      "type": "file",
+      "bytes": 11200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1379,
+          "bytes": 11200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_ME.BIN",
+      "type": "file",
+      "bytes": 11200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1385,
+          "bytes": 11200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_ME_A.BIN",
+      "type": "file",
+      "bytes": 11200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1391,
+          "bytes": 11200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/MON_ME_K.BIN",
+      "type": "file",
+      "bytes": 11200,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1397,
+          "bytes": 11200,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "BIN/ODORI.BIN",
+      "type": "file",
+      "bytes": 17600,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1403,
+          "bytes": 17600,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "D3_GAME.STR",
+      "type": "file",
+      "bytes": 1638400,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 120,
+          "bytes": 1638400,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "DUMY.DAT",
+      "type": "file",
+      "bytes": 43200056,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2651,
+          "bytes": 43200056,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "REVERSI.EXE",
+      "type": "file",
+      "bytes": 518144,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 920,
+          "bytes": 518144,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "SETUMEI.DAT",
+      "type": "file",
+      "bytes": 1579,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1173,
+          "bytes": 1579,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "SLPS_030.10",
+      "type": "file",
+      "bytes": 96256,
+      "flags": "0x00",
       "extents": [
         {
           "lba": 24,
-          "bytes": 2048,
+          "bytes": 96256,
           "continues": false
         }
       ]
     },
     {
-      "path": "S0/S0000003.NSD",
-      "type": "file",
-      "bytes": 67056,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 25,
-          "bytes": 67056,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000003.NSF",
-      "type": "file",
-      "bytes": 6477824,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 58,
-          "bytes": 6477824,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000004.NSD",
-      "type": "file",
-      "bytes": 2160,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 3221,
-          "bytes": 2160,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000004.NSF",
-      "type": "file",
-      "bytes": 1900544,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 3223,
-          "bytes": 1900544,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000005.NSD",
-      "type": "file",
-      "bytes": 66568,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 4151,
-          "bytes": 66568,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000005.NSF",
-      "type": "file",
-      "bytes": 5150720,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 4184,
-          "bytes": 5150720,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000006.NSD",
-      "type": "file",
-      "bytes": 67192,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 6699,
-          "bytes": 67192,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000006.NSF",
-      "type": "file",
-      "bytes": 6866944,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 6732,
-          "bytes": 6866944,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000007.NSD",
-      "type": "file",
-      "bytes": 66408,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 10085,
-          "bytes": 66408,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000007.NSF",
-      "type": "file",
-      "bytes": 5885952,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 10118,
-          "bytes": 5885952,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000008.NSD",
-      "type": "file",
-      "bytes": 65616,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 12992,
-          "bytes": 65616,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000008.NSF",
-      "type": "file",
-      "bytes": 3801088,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 13025,
-          "bytes": 3801088,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000009.NSD",
-      "type": "file",
-      "bytes": 66464,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 14881,
-          "bytes": 66464,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S0000009.NSF",
-      "type": "file",
-      "bytes": 6840320,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 14914,
-          "bytes": 6840320,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000A.NSD",
-      "type": "file",
-      "bytes": 65448,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 18254,
-          "bytes": 65448,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000A.NSF",
-      "type": "file",
-      "bytes": 4290560,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 18286,
-          "bytes": 4290560,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000C.NSD",
-      "type": "file",
-      "bytes": 66608,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 20381,
-          "bytes": 66608,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000C.NSF",
-      "type": "file",
-      "bytes": 5701632,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 20414,
-          "bytes": 5701632,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000E.NSD",
-      "type": "file",
-      "bytes": 66584,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 23198,
-          "bytes": 66584,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000E.NSF",
-      "type": "file",
-      "bytes": 5570560,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 23231,
-          "bytes": 5570560,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000F.NSD",
-      "type": "file",
-      "bytes": 66712,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 25951,
-          "bytes": 66712,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S0/S000000F.NSF",
-      "type": "file",
-      "bytes": 5158912,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 25984,
-          "bytes": 5158912,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1",
+      "path": "SOUND",
       "type": "dir",
       "flags": "0x02",
       "extents": [
         {
-          "lba": 28503,
+          "lba": 1412,
           "bytes": 2048,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000011.NSD",
+      "path": "SOUND/CHOUSEN.SEQ",
       "type": "file",
-      "bytes": 66688,
+      "bytes": 7606,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 28504,
-          "bytes": 66688,
+          "lba": 1413,
+          "bytes": 7606,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000011.NSF",
+      "path": "SOUND/DRAW.SEQ",
       "type": "file",
-      "bytes": 7284736,
+      "bytes": 278,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 28537,
-          "bytes": 7284736,
+          "lba": 1417,
+          "bytes": 278,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000012.NSD",
+      "path": "SOUND/LOSE.SEQ",
       "type": "file",
-      "bytes": 67040,
+      "bytes": 257,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 32094,
-          "bytes": 67040,
+          "lba": 1418,
+          "bytes": 257,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000012.NSF",
+      "path": "SOUND/MENU.SEQ",
       "type": "file",
-      "bytes": 5863424,
+      "bytes": 5743,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 32127,
-          "bytes": 5863424,
+          "lba": 1419,
+          "bytes": 5743,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000013.NSD",
+      "path": "SOUND/REV.VB",
       "type": "file",
-      "bytes": 67160,
+      "bytes": 422368,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 34990,
-          "bytes": 67160,
+          "lba": 1422,
+          "bytes": 422368,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000013.NSF",
+      "path": "SOUND/REV.VH",
       "type": "file",
-      "bytes": 6969344,
+      "bytes": 10784,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 35023,
-          "bytes": 6969344,
+          "lba": 1629,
+          "bytes": 10784,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000014.NSD",
+      "path": "SOUND/REV1.SEQ",
       "type": "file",
-      "bytes": 66720,
+      "bytes": 14828,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 38426,
-          "bytes": 66720,
+          "lba": 1635,
+          "bytes": 14828,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000014.NSF",
+      "path": "SOUND/REV2.SEQ",
       "type": "file",
-      "bytes": 6094848,
+      "bytes": 11992,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 38459,
-          "bytes": 6094848,
+          "lba": 1643,
+          "bytes": 11992,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000015.NSD",
+      "path": "SOUND/REV3.SEQ",
       "type": "file",
-      "bytes": 66744,
+      "bytes": 11145,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 41435,
-          "bytes": 66744,
+          "lba": 1649,
+          "bytes": 11145,
           "continues": false
         }
       ]
     },
     {
-      "path": "S1/S0000015.NSF",
+      "path": "SOUND/WIN.SEQ",
       "type": "file",
-      "bytes": 5484544,
+      "bytes": 311,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 41468,
-          "bytes": 5484544,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000016.NSD",
-      "type": "file",
-      "bytes": 66624,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 44146,
-          "bytes": 66624,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000016.NSF",
-      "type": "file",
-      "bytes": 6293504,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 44179,
-          "bytes": 6293504,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000017.NSD",
-      "type": "file",
-      "bytes": 65512,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 47252,
-          "bytes": 65512,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000017.NSF",
-      "type": "file",
-      "bytes": 2621440,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 47284,
-          "bytes": 2621440,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000018.NSD",
-      "type": "file",
-      "bytes": 66880,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 48564,
-          "bytes": 66880,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000018.NSF",
-      "type": "file",
-      "bytes": 5552128,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 48597,
-          "bytes": 5552128,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000019.NSD",
-      "type": "file",
-      "bytes": 69168,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 51308,
-          "bytes": 69168,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S0000019.NSF",
-      "type": "file",
-      "bytes": 9635840,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 51342,
-          "bytes": 9635840,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001A.NSD",
-      "type": "file",
-      "bytes": 67152,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 56047,
-          "bytes": 67152,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001A.NSF",
-      "type": "file",
-      "bytes": 6193152,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 56080,
-          "bytes": 6193152,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001B.NSD",
-      "type": "file",
-      "bytes": 65656,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 59104,
-          "bytes": 65656,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001B.NSF",
-      "type": "file",
-      "bytes": 3407872,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 59137,
-          "bytes": 3407872,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001C.NSD",
-      "type": "file",
-      "bytes": 66808,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 60801,
-          "bytes": 66808,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001C.NSF",
-      "type": "file",
-      "bytes": 5359616,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 60834,
-          "bytes": 5359616,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001D.NSD",
-      "type": "file",
-      "bytes": 67112,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 63451,
-          "bytes": 67112,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001D.NSF",
-      "type": "file",
-      "bytes": 5212160,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 63484,
-          "bytes": 5212160,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001E.NSD",
-      "type": "file",
-      "bytes": 66600,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 66029,
-          "bytes": 66600,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001E.NSF",
-      "type": "file",
-      "bytes": 7796736,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 66062,
-          "bytes": 7796736,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001F.NSD",
-      "type": "file",
-      "bytes": 65512,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 69869,
-          "bytes": 65512,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S1/S000001F.NSF",
-      "type": "file",
-      "bytes": 4268032,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 69901,
-          "bytes": 4268032,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2",
-      "type": "dir",
-      "flags": "0x02",
-      "extents": [
-        {
-          "lba": 71985,
-          "bytes": 2048,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000020.NSD",
-      "type": "file",
-      "bytes": 66864,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 71986,
-          "bytes": 66864,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000020.NSF",
-      "type": "file",
-      "bytes": 5771264,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 72019,
-          "bytes": 5771264,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000021.NSD",
-      "type": "file",
-      "bytes": 65648,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 74837,
-          "bytes": 65648,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000021.NSF",
-      "type": "file",
-      "bytes": 3407872,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 74870,
-          "bytes": 3407872,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000022.NSD",
-      "type": "file",
-      "bytes": 66992,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 76534,
-          "bytes": 66992,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000022.NSF",
-      "type": "file",
-      "bytes": 4907008,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 76567,
-          "bytes": 4907008,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000023.NSD",
-      "type": "file",
-      "bytes": 67208,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 78963,
-          "bytes": 67208,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000023.NSF",
-      "type": "file",
-      "bytes": 6275072,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 78996,
-          "bytes": 6275072,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000024.NSD",
-      "type": "file",
-      "bytes": 65776,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 82060,
-          "bytes": 65776,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000024.NSF",
-      "type": "file",
-      "bytes": 3248128,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 82093,
-          "bytes": 3248128,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000025.NSD",
-      "type": "file",
-      "bytes": 65704,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 83679,
-          "bytes": 65704,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000025.NSF",
-      "type": "file",
-      "bytes": 3426304,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 83712,
-          "bytes": 3426304,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000026.NSD",
-      "type": "file",
-      "bytes": 3056,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 85385,
-          "bytes": 3056,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000026.NSF",
-      "type": "file",
-      "bytes": 3481600,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 85387,
-          "bytes": 3481600,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000028.NSD",
-      "type": "file",
-      "bytes": 66488,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 87087,
-          "bytes": 66488,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000028.NSF",
-      "type": "file",
-      "bytes": 5183488,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 87120,
-          "bytes": 5183488,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000029.NSD",
-      "type": "file",
-      "bytes": 66496,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 89651,
-          "bytes": 66496,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S0000029.NSF",
-      "type": "file",
-      "bytes": 5801984,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 89684,
-          "bytes": 5801984,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002A.NSD",
-      "type": "file",
-      "bytes": 66632,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 92517,
-          "bytes": 66632,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002A.NSF",
-      "type": "file",
-      "bytes": 5593088,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 92550,
-          "bytes": 5593088,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002C.NSD",
-      "type": "file",
-      "bytes": 66016,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 98118,
-          "bytes": 66016,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002C.NSF",
-      "type": "file",
-      "bytes": 6203392,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 98151,
-          "bytes": 6203392,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002D.NSD",
-      "type": "file",
-      "bytes": 2352,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 95281,
-          "bytes": 2352,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002D.NSF",
-      "type": "file",
-      "bytes": 1288192,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 95283,
-          "bytes": 1288192,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002E.NSD",
-      "type": "file",
-      "bytes": 66760,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 95912,
-          "bytes": 66760,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S2/S000002E.NSF",
-      "type": "file",
-      "bytes": 4450304,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 95945,
-          "bytes": 4450304,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3",
-      "type": "dir",
-      "flags": "0x02",
-      "extents": [
-        {
-          "lba": 101180,
-          "bytes": 2048,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000033.NSD",
-      "type": "file",
-      "bytes": 65792,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 101181,
-          "bytes": 65792,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000033.NSF",
-      "type": "file",
-      "bytes": 3442688,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 101214,
-          "bytes": 3442688,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000034.NSD",
-      "type": "file",
-      "bytes": 65896,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 102895,
-          "bytes": 65896,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000034.NSF",
-      "type": "file",
-      "bytes": 3829760,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 102928,
-          "bytes": 3829760,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000037.NSD",
-      "type": "file",
-      "bytes": 67240,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 104798,
-          "bytes": 67240,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000037.NSF",
-      "type": "file",
-      "bytes": 7948288,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 104831,
-          "bytes": 7948288,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000038.NSD",
-      "type": "file",
-      "bytes": 3096,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 108712,
-          "bytes": 3096,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000038.NSF",
-      "type": "file",
-      "bytes": 2686976,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 108714,
-          "bytes": 2686976,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000039.NSD",
-      "type": "file",
-      "bytes": 2480,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 110026,
-          "bytes": 2480,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "S3/S0000039.NSF",
-      "type": "file",
-      "bytes": 4075520,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 110028,
-          "bytes": 4075520,
-          "continues": false
-        }
-      ]
-    },
-    {
-      "path": "SCUS_949.00",
-      "type": "file",
-      "bytes": 290816,
-      "flags": "0x00",
-      "extents": [
-        {
-          "lba": 112018,
-          "bytes": 290816,
+          "lba": 1655,
+          "bytes": 311,
           "continues": false
         }
       ]
@@ -1210,25 +432,257 @@
     {
       "path": "SYSTEM.CNF",
       "type": "file",
-      "bytes": 66,
+      "bytes": 68,
       "flags": "0x00",
       "extents": [
         {
           "lba": 23,
-          "bytes": 66,
+          "bytes": 68,
           "continues": false
         }
       ]
     },
     {
-      "path": "ZBSPTREE.WAD",
+      "path": "TIM",
+      "type": "dir",
+      "flags": "0x02",
+      "extents": [
+        {
+          "lba": 1656,
+          "bytes": 2048,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/BAN1.TIM",
       "type": "file",
-      "bytes": 320373760,
+      "bytes": 153620,
       "flags": "0x00",
       "extents": [
         {
-          "lba": 112160,
-          "bytes": 320373760,
+          "lba": 1657,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/BAN2.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1733,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/BAN3.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1809,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/HAIKEI1.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1885,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/HAIKEI2.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 1961,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/HAIKEI3.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2037,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/KOMA1.TIM",
+      "type": "file",
+      "bytes": 125460,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2113,
+          "bytes": 125460,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/KOMA2.TIM",
+      "type": "file",
+      "bytes": 125460,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2175,
+          "bytes": 125460,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/KOMA3.TIM",
+      "type": "file",
+      "bytes": 125460,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2237,
+          "bytes": 125460,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/MIHON.TIM",
+      "type": "file",
+      "bytes": 20756,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2299,
+          "bytes": 20756,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/PARTS.TIM",
+      "type": "file",
+      "bytes": 47636,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2310,
+          "bytes": 47636,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM/TITLE.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2334,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM2",
+      "type": "dir",
+      "flags": "0x02",
+      "extents": [
+        {
+          "lba": 71,
+          "bytes": 2048,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM2/CE_HAI.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2410,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM2/G_PARTS.TIM",
+      "type": "file",
+      "bytes": 25620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2486,
+          "bytes": 25620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM2/KN_HAI.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2499,
+          "bytes": 153620,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM2/STARTB.TIM",
+      "type": "file",
+      "bytes": 97148,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 72,
+          "bytes": 97148,
+          "continues": false
+        }
+      ]
+    },
+    {
+      "path": "TIM2/TN_HAI.TIM",
+      "type": "file",
+      "bytes": 153620,
+      "flags": "0x00",
+      "extents": [
+        {
+          "lba": 2575,
+          "bytes": 153620,
           "continues": false
         }
       ]

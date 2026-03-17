@@ -140,7 +140,9 @@ void runBiosVectorInterruptChainTests()
     }
 
     // ---------------------------------------------------------------
-    // Test 24: ReturnFromException in chain still preserves kernel-event delivery
+    // Test 24: ReturnFromException in chain aborts entire exception flow
+    // PSX-SPX: RFE from a chain handler returns to the interrupted code,
+    // skipping kernel-event dispatch and HookEntryInt.
     // ---------------------------------------------------------------
     {
         PsxSystem system;
@@ -185,11 +187,10 @@ void runBiosVectorInterruptChainTests()
         system.interrupts().raise(InterruptLine::VBlank);
         system.serviceInterrupts();
 
-        assert(order.size() == 2);
+        // Only the chain func1 runs; RFE aborts before events or func2.
+        assert(order.size() == 1);
         assert(order[0] == func1);
-        assert(order[1] == eventCallback);
-        assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) == 0u);
-        std::cerr << "[PASS] chain ReturnFromException preserves event delivery\n";
+        std::cerr << "[PASS] chain ReturnFromException aborts entire exception flow\n";
     }
 
     // ---------------------------------------------------------------

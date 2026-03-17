@@ -1,12 +1,12 @@
 {
   "schemaVersion": "1.0",
-  "inputPath": "Crash Bandicoot (USA).cue",
-  "volumeLabel": "SCUS-94900",
+  "inputPath": "Simple 1500 Series Vol. 41 - The Reversi 2 (Japan).bin",
+  "volumeLabel": "SLPS_03010",
   "isJoliet": false,
   "rawSectorSize": 2352,
   "logicalBlockSize": 2048,
-  "totalSectors": 268743,
-  "bootExecutable": "SCUS_949.00",
+  "totalSectors": 23895,
+  "bootExecutable": "SLPS_030.10",
   "tracks": [
     {
       "trackNumber": 1,
@@ -23,7 +23,7 @@
     "sectorSize": 2352
   },
   "stats": {
-    "discFiles": 91,
+    "discFiles": 49,
     "discDirs": 4
   }
 }

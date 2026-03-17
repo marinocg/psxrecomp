@@ -98,6 +98,30 @@ Commands are written to 0x1F801810:
 - PAL: 50Hz, 576i
 - Progressive modes available
 
+## MDEC: Macroblock Decoder
+
+- **Registers**: `0x1F801820` (command/data), `0x1F801824` (status/control)
+- **DMA Channels**: DMA0 (MDEC In, RAM→MDEC), DMA1 (MDEC Out, MDEC→RAM)
+- **Function**: Decompresses MPEG-style macroblocks for FMV playback
+
+### Runtime Conformance Notes
+
+- Status register after control-reset matches PSX-SPX documented `0x80040000`
+  (bit 31 = FIFO empty, bits 18-16 = block 4/Cr, all other bits zero including
+  depth field at bits 26-25).
+- Command 1 (decode macroblock) sets busy, accepts the parameter count from bits
+  0-15, and generates placeholder (zero) output once all parameters are consumed.
+  Actual MPEG decode is not yet implemented; the handshake (busy set/clear,
+  output-request assertion, DMA1 drainability) is fully modeled.
+- Commands 2 and 3 (set quantization/scale table) accept 16/32 or 32 parameter
+  words respectively and populate internal tables used by future decode commands.
+- No-function commands (0, 4-7) reflect bits 0-15 and 25-28 of the command word
+  into the corresponding status fields without setting busy.
+- Control register bit 30 enables the data-in DMA request (status bit 28);
+  bit 29 enables the data-out DMA request (status bit 27).
+- DMA0 transfers feed parameters to the MDEC via `writeDma()`; DMA1 transfers
+  drain output via `readDma()`.  Both run synchronously within `handleDmaTransfer`.
+
 ## SPU: Sound Processing Unit
 
 - **Channels**: 24 simultaneous voices

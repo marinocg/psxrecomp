@@ -146,7 +146,7 @@ void Mdec::writeControl(u32 value)
         reset();
         m_statusLow16OverrideValid = true;
         m_statusLow16Override = 0x0000u;
-        m_outputDepth = 2;
+        m_outputDepth = 0;
         m_currentBlock = 4;
         return;
     }

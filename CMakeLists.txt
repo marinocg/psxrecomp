@@ -172,6 +172,7 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system_gpu_wait_trace.cpp
     src/runtime/psx_system_hook_entry_int.cpp
     src/runtime/psx_system_interrupts.cpp
+    src/runtime/psx_system_cdrom_irq.cpp
     src/runtime/psx_system_irq_chains.cpp
     src/runtime/psx_system_bios.cpp
     src/runtime/psx_system_bios_a0.cpp
@@ -589,6 +590,31 @@ if(BUILD_TESTS)
         tests/unit/codegen_debug_test.cpp
     )
     target_link_libraries(codegen_debug_test PRIVATE psxrecomp_recompiler)
+
+    add_psxrecomp_unit_test(change_clear_rcnt_test
+        tests/unit/change_clear_rcnt_test.cpp
+    )
+    target_link_libraries(change_clear_rcnt_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(timer_mode_test
+        tests/unit/timer_mode_test.cpp
+    )
+    target_link_libraries(timer_mode_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(irq_flow_test
+        tests/unit/irq_flow_test.cpp
+    )
+    target_link_libraries(irq_flow_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mdec_test
+        tests/unit/mdec_test.cpp
+    )
+    target_link_libraries(mdec_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mdec_dma_test
+        tests/unit/mdec_dma_test.cpp
+    )
+    target_link_libraries(mdec_dma_test PRIVATE psxrecomp_runtime)
 endif()
 
 # Examples

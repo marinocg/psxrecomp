@@ -1,7 +1,5 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <cstdio>
-
 #include "bios_helpers.h"
 
 #include <cctype>
@@ -47,18 +45,6 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
     const u32 a0 = regs[4];
     const u32 a1 = regs[5];
     const u32 a2 = regs[6];
-
-    // Temporary trace for interesting BIOS A calls (skip repeated timer/event calls)
-    if (functionId != 0x13 && functionId != 0x3C)
-    {
-        static int sBiosACount = 0;
-        if (sBiosACount < 500)
-        {
-            ++sBiosACount;
-            std::fprintf(stderr, "[bios] A(0x%02x) a0=0x%08x a1=0x%08x a2=0x%08x\n",
-                         functionId, a0, a1, a2);
-        }
-    }
 
     switch (functionId)
     {

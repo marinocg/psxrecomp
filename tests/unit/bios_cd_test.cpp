@@ -247,12 +247,13 @@ static void testCdAsyncSeekL()
     callA0(system, 0x78, regs);
     assert(regs[2] == 1);
 
-    // SeekL queues INT3 (ack) and INT2 (seek complete) immediately in our
-    // emulator. CommandDone is delivered on the INT2 completion edge.
-    assert(pumpUntilCdromIrq(system, 200)); // SeekL INT3
+    // CdAsyncSeekL queues Setloc INT3, SeekL INT3, SeekL INT2 immediately.
+    // serviceBiosCdromInterrupt acknowledges each as it fires:
+    //   pumpUntilCdromIrq processes Setloc INT3 → promotes SeekL INT3,
+    //   ackCdromIrq acks SeekL INT3 → promotes SeekL INT2,
+    //   serviceInterrupts processes SeekL INT2 → delivers CommandDone.
+    assert(pumpUntilCdromIrq(system, 200));
     ackCdromIrq(system);
-    system.serviceInterrupts();
-    assert(pumpUntilCdromIrq(system, 200)); // SeekL INT2 -> CommandDone delivered
     system.serviceInterrupts();
     assert(system.events().isEventDelivered(evHandle));
 

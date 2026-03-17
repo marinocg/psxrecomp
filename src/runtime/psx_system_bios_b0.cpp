@@ -1,7 +1,5 @@
 #include "psxrecomp/runtime/psx_system.h"
 
-#include <cstdio>
-
 #include "bios_helpers.h"
 #include "irq_trace_utils.h"
 
@@ -55,18 +53,6 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
     const u32 a1 = regs[5];
     const u32 a2 = regs[6];
     const u32 a3 = regs[7];
-
-    // Temporary trace - skip the repeating DeliverEvent/RFE/WaitEvent pattern
-    if (functionId != 0x07 && functionId != 0x17 && functionId != 0x0a && functionId != 0x0b)
-    {
-        static int sBiosBCount = 0;
-        if (sBiosBCount < 500)
-        {
-            ++sBiosBCount;
-            std::fprintf(stderr, "[bios] B(0x%02x) a0=0x%08x a1=0x%08x a2=0x%08x a3=0x%08x\n",
-                         functionId, a0, a1, a2, a3);
-        }
-    }
 
     switch (functionId)
     {
@@ -194,6 +180,18 @@ bool PsxSystem::callBiosVectorB0(u32 functionId, u32* regs)
         regs[2] = m_hookEntryInt.descriptorAddress;
         m_hookEntryInt.descriptorAddress = a0;
         m_hookEntryIntTrace.recordInstall(m_debugOverlay.lastProgramCounter(), a0);
+
+        // Snapshot descriptor at install for later clobber detection.
+        if (a0 != 0)
+        {
+            const Address phys = normalizeAddress(a0);
+            const Address off = foldMainRamAddress(phys);
+            if (isMainRamAddress(phys, 0x30u) && off <= MemoryMap::RAM_SIZE - 0x30u)
+            {
+                m_hookEntryIntTrace.snapshotDescriptorAtInstall(m_ram.data(), off,
+                                                                MemoryMap::RAM_SIZE);
+            }
+        }
 
         std::ostringstream msg;
         msg << "HookEntryInt descriptor=0x" << std::hex << a0;

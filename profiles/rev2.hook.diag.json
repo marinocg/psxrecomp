@@ -1,0 +1,91 @@
+{
+  "name": "rev2-hook",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_descriptor_writes",
+      "kind": "ram_write",
+      "range": "0x80165520-0x8016554f",
+      "action": "log"
+    },
+    {
+      "name": "rev2_descriptor_ra_reads",
+      "kind": "ram_read",
+      "range": "0x80165520-0x80165523",
+      "action": "log"
+    },
+    {
+      "name": "rev2_callback_busy_latch",
+      "kind": "ram_write",
+      "range": "0x801654e8-0x801654ef",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_descriptor_save",
+      "pc_range": "0x15de4c-0x15de84",
+      "registers": ["ra", "a0", "sp", "fp"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2
+    },
+    {
+      "name": "rev2_install_wrapper",
+      "pc_range": "0x15de3c-0x15de44",
+      "registers": ["a0", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true
+    },
+    {
+      "name": "rev2_init_callback",
+      "pc_range": "0x15d8d0-0x15d9a4",
+      "registers": ["s0", "sp", "ra", "a0"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4
+    },
+    {
+      "name": "rev2_hook_invoke_site",
+      "pc_range": "0x15452c-0x154874",
+      "registers": ["v0", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "repeat_threshold": 32
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "irq_controller"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_descriptor_save",
+      "pc_range": "0x15de4c-0x15de84",
+      "watched_cells": ["0x80165520", "0x80165524", "0x8016552c"]
+    },
+    {
+      "name": "rev2_init_callback",
+      "pc_range": "0x15d8d0-0x15d9a4",
+      "watched_cells": ["0x80165520", "0x80165524", "0x801654ea"]
+    }
+  ]
+}
