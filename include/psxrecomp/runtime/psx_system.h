@@ -6,6 +6,7 @@
 #include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/debug_overlay.h"
 #include "psxrecomp/runtime/diag_boundaries.h"
+#include "psxrecomp/runtime/diag_cdrom_bank_tracer.h"
 #include "psxrecomp/runtime/diag_explainers.h"
 #include "psxrecomp/runtime/diag_metadata_watch.h"
 #include "psxrecomp/runtime/diag_profile.h"
@@ -265,6 +266,9 @@ class PsxSystem
     /// Access the diagnostic metadata watch engine.
     DiagMetadataWatchEngine& diagMetadataWatch();
 
+    /// Access the CDROM bank-aware register tracer.
+    DiagCdromBankTracer& diagCdromBankTracer();
+
     /// Set the most recent resume address for diagnostic context.
     /// Called by generated code when a function is entered via mid-block resume.
     void setLastResumeAddress(Address address);
@@ -507,6 +511,7 @@ class PsxSystem
     DiagValidatorEngine m_diagValidators;
     DiagBoundaryDispatcher m_diagBoundaries;
     DiagMetadataWatchEngine m_diagMetadataWatch;
+    DiagCdromBankTracer m_diagCdromBankTracer;
 
     /// Last resume address set by generated code (0 = not a resumed entry).
     Address m_lastResumeAddress = 0;

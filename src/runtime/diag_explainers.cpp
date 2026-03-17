@@ -137,5 +137,10 @@ size_t DiagExplainerEngine::explainerCount() const
     return m_configs.size();
 }
 
+std::string DiagExplainerEngine::explainCdromBankSummary(const DiagCdromBankTracer& tracer)
+{
+    return tracer.formatSummary();
+}
+
 } // namespace runtime
 } // namespace psxrecomp

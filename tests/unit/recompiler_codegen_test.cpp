@@ -331,6 +331,15 @@ int main()
     runtimeHeader << "    std::size_t eventCount() const { return 0; }\n";
     runtimeHeader << "    std::string formatSummary() const { return {}; }\n";
     runtimeHeader << "};\n";
+    runtimeHeader << "class DiagCdromBankTracer {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    bool isEnabled() const { return false; }\n";
+    runtimeHeader << "};\n";
+    runtimeHeader << "class DiagExplainerEngine {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    static std::string explainCdromBankSummary(const DiagCdromBankTracer&)"
+                     " { return {}; }\n";
+    runtimeHeader << "};\n";
     runtimeHeader << "class CallbackTraceEngine {\n";
     runtimeHeader << "  public:\n";
     runtimeHeader << "    bool hasActiveInvocation() const { return false; }\n";
@@ -400,6 +409,7 @@ int main()
     runtimeHeader << "    StallClassifier& stallClassifier() { return m_stallClassifier; }\n";
     runtimeHeader << "    DiagTracepointEngine& diagTracepoints() { return m_diagTracepoints; }\n";
     runtimeHeader << "    DiagWatchpointEngine& diagWatchpoints() { return m_diagWatchpoints; }\n";
+    runtimeHeader << "    DiagCdromBankTracer& diagCdromBankTracer() { return m_diagCdromBankTracer; }\n";
     runtimeHeader << "    CallbackTraceEngine& callbackTrace() { return m_callbackTrace; }\n";
     runtimeHeader << "    std::string formatHookEntryIntResumeTrace() const { return {}; }\n";
     runtimeHeader << "  private:\n";
@@ -410,6 +420,7 @@ int main()
     runtimeHeader << "    StallClassifier m_stallClassifier;\n";
     runtimeHeader << "    DiagTracepointEngine m_diagTracepoints;\n";
     runtimeHeader << "    DiagWatchpointEngine m_diagWatchpoints;\n";
+    runtimeHeader << "    DiagCdromBankTracer m_diagCdromBankTracer;\n";
     runtimeHeader << "    CallbackTraceEngine m_callbackTrace;\n";
     runtimeHeader << "    Address m_lastResumeAddress = 0;\n";
     runtimeHeader << "};\n";

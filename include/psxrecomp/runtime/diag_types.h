@@ -138,7 +138,9 @@ enum class ExplainerKind : u8
     Gpustat,
     CdromIrq,
     IrqController,
-    DmaChannel
+    DmaChannel,
+    /// End-of-run bank-aware CDROM host-interface summary.
+    CdromBankSummary
 };
 
 /// A single device/register explainer from a profile.

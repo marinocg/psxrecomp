@@ -1,5 +1,6 @@
 #pragma once
 
+#include "psxrecomp/runtime/diag_cdrom_bank_tracer.h"
 #include "psxrecomp/runtime/diag_types.h"
 
 #include <string>
@@ -33,6 +34,10 @@ class DiagExplainerEngine
 
     /// Decode a DMA channel's control register.
     static std::string explainDmaChannel(u8 port, u32 control);
+
+    /// Return an end-of-run bank-aware CDROM host-interface summary.
+    /// Delegates to the provided tracer's formatSummary().
+    static std::string explainCdromBankSummary(const DiagCdromBankTracer& tracer);
 
     /// Number of configured explainers.
     size_t explainerCount() const;

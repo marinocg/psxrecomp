@@ -201,6 +201,7 @@ set(RUNTIME_SOURCES
     src/runtime/diag_validators.cpp
     src/runtime/diag_boundaries.cpp
     src/runtime/diag_metadata_watch.cpp
+    src/runtime/diag_cdrom_bank_tracer.cpp
     src/runtime/json_helpers.cpp
     src/runtime/semantic_audit.cpp
     src/runtime/timers.cpp
@@ -485,6 +486,11 @@ if(BUILD_TESTS)
         tests/unit/cdrom_bank_irq_test.cpp
     )
     target_link_libraries(cdrom_bank_irq_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_bank_trace_test
+        tests/unit/cdrom_bank_trace_test.cpp
+    )
+    target_link_libraries(cdrom_bank_trace_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(sio0_test
         tests/unit/sio0_test.cpp

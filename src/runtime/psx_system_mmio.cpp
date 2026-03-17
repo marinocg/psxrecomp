@@ -244,10 +244,16 @@ u8 PsxSystem::readMmio8(Address address)
 {
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
-        const u8 val = m_cdrom.readReg(static_cast<u8>(address - Mmio::CDROM_BASE));
+        const u8 offset = static_cast<u8>(address - Mmio::CDROM_BASE);
+        const u8 bank = m_cdrom.readStatus() & 0x3u;
+        const u8 val = m_cdrom.readReg(offset);
         m_stallClassifier.recordMmioAccess(address, val, false);
         recordMmioReadWatch(m_diagWatchpoints, m_debugOverlay, m_logger, address, 1, val,
                             m_lastResumeAddress);
+        if (m_diagCdromBankTracer.isEnabled())
+        {
+            m_diagCdromBankTracer.recordRead(offset, bank, val);
+        }
         return val;
     }
     if (isInRange(address, Mmio::CONTROLLER_BASE, Mmio::CONTROLLER_SIZE))
@@ -410,8 +416,17 @@ void PsxSystem::writeMmio8(Address address, u8 value)
     }
     if (isInRange(address, Mmio::CDROM_BASE, Mmio::CDROM_SIZE))
     {
+        const u8 offset = static_cast<u8>(address - Mmio::CDROM_BASE);
+        // Read bank BEFORE the write so offset-0 writes (bank select) are
+        // labelled with the OLD bank (the one that was active when the write
+        // was dispatched).  Bank changes take effect inside writeReg().
+        const u8 bank = m_cdrom.readStatus() & 0x3u;
         m_stallClassifier.recordMmioAccess(address, value, true);
-        m_cdrom.writeReg(static_cast<u8>(address - Mmio::CDROM_BASE), value);
+        m_cdrom.writeReg(offset, value);
+        if (m_diagCdromBankTracer.isEnabled())
+        {
+            m_diagCdromBankTracer.recordWrite(offset, bank, value);
+        }
         syncLevelInterruptSources();
         return;
     }
