@@ -86,39 +86,14 @@ u32 Cdrom::readDma()
         return 0;
     }
 
-    // When BFRD is set and the FIFO is exhausted, automatically advance to the
-    // next buffered sector to support seamless streaming DMA across sector
-    // boundaries.  The writeRequestControl path already loaded the first sector
-    // on the BFRD 0->1 edge, so this branch is only reached mid-stream.
-    if (m_dataFifo.empty())
-    {
-        if (!m_bufferedReadSectors.empty())
-        {
-            // Advance from the pre-buffered pool to the next streaming sector.
-            m_activeSector = std::move(m_bufferedReadSectors.front());
-            m_bufferedReadSectors.pop_front();
-            m_activeSectorOffset = 0;
-            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
-            m_activeSectorOffset = m_activeSector.size();
-            updateDataPadForActiveSector();
-        }
-        else if (m_execution.readActive || m_execution.seekActive)
-        {
-            // No pre-buffered sector: load directly from the source.
-            std::vector<u8> sector;
-            if (loadReadSector(sector))
-            {
-                m_activeSector = std::move(sector);
-                m_activeSectorOffset = 0;
-                m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
-                                         DATA_FIFO_CAPACITY);
-                m_activeSectorOffset = m_activeSector.size();
-                updateDataPadForActiveSector();
-                m_execution.seekActive = false;
-                m_execution.readActive = true;
-            }
-        }
-    }
+    // Sector advance is NOT automatic on FIFO exhaustion.  Per PSX-SPX the
+    // host-visible data-ready cycle is per-sector:
+    //   INT1 published → BFRD written 0→1 → DRQSTS rises → data readable
+    //   FIFO drained   → DRQSTS falls  → next INT1 needed before BFRD re-arms
+    // Silently loading the next buffered sector here would shortcut that
+    // handshake and allow the game to read past a sector boundary without
+    // ever observing the next INT1.  The pad byte is returned instead once
+    // the accepted sector is fully consumed.
 
     const auto consumeDataByte = [this]() -> u8
     {

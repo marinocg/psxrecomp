@@ -174,6 +174,12 @@ void enableBufferRead([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
     cdrom.writeReg(0, 0);
     cdrom.writeReg(3, 0x80);
 }
+
+void disableBufferRead([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeReg(0, 0);
+    cdrom.writeReg(3, 0x00);
+}
 } // namespace
 
 int main()
@@ -459,7 +465,10 @@ int main()
         readSingleResponseAndAck(cdrom);
     }
 
-    // BFRD should lock one buffered sector instead of auto-crossing into the next one.
+    // Each INT1 requires a fresh 0→1 BFRD edge.  Draining sector 0 and
+    // re-writing BFRD=1 (1→1) must NOT give access to sector 1.  The game
+    // must first acknowledge sector 0’s INT1, observe INT1 for sector 1,
+    // then arm BFRD=1 (0→1) to make sector 1 readable.
     {
         Cdrom cdrom;
         cdrom.reset();
@@ -472,15 +481,28 @@ int main()
         assertResponse(cdrom, {0x42});
         ack(cdrom);
 
-        cdrom.tick(kCdromReadCycles * 2);
-        assert(irqType(cdrom) == 0x01);
+        cdrom.tick(kCdromReadCycles * 2); // sectors 0 and 1 both ready
+        assert(irqType(cdrom) == 0x01);   // INT1 for sector 0
+
         enableBufferRead(cdrom);
         for (size_t i = 0; i < 2048; ++i)
         {
             assert(cdrom.readData() == userByte(0, i));
         }
-        assert(cdrom.readData() == userByte(0, 2040));
+        // Sector 0 fully drained.  BFRD is still 1; re-writing it (1→1)
+        // must NOT auto-advance to sector 1.
+        assert(cdrom.readData() == userByte(0, 2040)); // pad byte, not sector 1
 
+        // Disable BFRD so the next write produces a genuine 0→1 edge.
+        disableBufferRead(cdrom);
+        assert(cdrom.readData() == 0x00u); // gate closed
+
+        // Acknowledge INT1 for sector 0 → INT1 for sector 1 fires,
+        // sector 1 moves to m_activeSector.
+        readSingleResponseAndAck(cdrom);
+        assert(irqType(cdrom) == 0x01u); // INT1 for sector 1
+
+        // Now arm BFRD (0→1) → sector 1 loaded into FIFO.
         enableBufferRead(cdrom);
         assert(cdrom.readData() == userByte(1, 0));
     }

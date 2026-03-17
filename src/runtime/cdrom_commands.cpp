@@ -378,13 +378,14 @@ void Cdrom::writeRequestControl(u8 value)
 
     if (bfrdRising)
     {
-        // PSX-SPX: setting BFRD makes the active sector's data available
-        // via the data FIFO. Re-populate from the active sector (the one
-        // that caused the current INT1), NOT from the buffered-sectors
-        // queue. Advancing to the next sector happens when INT1 is
-        // acknowledged and publishNextInterruptEvent fires.
-        // Only reload on the 0→1 transition; re-writing 0x80 when already
-        // set must not reset the FIFO mid-DMA.
+        // PSX-SPX: setting BFRD arms the current host-visible data phase.
+        // Only the sector published with the most recent INT1 (held in
+        // m_activeSector) is loaded into the data FIFO on the 0→1 edge.
+        // If no INT1 has been published yet m_activeSector is empty and the
+        // FIFO stays empty; the game must wait for the next INT1 before BFRD
+        // can expose any data.  The next buffered sector (m_bufferedReadSectors)
+        // is deliberately NOT touched here — it requires its own INT1 promotion
+        // followed by a fresh BFRD 0→1 write before it becomes readable.
         if (!m_activeSector.empty())
         {
             m_dataFifo.clear();
@@ -393,27 +394,18 @@ void Cdrom::writeRequestControl(u8 value)
             m_activeSectorOffset = m_activeSector.size();
             updateDataPadForActiveSector();
         }
-        else
-        {
-            // No active sector yet — try to accept the first buffered one.
-            acceptBufferedReadSector(true);
-        }
+        // m_activeSector empty → FIFO stays empty; no auto-accept.
     }
-    else if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+    else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+             (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
     {
-        // BFRD already set (1→1): if the FIFO has been exhausted, accept the next
-        // buffered sector. replaceExistingData=false ensures we never disturb an
-        // in-progress DMA transfer that still has bytes remaining in the FIFO.
-        if (m_dataFifo.empty())
-        {
-            acceptBufferedReadSector(false);
-        }
-    }
-    else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
-    {
-        // PSX-SPX: clearing BFRD resets the data FIFO to zero.
+        // BFRD cleared (1→0): PSX-SPX specifies that clearing the request bit
+        // discards the data FIFO contents.
         m_dataFifo.clear();
     }
+    // BFRD 1→1 (re-write while already set): no-op.  The accepted sector is
+    // not re-loaded and the next buffered sector is not accepted.  Advancing
+    // to the next sector requires a new INT1 event followed by a BFRD 0→1.
 }
 
 void Cdrom::writeInterruptEnable(u8 value)

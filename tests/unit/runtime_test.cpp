@@ -455,16 +455,20 @@ int main()
     system.logger().setCallback({});
 
     // A second frame should queue another sector without dropping boundaries.
+    // Per the per-sector host-visible protocol, xaSector2 is only accessible
+    // after explicitly: clearing BFRD, acknowledging xaSector's INT1 (which
+    // promotes INT1 for xaSector2 and moves it to m_activeSector), then
+    // re-arming BFRD (0→1) to load xaSector2 into the data FIFO.
     system.runFrame();
-    [[maybe_unused]] bool reachedSecondSector = false;
-    for (int i = 0; i < 2048; ++i)
-    {
-        if (system.cdrom().readDma() == 0xDDCCBBAAu)
-        {
-            reachedSecondSector = true;
-            break;
-        }
-    }
+    // Clear BFRD (falling edge discards current FIFO contents).
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x00u);
+    // Ack xaSector's INT1 → INT1 for xaSector2 fires, xaSector2 → m_activeSector.
+    ackCdromIrq(system);
+    // Re-arm BFRD (0→1) → xaSector2 loaded into data FIFO.
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
+    system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x80u);
+    [[maybe_unused]] bool reachedSecondSector = (system.cdrom().readDma() == 0xDDCCBBAAu);
     assert(reachedSecondSector);
 
     // CD-ROM queued sectors are bounded to avoid unbounded memory growth.
@@ -484,8 +488,12 @@ int main()
                                                         0u);
     boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1,
                                                         0x06);
-    boundedQueueSystem.runFrame();
-    // Set BFRD to gate the DMA read on the host-side data-ready signal.
+    // Ack the INT3 command-response from ReadN, then tick one full read
+    // interval so the first sector INT1 fires.  publishNextInterruptEvent()
+    // then moves sector 16 (the first bounded one) into m_activeSector.
+    ackCdromIrq(boundedQueueSystem);
+    boundedQueueSystem.tickCpuCycles(451584u);
+    // Set BFRD (0→1): loads m_activeSector (sector 16) into the data FIFO.
     boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
                                                         0u);
     boundedQueueSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
@@ -519,15 +527,11 @@ int main()
     ackCdromIrq(dmaLoopSystem);
     dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1, 0x06);
     ackCdromIrq(dmaLoopSystem);
-    // Tick three sector cycles so all three enqueued sectors are loaded and INT1
-    // is published for the first sector.  The remaining sectors stay buffered
-    // and will be advanced automatically by readDma() at each sector boundary.
+    // Tick enough cycles to buffer all three sectors and fire INT1 for the
+    // first one.  The remaining two sectors stay in m_bufferedReadSectors and
+    // will become available after each sector's INT1 is acknowledged and BFRD
+    // is re-armed per the per-sector host-visible data-ready protocol.
     dmaLoopSystem.tickCpuCycles(451584u * 3u); // CDROM_READ_CYCLES * 3
-    // Set BFRD to gate DMA on the host-side data-ready signal.  This loads the
-    // first sector (m_activeSector from INT1 promotion) into the data FIFO.
-    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0, 0u);
-    dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
-                                                   0x80u);
 
     const Address dmaLoopCdromBase =
         psxrecomp::runtime::DmaController::ChannelBase +
@@ -535,13 +539,36 @@ int main()
     constexpr Address dmaLoopOutBase = 0x00018000;
     constexpr psxrecomp::u32 dmaWordsPerChunk = 0x100u; // 1024 bytes/chunk
     constexpr psxrecomp::u32 bytesPerChunk = dmaWordsPerChunk * sizeof(psxrecomp::u32);
-    for (psxrecomp::u32 chunk = 0; chunk < 6; ++chunk)
+    constexpr psxrecomp::u32 chunksPerSector = 2u; // 2 × 256 words = 2048 bytes = 1 sector
+
+    // For each sector: BFRD=1 (0→1) → 2 DMA chunks → BFRD=0 → ack INT1.
+    // After the ack, publishNextInterruptEvent fires the next INT1 and moves
+    // the following sector into m_activeSector, ready for the next BFRD re-arm.
+    for (psxrecomp::u32 s = 0; s < 3u; ++s)
     {
-        const Address chunkDest = dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
-        dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x0,
-                                            static_cast<psxrecomp::u32>(chunkDest));
-        dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x4, dmaWordsPerChunk);
-        dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x8, 0x01000000u);
+        // Arm BFRD (0→1): loads the current m_activeSector into the data FIFO.
+        dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
+                                                       0u);
+        dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
+                                                       0x80u);
+        for (psxrecomp::u32 c = 0; c < chunksPerSector; ++c)
+        {
+            const psxrecomp::u32 chunk = s * chunksPerSector + c;
+            const Address chunkDest =
+                dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
+            dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x0,
+                                                static_cast<psxrecomp::u32>(chunkDest));
+            dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x4, dmaWordsPerChunk);
+            dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x8, 0x01000000u);
+        }
+        // Clear BFRD (1→0): ensures the next BFRD write is a genuine 0→1 edge.
+        dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0,
+                                                       0u);
+        dmaLoopSystem.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3,
+                                                       0x00u);
+        // Ack INT1 for this sector: publishNextInterruptEvent fires, the next
+        // sector (if any) moves from m_bufferedReadSectors to m_activeSector.
+        ackCdromIrq(dmaLoopSystem);
     }
 
     for (psxrecomp::u32 chunk = 0; chunk < 6; ++chunk)
