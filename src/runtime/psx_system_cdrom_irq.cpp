@@ -80,6 +80,9 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         m_cdrom.enableDataRead();
     }
 
+    // Track whether the type-specific path already acknowledged the interrupt.
+    bool interruptAcknowledged = false;
+
     // INT1 (data-ready): copy sector data for CdAsyncReadSector.
     if (irqType == 1u && m_biosCdrom.asyncReadCount > 0)
     {
@@ -131,6 +134,7 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         // On real PSX the BIOS handler has higher priority and fully
         // handles each sector before HookEntryInt sees the interrupt.
         m_cdrom.writeInterruptFlags(0x07u);
+        interruptAcknowledged = true;
 
         if (m_biosCdrom.asyncReadCount == 0)
         {
@@ -165,6 +169,28 @@ bool PsxSystem::serviceBiosCdromInterrupt()
                         m_debugOverlay.lastProgramCounter(), "CdAsyncGetStatus",
                         "irq=INT3 response_byte=0");
         m_biosCdrom.asyncResultPtr = 0;
+    }
+
+    // When the BIOS owns the CDROM operation (CdAsyncReadSector or
+    // CdAsyncGetStatus), the type-specific paths above already drain
+    // responses and acknowledge. For other IRQ types originating from
+    // BIOS-initiated operations (e.g. the Pause INT3+INT2 sequence after
+    // the last async sector), drain and ack so publishNextInterruptEvent()
+    // is unblocked and the queue can advance.
+    //
+    // When the GAME manages its own CDROM reads (e.g. PSY-Q library
+    // CdRead/CdReadSync), we must NOT drain or ack here — the game's
+    // event callbacks need to read response bytes and see the interrupt
+    // type. The game's HookEntryInt handler will ack instead.
+    const bool biosOwnsOperation =
+        m_biosCdrom.asyncReadCount > 0 || m_biosCdrom.asyncSectorsRead > 0;
+    if (!interruptAcknowledged && biosOwnsOperation)
+    {
+        while ((m_cdrom.readStatus() & 0x20u) != 0)
+        {
+            (void)m_cdrom.readResponse();
+        }
+        m_cdrom.writeInterruptFlags(0x07u);
     }
 
     std::vector<u32> callbacks =

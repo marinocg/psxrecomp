@@ -1,0 +1,81 @@
+{
+  "name": "rev2-movie",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "mdec_command_write",
+      "kind": "mmio_write",
+      "range": "0x1F801820-0x1F801823",
+      "action": "log"
+    },
+    {
+      "name": "mdec_control_write",
+      "kind": "mmio_write",
+      "range": "0x1F801824-0x1F801827",
+      "action": "log"
+    },
+    {
+      "name": "mdec_status_read",
+      "kind": "mmio_read",
+      "range": "0x1F801824-0x1F801827",
+      "action": "summarize"
+    },
+    {
+      "name": "cdrom_bank_write",
+      "kind": "mmio_write",
+      "range": "0x1F801800-0x1F801800",
+      "action": "summarize"
+    },
+    {
+      "name": "cdrom_request_write",
+      "kind": "mmio_write",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    },
+    {
+      "name": "cdrom_status_read",
+      "kind": "mmio_read",
+      "range": "0x1F801800-0x1F801800",
+      "action": "summarize"
+    },
+    {
+      "name": "gpu_gp0_write",
+      "kind": "mmio_write",
+      "range": "0x1F801810-0x1F801813",
+      "action": "summarize"
+    },
+    {
+      "name": "gpu_gp1_write",
+      "kind": "mmio_write",
+      "range": "0x1F801814-0x1F801817",
+      "action": "summarize"
+    }
+  ],
+  "tracepoints": [],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    },
+    {
+      "kind": "gpustat"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": []
+}

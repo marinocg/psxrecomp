@@ -144,7 +144,8 @@ void Cdrom::executePendingCommand()
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
-        queueInterruptEvent(cdrom_detail::INT3, {currentStat(), currentStat()});
+        // PSX-SPX: ReadN/ReadS INT3 acknowledgment contains a single stat byte.
+        queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
         break;
     case 0x08: // Stop
     {

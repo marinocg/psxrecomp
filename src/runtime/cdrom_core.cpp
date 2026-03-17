@@ -197,6 +197,9 @@ void Cdrom::writeReg(u8 offset, u8 value)
         {
             writeCommand(value);
         }
+        // Index 1: Sound Map Data Out (ignored)
+        // Index 2: Sound Map Coding Info (ignored)
+        // Index 3: Right-CD to Right-SPU Volume (ignored)
         break;
     case 2:
         if (m_index == 0)
@@ -207,6 +210,8 @@ void Cdrom::writeReg(u8 offset, u8 value)
         {
             writeInterruptEnable(value);
         }
+        // Index 2: Left-CD to Left-SPU Volume (ignored)
+        // Index 3: Right-CD to Left-SPU Volume (ignored)
         break;
     case 3:
         if (m_index == 0)
@@ -217,6 +222,8 @@ void Cdrom::writeReg(u8 offset, u8 value)
         {
             writeInterruptFlags(value);
         }
+        // Index 2: Left-CD to Right-SPU Volume (ignored)
+        // Index 3: Apply Volume Changes (ignored)
         break;
     default:
         break;

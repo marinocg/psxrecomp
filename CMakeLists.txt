@@ -481,6 +481,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(cdrom_state_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(cdrom_bank_irq_test
+        tests/unit/cdrom_bank_irq_test.cpp
+    )
+    target_link_libraries(cdrom_bank_irq_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(sio0_test
         tests/unit/sio0_test.cpp
         tests/unit/sio0_irq_bus_test_sections.cpp
@@ -506,6 +511,11 @@ if(BUILD_TESTS)
         tests/unit/bios_cd_int1_test.cpp
     )
     target_link_libraries(bios_cd_int1_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_int_promotion_test
+        tests/unit/cdrom_int_promotion_test.cpp
+    )
+    target_link_libraries(cdrom_int_promotion_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp

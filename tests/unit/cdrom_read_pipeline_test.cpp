@@ -193,7 +193,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
 
         cdrom.tick(kCdromReadCycles - 1);
         assert(irqType(cdrom) == 0x00);
@@ -233,7 +233,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         enableBufferRead(cdrom);
@@ -256,7 +256,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
 
         cdrom.tick((kCdromReadCycles / 2u) - 1u);
         assert(irqType(cdrom) == 0x00);
@@ -283,7 +283,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
 
@@ -319,7 +319,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         enableBufferRead(cdrom);
@@ -350,7 +350,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
 
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
@@ -389,7 +389,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         // Falls back to regular 2048-byte user payload beginning at raw[24].
@@ -410,7 +410,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         enableBufferRead(cdrom);
@@ -433,7 +433,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         assertResponse(cdrom, {0x22});
@@ -451,7 +451,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
         cdrom.tick(kCdromReadCycles);
         assert(irqType(cdrom) == 0x01);
         enableBufferRead(cdrom);
@@ -470,7 +470,7 @@ int main()
         issueReadN(cdrom);
         assert(irqType(cdrom) == 0x03);
         assertResponse(cdrom, {0x42});
-        readSingleResponseAndAck(cdrom);
+        ack(cdrom);
 
         cdrom.tick(kCdromReadCycles * 2);
         assert(irqType(cdrom) == 0x01);
