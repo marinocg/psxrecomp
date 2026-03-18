@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iomanip>
+#include <sstream>
 #include <utility>
 
 namespace psxrecomp
@@ -44,6 +46,92 @@ void traceCdrom(const char* fmt, ...)
 }
 } // namespace
 
+// ---------------------------------------------------------------------------
+// Sector phase trace helpers
+// ---------------------------------------------------------------------------
+
+namespace
+{
+const char* phaseReasonName(Cdrom::SectorPhaseReason r)
+{
+    switch (r)
+    {
+    case Cdrom::SectorPhaseReason::QueuePromote:   return "queue_promote";
+    case Cdrom::SectorPhaseReason::PublishInt3:    return "publish_int3";
+    case Cdrom::SectorPhaseReason::PublishInt1:    return "publish_int1";
+    case Cdrom::SectorPhaseReason::HclrctlAck:    return "hclrctl_ack";
+    case Cdrom::SectorPhaseReason::AcceptBfrd:    return "accept_bfrd";
+    case Cdrom::SectorPhaseReason::DrqstsOn:      return "drqsts_on";
+    case Cdrom::SectorPhaseReason::CpuRddatRead:  return "cpu_rddat_read";
+    case Cdrom::SectorPhaseReason::Dma3Read:      return "dma3_read";
+    case Cdrom::SectorPhaseReason::DrainComplete:  return "drain_complete";
+    default:                                       return "unknown";
+    }
+}
+
+const char* phaseStateName(Cdrom::SectorPhaseReason r)
+{
+    switch (r)
+    {
+    case Cdrom::SectorPhaseReason::QueuePromote:   return "buffered";
+    case Cdrom::SectorPhaseReason::PublishInt3:    return "published";
+    case Cdrom::SectorPhaseReason::PublishInt1:    return "published";
+    case Cdrom::SectorPhaseReason::AcceptBfrd:
+    case Cdrom::SectorPhaseReason::DrqstsOn:
+    case Cdrom::SectorPhaseReason::CpuRddatRead:
+    case Cdrom::SectorPhaseReason::Dma3Read:
+    case Cdrom::SectorPhaseReason::DrainComplete:  return "accepted";
+    default:                                       return "";
+    }
+}
+} // namespace
+
+void Cdrom::recordPhaseTrace(u32 lba, SectorPhaseReason reason)
+{
+    m_phaseRing[m_phaseRingHead] = PhaseTraceEntry{lba, reason};
+    m_phaseRingHead = (m_phaseRingHead + 1u) % PHASE_TRACE_CAPACITY;
+    if (m_phaseRingCount < PHASE_TRACE_CAPACITY)
+    {
+        ++m_phaseRingCount;
+    }
+}
+
+size_t Cdrom::phaseTraceCount() const
+{
+    return m_phaseRingCount;
+}
+
+Cdrom::PhaseTraceEntry Cdrom::phaseTraceEntry(size_t index) const
+{
+    // Map logical index (0 = oldest) to physical ring position.
+    const size_t oldest =
+        (m_phaseRingHead + PHASE_TRACE_CAPACITY - m_phaseRingCount) % PHASE_TRACE_CAPACITY;
+    return m_phaseRing[(oldest + index) % PHASE_TRACE_CAPACITY];
+}
+
+std::string Cdrom::formatPhaseTraceSummary(size_t last) const
+{
+    std::ostringstream os;
+    const size_t count = m_phaseRingCount;
+    os << "=== CDROM Sector Phase Trace (last " << last << " transitions) ===\n";
+    const size_t start = count > last ? count - last : 0u;
+    for (size_t i = start; i < count; ++i)
+    {
+        const PhaseTraceEntry e = phaseTraceEntry(i);
+        os << "  [" << std::setw(2) << i << "] lba=0x" << std::hex << std::setw(6)
+           << std::setfill('0') << e.lba << std::dec << std::setfill(' ')
+           << " reason=" << std::setw(16) << std::left << phaseReasonName(e.reason)
+           << std::right;
+        const char* state = phaseStateName(e.reason);
+        if (state[0] != '\0')
+        {
+            os << "  (" << state << ")";
+        }
+        os << "\n";
+    }
+    return os.str();
+}
+
 u32 Cdrom::currentReadCycles() const
 {
     if ((m_execution.mode & cdrom_detail::SETMODE_DOUBLE_SPEED) != 0)
@@ -77,6 +165,15 @@ void Cdrom::reset()
     m_discBackendInitialized = false;
     m_doorOpen = false;
     m_doorCloseCycles = 0;
+    // Phase trace
+    m_phaseRing = {};
+    m_phaseRingHead = 0;
+    m_phaseRingCount = 0;
+    m_activeLba = 0;
+    m_bufferedReadLbas.clear();
+    m_phaseFirstCpuReadFired = false;
+    m_phaseFirstDmaFired = false;
+    m_phaseDrainFired = false;
 }
 
 void Cdrom::setDiscBackend(Disc* disc)
@@ -115,6 +212,7 @@ void Cdrom::primeBootState(bool discPresent)
     m_interruptFlags = 0;
     m_responseFifo.clear();
     m_bufferedReadSectors.clear();
+    m_bufferedReadLbas.clear();
 }
 
 void Cdrom::tick(u32 cpuCycles)

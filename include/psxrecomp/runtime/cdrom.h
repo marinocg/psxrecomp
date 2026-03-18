@@ -8,6 +8,7 @@
 #include <deque>
 #include <functional>
 #include <initializer_list>
+#include <string>
 #include <vector>
 
 namespace psxrecomp
@@ -36,6 +37,39 @@ class Cdrom
         bool readActive = false;
         bool seekActive = false;
     };
+
+    /// Reasons that can trigger a sector-phase transition event.
+    enum class SectorPhaseReason : u8
+    {
+        QueuePromote,   ///< Sector read from disc/queue; now in m_bufferedReadSectors (buffered).
+        PublishInt3,    ///< INT3 (command-complete) published to the interrupt register.
+        PublishInt1,    ///< INT1 (data-ready) published; m_activeSector advances (published).
+        HclrctlAck,    ///< HCLRCTL write acknowledged and cleared the active interrupt.
+        AcceptBfrd,    ///< BFRD 0→1: m_activeSector loaded into data FIFO (accepted).
+        DrqstsOn,      ///< DRQSTS asserted (BFRD=1 and data FIFO non-empty).
+        CpuRddatRead,  ///< First readData() byte consumed from the current accepted-sector phase.
+        Dma3Read,      ///< First readDma() word consumed from the current accepted-sector phase.
+        DrainComplete,  ///< Data FIFO exhausted; DRQSTS would fall.
+    };
+
+    /// One entry in the rolling sector-phase transition history.
+    struct PhaseTraceEntry
+    {
+        u32 lba = 0;
+        SectorPhaseReason reason = SectorPhaseReason::QueuePromote;
+    };
+
+    static constexpr size_t PHASE_TRACE_CAPACITY = 32u;
+
+    /// Number of valid entries in the rolling phase-trace ring (≤ PHASE_TRACE_CAPACITY).
+    size_t phaseTraceCount() const;
+
+    /// Retrieve an entry by logical index where 0 is the oldest retained entry.
+    PhaseTraceEntry phaseTraceEntry(size_t index) const;
+
+    /// Compact multi-line textual summary of the last @p last transitions.
+    /// Suitable for end-of-run diagnostics output.
+    std::string formatPhaseTraceSummary(size_t last = 10) const;
 
     void reset();
     void tick(u32 cpuCycles);
@@ -286,6 +320,18 @@ class Cdrom
     bool m_discBackendInitialized = false;
     bool m_doorOpen = false;
     u32 m_doorCloseCycles = 0;
+
+    // ---- Sector phase trace ------------------------------------------------
+    std::array<PhaseTraceEntry, PHASE_TRACE_CAPACITY> m_phaseRing{};
+    size_t m_phaseRingHead = 0;   ///< Next write slot.
+    size_t m_phaseRingCount = 0;  ///< Valid entries (≤ PHASE_TRACE_CAPACITY).
+    u32 m_activeLba = 0;          ///< LBA of the sector currently held in m_activeSector.
+    std::deque<u32> m_bufferedReadLbas; ///< Parallel to m_bufferedReadSectors.
+    bool m_phaseFirstCpuReadFired = false; ///< Reset on AcceptBfrd; fires CpuRddatRead once.
+    bool m_phaseFirstDmaFired = false;     ///< Reset on AcceptBfrd; fires Dma3Read once.
+    bool m_phaseDrainFired = false;        ///< Reset on AcceptBfrd; fires DrainComplete once.
+
+    void recordPhaseTrace(u32 lba, SectorPhaseReason reason);
 
     void pushResponse(u8 value);
     u8 currentStat() const;

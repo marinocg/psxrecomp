@@ -342,6 +342,7 @@ void Cdrom::writeInterruptFlags(u8 value)
         if ((ackMask & currentTypeBit) != 0u)
         {
             m_interruptFlags = static_cast<u8>(m_interruptFlags & 0xF8u);
+            recordPhaseTrace(m_activeLba, SectorPhaseReason::HclrctlAck);
             // Move any unread response bytes into the ack buffer.
             // The next queued interrupt is not promoted until software drains these.
             m_ackResponseFifo.clear();
@@ -395,6 +396,14 @@ void Cdrom::writeRequestControl(u8 value)
             updateDataPadForActiveSector();
         }
         // m_activeSector empty → FIFO stays empty; no auto-accept.
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::AcceptBfrd);
+        if (!m_dataFifo.empty())
+        {
+            recordPhaseTrace(m_activeLba, SectorPhaseReason::DrqstsOn);
+        }
+        m_phaseFirstCpuReadFired = false;
+        m_phaseFirstDmaFired = false;
+        m_phaseDrainFired = false;
     }
     else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
              (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
@@ -544,6 +553,23 @@ void Cdrom::publishNextInterruptEvent()
         m_bufferedReadSectors.pop_front();
         m_activeSectorOffset = 0;
         updateDataPadForActiveSector();
+        // Advance the parallel LBA tracker to match the newly active sector.
+        if (!m_bufferedReadLbas.empty())
+        {
+            m_activeLba = m_bufferedReadLbas.front();
+            m_bufferedReadLbas.pop_front();
+        }
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::PublishInt1);
+    }
+    else if (event.type == cdrom_detail::INT1)
+    {
+        // INT1 with no buffered sectors: active sector is unchanged.
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::PublishInt1);
+    }
+    else
+    {
+        // INT3 (command-complete) or other non-data interrupt.
+        recordPhaseTrace(m_execution.currentLba, SectorPhaseReason::PublishInt3);
     }
 
     if (!event.responses.empty())

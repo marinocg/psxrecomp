@@ -53,10 +53,22 @@ u8 Cdrom::readData()
         return 0;
     }
 
+    const bool wasNonEmpty = !m_dataFifo.empty();
     u8 value = 0;
     if (!m_dataFifo.popFront(value))
     {
         return m_dataPadValid ? m_dataPadByte : 0;
+    }
+
+    if (!m_phaseFirstCpuReadFired)
+    {
+        m_phaseFirstCpuReadFired = true;
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::CpuRddatRead);
+    }
+    if (wasNonEmpty && m_dataFifo.empty() && !m_phaseDrainFired)
+    {
+        m_phaseDrainFired = true;
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::DrainComplete);
     }
 
     return value;
@@ -95,14 +107,17 @@ u32 Cdrom::readDma()
     // ever observing the next INT1.  The pad byte is returned instead once
     // the accepted sector is fully consumed.
 
-    const auto consumeDataByte = [this]() -> u8
+    const bool wasNonEmpty = !m_dataFifo.empty();
+    bool firstByteFromFifo = false;
+
+    const auto consumeDataByte = [this, &firstByteFromFifo]() -> u8
     {
         u8 byte = 0;
         if (m_dataFifo.popFront(byte))
         {
+            firstByteFromFifo = true;
             return byte;
         }
-
         return m_dataPadValid ? m_dataPadByte : 0;
     };
 
@@ -114,6 +129,17 @@ u32 Cdrom::readDma()
     }
 
     m_lastDmaWord = value;
+
+    if (firstByteFromFifo && !m_phaseFirstDmaFired)
+    {
+        m_phaseFirstDmaFired = true;
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::Dma3Read);
+    }
+    if (wasNonEmpty && m_dataFifo.empty() && !m_phaseDrainFired)
+    {
+        m_phaseDrainFired = true;
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::DrainComplete);
+    }
 
     return value;
 }
@@ -213,8 +239,14 @@ bool Cdrom::queueReadSector()
     if (m_bufferedReadSectors.size() >= MAX_BUFFERED_READ_SECTORS)
     {
         m_bufferedReadSectors.pop_front();
+        if (!m_bufferedReadLbas.empty())
+        {
+            m_bufferedReadLbas.pop_front();
+        }
     }
     m_bufferedReadSectors.push_back(std::move(sector));
+    m_bufferedReadLbas.push_back(m_execution.currentLba);
+    recordPhaseTrace(m_execution.currentLba, SectorPhaseReason::QueuePromote);
     return true;
 }
 

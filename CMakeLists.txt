@@ -507,6 +507,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(cdrom_sector_advance_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(cdrom_sector_phase_test
+        tests/unit/cdrom_sector_phase_test.cpp
+    )
+    target_link_libraries(cdrom_sector_phase_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(sio0_test
         tests/unit/sio0_test.cpp
         tests/unit/sio0_irq_bus_test_sections.cpp
