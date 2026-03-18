@@ -21,6 +21,7 @@ inline constexpr u8 INT5 = 0x5u;
 
 inline constexpr u8 STATUS_RESPONSE_READY = 1u << 5;
 inline constexpr u8 STATUS_DATA_READY = 1u << 6;
+inline constexpr u8 STATUS_ADPBUSY = 1u << 2;
 inline constexpr u8 STATUS_PARAM_FIFO_EMPTY = 1u << 3;
 inline constexpr u8 STATUS_PARAM_FIFO_WRITE_READY = 1u << 4;
 inline constexpr u8 STATUS_COMMAND_BUSY = 1u << 7;

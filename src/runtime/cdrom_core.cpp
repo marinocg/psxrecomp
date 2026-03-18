@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <sstream>
 #include <utility>
+#include <cstddef>
 
 namespace psxrecomp
 {
@@ -66,6 +67,11 @@ const char* phaseReasonName(Cdrom::SectorPhaseReason r)
     case Cdrom::SectorPhaseReason::CpuRddatRead:  return "cpu_rddat_read";
     case Cdrom::SectorPhaseReason::Dma3Read:      return "dma3_read";
     case Cdrom::SectorPhaseReason::DrainComplete:  return "drain_complete";
+    case Cdrom::SectorPhaseReason::XaAudioDeliver: return "xa_audio_deliver";
+    case Cdrom::SectorPhaseReason::CpuDataDeliver: return "cpu_data_deliver";
+    case Cdrom::SectorPhaseReason::FilterReject:   return "filter_reject";
+    case Cdrom::SectorPhaseReason::FormatReject:   return "format_reject";
+    case Cdrom::SectorPhaseReason::SubmodeReject:  return "submode_reject";
     default:                                       return "unknown";
     }
 }
@@ -83,6 +89,11 @@ const char* phaseStateName(Cdrom::SectorPhaseReason r)
     case Cdrom::SectorPhaseReason::CpuRddatRead:
     case Cdrom::SectorPhaseReason::Dma3Read:
     case Cdrom::SectorPhaseReason::DrainComplete:  return "accepted";
+    case Cdrom::SectorPhaseReason::XaAudioDeliver: return "xa_audio";
+    case Cdrom::SectorPhaseReason::CpuDataDeliver: return "cpu_data";
+    case Cdrom::SectorPhaseReason::FilterReject:   return "filtered";
+    case Cdrom::SectorPhaseReason::FormatReject:   return "cpu_data";
+    case Cdrom::SectorPhaseReason::SubmodeReject:  return "cpu_data";
     default:                                       return "";
     }
 }
@@ -134,6 +145,51 @@ std::string Cdrom::formatPhaseTraceSummary(size_t last) const
     return os.str();
 }
 
+std::string Cdrom::formatXaClassificationSummary() const
+{
+    std::ostringstream os;
+    const u32 int1Count = m_formatRejectCount + m_submodeRejectCount + m_cpuDeliveryCount;
+    const u32 totalSectors =
+        m_xaDeliveryCount + m_filterRejectCount + int1Count;
+
+    const bool xaStream = (m_execution.mode & cdrom_detail::SETMODE_XA_STREAM_ENABLE) != 0;
+    const bool xaFilter = (m_execution.mode & cdrom_detail::SETMODE_XA_FILTER_ENABLE) != 0;
+    const bool dblSpeed = (m_execution.mode & cdrom_detail::SETMODE_DOUBLE_SPEED) != 0;
+
+    os << "=== CDROM XA Sector Classification Summary ===\n";
+    os << "  setmode:          0x" << std::hex << std::setw(2) << std::setfill('0')
+       << static_cast<unsigned>(m_execution.mode) << std::dec << std::setfill(' ')
+       << " (xa_stream=" << xaStream << " xa_filter=" << xaFilter
+       << " double_speed=" << dblSpeed << ")\n";
+    os << "  setfilter:        file=0x" << std::hex << std::setw(2) << std::setfill('0')
+       << static_cast<unsigned>(m_execution.xaFilterFile) << " channel=0x" << std::setw(2)
+       << std::setfill('0') << static_cast<unsigned>(m_execution.xaFilterChannel) << std::dec
+       << std::setfill(' ') << " (" << (xaFilter ? "enabled" : "disabled") << ")\n";
+    os << "  sectors_total:    " << totalSectors << "\n";
+    os << "    xa_audio_deliver:  " << std::setw(6) << m_xaDeliveryCount
+       << "  (INT1 suppressed)\n";
+    os << "    cpu_data_deliver:  " << std::setw(6) << m_cpuDeliveryCount << "  (INT1 fired)\n";
+    os << "    filter_reject:     " << std::setw(6) << m_filterRejectCount << "\n";
+    os << "    format_reject:     " << std::setw(6) << m_formatRejectCount
+       << "  (bad subheader, INT1 fired)\n";
+    os << "    submode_reject:    " << std::setw(6) << m_submodeRejectCount
+       << "  (Form2/non-ADPCM, INT1 fired)\n";
+    os << "  INT1_count:       " << int1Count << "\n";
+    os << "  INT1_suppressed:  " << m_xaDeliveryCount << "\n";
+    const u32 consumedBytes =
+        m_xaDeliveryCount * static_cast<u32>(cdrom_detail::XA_FORM2_USER_BYTES);
+    os << "  xa_sink:          " << (m_xaAudioSink ? "real" : "stub") << "\n";
+    os << "  xa_consumed:      " << m_xaDeliveryCount << " sectors, " << consumedBytes
+       << " bytes";
+    if (m_xaDeliveryCount > 0)
+    {
+        os << ", last_coding=0x" << std::hex << std::setw(2) << std::setfill('0')
+           << static_cast<unsigned>(m_xaLastCodingInfo) << std::dec << std::setfill(' ');
+    }
+    os << "\n";
+    return os.str();
+}
+
 u32 Cdrom::currentReadCycles() const
 {
     if ((m_execution.mode & cdrom_detail::SETMODE_DOUBLE_SPEED) != 0)
@@ -176,6 +232,19 @@ void Cdrom::reset()
     m_phaseFirstCpuReadFired = false;
     m_phaseFirstDmaFired = false;
     m_phaseDrainFired = false;
+    // XA classification counters
+    m_xaDeliveryCount = 0;
+    m_filterRejectCount = 0;
+    m_formatRejectCount = 0;
+    m_submodeRejectCount = 0;
+    m_cpuDeliveryCount = 0;
+    m_xaLastCodingInfo = 0;
+    // ADPBUSY + post-stream validator
+    m_xaPlaybackBusy = false;
+    m_streamStartXaCount = 0;
+    m_streamStartCpuCount = 0;
+    m_streamStarted = false;
+    m_cpuRecordCount = 0;
 }
 
 void Cdrom::setDiscBackend(Disc* disc)
@@ -349,6 +418,7 @@ u8 Cdrom::readStatus() const
     {
         status |= cdrom_detail::STATUS_DATA_READY;
     }
+    if (m_xaPlaybackBusy && (m_execution.readActive || m_execution.seekActive)) { status |= cdrom_detail::STATUS_ADPBUSY; }
     status |= static_cast<u8>(m_status & cdrom_detail::STATUS_COMMAND_BUSY);
     return status;
 }

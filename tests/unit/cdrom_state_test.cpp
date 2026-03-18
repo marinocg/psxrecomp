@@ -144,7 +144,10 @@ int main()
         assert(cdrom.deserializeState(saved));
 
         enableBufferRead(cdrom);
-        const std::vector<psxrecomp::u8> expected = {0, 0, 0, 0, 0, 0, 0, 0, 1, 2};
+        // PR-RV29: auto-reload flushes stale LBA0 bytes on INT1-LBA1 ack, then
+        // LBA1 bytes on INT1-LBA2 ack, so serialized FIFO holds LBA2 sector
+        // from byte 0 (whole-sector header zeros for the first 12 bytes).
+        const std::vector<psxrecomp::u8> expected = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         for ([[maybe_unused]] psxrecomp::u8 value : expected)
         {
             assert(cdrom.readData() == value);

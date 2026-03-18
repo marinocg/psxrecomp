@@ -1,5 +1,7 @@
 #include "psxrecomp/runtime/diag_explainers.h"
 
+#include "psxrecomp/runtime/cdrom.h"
+
 #include <sstream>
 
 namespace psxrecomp
@@ -140,6 +142,21 @@ size_t DiagExplainerEngine::explainerCount() const
 std::string DiagExplainerEngine::explainCdromBankSummary(const DiagCdromBankTracer& tracer)
 {
     return tracer.formatSummary();
+}
+
+std::string DiagExplainerEngine::explainCdromXaClassification(const Cdrom& cdrom)
+{
+    return cdrom.formatXaClassificationSummary();
+}
+
+std::string DiagExplainerEngine::explainCdromPostStreamValidator(const Cdrom& cdrom)
+{
+    return cdrom.formatPostStreamSummary();
+}
+
+std::string DiagExplainerEngine::explainCdromCpuPayloadSummary(const Cdrom& cdrom)
+{
+    return cdrom.formatCpuPayloadSummary();
 }
 
 } // namespace runtime

@@ -128,6 +128,15 @@
     },
     {
       "kind": "cdrom_phase_summary"
+    },
+    {
+      "kind": "cdrom_xa_classification"
+    },
+    {
+      "kind": "cdrom_post_stream_validator"
+    },
+    {
+      "kind": "cdrom_cpu_payload_summary"
     }
   ],
   "metadata_watches": [],

@@ -206,27 +206,19 @@ void Cdrom::loadNextSectorToFifo()
 
 void Cdrom::enableDataRead()
 {
-    const bool wasEnabled = (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0;
     m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
-    if (!wasEnabled)
+    // Arm (or re-arm) the active sector when FIFO is empty — covers both the
+    // initial 0→1 edge and re-arm after INT1 advanced the sector while BFRD
+    // remained set.  Non-empty FIFO (mid-drain) is a no-op like BFRD 1→1.
+    if (!m_activeSector.empty() && m_dataFifo.empty())
     {
-        // Replicate the BFRD 0→1 rising-edge behaviour: load the active sector
-        // into the data FIFO so readData()/readDma() can consume it.
-        // If m_activeSector is empty (INT1 not yet published) the FIFO stays
-        // empty — the caller must wait for INT1 before calling enableDataRead().
-        if (!m_activeSector.empty())
-        {
-            m_dataFifo.clear();
-            m_activeSectorOffset = 0;
-            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
-            m_activeSectorOffset = m_activeSector.size();
-            updateDataPadForActiveSector();
-        }
+        m_dataFifo.clear();
+        m_activeSectorOffset = 0;
+        m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
+        m_activeSectorOffset = m_activeSector.size();
+        updateDataPadForActiveSector();
         recordPhaseTrace(m_activeLba, SectorPhaseReason::AcceptBiosAuto);
-        if (!m_dataFifo.empty())
-        {
-            recordPhaseTrace(m_activeLba, SectorPhaseReason::DrqstsOn);
-        }
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::DrqstsOn);
         m_phaseFirstCpuReadFired = false;
         m_phaseFirstDmaFired = false;
         m_phaseDrainFired = false;
@@ -326,7 +318,8 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
             }
             if (!haveRawSector && !haveUserSector)
             {
-                traceCdrom("loadActiveSector read failed lba=%u", loadedLba);
+                traceCdrom("loadActiveSector read failed lba=%u scan=%zu", loadedLba, scan);
+                if (scan > 0) { break; } // Filter-scan hit end-of-disc; no error.
                 queueErrorInterrupt(cdrom_detail::ERR_READ_FAIL);
                 return false;
             }
@@ -355,18 +348,62 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
         {
             traceCdrom("loadActiveSector xa filtered lba=%u file=%u ch=%u", loadedLba,
                        xa.fileNumber, xa.channelNumber);
+            recordPhaseTrace(loadedLba, SectorPhaseReason::FilterReject);
+            ++m_filterRejectCount;
             continue;
         }
 
-        if (m_xaAudioSink && m_execution.xaStreamingEnabled && isXaAdpcm)
+        // XA-ADPCM sector with XA streaming enabled: decode audio and suppress
+        // INT1.  Per PSX-SPX, XA-ADPCM sectors are routed to the SPU and do
+        // NOT generate INT1 (data-ready) interrupts.  Leaving outSector empty
+        // signals no CPU-visible data for this cadence tick.
+        if (m_execution.xaStreamingEnabled && isXaAdpcm)
         {
-            std::vector<int16_t> xaPcm;
-            if (cdrom_detail::decodeXaAudioSector(rawSector, xa, m_execution.xaPrevLeft1,
-                                                  m_execution.xaPrevLeft2, m_execution.xaPrevRight1,
-                                                  m_execution.xaPrevRight2, xaPcm))
+            if (m_xaAudioSink)
             {
-                m_xaAudioSink(xaPcm);
+                std::vector<int16_t> xaPcm;
+                if (cdrom_detail::decodeXaAudioSector(rawSector, xa, m_execution.xaPrevLeft1,
+                                                      m_execution.xaPrevLeft2,
+                                                      m_execution.xaPrevRight1,
+                                                      m_execution.xaPrevRight2, xaPcm))
+                {
+                    m_xaAudioSink(xaPcm);
+                }
             }
+            traceCdrom("loadActiveSector xa_audio_deliver lba=%u file=%u ch=%u submode=0x%02X",
+                       loadedLba, xa.fileNumber, xa.channelNumber,
+                       static_cast<unsigned>(xa.submode));
+            recordPhaseTrace(loadedLba, SectorPhaseReason::XaAudioDeliver);
+            m_xaPlaybackBusy = true;
+            m_xaLastCodingInfo = xa.codingInfo;
+            ++m_xaDeliveryCount;
+            break; // outSector stays empty → no INT1
+        }
+
+        // CPU data delivery path.  Classify the sector for diagnostics.
+        if (m_execution.xaStreamingEnabled && haveRawSector)
+        {
+            if (!hasValidXaSubheader)
+            {
+                recordPhaseTrace(loadedLba, SectorPhaseReason::FormatReject);
+                ++m_formatRejectCount;
+            }
+            else if (isXaForm2)
+            {
+                // Form2 but not audio+realtime — e.g. MDEC video; CPU data.
+                recordPhaseTrace(loadedLba, SectorPhaseReason::SubmodeReject);
+                ++m_submodeRejectCount;
+            }
+            else
+            {
+                recordPhaseTrace(m_execution.currentLba, SectorPhaseReason::CpuDataDeliver);
+                ++m_cpuDeliveryCount;
+            }
+        }
+        else
+        {
+            recordPhaseTrace(m_execution.currentLba, SectorPhaseReason::CpuDataDeliver);
+            ++m_cpuDeliveryCount;
         }
 
         if (wholeSectorMode)

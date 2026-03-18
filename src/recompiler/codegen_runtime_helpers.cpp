@@ -334,6 +334,33 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
         "stream << context.system.cdrom().formatPhaseTraceSummary(32);");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
+    emitter.writeLine(
+        "if (context.system.diagExplainers().isEnabled("
+        "runtime::ExplainerKind::CdromXaClassification))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "stream << runtime::DiagExplainerEngine::explainCdromXaClassification("
+        "context.system.cdrom());");
+    emitter.writeLine("stream << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "if (context.system.diagExplainers().isEnabled("
+        "runtime::ExplainerKind::CdromPostStreamValidator))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "stream << runtime::DiagExplainerEngine::explainCdromPostStreamValidator("
+        "context.system.cdrom());");
+    emitter.writeLine("stream << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine(
+        "if (context.system.diagExplainers().isEnabled("
+        "runtime::ExplainerKind::CdromCpuPayloadSummary))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "stream << runtime::DiagExplainerEngine::explainCdromCpuPayloadSummary("
+        "context.system.cdrom());");
+    emitter.writeLine("stream << \"\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");
     emitter.writeLine("stream << context.system.formatHookEntryIntResumeTrace();");
     emitter.writeLine("throw std::runtime_error(stream.str());");

@@ -139,6 +139,8 @@ set(RUNTIME_SOURCES
     src/runtime/cdrom_commands.cpp
     src/runtime/cdrom_data.cpp
     src/runtime/cdrom_state.cpp
+    src/runtime/cdrom_stream_validator.cpp
+    src/runtime/cdrom_cpu_payload_tracer.cpp
     src/runtime/disc_image.cpp
     src/runtime/cop0.cpp
     src/runtime/callback_trace.cpp
@@ -516,6 +518,36 @@ if(BUILD_TESTS)
         tests/unit/cdrom_accept_source_test.cpp
     )
     target_link_libraries(cdrom_accept_source_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_xa_classification_test
+        tests/unit/cdrom_xa_classification_test.cpp
+    )
+    target_link_libraries(cdrom_xa_classification_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_xa_mixed_stream_test
+        tests/unit/cdrom_xa_mixed_stream_test.cpp
+    )
+    target_link_libraries(cdrom_xa_mixed_stream_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_xa_sink_test
+        tests/unit/cdrom_xa_sink_test.cpp
+    )
+    target_link_libraries(cdrom_xa_sink_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_adpbusy_test
+        tests/unit/cdrom_adpbusy_test.cpp
+    )
+    target_link_libraries(cdrom_adpbusy_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_cpu_payload_test
+        tests/unit/cdrom_cpu_payload_test.cpp
+    )
+    target_link_libraries(cdrom_cpu_payload_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_mixed_xa_test
+        tests/unit/cdrom_mixed_xa_test.cpp
+    )
+    target_link_libraries(cdrom_mixed_xa_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(sio0_test
         tests/unit/sio0_test.cpp

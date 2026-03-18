@@ -142,7 +142,13 @@ enum class ExplainerKind : u8
     /// End-of-run bank-aware CDROM host-interface summary.
     CdromBankSummary,
     /// End-of-run rolling sector-phase transition trace (PR-RV21c).
-    CdromPhaseSummary
+    CdromPhaseSummary,
+    /// End-of-run XA sector classification and delivery summary (PR-RV23).
+    CdromXaClassification,
+    /// Post-ReadS/ReadN XA stream summary scoped to the most recent XA-enabled stream (PR-RV27).
+    CdromPostStreamValidator,
+    /// Per-sector CPU payload breakdown for the first 32 post-stream sectors (PR-RV28).
+    CdromCpuPayloadSummary
 };
 
 /// A single device/register explainer from a profile.

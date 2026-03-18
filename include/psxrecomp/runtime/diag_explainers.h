@@ -11,6 +11,8 @@ namespace psxrecomp
 namespace runtime
 {
 
+class Cdrom;
+
 /// Generic device/register explainer that decodes hardware state.
 class DiagExplainerEngine
 {
@@ -38,6 +40,18 @@ class DiagExplainerEngine
     /// Return an end-of-run bank-aware CDROM host-interface summary.
     /// Delegates to the provided tracer's formatSummary().
     static std::string explainCdromBankSummary(const DiagCdromBankTracer& tracer);
+
+    /// Return an end-of-run XA sector classification and delivery summary.
+    /// Delegates to Cdrom::formatXaClassificationSummary().
+    static std::string explainCdromXaClassification(const Cdrom& cdrom);
+
+    /// Return a post-ReadS XA stream summary scoped to the most recent XA-enabled stream.
+    /// Delegates to Cdrom::formatPostStreamSummary().
+    static std::string explainCdromPostStreamValidator(const Cdrom& cdrom);
+
+    /// Return a per-sector CPU payload breakdown for the first 32 post-stream sectors.
+    /// Delegates to Cdrom::formatCpuPayloadSummary().
+    static std::string explainCdromCpuPayloadSummary(const Cdrom& cdrom);
 
     /// Number of configured explainers.
     size_t explainerCount() const;

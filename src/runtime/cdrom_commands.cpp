@@ -144,6 +144,12 @@ void Cdrom::executePendingCommand()
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
+        if (m_execution.xaStreamingEnabled) // Snapshot counters (PR-RV27).
+        {
+            m_streamStarted = true;
+            m_streamStartXaCount = m_xaDeliveryCount;
+            m_streamStartCpuCount = m_cpuDeliveryCount;
+        }
         // PSX-SPX: ReadN/ReadS INT3 acknowledgment contains a single stat byte.
         queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
         break;
@@ -413,8 +419,8 @@ void Cdrom::writeRequestControl(u8 value)
         m_dataFifo.clear();
     }
     // BFRD 1→1 (re-write while already set): no-op.  The accepted sector is
-    // not re-loaded and the next buffered sector is not accepted.  Advancing
-    // to the next sector requires a new INT1 event followed by a BFRD 0→1.
+    // not re-loaded; FIFO state is unchanged.  If BFRD is held across sectors,
+    // INT1 delivery (publishNextInterruptEvent) reloads the FIFO automatically.
 }
 
 void Cdrom::writeInterruptEnable(u8 value)
@@ -540,19 +546,21 @@ void Cdrom::publishNextInterruptEvent()
         pushResponse(byte);
     }
 
-    // When publishing INT1 (data-ready), advance the active sector to the
-    // next buffered sector ready for the game to request via
-    // writeRequestControl.  BFRD and m_dataFifo are deliberately NOT touched
-    // here: the game must gate data visibility through the host-side
-    // request/ack/data-ready progression described in PSX-SPX.  The sector
-    // is held in m_activeSector; writeRequestControl will fill m_dataFifo
-    // on the 0->1 BFRD transition.
+    // INT1: advance to the next buffered sector.  If BFRD is armed, flush any
+    // unread remainder from the previous sector and reload immediately (PR-RV29).
     if (event.type == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
     {
+        if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
+        {
+            m_cpuRecords[m_cpuRecordCount - 1].dma3Started = m_phaseFirstDmaFired;
+            m_cpuRecords[m_cpuRecordCount - 1].drained     = m_phaseDrainFired;
+            m_cpuRecords[m_cpuRecordCount - 1].finalized   = true;
+        }
         m_activeSector = std::move(m_bufferedReadSectors.front());
         m_bufferedReadSectors.pop_front();
         m_activeSectorOffset = 0;
-        updateDataPadForActiveSector();
+        // Sector unarmed until BFRD/enableDataRead; auto-reload below if held.
+        m_dataPadValid = false;
         // Advance the parallel LBA tracker to match the newly active sector.
         if (!m_bufferedReadLbas.empty())
         {
@@ -560,6 +568,23 @@ void Cdrom::publishNextInterruptEvent()
             m_bufferedReadLbas.pop_front();
         }
         recordPhaseTrace(m_activeLba, SectorPhaseReason::PublishInt1);
+        snapshotCpuSector(m_activeLba, m_activeSector);
+        // PR-RV29: flush stale remainder and reload the new sector when BFRD
+        // is held across a boundary (mixed-XA).  Empty FIFO = no action.
+        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+            !m_dataFifo.empty())
+        {
+            m_dataFifo.clear();
+            m_activeSectorOffset = 0;
+            m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
+                                     DATA_FIFO_CAPACITY);
+            m_activeSectorOffset = m_activeSector.size();
+            updateDataPadForActiveSector();
+            m_phaseFirstCpuReadFired = false;
+            m_phaseFirstDmaFired     = false;
+            m_phaseDrainFired        = false;
+            recordPhaseTrace(m_activeLba, SectorPhaseReason::DrqstsOn);
+        }
     }
     else if (event.type == cdrom_detail::INT1)
     {

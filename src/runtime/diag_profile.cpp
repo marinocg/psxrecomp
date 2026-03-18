@@ -108,6 +108,12 @@ ExplainerKind parseExplainerKind(const std::string& text)
         return ExplainerKind::CdromBankSummary;
     if (text == "cdrom_phase_summary")
         return ExplainerKind::CdromPhaseSummary;
+    if (text == "cdrom_xa_classification")
+        return ExplainerKind::CdromXaClassification;
+    if (text == "cdrom_post_stream_validator")
+        return ExplainerKind::CdromPostStreamValidator;
+    if (text == "cdrom_cpu_payload_summary")
+        return ExplainerKind::CdromCpuPayloadSummary;
     return ExplainerKind::Gpustat;
 }
 

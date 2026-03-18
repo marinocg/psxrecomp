@@ -333,7 +333,9 @@ int main()
         readSingleResponseAndAck(cdrom);
     }
 
-    // XA Setfilter should only surface matching XA sectors when enabled.
+    // XA Setfilter with XA streaming: matching ADPCM sectors route to SPU,
+    // non-matching sectors are filtered.  Per PSX-SPX, XA-ADPCM sectors with
+    // XA streaming enabled do NOT generate INT1 regardless of filter result.
     {
         XaPatternDisc xaDisc;
         Cdrom cdrom;
@@ -358,24 +360,20 @@ int main()
         assertResponse(cdrom, {0x42});
         ack(cdrom);
 
+        // Tick 1: sector 0 (file=1, ch=2) is ADPCM + filter match → xa_audio_deliver.
+        // Per PSX-SPX no INT1 for XA-ADPCM sectors delivered to SPU.
         cdrom.tick(kCdromReadCycles);
-        assert(irqType(cdrom) == 0x01);
-        enableBufferRead(cdrom);
-        assert(cdrom.readData() == 0x10);
-        assert(cdrom.readData() == 0x11);
-        for (size_t i = 2; i < 2324; ++i)
-        {
-            (void)cdrom.readData();
-        }
-        readSingleResponseAndAck(cdrom);
+        assert(irqType(cdrom) == 0x00);
 
+        // Tick 2: sector 1 (file=3, ch=4) → filter_reject, scan ahead.
+        //         sector 2 (file=1, ch=2) → xa_audio_deliver.  Still no INT1.
         cdrom.tick(kCdromReadCycles);
-        assert(irqType(cdrom) == 0x01);
-        // Sector1 is filtered out; stream should advance to matching sector2.
-        enableBufferRead(cdrom);
-        assert(cdrom.readData() == 0xC0);
-        assert(cdrom.readData() == 0xC1);
-        readSingleResponseAndAck(cdrom);
+        assert(irqType(cdrom) == 0x00);
+
+        // Classification summary: 2 XA audio deliveries, 0 INT1 events.
+        const std::string summary = cdrom.formatXaClassificationSummary();
+        assert(summary.find("INT1_suppressed:  2") != std::string::npos);
+        assert(summary.find("INT1_count:       0") != std::string::npos);
     }
 
     // Invalid XA subheader should not apply XA-form2 payload path.

@@ -13,6 +13,10 @@ This roadmap tracks runtime CD-ROM emulation work needed for accurate PSX execut
 - [x] XA streaming baseline (Setmode + ReadN/ReadS sector pumping).
 - [x] XA subheader-aware payload path (Mode2/Form2 validation + Setfilter file/channel matching).
 - [x] XA ADPCM sector decode path feeding SPU CD-audio mixer input.
+- [x] XA sector classification and delivery tracing (PR-RV23): per-sector `xa_audio_deliver` /
+      `cpu_data_deliver` / `filter_reject` / `format_reject` / `submode_reject` phase trace events;
+      end-of-run counters; INT1 suppression fix for XA-ADPCM sectors; `formatXaClassificationSummary()`
+      API; `cdrom_xa_classification` diagnostic explainer for `rev2.movie.diag.json`.
 - [x] Disc-change door-open transition state and INT5 no-disc/read-fail error responses.
 - [x] Save-state serialization/deserialization for CD-ROM runtime state (FIFOs, current LBA, queued IRQs, mode flags, partially-consumed sector buffers).
 
@@ -31,6 +35,12 @@ This roadmap tracks runtime CD-ROM emulation work needed for accurate PSX execut
 - [x] Implement ReadN/ReadS scheduling hooks with sector cadence.
 - [x] Feed XA payload bytes into the data FIFO using Mode2/Form2 subheader validation.
 - [x] Implement Setfilter (file/channel) matching for XA ADPCM-shaped sectors.
+- [x] XA-ADPCM INT1 suppression: Mode2/Form2/audio+realtime sectors with Setmode bit6 set no longer
+      generate INT1 (per PSX-SPX); they are decoded to SPU and the cadence slot is consumed silently.
+- [x] XA sector classification tracing: `SectorPhaseReason` extended with 5 new enum values; per-sector
+      phase ring events and end-of-run counters (`m_xaDeliveryCount`, `m_filterRejectCount`,
+      `m_formatRejectCount`, `m_submodeRejectCount`, `m_cpuDeliveryCount`) exposed via
+      `formatXaClassificationSummary()` and the `CdromXaClassification` diag explainer kind.
 
 ## Phase 4: Accuracy Expansion (Post-M3)
 - [ ] Command-specific timing/latency model (seek/read transitions, busy windows).
