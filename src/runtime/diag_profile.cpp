@@ -106,6 +106,8 @@ ExplainerKind parseExplainerKind(const std::string& text)
         return ExplainerKind::DmaChannel;
     if (text == "cdrom_bank_summary")
         return ExplainerKind::CdromBankSummary;
+    if (text == "cdrom_phase_summary")
+        return ExplainerKind::CdromPhaseSummary;
     return ExplainerKind::Gpustat;
 }
 

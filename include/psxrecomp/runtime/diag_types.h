@@ -140,7 +140,9 @@ enum class ExplainerKind : u8
     IrqController,
     DmaChannel,
     /// End-of-run bank-aware CDROM host-interface summary.
-    CdromBankSummary
+    CdromBankSummary,
+    /// End-of-run rolling sector-phase transition trace (PR-RV21c).
+    CdromPhaseSummary
 };
 
 /// A single device/register explainer from a profile.

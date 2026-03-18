@@ -326,6 +326,14 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
         "context.system.diagCdromBankTracer());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
+    emitter.writeLine(
+        "if (context.system.diagExplainers().isEnabled("
+        "runtime::ExplainerKind::CdromPhaseSummary))");
+    emitter.openBlock("");
+    emitter.writeLine(
+        "stream << context.system.cdrom().formatPhaseTraceSummary(64);");
+    emitter.writeLine("stream << \"\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");
     emitter.writeLine("stream << context.system.formatHookEntryIntResumeTrace();");
     emitter.writeLine("throw std::runtime_error(stream.str());");

@@ -125,6 +125,9 @@
     },
     {
       "kind": "cdrom_bank_summary"
+    },
+    {
+      "kind": "cdrom_phase_summary"
     }
   ],
   "metadata_watches": [],
