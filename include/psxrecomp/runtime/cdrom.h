@@ -45,8 +45,9 @@ class Cdrom
         PublishInt3,    ///< INT3 (command-complete) published to the interrupt register.
         PublishInt1,    ///< INT1 (data-ready) published; m_activeSector advances (published).
         HclrctlAck,    ///< HCLRCTL write acknowledged and cleared the active interrupt.
-        AcceptBfrd,    ///< BFRD 0→1: m_activeSector loaded into data FIFO (accepted).
-        DrqstsOn,      ///< DRQSTS asserted (BFRD=1 and data FIFO non-empty).
+        AcceptBfrd,     ///< BFRD 0→1: m_activeSector loaded into data FIFO (accepted).
+        AcceptBiosAuto, ///< BIOS-owned CdAsyncReadSector path (enableDataRead()) loaded the FIFO.
+        DrqstsOn,       ///< DRQSTS asserted (BFRD=1 and data FIFO non-empty).
         CpuRddatRead,  ///< First readData() byte consumed from the current accepted-sector phase.
         Dma3Read,      ///< First readDma() word consumed from the current accepted-sector phase.
         DrainComplete,  ///< Data FIFO exhausted; DRQSTS would fall.

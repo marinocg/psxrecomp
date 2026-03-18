@@ -61,6 +61,7 @@ const char* phaseReasonName(Cdrom::SectorPhaseReason r)
     case Cdrom::SectorPhaseReason::PublishInt1:    return "publish_int1";
     case Cdrom::SectorPhaseReason::HclrctlAck:    return "hclrctl_ack";
     case Cdrom::SectorPhaseReason::AcceptBfrd:    return "accept_bfrd";
+    case Cdrom::SectorPhaseReason::AcceptBiosAuto: return "accept_bios_auto";
     case Cdrom::SectorPhaseReason::DrqstsOn:      return "drqsts_on";
     case Cdrom::SectorPhaseReason::CpuRddatRead:  return "cpu_rddat_read";
     case Cdrom::SectorPhaseReason::Dma3Read:      return "dma3_read";
@@ -77,6 +78,7 @@ const char* phaseStateName(Cdrom::SectorPhaseReason r)
     case Cdrom::SectorPhaseReason::PublishInt3:    return "published";
     case Cdrom::SectorPhaseReason::PublishInt1:    return "published";
     case Cdrom::SectorPhaseReason::AcceptBfrd:
+    case Cdrom::SectorPhaseReason::AcceptBiosAuto:
     case Cdrom::SectorPhaseReason::DrqstsOn:
     case Cdrom::SectorPhaseReason::CpuRddatRead:
     case Cdrom::SectorPhaseReason::Dma3Read:

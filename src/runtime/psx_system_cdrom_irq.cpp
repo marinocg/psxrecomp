@@ -70,16 +70,6 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
     }
 
-    // INT1 (data-ready): the real BIOS INT1 handler always writes 0x80 (BFRD)
-    // to the request register so sector data is available for DMA. enableDataRead()
-    // replicates the 0→1 rising edge: it sets BFRD and loads the active sector into
-    // the data FIFO, making bytes visible to readData()/readDma() even when no BIOS
-    // async read is in progress (e.g. for direct software DMA setups).
-    if (irqType == 1u)
-    {
-        m_cdrom.enableDataRead();
-    }
-
     // Track whether the type-specific path already acknowledged the interrupt.
     bool interruptAcknowledged = false;
 
@@ -100,7 +90,9 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         const char* readCmdLabel = (m_biosCdrom.asyncReadMode & 0x100u) ? "ReadS" : "ReadN";
         const u32 dstAddr =
             m_biosCdrom.asyncReadBuffer + m_biosCdrom.asyncSectorsRead * sectorBytes;
-        // enableDataRead() was already called above for all INT1s.
+        // enableDataRead() is scoped to this BIOS-owned CdAsyncReadSector path only.
+        // Game-managed reads must arm BFRD themselves via the request register.
+        m_cdrom.enableDataRead();
         std::vector<u8> sectorData(sectorBytes);
         for (u32 i = 0; i < sectorBytes; ++i)
         {
@@ -151,13 +143,6 @@ bool PsxSystem::serviceBiosCdromInterrupt()
                     << m_biosCdrom.asyncSectorsRead << " pause_issued=1";
                 m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
             }
-        }
-        else
-        {
-            // Prepare the data FIFO for the next sector so the subsequent
-            // INT1 finds valid data. This mirrors how the real CDROM
-            // controller pre-loads sector data before signalling INT1.
-            m_cdrom.loadNextSectorToFifo();
         }
     }
 

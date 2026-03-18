@@ -331,7 +331,7 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
         "runtime::ExplainerKind::CdromPhaseSummary))");
     emitter.openBlock("");
     emitter.writeLine(
-        "stream << context.system.cdrom().formatPhaseTraceSummary(64);");
+        "stream << context.system.cdrom().formatPhaseTraceSummary(32);");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");

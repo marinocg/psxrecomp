@@ -210,9 +210,10 @@ void Cdrom::enableDataRead()
     m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
     if (!wasEnabled)
     {
-        // Replicate the BFRD 0→1 rising-edge behaviour from writeRequestControl:
-        // load the active sector into the data FIFO so readData() returns valid
-        // bytes for the current INT1 without needing a hardware register write.
+        // Replicate the BFRD 0→1 rising-edge behaviour: load the active sector
+        // into the data FIFO so readData()/readDma() can consume it.
+        // If m_activeSector is empty (INT1 not yet published) the FIFO stays
+        // empty — the caller must wait for INT1 before calling enableDataRead().
         if (!m_activeSector.empty())
         {
             m_dataFifo.clear();
@@ -221,10 +222,14 @@ void Cdrom::enableDataRead()
             m_activeSectorOffset = m_activeSector.size();
             updateDataPadForActiveSector();
         }
-        else
+        recordPhaseTrace(m_activeLba, SectorPhaseReason::AcceptBiosAuto);
+        if (!m_dataFifo.empty())
         {
-            acceptBufferedReadSector(true);
+            recordPhaseTrace(m_activeLba, SectorPhaseReason::DrqstsOn);
         }
+        m_phaseFirstCpuReadFired = false;
+        m_phaseFirstDmaFired = false;
+        m_phaseDrainFired = false;
     }
 }
 
