@@ -143,10 +143,13 @@ int main()
         cdrom.reset();
         assert(cdrom.deserializeState(saved));
 
-        enableBufferRead(cdrom);
-        // PR-RV29: auto-reload flushes stale LBA0 bytes on INT1-LBA1 ack, then
-        // LBA1 bytes on INT1-LBA2 ack, so serialized FIFO holds LBA2 sector
-        // from byte 0 (whole-sector header zeros for the first 12 bytes).
+        // PR-RV35: m_requestControl was serialized with BFRD=1, so enableBufferRead
+        // would be a 1→1 no-op leaving stale LBA0 bytes in the FIFO.  Toggle
+        // BFRD 1→0→1 to discard the stale bytes and load LBA2 (m_activeSector).
+        cdrom.writeReg(0, 0u);
+        cdrom.writeReg(3, 0x00u); // BFRD 1→0: FIFO cleared.
+        enableBufferRead(cdrom);  // BFRD 0→1: LBA2 whole-sector data loaded.
+        // LBA2's synthesized whole-sector has header zeros for the first 12 bytes.
         const std::vector<psxrecomp::u8> expected = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
         for ([[maybe_unused]] psxrecomp::u8 value : expected)
         {

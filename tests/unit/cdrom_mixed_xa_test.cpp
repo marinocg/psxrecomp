@@ -1,13 +1,12 @@
-// PR-RV29: Mixed-XA CPU delivery correctness tests.
+// PR-RV35: Mixed-XA CPU delivery correctness tests.
 //
-// Verifies two behavioural contracts introduced by PR-RV29:
+// Verifies two behavioural contracts:
 //
-//   1. Unread-remainder flush: when BFRD=1 is held across a sector boundary
-//      and the game partially reads the first sector (leaving bytes in the FIFO),
-//      the INT1 delivery for the next CPU sector must discard those stale bytes
-//      and immediately arm the FIFO with the new sector's payload.
-//      A game that never writes BFRD 0→1 between sectors must not see data
-//      from the previous sector mixed into the new one.
+//   1. Unread-remainder preserved (PR-RV35): when BFRD=1 is held across a
+//      sector boundary and the game partially reads the first sector (leaving
+//      bytes in the FIFO), INT1 delivery for the next CPU sector does NOT
+//      discard those stale bytes.  The game must write BFRD 1→0→1 to clear
+//      the stale remainder and arm the FIFO with the new sector's payload.
 //
 //   2. DMA3 == CPU RDDAT parity: both readDma() and readData() drain the same
 //      data FIFO byte-for-byte, so a game switching between DMA3 and register
@@ -117,6 +116,12 @@ void enableBfrd(psxrecomp::runtime::Cdrom& cdrom)
     cdrom.writeReg(3, 0x80);
 }
 
+void disableBfrd(psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeReg(0, 0);
+    cdrom.writeReg(3, 0x00);
+}
+
 void issueSetmode(psxrecomp::runtime::Cdrom& cdrom, u8 mode)
 {
     cdrom.writeParam(mode);
@@ -144,18 +149,19 @@ void issueReadN(psxrecomp::runtime::Cdrom& cdrom)
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Test 1: Unread-remainder flush when BFRD is held across a sector boundary.
+// Test 1: Unread-remainder is preserved (not flushed) when BFRD is held
+//         across a sector boundary — PR-RV35 semantics.
 //
 // Game reads only 511 of 512 words from a 2048-byte Mode1 sector (leaving
 // 4 bytes in the FIFO), ACKs INT1, and keeps BFRD=1.  An XA-ADPCM sector
 // arrives (no INT1), then a Form2 non-audio sector fires INT1.
 //
-// Without PR-RV29 the stale 4-byte remainder would be at the front of the
-// FIFO when the game reads the Form2 sector.  With PR-RV29, INT1 delivery
-// discards the remainder and loads the Form2 payload: the first DMA word
-// must equal LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 }.
+// PR-RV35: INT1 delivery does NOT silently flush unread remainder.  The 4
+// stale LBA 0 bytes remain at the front of the FIFO.  The game must write
+// BFRD 1→0→1 to discard the stale bytes and load LBA 2.  Only after that
+// toggle does readDma() return LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 }.
 // ---------------------------------------------------------------------------
-void testUnreadRemainderFlushedOnInt1()
+void testUnreadRemainderPreservedAtInt1()
 {
     MixedXaDisc disc;
     psxrecomp::runtime::Cdrom cdrom;
@@ -180,22 +186,36 @@ void testUnreadRemainderFlushedOnInt1()
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x00);
 
-    // --- LBA 2 (Form2 non-audio) — INT1; PR-RV29 must flush remainder ---
+    // --- LBA 2 (Form2 non-audio) — INT1; PR-RV35 must preserve FIFO remainder ---
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x01);
 
-    // DRQSTS (STATUS_DATA_READY, bit 6) must be set: LBA 2 payload is in FIFO.
+    // DRQSTS (bit 6) is still set because the 4 stale LBA 0 bytes remain.
     assert((cdrom.readStatus() & 0x40u) != 0u);
 
-    // First DMA word must be LBA 2 raw[24..27] = 0xB0,0xB1,0xB2,0xB3 (LE).
-    // Stale LBA 0 remainder would have been raw[24+2044..2047] = 0x9C..0x9F.
-    const u32 firstWord = cdrom.readDma();
+    // First DMA word is the stale LBA 0 tail: raw[24+2044..2047] = 0x9C..0x9F (LE).
+    // PR-RV35 does not flush the remainder at INT1.
+    const u32 staleLba0Word =
+        static_cast<u32>(0x9Cu) |
+        (static_cast<u32>(0x9Du) << 8) |
+        (static_cast<u32>(0x9Eu) << 16) |
+        (static_cast<u32>(0x9Fu) << 24);
+    assert(cdrom.readDma() == staleLba0Word);
+
+    // Game must toggle BFRD 1→0→1 to advance to LBA 2.
+    disableBfrd(cdrom); // BFRD 1→0: FIFO cleared.
+    enableBfrd(cdrom);  // BFRD 0→1: m_activeSector (LBA 2) loaded into FIFO.
+
+    // DRQSTS must be set: LBA 2 payload is now in FIFO.
+    assert((cdrom.readStatus() & 0x40u) != 0u);
+
+    // First DMA word must now be LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 } (LE).
     const u32 expectedLba2Word =
         static_cast<u32>(0xB0u) |
         (static_cast<u32>(0xB1u) << 8) |
         (static_cast<u32>(0xB2u) << 16) |
         (static_cast<u32>(0xB3u) << 24);
-    assert(firstWord == expectedLba2Word);
+    assert(cdrom.readDma() == expectedLba2Word);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,7 +281,7 @@ void testDma3EqualsCpuRddat()
 
 int main()
 {
-    testUnreadRemainderFlushedOnInt1();
+    testUnreadRemainderPreservedAtInt1();
     testDma3EqualsCpuRddat();
     return 0;
 }

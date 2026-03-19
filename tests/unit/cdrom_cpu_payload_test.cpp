@@ -129,6 +129,12 @@ void enableBfrd(psxrecomp::runtime::Cdrom& cdrom)
     cdrom.writeReg(3, 0x80);
 }
 
+void disableBfrd(psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeReg(0, 0);
+    cdrom.writeReg(3, 0x00);
+}
+
 void issueSetmode(psxrecomp::runtime::Cdrom& cdrom, u8 mode)
 {
     cdrom.writeParam(mode);
@@ -498,6 +504,89 @@ void testTracerRecordsDmaOnSecondSector()
     assert(s.find("dma_only=2") != std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// Test 10: Split DMA window — two separate DMA bursts accumulate one pointer.
+//
+// Simulates the game's 12-byte header DMA followed by 2048-byte payload DMA
+// (with a BFRD=1 no-op write between them, as observed in Reversi 2).
+// Verifies that m_dataFifoConsumedBytes accumulates across both bursts so the
+// tracer records dma_start=0, dma_bytes=2060, final=2060 (not 0).
+// ---------------------------------------------------------------------------
+void testSplitDmaWindow()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0 (Form2, 2324 bytes)
+    issueReadN(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom);
+
+    // Burst 1: 3 DMA words = 12 bytes (header read).
+    for (int i = 0; i < 3; ++i) (void)cdrom.readDma();
+    // BFRD=1 again: 1→1 no-op, FIFO pointer unchanged.
+    enableBfrd(cdrom);
+    // Burst 2: 512 DMA words = 2048 bytes (payload read).
+    for (int i = 0; i < 512; ++i) (void)cdrom.readDma();
+
+    readAndAck(cdrom); // LBA 0 finalized via INT1-no-buffered (finalOffset=2060).
+
+    const std::string s = cdrom.formatCpuPayloadSummary();
+    assert(s.find("dma_start=0")    != std::string::npos);
+    assert(s.find("dma_bytes=2060") != std::string::npos);
+    assert(s.find("final=2060")     != std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// Test 11: FIFO non-empty at INT1 → auto-reload suppressed (PR-RV35).
+//
+// When bytes remain unread at the next INT1 boundary, publishNextInterruptEvent
+// must NOT silently discard them and reload the next sector.  The game must
+// write BFRD 1→0→1 explicitly to advance.  Verifies:
+//   - FIFO still holds old-sector bytes after INT1 fires.
+//   - After BFRD toggle the new sector is loaded (m_activeSector updated).
+// ---------------------------------------------------------------------------
+void testFifoNonEmptyAtInt1NoAutoReload()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0 (Form2, 2324 bytes)
+    issueReadN(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom); // FIFO loaded: 2324 bytes.
+
+    // Partial read: 3 DMA words = 12 bytes. 2312 bytes remain.
+    for (int i = 0; i < 3; ++i) (void)cdrom.readDma();
+    assert(cdrom.debugSnapshot().dataFifoSize == 2312);
+
+    readAndAck(cdrom); // LBA 0 finalized; FIFO still has 2312 stale bytes.
+
+    // Second tick: LBA 1 INT1 fires (BFRD held, FIFO non-empty).
+    // PR-RV35: auto-reload must NOT fire; stale bytes must remain.
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    assert(cdrom.debugSnapshot().dataFifoSize == 2312); // unchanged
+
+    // Game toggles BFRD to discard stale data and load the new sector.
+    disableBfrd(cdrom); // BFRD 1→0: FIFO cleared.
+    assert(cdrom.debugSnapshot().dataFifoSize == 0);
+    enableBfrd(cdrom);  // BFRD 0→1: m_activeSector (LBA 1, 2048 bytes) loaded.
+    assert(cdrom.debugSnapshot().dataFifoSize == 2048);
+}
+
 int main()
 {
     testForm2NonAudioRecordedAs2324();
@@ -509,5 +598,7 @@ int main()
     testBfrdHeldFifoEmptyArmedAtInt1();
     testSectorNotPreloadedBeforeInt1();
     testTracerRecordsDmaOnSecondSector();
+    testSplitDmaWindow();
+    testFifoNonEmptyAtInt1NoAutoReload();
     return 0;
 }

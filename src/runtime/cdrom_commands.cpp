@@ -580,13 +580,14 @@ void Cdrom::publishNextInterruptEvent()
         }
         recordPhaseTrace(m_activeLba, SectorPhaseReason::PublishInt1);
         snapshotCpuSector(m_activeLba, m_activeSector);
-        // PR-RV34: arm the new sector when BFRD is held across an INT1
-        // boundary, whether the FIFO had stale remainder (flush case) or was
-        // already fully drained.  Removes the pre-INT1 acceptBufferedReadSector
-        // call from tick() so no sector is readable before its own INT1.
-        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+        // PR-RV35: auto-reload only when the FIFO is fully drained.  Do not
+        // silently discard unread remainder from the accepted sector — games
+        // that leave bytes behind must write BFRD 1→0→1 to advance to the
+        // next sector.  The BFRD 0→1 rising edge in writeRequestControl will
+        // load m_activeSector (already updated above) when the game is ready.
+        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+            m_dataFifo.empty())
         {
-            m_dataFifo.clear();
             m_activeSectorOffset = 0;
             m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(),
                                      DATA_FIFO_CAPACITY);
@@ -601,10 +602,9 @@ void Cdrom::publishNextInterruptEvent()
     }
     else if (event.type == cdrom_detail::INT1)
     {
-        // INT1 with no buffered sectors: active sector was already loaded into
-        // the FIFO by acceptBufferedReadSector() in tick() (BFRD held, FIFO
-        // was empty).  Finalize the previous record here so finalOffset is
-        // captured before the counter resets for the new sector.
+        // INT1 with no buffered sectors (end of stream or single-sector read).
+        // Finalize the previous record here so finalOffset is captured before
+        // the counter resets.
         if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
         {
             CpuSectorRecord& rec = m_cpuRecords[m_cpuRecordCount - 1];
