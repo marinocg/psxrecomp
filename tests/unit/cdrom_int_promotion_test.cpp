@@ -129,7 +129,7 @@ static void testInt3ToInt1Promotion()
     u32 regs[32] = {};
     regs[4] = 1; // count = 1 sector
     regs[5] = readDst;
-    regs[6] = 0x00; // mode
+    regs[6] = 0x00;             // mode
     callA0(system, 0x7E, regs); // CdAsyncReadSector
     assert(regs[2] == 1);
 

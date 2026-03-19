@@ -134,7 +134,7 @@ class XaPatternDisc final : public psxrecomp::runtime::Disc
 
 void ack([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
 {
-    cdrom.writeInterruptFlags(0x07);
+    cdrom.writeInterruptFlags(0x1F);
 }
 
 void readSingleResponseAndAck([[maybe_unused]] psxrecomp::runtime::Cdrom& cdrom)
@@ -495,9 +495,10 @@ int main()
         disableBufferRead(cdrom);
         assert(cdrom.readData() == 0x00u); // gate closed
 
-        // Acknowledge INT1 for sector 0 → INT1 for sector 1 fires,
-        // sector 1 moves to m_activeSector.
+        // Acknowledge INT1 for sector 0. Per PSX-SPX there is a short post-ACK
+        // gap before the next buffered INT1 becomes visible.
         readSingleResponseAndAck(cdrom);
+        cdrom.tick(1);
         assert(irqType(cdrom) == 0x01u); // INT1 for sector 1
 
         // Now arm BFRD (0→1) → sector 1 loaded into FIFO.

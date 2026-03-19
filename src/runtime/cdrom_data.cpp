@@ -60,23 +60,26 @@ u8 Cdrom::readData()
         return m_dataPadValid ? m_dataPadByte : 0;
     }
 
-    if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
+    noteCpuPayloadAccepted(m_drainingLba);
+    if (CpuSectorRecord* rec = currentCpuPayloadRecord())
     {
-        CpuSectorRecord& rec = m_cpuRecords[m_cpuRecordCount - 1];
-        if (rec.cpuFirstOffset == ~size_t{0}) { rec.cpuFirstOffset = m_dataFifoConsumedBytes; }
-        ++rec.cpuBytesRead;
+        if (rec->cpuFirstOffset == ~size_t{0})
+        {
+            rec->cpuFirstOffset = m_dataFifoConsumedBytes;
+        }
+        ++rec->cpuBytesRead;
     }
     ++m_dataFifoConsumedBytes;
 
     if (!m_phaseFirstCpuReadFired)
     {
         m_phaseFirstCpuReadFired = true;
-        recordPhaseTrace(m_activeLba, SectorPhaseReason::CpuRddatRead);
+        recordPhaseTrace(m_drainingLba, SectorPhaseReason::CpuRddatRead);
     }
     if (wasNonEmpty && m_dataFifo.empty() && !m_phaseDrainFired)
     {
         m_phaseDrainFired = true;
-        recordPhaseTrace(m_activeLba, SectorPhaseReason::DrainComplete);
+        recordPhaseTrace(m_drainingLba, SectorPhaseReason::DrainComplete);
     }
 
     return value;
@@ -92,7 +95,7 @@ u32 Cdrom::readDma()
         {
             traceCdrom("readDma count=%llu data=%zu active=%zu readActive=%d",
                        static_cast<unsigned long long>(sReadDmaCounter), m_dataFifo.size(),
-                       m_activeSector.size(), m_execution.readActive ? 1 : 0);
+                       m_drainingSector.size(), m_execution.readActive ? 1 : 0);
         }
     }
 
@@ -125,11 +128,14 @@ u32 Cdrom::readDma()
         if (m_dataFifo.popFront(byte))
         {
             firstByteFromFifo = true;
-            if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
+            noteCpuPayloadAccepted(m_drainingLba);
+            if (CpuSectorRecord* rec = currentCpuPayloadRecord())
             {
-                CpuSectorRecord& rec = m_cpuRecords[m_cpuRecordCount - 1];
-                if (rec.dmaFirstOffset == ~size_t{0}) { rec.dmaFirstOffset = m_dataFifoConsumedBytes; }
-                ++rec.dmaBytesRead;
+                if (rec->dmaFirstOffset == ~size_t{0})
+                {
+                    rec->dmaFirstOffset = m_dataFifoConsumedBytes;
+                }
+                ++rec->dmaBytesRead;
             }
             ++m_dataFifoConsumedBytes;
         }
@@ -145,12 +151,12 @@ u32 Cdrom::readDma()
     if (firstByteFromFifo && !m_phaseFirstDmaFired)
     {
         m_phaseFirstDmaFired = true;
-        recordPhaseTrace(m_activeLba, SectorPhaseReason::Dma3Read);
+        recordPhaseTrace(m_drainingLba, SectorPhaseReason::Dma3Read);
     }
     if (wasNonEmpty && m_dataFifo.empty() && !m_phaseDrainFired)
     {
         m_phaseDrainFired = true;
-        recordPhaseTrace(m_activeLba, SectorPhaseReason::DrainComplete);
+        recordPhaseTrace(m_drainingLba, SectorPhaseReason::DrainComplete);
     }
 
     return value;
@@ -165,31 +171,31 @@ void Cdrom::enqueueDataSector(const std::vector<u8>& data)
     m_sectorQueue.push_back(data);
 }
 
-void Cdrom::updateDataPadForActiveSector()
+void Cdrom::updateDataPadForDrainingSector()
 {
-    if (m_activeSector.empty())
+    if (m_drainingSector.empty())
     {
         m_dataPadValid = false;
         return;
     }
     const bool wholeSectorMode = (m_execution.mode & cdrom_detail::SETMODE_SECTOR_SIZE_2340) != 0;
-    size_t padIndex = m_activeSector.size() - 1;
-    if (wholeSectorMode && m_activeSector.size() >= 0x924u)
+    size_t padIndex = m_drainingSector.size() - 1;
+    if (wholeSectorMode && m_drainingSector.size() >= 0x924u)
     {
         padIndex = 0x924u - 4u;
     }
-    else if (!wholeSectorMode && m_activeSector.size() >= 0x800u)
+    else if (!wholeSectorMode && m_drainingSector.size() >= 0x800u)
     {
         padIndex = 0x800u - 8u;
     }
-    m_dataPadByte = m_activeSector[padIndex];
+    m_dataPadByte = m_drainingSector[padIndex];
     m_dataPadValid = true;
 }
 
-void Cdrom::acceptBufferedReadSector(bool replaceExistingData)
+void Cdrom::acceptPublishedSector(bool replaceExistingData)
 {
     if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0 ||
-        m_bufferedReadSectors.empty())
+        m_activeSector.empty())
     {
         return;
     }
@@ -199,13 +205,21 @@ void Cdrom::acceptBufferedReadSector(bool replaceExistingData)
         return;
     }
 
+    traceCdrom("acceptPublishedSector lba=%u replace=%d published=%zu fifo_before=%zu", m_activeLba,
+               replaceExistingData ? 1 : 0, m_activeSector.size(), m_dataFifo.size());
+    finalizeCpuPayloadRecord(false);
     m_dataFifo.clear();
-    m_activeSector = std::move(m_bufferedReadSectors.front());
-    m_bufferedReadSectors.pop_front();
+    m_drainingSector = m_activeSector;
+    m_drainingLba = m_activeLba;
     m_activeSectorOffset = 0;
-    m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
-    m_activeSectorOffset = m_activeSector.size();
-    updateDataPadForActiveSector();
+    m_dataFifo.pushBackRange(m_drainingSector, 0, m_drainingSector.size(), DATA_FIFO_CAPACITY);
+    m_activeSectorOffset = m_drainingSector.size();
+    updateDataPadForDrainingSector();
+    m_dataFifoConsumedBytes = 0;
+    noteCpuPayloadAccepted(m_drainingLba);
+    m_phaseFirstCpuReadFired = false;
+    m_phaseFirstDmaFired = false;
+    m_phaseDrainFired = false;
 }
 
 void Cdrom::loadNextSectorToFifo()
@@ -213,7 +227,7 @@ void Cdrom::loadNextSectorToFifo()
     // Enable buffer reads (matching what the real BIOS does before reading
     // sector data) and load the next buffered sector into the data FIFO.
     m_requestControl |= cdrom_detail::REQUEST_ENABLE_BUFFER_READ;
-    acceptBufferedReadSector(true);
+    acceptPublishedSector(true);
 }
 
 void Cdrom::enableDataRead()
@@ -224,26 +238,19 @@ void Cdrom::enableDataRead()
     // remained set.  Non-empty FIFO (mid-drain) is a no-op like BFRD 1→1.
     if (!m_activeSector.empty() && m_dataFifo.empty())
     {
-        m_dataFifo.clear();
-        m_activeSectorOffset = 0;
-        m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
-        m_activeSectorOffset = m_activeSector.size();
-        updateDataPadForActiveSector();
-        m_dataFifoConsumedBytes = 0;
-        recordPhaseTrace(m_activeLba, SectorPhaseReason::AcceptBiosAuto);
-        recordPhaseTrace(m_activeLba, SectorPhaseReason::DrqstsOn);
-        m_phaseFirstCpuReadFired = false;
-        m_phaseFirstDmaFired = false;
-        m_phaseDrainFired = false;
+        acceptPublishedSector(true);
+        recordPhaseTrace(m_drainingLba, SectorPhaseReason::AcceptBiosAuto);
+        recordPhaseTrace(m_drainingLba, SectorPhaseReason::DrqstsOn);
     }
 }
 
-bool Cdrom::queueReadSector()
+Cdrom::ReadSectorResult Cdrom::queueReadSector()
 {
     std::vector<u8> sector;
-    if (!loadReadSector(sector))
+    const ReadSectorResult result = loadReadSector(sector);
+    if (result != ReadSectorResult::BufferedSector)
     {
-        return false;
+        return result;
     }
 
     if (m_bufferedReadSectors.size() >= MAX_BUFFERED_READ_SECTORS)
@@ -257,12 +264,14 @@ bool Cdrom::queueReadSector()
     m_bufferedReadSectors.push_back(std::move(sector));
     m_bufferedReadLbas.push_back(m_execution.currentLba);
     recordPhaseTrace(m_execution.currentLba, SectorPhaseReason::QueuePromote);
-    return true;
+    return ReadSectorResult::BufferedSector;
 }
 
-bool Cdrom::loadReadSector(std::vector<u8>& outSector)
+Cdrom::ReadSectorResult Cdrom::loadReadSector(std::vector<u8>& outSector)
 {
     outSector.clear();
+    bool reachedEndOfStream = false;
+    bool readFailure = false;
 
     const bool wholeSectorMode = (m_execution.mode & cdrom_detail::SETMODE_SECTOR_SIZE_2340) != 0;
     const bool needRawXa = m_execution.xaStreamingEnabled || m_execution.xaFilterEnabled;
@@ -332,9 +341,16 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
             if (!haveRawSector && !haveUserSector)
             {
                 traceCdrom("loadActiveSector read failed lba=%u scan=%zu", loadedLba, scan);
-                if (scan > 0) { break; } // Filter-scan hit end-of-disc; no error.
-                queueErrorInterrupt(cdrom_detail::ERR_READ_FAIL);
-                return false;
+                const u32 sectorCount = m_disc->userSectorCount();
+                if (sectorCount != 0u && loadedLba >= sectorCount)
+                {
+                    reachedEndOfStream = true;
+                }
+                else
+                {
+                    readFailure = true;
+                }
+                break;
             }
             ++m_execution.nextReadLba;
         }
@@ -344,7 +360,7 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
             // issuing an error interrupt so previously buffered sectors are preserved.
             traceCdrom("loadActiveSector queue exhausted, no disc");
             m_execution.readActive = false;
-            return false;
+            return ReadSectorResult::EndOfStream;
         }
 
         cdrom_detail::XaSubheader xa{};
@@ -375,10 +391,9 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
             if (m_xaAudioSink)
             {
                 std::vector<int16_t> xaPcm;
-                if (cdrom_detail::decodeXaAudioSector(rawSector, xa, m_execution.xaPrevLeft1,
-                                                      m_execution.xaPrevLeft2,
-                                                      m_execution.xaPrevRight1,
-                                                      m_execution.xaPrevRight2, xaPcm))
+                if (cdrom_detail::decodeXaAudioSector(
+                        rawSector, xa, m_execution.xaPrevLeft1, m_execution.xaPrevLeft2,
+                        m_execution.xaPrevRight1, m_execution.xaPrevRight2, xaPcm))
                 {
                     m_xaAudioSink(xaPcm);
                 }
@@ -387,11 +402,16 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
                        loadedLba, xa.fileNumber, xa.channelNumber,
                        static_cast<unsigned>(xa.submode));
             recordPhaseTrace(loadedLba, SectorPhaseReason::XaAudioDeliver);
-            if (!m_xaPlaybackBusy) { m_xaPlaybackBusy = true; m_xaPlaybackBusyRoseLba = loadedLba; m_xaSectorsWhileBusy = 0; }
+            if (!m_xaPlaybackBusy)
+            {
+                m_xaPlaybackBusy = true;
+                m_xaPlaybackBusyRoseLba = loadedLba;
+                m_xaSectorsWhileBusy = 0;
+            }
             ++m_xaSectorsWhileBusy;
             m_xaLastCodingInfo = xa.codingInfo;
             ++m_xaDeliveryCount;
-            break; // outSector stays empty → no INT1
+            return ReadSectorResult::NoHostData;
         }
 
         // CPU data delivery path.  Classify the sector for diagnostics.
@@ -489,11 +509,15 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
     if (!outSector.empty())
     {
         traceCdrom("loadActiveSector active_bytes=%zu", outSector.size());
-        return true;
+        return ReadSectorResult::BufferedSector;
     }
 
     traceCdrom("loadActiveSector no active sector after scan");
-    return false;
+    if (readFailure)
+    {
+        return ReadSectorResult::ReadFailure;
+    }
+    return reachedEndOfStream ? ReadSectorResult::EndOfStream : ReadSectorResult::NoHostData;
 }
 
 } // namespace runtime

@@ -102,7 +102,9 @@ std::string PsxSystem::describeBiosCdromState() const
 
     stream << " bios={init=" << (m_biosCdrom.initialized ? 1 : 0);
     stream << " handleBase=0x" << std::hex << m_biosCdrom.handleStorageAddress;
-    stream << " asyncResult=0x" << m_biosCdrom.asyncResultPtr << std::dec;
+    stream << " readActive=" << std::dec << (m_biosCdrom.asyncReadActive ? 1 : 0);
+    stream << " ackDone=" << (m_biosCdrom.asyncCommandDoneOnAck ? 1 : 0);
+    stream << " asyncResult=0x" << std::hex << m_biosCdrom.asyncResultPtr << std::dec;
     stream << " asyncRemaining=" << m_biosCdrom.asyncReadCount;
     stream << " asyncRead=" << m_biosCdrom.asyncSectorsRead << "}";
 

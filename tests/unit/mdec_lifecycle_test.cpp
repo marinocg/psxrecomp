@@ -34,15 +34,15 @@ using psxrecomp::runtime::PsxSystem;
 // ---- Status / control constants ----
 
 constexpr u32 STATUS_FIFO_EMPTY = 1u << 31;
-constexpr u32 STATUS_CMD_BUSY   = 1u << 29;
+constexpr u32 STATUS_CMD_BUSY = 1u << 29;
 constexpr u32 STATUS_DMA_IN_REQ = 1u << 28;
 constexpr u32 STATUS_DMA_OUT_REQ = 1u << 27;
 
-constexpr u32 CTRL_RESET    = 1u << 31;
-constexpr u32 CTRL_DMA_IN   = 1u << 30;
-constexpr u32 CTRL_DMA_OUT  = 1u << 29;
+constexpr u32 CTRL_RESET = 1u << 31;
+constexpr u32 CTRL_DMA_IN = 1u << 30;
+constexpr u32 CTRL_DMA_OUT = 1u << 29;
 
-constexpr u32 MDEC_CMD  = psxrecomp::runtime::Mmio::MDEC_BASE;
+constexpr u32 MDEC_CMD = psxrecomp::runtime::Mmio::MDEC_BASE;
 constexpr u32 MDEC_CTRL = psxrecomp::runtime::Mmio::MDEC_BASE + 4u;
 
 // ---- Assertion helpers ----
@@ -105,8 +105,7 @@ void testCommandClassification()
     // MDEC(2) — SetQuantTable (luma-only, 16 params)
     mdec.reset();
     mdec.writeCommand(2u << 29);
-    require(mdec.lastCommandKind() == Mdec::CommandKind::SetQuantTable,
-            "cmd 2 → SetQuantTable");
+    require(mdec.lastCommandKind() == Mdec::CommandKind::SetQuantTable, "cmd 2 → SetQuantTable");
     require(mdec.currentPhase() == Mdec::CommandPhase::AwaitingParameters,
             "cmd 2 → AwaitingParameters while params pending");
     for (u32 i = 0; i < 16u; ++i)
@@ -119,16 +118,14 @@ void testCommandClassification()
     // MDEC(3) — SetScaleTable (32 params)
     mdec.reset();
     mdec.writeCommand(3u << 29);
-    require(mdec.lastCommandKind() == Mdec::CommandKind::SetScaleTable,
-            "cmd 3 → SetScaleTable");
+    require(mdec.lastCommandKind() == Mdec::CommandKind::SetScaleTable, "cmd 3 → SetScaleTable");
     require(mdec.currentPhase() == Mdec::CommandPhase::AwaitingParameters,
             "cmd 3 → AwaitingParameters");
     for (u32 i = 0; i < 32u; ++i)
     {
         mdec.writeCommand(i);
     }
-    require(mdec.currentPhase() == Mdec::CommandPhase::Idle,
-            "cmd 3 → Idle after all params");
+    require(mdec.currentPhase() == Mdec::CommandPhase::Idle, "cmd 3 → Idle after all params");
 
     // commandIsOutputCapable() contract.
     require(Mdec::commandIsOutputCapable(Mdec::CommandKind::DecodeMacroblock),
@@ -137,8 +134,7 @@ void testCommandClassification()
             "SetQuantTable is NOT output-capable");
     require(!Mdec::commandIsOutputCapable(Mdec::CommandKind::SetScaleTable),
             "SetScaleTable is NOT output-capable");
-    require(!Mdec::commandIsOutputCapable(Mdec::CommandKind::None),
-            "None is NOT output-capable");
+    require(!Mdec::commandIsOutputCapable(Mdec::CommandKind::None), "None is NOT output-capable");
     require(!Mdec::commandIsOutputCapable(Mdec::CommandKind::Invalid),
             "Invalid is NOT output-capable");
 }
@@ -171,8 +167,7 @@ void testQuantTableNeverProducesOutput()
         mdec.writeCommand(i);
     }
 
-    require((mdec.readStatus() & STATUS_CMD_BUSY) == 0,
-            "busy must clear after all quant params");
+    require((mdec.readStatus() & STATUS_CMD_BUSY) == 0, "busy must clear after all quant params");
     require(!mdec.dmaOutRequest(), "dmaOut must not rise after SetQuantTable completion");
     require(mdec.currentPhase() == Mdec::CommandPhase::Idle,
             "phase must be Idle after SetQuantTable");
@@ -208,8 +203,7 @@ void testScaleTableNeverProducesOutput()
         mdec.writeCommand(i);
     }
 
-    require((mdec.readStatus() & STATUS_CMD_BUSY) == 0,
-            "busy must clear after all scale params");
+    require((mdec.readStatus() & STATUS_CMD_BUSY) == 0, "busy must clear after all scale params");
     require(!mdec.dmaOutRequest(), "dmaOut must not rise after SetScaleTable completion");
     require(mdec.currentPhase() == Mdec::CommandPhase::Idle,
             "phase must be Idle after SetScaleTable");
@@ -305,8 +299,7 @@ void testWarmResetAbortsLifecycle()
         mdec.writeControl(CTRL_RESET);
 
         requireEqual("status after warm reset mid-MDEC(1)", 0x80040000u, mdec.readStatus());
-        require(mdec.currentPhase() == Mdec::CommandPhase::Idle,
-                "phase=Idle after warm reset");
+        require(mdec.currentPhase() == Mdec::CommandPhase::Idle, "phase=Idle after warm reset");
         require(!mdec.dmaInRequest(), "dmaInRequest clear after warm reset");
         require(!mdec.dmaOutRequest(), "dmaOutRequest clear after warm reset");
     }
@@ -373,8 +366,7 @@ void testLifetimeStatsSurviveWarmReset()
     requireEqual("decode commands issued", 1u, stats.decodeCommandsIssued);
     requireEqual("quant table commands issued", 1u, stats.quantTableCommandsIssued);
     requireEqual("scale table commands issued", 1u, stats.scaleTableCommandsIssued);
-    require(stats.anyDecodeReachedOutputAvailable,
-            "anyDecodeReachedOutputAvailable must be true");
+    require(stats.anyDecodeReachedOutputAvailable, "anyDecodeReachedOutputAvailable must be true");
 }
 
 // ============================================================
@@ -436,14 +428,12 @@ void testIntegrationSyntheticDecodeChain()
     sys.writeMmioExplicit<u32>(dma1 + 0x4u, drainWords | (1u << 16));
     sys.writeMmioExplicit<u32>(dma1 + 0x8u, 0x01000200u); // toRAM, request, start
 
-    require(sys.read<u32>(outputBase) != 0xDEADDEADu,
-            "DMA1 must have written output data to RAM");
+    require(sys.read<u32>(outputBase) != 0xDEADDEADu, "DMA1 must have written output data to RAM");
 
     // Inspect lifetime stats via the accessor.
     const Mdec::LifetimeStats stats = sys.mdec().lifetimeStats();
     requireEqual("integration: decode commands issued", 1u, stats.decodeCommandsIssued);
-    require(stats.anyDecodeReachedOutputAvailable,
-            "integration: anyDecodeReachedOutputAvailable");
+    require(stats.anyDecodeReachedOutputAvailable, "integration: anyDecodeReachedOutputAvailable");
     require(stats.anyDma1Drain, "integration: anyDma1Drain");
 }
 
@@ -521,16 +511,11 @@ void testIntegrationRev2Regression()
     const Mdec::LifetimeStats stats = sys.mdec().lifetimeStats();
 
     // Decisive proof: MDEC(1) was never issued.
-    requireEqual("rev2: decode commands issued (must be 0)", 0u,
-                 stats.decodeCommandsIssued);
-    requireEqual("rev2: quant table commands issued", 1u,
-                 stats.quantTableCommandsIssued);
-    requireEqual("rev2: scale table commands issued", 1u,
-                 stats.scaleTableCommandsIssued);
-    require(!stats.anyDecodeReachedOutputAvailable,
-            "rev2: no decode output ever produced");
-    require(!stats.anyDma1Drain,
-            "rev2: DMA1 was never triggered — blocker is upstream of MDEC(1)");
+    requireEqual("rev2: decode commands issued (must be 0)", 0u, stats.decodeCommandsIssued);
+    requireEqual("rev2: quant table commands issued", 1u, stats.quantTableCommandsIssued);
+    requireEqual("rev2: scale table commands issued", 1u, stats.scaleTableCommandsIssued);
+    require(!stats.anyDecodeReachedOutputAvailable, "rev2: no decode output ever produced");
+    require(!stats.anyDma1Drain, "rev2: DMA1 was never triggered — blocker is upstream of MDEC(1)");
 }
 
 } // namespace

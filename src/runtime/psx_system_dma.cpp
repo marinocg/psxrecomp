@@ -127,8 +127,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         // Per PSX-SPX, DMA3 only transfers when BFRD=1 and the data FIFO has
         // bytes to serve.  Initiating a transfer before BFRD=1 yields no data;
         // mirroring the hardware stall with an immediate skip is correct here.
-        if (port == DmaPort::Cdrom &&
-            (m_cdrom.readStatus() & 0x40u) == 0u)
+        if (port == DmaPort::Cdrom && (m_cdrom.readStatus() & 0x40u) == 0u)
         {
             transferredWords = 0;
             goto dma_transfer_complete;

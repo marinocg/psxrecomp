@@ -49,8 +49,8 @@ class DiagExplainerEngine
     /// Delegates to Cdrom::formatPostStreamSummary().
     static std::string explainCdromPostStreamValidator(const Cdrom& cdrom);
 
-    /// Return a per-sector CPU payload breakdown for the first 32 post-stream sectors.
-    /// Delegates to Cdrom::formatCpuPayloadSummary().
+    /// Return a per-sector CPU payload breakdown for the rolling last 32 accepted/read ReadS/ReadN
+    /// sectors. Delegates to Cdrom::formatCpuPayloadSummary().
     static std::string explainCdromCpuPayloadSummary(const Cdrom& cdrom);
 
     /// Number of configured explainers.

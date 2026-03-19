@@ -147,7 +147,8 @@ enum class ExplainerKind : u8
     CdromXaClassification,
     /// Post-ReadS/ReadN XA stream summary scoped to the most recent XA-enabled stream (PR-RV27).
     CdromPostStreamValidator,
-    /// Per-sector CPU payload breakdown for the first 32 post-stream sectors (PR-RV28).
+    /// Per-sector CPU payload breakdown for the rolling last 32 accepted/read ReadS/ReadN sectors
+    /// (PR-RV28/37).
     CdromCpuPayloadSummary
 };
 

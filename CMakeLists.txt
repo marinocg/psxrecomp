@@ -137,6 +137,7 @@ set(RUNTIME_SOURCES
     src/runtime/cdrom_shared.cpp
     src/runtime/cdrom_core.cpp
     src/runtime/cdrom_commands.cpp
+    src/runtime/cdrom_irq.cpp
     src/runtime/cdrom_data.cpp
     src/runtime/cdrom_state.cpp
     src/runtime/cdrom_stream_validator.cpp
@@ -543,6 +544,16 @@ if(BUILD_TESTS)
         tests/unit/cdrom_cpu_payload_test.cpp
     )
     target_link_libraries(cdrom_cpu_payload_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_cpu_payload_window_test
+        tests/unit/cdrom_cpu_payload_window_test.cpp
+    )
+    target_link_libraries(cdrom_cpu_payload_window_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_eof_completion_test
+        tests/unit/cdrom_eof_completion_test.cpp
+    )
+    target_link_libraries(cdrom_eof_completion_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(cdrom_mixed_xa_test
         tests/unit/cdrom_mixed_xa_test.cpp

@@ -96,6 +96,8 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
             initializeBiosCdromState(0u);
         }
         // Clear any pending async state from a previous session.
+        m_biosCdrom.asyncReadActive = false;
+        m_biosCdrom.asyncCommandDoneOnAck = false;
         m_biosCdrom.asyncResultPtr = 0;
         m_biosCdrom.asyncReadBuffer = 0;
         m_biosCdrom.asyncReadCount = 0;
@@ -122,6 +124,8 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
     // ---------------------------------------------------------------
     case 0x56:
     {
+        m_biosCdrom.asyncReadActive = false;
+        m_biosCdrom.asyncCommandDoneOnAck = false;
         m_biosCdrom.asyncResultPtr = 0;
         m_biosCdrom.asyncReadBuffer = 0;
         m_biosCdrom.asyncReadCount = 0;
@@ -180,6 +184,7 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
     // ---------------------------------------------------------------
     case 0x7C:
     {
+        m_biosCdrom.asyncCommandDoneOnAck = true;
         m_biosCdrom.asyncResultPtr = a0;
         m_cdrom.writeInterruptFlags(0x07u);
         m_cdrom.writeCommand(CDCMD_GETSTAT);
@@ -218,6 +223,8 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
             m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
         }
 
+        m_biosCdrom.asyncReadActive = true;
+        m_biosCdrom.asyncCommandDoneOnAck = false;
         m_biosCdrom.asyncReadBuffer = a1;
         m_biosCdrom.asyncReadCount = a0;
         m_biosCdrom.asyncSectorsRead = 0;
@@ -273,6 +280,7 @@ bool PsxSystem::callBiosCdFunction(u32 functionId, u32* regs)
     // ---------------------------------------------------------------
     case 0x81:
     {
+        m_biosCdrom.asyncCommandDoneOnAck = true;
         m_cdrom.writeInterruptFlags(0x07u);
         m_cdrom.writeParam(static_cast<u8>(a0 & 0xFF));
         m_cdrom.writeCommand(CDCMD_SETMODE);

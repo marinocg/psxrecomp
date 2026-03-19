@@ -338,7 +338,8 @@ int main()
     runtimeHeader << "};\n";
     runtimeHeader << "class Cdrom {\n";
     runtimeHeader << "  public:\n";
-    runtimeHeader << "    std::string formatPhaseTraceSummary(std::size_t = 10) const { return {}; }\n";
+    runtimeHeader
+        << "    std::string formatPhaseTraceSummary(std::size_t = 10) const { return {}; }\n";
     runtimeHeader << "    std::string formatXaClassificationSummary() const { return {}; }\n";
     runtimeHeader << "    std::string formatPostStreamSummary() const { return {}; }\n";
     runtimeHeader << "    std::string formatCpuPayloadSummary() const { return {}; }\n";
@@ -353,9 +354,12 @@ int main()
     runtimeHeader << "    bool isEnabled(ExplainerKind) const { return false; }\n";
     runtimeHeader << "    static std::string explainCdromBankSummary(const DiagCdromBankTracer&)"
                      " { return {}; }\n";
-    runtimeHeader << "    static std::string explainCdromXaClassification(const Cdrom&) { return {}; }\n";
-    runtimeHeader << "    static std::string explainCdromPostStreamValidator(const Cdrom&) { return {}; }\n";
-    runtimeHeader << "    static std::string explainCdromCpuPayloadSummary(const Cdrom&) { return {}; }\n";
+    runtimeHeader
+        << "    static std::string explainCdromXaClassification(const Cdrom&) { return {}; }\n";
+    runtimeHeader
+        << "    static std::string explainCdromPostStreamValidator(const Cdrom&) { return {}; }\n";
+    runtimeHeader
+        << "    static std::string explainCdromCpuPayloadSummary(const Cdrom&) { return {}; }\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class CallbackTraceEngine {\n";
     runtimeHeader << "  public:\n";
@@ -426,7 +430,8 @@ int main()
     runtimeHeader << "    StallClassifier& stallClassifier() { return m_stallClassifier; }\n";
     runtimeHeader << "    DiagTracepointEngine& diagTracepoints() { return m_diagTracepoints; }\n";
     runtimeHeader << "    DiagWatchpointEngine& diagWatchpoints() { return m_diagWatchpoints; }\n";
-    runtimeHeader << "    DiagCdromBankTracer& diagCdromBankTracer() { return m_diagCdromBankTracer; }\n";
+    runtimeHeader
+        << "    DiagCdromBankTracer& diagCdromBankTracer() { return m_diagCdromBankTracer; }\n";
     runtimeHeader << "    DiagExplainerEngine& diagExplainers() { return m_diagExplainers; }\n";
     runtimeHeader << "    Cdrom& cdrom() { return m_cdrom; }\n";
     runtimeHeader << "    CallbackTraceEngine& callbackTrace() { return m_callbackTrace; }\n";

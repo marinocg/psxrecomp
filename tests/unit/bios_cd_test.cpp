@@ -152,7 +152,8 @@ static void testCdAsyncSetMode()
     ackCdromIrq(system); // ack Init INT3 -> FIFO cleared -> INT2 promoted
     ackCdromIrq(system); // ack Init INT2 -> FIFO cleared -> nothing pending
 
-    // Open a user event for CommandDone (INT3 maps to CDROM_IRQ_EVENT_SPECS[2] = 0x0020).
+    // BIOS CdAsyncSetMode completes on EventSpec::CommandDone even though the
+    // underlying hardware response is INT3/CommandAck.
     const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
                                                    EventMode::NoCallback, 0);
     assert(evHandle != 0xFFFFFFFFu);
@@ -190,7 +191,8 @@ static void testCdAsyncGetStatus()
     constexpr u32 resultAddr = 0x8000;
     system.getRam()[resultAddr] = 0xFF; // sentinel
 
-    // Open event for CommandDone (INT3 maps to CDROM_IRQ_EVENT_SPECS[2] = 0x0020).
+    // BIOS CdAsyncGetStatus completes on EventSpec::CommandDone even though the
+    // underlying hardware response is INT3/CommandAck.
     const u32 evHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
                                                    EventMode::NoCallback, 0);
     assert(evHandle != 0xFFFFFFFFu);
@@ -297,8 +299,8 @@ static void testCdAsyncReadSector()
     ackCdromIrq(system);            // clear INT2 -> nothing pending
     system.serviceInterrupts();
 
-    // Open event for INT1 (data-ready) — CDROM_IRQ_EVENT_SPECS[0] = 0x0010 = CommandAck.
-    const u32 dataEvHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
+    // Open an event for raw INT1 delivery; PSX-SPX maps INT1 to DataReady (0x0040).
+    const u32 dataEvHandle = system.events().openEvent(EventClass::Cdrom, EventSpec::DataReady,
                                                        EventMode::NoCallback, 0);
     assert(dataEvHandle != 0xFFFFFFFFu);
     system.events().enableEvent(dataEvHandle);
@@ -380,7 +382,7 @@ static void testSdkStyleAsyncCdFlow()
     // 2. Open events for completion + data-ready
     const u32 doneEv = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandDone,
                                                  EventMode::NoCallback, 0);
-    const u32 dataEv = system.events().openEvent(EventClass::Cdrom, EventSpec::CommandAck,
+    const u32 dataEv = system.events().openEvent(EventClass::Cdrom, EventSpec::DataReady,
                                                  EventMode::NoCallback, 0);
     assert(doneEv != 0xFFFFFFFFu);
     assert(dataEv != 0xFFFFFFFFu);

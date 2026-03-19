@@ -260,10 +260,11 @@ void runBiosVectorInterruptChainTests()
         std::cerr << "[PASS] HookEntryInt runs after chain/event dispatch\n";
     }
 
-    // Test 26: _96_init maps CDROM INT3 to CommandDone before HookEntryInt
+    // Test 26: _96_init maps raw CDROM INT3 to CommandAck before HookEntryInt
     //
-    // Per PSX-SPX BIOS CDROM interrupt handler, INT3 (Acknowledge) delivers
-    // event spec 0x0020 (CommandDone), the same as INT2.
+    // Per PSX-SPX, the BIOS opens F0000003 events 10h/20h/40h/80h/8000h and
+    // raw INT3 corresponds to CommandAck (0x0010). Higher-level BIOS helpers
+    // may translate some INT3 completions to CommandDone separately.
     {
         using psxrecomp::runtime::EventMode;
         namespace EventClass = psxrecomp::runtime::EventClass;
@@ -278,7 +279,7 @@ void runBiosVectorInterruptChainTests()
         system.callBiosVector(0xA0, regs, 32);
 
         [[maybe_unused]] const u32 handle = system.events().openEvent(
-            EventClass::Cdrom, EventSpec::CommandDone, EventMode::Callback, 0x80014000u);
+            EventClass::Cdrom, EventSpec::CommandAck, EventMode::Callback, 0x80014000u);
         assert(handle != 0xFFFFFFFFu);
         assert(system.events().enableEvent(handle));
 
@@ -296,7 +297,7 @@ void runBiosVectorInterruptChainTests()
 
         system.interrupts().writeMask(system.interrupts().readMask() |
                                       static_cast<u32>(InterruptLine::Cdrom));
-        system.cdrom().writeCommand(0x01); // Getstat -> INT3 / CommandDone
+        system.cdrom().writeCommand(0x01); // Getstat -> raw INT3 / CommandAck
         assert((system.cdrom().readInterruptFlags() & 0x07u) == 0x03u);
 
         system.serviceInterrupts();
@@ -306,7 +307,7 @@ void runBiosVectorInterruptChainTests()
         assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::Cdrom)) == 0u);
         assert(system.cdrom().readResponse() == 0x00u);
 
-        std::cerr << "[PASS] _96_init routes CDROM INT3 to CommandDone event\n";
+        std::cerr << "[PASS] _96_init routes raw CDROM INT3 to CommandAck event\n";
     }
 
     // Test 27: HookEntryInt acknowledging an IRQ still runs after kernel events.

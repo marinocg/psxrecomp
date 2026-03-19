@@ -12,6 +12,8 @@ constexpr psxrecomp::u32 kCdromReadCycles = 451584;
 class StaticDisc final : public psxrecomp::runtime::Disc
 {
   public:
+    explicit StaticDisc(Region region = Region::NorthAmerica) : m_region(region) {}
+
     bool readUserSector(psxrecomp::u32 lba, std::span<psxrecomp::u8, 2048> out) override
     {
         for (size_t i = 0; i < out.size(); ++i)
@@ -25,6 +27,14 @@ class StaticDisc final : public psxrecomp::runtime::Disc
     {
         return 1024;
     }
+
+    Region region() const override
+    {
+        return m_region;
+    }
+
+  private:
+    Region m_region = Region::NorthAmerica;
 };
 
 [[maybe_unused]] psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
@@ -64,6 +74,22 @@ void ack(psxrecomp::runtime::Cdrom& cdrom)
 int main()
 {
     using psxrecomp::runtime::Cdrom;
+    using psxrecomp::runtime::Disc;
+
+    const auto assertGetIdRegion = [](Disc& testDisc, std::initializer_list<psxrecomp::u8> expected)
+    {
+        Cdrom testCdrom;
+        testCdrom.reset();
+        testCdrom.setDiscBackend(&testDisc);
+        testCdrom.writeInterruptEnable(0x1F);
+        testCdrom.writeCommand(0x1A);
+        assert(irqType(testCdrom) == 0x03);
+        assertResponse(testCdrom, {0x00});
+        ack(testCdrom);
+        assert(irqType(testCdrom) == 0x02);
+        assertResponse(testCdrom, expected);
+        ack(testCdrom);
+    };
 
     Cdrom cdrom;
     StaticDisc disc;
@@ -218,8 +244,14 @@ int main()
     assertResponse(cdrom, {0x00, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'A'});
     ack(cdrom);
 
-    // ACKing INT2 before draining its response preserves that response byte.
-    // The next command is not presented until software consumes that byte.
+    StaticDisc jpDisc(Disc::Region::Japan);
+    assertGetIdRegion(jpDisc, {0x00, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'I'});
+
+    StaticDisc euDisc(Disc::Region::Europe);
+    assertGetIdRegion(euDisc, {0x00, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'E'});
+
+    // ACKing INT2 before draining its response drains the unread result bytes
+    // (PSX-SPX HCLRCTL behavior), so the FIFO is empty afterwards.
     cdrom.writeCommand(0x1A); // GetID (disc present)
     assert(irqType(cdrom) == 0x03);
     assertResponse(cdrom, {0x00});
@@ -228,6 +260,7 @@ int main()
 
     cdrom.writeInterruptFlags(0x02); // ACK INT2 before reading its response.
     assert(irqType(cdrom) == 0x00);
+    assert((cdrom.readStatus() & (1u << 5)) == 0u);
     assert(cdrom.readResponse() == 0x00);
 
     return 0;

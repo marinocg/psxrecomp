@@ -64,7 +64,8 @@ void PsxSystem::invokeHookEntryIntHandler()
             }
 
             // Helper to read a descriptor word from the snapshot or live RAM.
-            const auto readDesc = [&](Address offset) -> u32 {
+            const auto readDesc = [&](Address offset) -> u32
+            {
                 if (usingSnapshot)
                 {
                     u32 val = 0;

@@ -4,12 +4,17 @@ This roadmap tracks runtime CD-ROM emulation work needed for accurate PSX execut
 
 ## Current Status
 - [x] Index-selected MMIO register bank (`1F801800h` index + `+1..+3` logical ports) wired for command/response/data/IRQ paths.
-- [x] IRQ queue model: ACK-driven promotion of queued IRQ types with interrupt flag/enable masking.
+- [x] IRQ queue model: ACK-driven promotion of queued IRQ types with interrupt flag/enable masking, plus PSX-SPX-aligned HCLRCTL semantics (drain unread result bytes and defer buffered read `INT1` promotion until after a short post-ACK gap).
+- [x] BIOS CD-ROM IRQ ordering now follows the PSX-SPX priority-chain model: the BIOS-owned CD path is serviced as part of the priority-0 `SysEnqIntRP` chain before lower-priority user handlers and before `HookEntryInt`.
+- [x] BIOS/kernel CD event routing split: raw IRQ subtype delivery now matches PSX-SPX (`INT3->0x0010`, `INT2->0x0020`, `INT1->0x0040`, `INT4->0x0080`, `INT5->0x8000`), while BIOS-owned async helpers still translate their documented completion events onto `0x0020`.
 - [x] Basic command responses and interrupt flag plumbing.
 - [x] Boot-critical command coverage (`Getstat`, `Setloc`, `SeekL`, `ReadN/ReadS`, `Pause/Stop`,
       `Setmode`, `GetlocL/GetlocP`, `GetTN/GetTD`, `GetID`) with command-specific response shapes.
 - [x] Setloc/read pipeline with MSF->LBA conversion (pregap), timed sector cadence, and data-fifo payload selection (0x800 vs 0x924 mode).
 - [x] Data-sector FIFO path with DMA-readable payload words.
+- [x] Bounded ReadN/ReadS sector-ready signaling: INT1 now reflects the buffered drive window rather than an unbounded software queue, so overrun can skip older sectors per PSX-SPX.
+- [x] Finite-read completion path: when `ReadN/ReadS` can no longer produce another valid sector, the controller now leaves `readActive`, drains any already-buffered INT1 sectors, then emits a single `INT4/DataEnd` completion instead of remaining in a silent active-read limbo.
+- [x] Explicit buffered/published/draining sector ownership: the next buffered sector, the current INT1-published sector, and the sector currently backing `RDDATA`/DMA are now tracked separately, so late INT1 publication no longer rewrites the identity of bytes that are still draining.
 - [x] XA streaming baseline (Setmode + ReadN/ReadS sector pumping).
 - [x] XA subheader-aware payload path (Mode2/Form2 validation + Setfilter file/channel matching).
 - [x] XA ADPCM sector decode path feeding SPU CD-audio mixer input.

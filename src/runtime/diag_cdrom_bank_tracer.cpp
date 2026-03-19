@@ -238,8 +238,7 @@ std::string DiagCdromBankTracer::formatSummary() const
        << "  INT3_observed=" << (m_sawInt3 ? "yes" : "no") << "\n";
 
     // Offset-2 writes
-    os << "PARAM    writes=" << m_paramPushCount
-       << "  HINTMSK writes=" << m_hintMskWriteCount;
+    os << "PARAM    writes=" << m_paramPushCount << "  HINTMSK writes=" << m_hintMskWriteCount;
     if (m_hintMskWriteCount > 0)
     {
         os << " last=0x" << std::hex << static_cast<int>(m_lastHintMskWrite) << std::dec;
@@ -268,13 +267,12 @@ std::string DiagCdromBankTracer::formatSummary() const
     os << "  audio_vol3 writes=" << m_audioVol3WriteCount << "\n";
 
     // DMA-related
-    os << "BFRD_set count=" << m_dma3TriggerCount
-       << "  (last REQUEST with bit7 set)\n";
+    os << "BFRD_set count=" << m_dma3TriggerCount << "  (last REQUEST with bit7 set)\n";
 
     if (m_hintSts3ReadCount > 0)
     {
-        os << "HINTSTS(off3) reads=" << m_hintSts3ReadCount
-           << " last=0x" << std::hex << static_cast<int>(m_lastHintSts3Read) << std::dec << "\n";
+        os << "HINTSTS(off3) reads=" << m_hintSts3ReadCount << " last=0x" << std::hex
+           << static_cast<int>(m_lastHintSts3Read) << std::dec << "\n";
     }
 
     return os.str();

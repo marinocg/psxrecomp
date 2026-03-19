@@ -294,8 +294,8 @@ Implementation sources: `src/runtime/psx_system_bios_a0.cpp`, `src/runtime/psx_s
 
 - [x] `0x00` — `EnqueueTimerAndVblankIrqs(priority)` — _Stub: no-op_
 - [x] `0x01` — `EnqueueSyscallHandler(priority)` — _Stub: no-op_
-- [x] `0x02` — `SysEnqIntRP(priority, struc)` — _Stub: no-op_
-- [x] `0x03` — `SysDeqIntRP(priority, struc)` — _Stub: no-op_
+- [x] `0x02` — `SysEnqIntRP(priority, struc)` — _Functional: inserts the node at the head of the selected BIOS IRQ-priority chain_
+- [x] `0x03` — `SysDeqIntRP(priority, struc)` — _Functional: unlinks an explicitly named node from the selected BIOS IRQ-priority chain; retail BIOS bug parity is not fully modeled yet_
 - [ ] `0x04` — `get_free_EvCB_slot()`
 - [ ] `0x05` — `get_free_TCB_slot()`
 - [ ] `0x06` — `ExceptionHandler()` _(internal)_

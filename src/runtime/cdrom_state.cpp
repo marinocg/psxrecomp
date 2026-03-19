@@ -162,6 +162,7 @@ std::vector<u8> Cdrom::serializeState() const
     appendU32(out, m_execution.nextReadLba);
     appendU32(out, m_execution.currentLba);
     appendU32(out, m_execution.cyclesUntilSector);
+    appendU32(out, m_execution.cyclesUntilBufferedInt1);
     appendS32(out, m_execution.xaPrevLeft1);
     appendS32(out, m_execution.xaPrevLeft2);
     appendS32(out, m_execution.xaPrevRight1);
@@ -169,6 +170,8 @@ std::vector<u8> Cdrom::serializeState() const
     appendBool(out, m_execution.motorOn);
     appendBool(out, m_execution.readActive);
     appendBool(out, m_execution.seekActive);
+    appendBool(out, m_execution.bufferedInt1Pending);
+    appendBool(out, m_execution.dataEndPending);
     appendBool(out, m_execution.xaStreamingEnabled);
     appendBool(out, m_execution.xaFilterEnabled);
 
@@ -193,6 +196,8 @@ std::vector<u8> Cdrom::serializeState() const
 
     appendByteVector(out, m_activeSector);
     appendU32(out, static_cast<u32>(m_activeSectorOffset));
+    appendByteVector(out, m_drainingSector);
+    appendU32(out, m_drainingLba);
 
     return out;
 }
@@ -228,6 +233,7 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     u32 nextReadLba = 0;
     u32 currentLba = 0;
     u32 cyclesUntilSector = 0;
+    u32 cyclesUntilBufferedInt1 = 0;
     int xaPrevLeft1 = 0;
     int xaPrevLeft2 = 0;
     int xaPrevRight1 = 0;
@@ -235,6 +241,8 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     bool motorOn = false;
     bool readActive = false;
     bool seekActive = false;
+    bool bufferedInt1Pending = false;
+    bool dataEndPending = false;
     bool xaStreamingEnabled = false;
     bool xaFilterEnabled = false;
     std::deque<IrqEvent> pendingResponseIrqs;
@@ -242,6 +250,8 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     std::deque<std::vector<u8>> bufferedReadSectors;
     std::vector<u8> activeSector;
     u32 activeSectorOffset = 0;
+    std::vector<u8> drainingSector;
+    u32 drainingLba = 0;
 
     if (!consumeU32(state, cursor, magic) || !consumeU32(state, cursor, version) ||
         magic != cdrom_detail::CDROM_STATE_MAGIC || version != cdrom_detail::CDROM_STATE_VERSION ||
@@ -274,10 +284,14 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
         !consumeU8(state, cursor, currentCommand) || !consumeU8(state, cursor, mode) ||
         !consumeU8(state, cursor, xaFilterFile) || !consumeU8(state, cursor, xaFilterChannel) ||
         !consumeU32(state, cursor, nextReadLba) || !consumeU32(state, cursor, currentLba) ||
-        !consumeU32(state, cursor, cyclesUntilSector) || !consumeS32(state, cursor, xaPrevLeft1) ||
-        !consumeS32(state, cursor, xaPrevLeft2) || !consumeS32(state, cursor, xaPrevRight1) ||
-        !consumeS32(state, cursor, xaPrevRight2) || !consumeBool(state, cursor, motorOn) ||
-        !consumeBool(state, cursor, readActive) || !consumeBool(state, cursor, seekActive) ||
+        !consumeU32(state, cursor, cyclesUntilSector) ||
+        !consumeU32(state, cursor, cyclesUntilBufferedInt1) ||
+        !consumeS32(state, cursor, xaPrevLeft1) || !consumeS32(state, cursor, xaPrevLeft2) ||
+        !consumeS32(state, cursor, xaPrevRight1) || !consumeS32(state, cursor, xaPrevRight2) ||
+        !consumeBool(state, cursor, motorOn) || !consumeBool(state, cursor, readActive) ||
+        !consumeBool(state, cursor, seekActive) ||
+        !consumeBool(state, cursor, bufferedInt1Pending) ||
+        !consumeBool(state, cursor, dataEndPending) ||
         !consumeBool(state, cursor, xaStreamingEnabled) ||
         !consumeBool(state, cursor, xaFilterEnabled))
     {
@@ -334,7 +348,10 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
 
     if (!consumeByteVector(state, cursor, cdrom_detail::MAX_SERIALIZED_SECTOR_BYTES,
                            activeSector) ||
-        !consumeU32(state, cursor, activeSectorOffset) || cursor != state.size())
+        !consumeU32(state, cursor, activeSectorOffset) ||
+        !consumeByteVector(state, cursor, cdrom_detail::MAX_SERIALIZED_SECTOR_BYTES,
+                           drainingSector) ||
+        !consumeU32(state, cursor, drainingLba) || cursor != state.size())
     {
         return false;
     }
@@ -370,6 +387,7 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     m_execution.nextReadLba = nextReadLba;
     m_execution.currentLba = currentLba;
     m_execution.cyclesUntilSector = cyclesUntilSector;
+    m_execution.cyclesUntilBufferedInt1 = cyclesUntilBufferedInt1;
     m_execution.xaPrevLeft1 = xaPrevLeft1;
     m_execution.xaPrevLeft2 = xaPrevLeft2;
     m_execution.xaPrevRight1 = xaPrevRight1;
@@ -377,6 +395,8 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     m_execution.motorOn = motorOn;
     m_execution.readActive = readActive;
     m_execution.seekActive = seekActive;
+    m_execution.bufferedInt1Pending = bufferedInt1Pending;
+    m_execution.dataEndPending = dataEndPending;
     m_execution.xaStreamingEnabled = xaStreamingEnabled;
     m_execution.xaFilterEnabled = xaFilterEnabled;
     m_execution.pendingResponseIrqs = std::move(pendingResponseIrqs);
@@ -384,6 +404,8 @@ bool Cdrom::deserializeState(const std::vector<u8>& state)
     m_bufferedReadSectors = std::move(bufferedReadSectors);
     m_activeSector = std::move(activeSector);
     m_activeSectorOffset = static_cast<size_t>(activeSectorOffset);
+    m_drainingSector = std::move(drainingSector);
+    m_drainingLba = drainingLba;
     return true;
 }
 

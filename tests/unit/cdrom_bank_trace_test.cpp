@@ -27,15 +27,15 @@
 #include <stdexcept>
 #include <string>
 
-using psxrecomp::u8;
 using psxrecomp::u32;
+using psxrecomp::u8;
 using namespace psxrecomp::runtime;
 
 // ---------------------------------------------------------------------------
 // Helper: assert a substring is present, otherwise throw with context.
 // ---------------------------------------------------------------------------
 static void assertContains(const std::string& haystack, const std::string& needle,
-                            const char* context)
+                           const char* context)
 {
     if (haystack.find(needle) == std::string::npos)
     {
@@ -45,7 +45,7 @@ static void assertContains(const std::string& haystack, const std::string& needl
 }
 
 static void assertAbsent(const std::string& haystack, const std::string& needle,
-                          const char* context)
+                         const char* context)
 {
     if (haystack.find(needle) != std::string::npos)
     {

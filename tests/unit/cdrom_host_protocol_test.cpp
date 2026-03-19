@@ -26,18 +26,21 @@ class PatternDisc final : public psxrecomp::runtime::Disc
     {
         for (size_t i = 0; i < out.size(); ++i)
         {
-            out[i] = static_cast<psxrecomp::u8>((lba * 7u + static_cast<psxrecomp::u32>(i)) & 0xFFu);
+            out[i] =
+                static_cast<psxrecomp::u8>((lba * 7u + static_cast<psxrecomp::u32>(i)) & 0xFFu);
         }
         return true;
     }
 
-    bool readRawSector2352(psxrecomp::u32 /*lba*/,
-                           std::span<psxrecomp::u8, 2352> /*out*/) override
+    bool readRawSector2352(psxrecomp::u32 /*lba*/, std::span<psxrecomp::u8, 2352> /*out*/) override
     {
         return false;
     }
 
-    psxrecomp::u32 userSectorCount() const override { return 8u; }
+    psxrecomp::u32 userSectorCount() const override
+    {
+        return 8u;
+    }
 };
 
 psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
@@ -130,7 +133,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u); // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -157,7 +160,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u); // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -191,7 +194,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u); // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
 
         // Acknowledge WITHOUT reading the INT3 response byte first.
@@ -207,7 +210,8 @@ int main()
     }
 
     // -----------------------------------------------------------------------
-    // Test 5: Multiple INT1 events stay queued until each is acknowledged.
+    // Test 5: Later sectors stay buffered, but the host only sees one active
+    // INT1 at a time.
     //
     // Two ticks buffer two sectors; only the first INT1 should be visible
     // until the game acknowledges it.
@@ -219,7 +223,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x00u); // LBA=0
-        cdrom.writeCommand(0x06u); // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -228,15 +232,18 @@ int main()
 
         // First INT1 (LBA=0) is visible.
         assert(irqType(cdrom) == 0x01u);
+        assert(cdrom.debugSnapshot().pendingIrqCount == 0u);
 
         // Enable BFRD, read first byte of LBA=0, then disable BFRD.
         enableBufferRead(cdrom);
         assert(cdrom.readData() == sectorByte(0u, 0u));
         disableBufferRead(cdrom); // clear FIFO; game must re-enable for next sector
         readAndAck(cdrom);
+        cdrom.tick(1u);
 
-        // Acknowledge INT1 for LBA=0 — second INT1 (LBA=1) should now surface.
+        // After a short post-ACK delay, the buffered INT1 for LBA=1 surfaces.
         assert(irqType(cdrom) == 0x01u);
+        assert(cdrom.debugSnapshot().pendingIrqCount == 0u);
 
         // The game must write BFRD again for each new sector.
         enableBufferRead(cdrom);
@@ -248,7 +255,39 @@ int main()
     }
 
     // -----------------------------------------------------------------------
-    // Test 6: Clearing BFRD hides sector data; re-enabling loads the same
+    // Test 6: Buffered sectors must not accumulate a software queue of INT1s.
+    //
+    // PSX-SPX notes that streamed reads can overrun and skip sectors rather
+    // than building an unbounded interrupt backlog. The runtime should keep at
+    // most one host-visible INT1 pending while later sectors remain buffered.
+    // -----------------------------------------------------------------------
+    {
+        Cdrom cdrom;
+        cdrom.reset();
+        cdrom.setDiscBackend(&disc);
+        cdrom.writeInterruptEnable(0x1Fu);
+
+        issueSetloc(cdrom, 0x00u, 0x02u, 0x00u); // LBA=0
+        cdrom.writeCommand(0x06u);               // ReadN
+        assert(irqType(cdrom) == 0x03u);
+        readAndAck(cdrom);
+
+        cdrom.tick(kReadCycles * 6u);
+        assert(irqType(cdrom) == 0x01u);
+        assert(cdrom.debugSnapshot().pendingIrqCount == 0u);
+
+        enableBufferRead(cdrom);
+        (void)cdrom.readData();
+        disableBufferRead(cdrom);
+        readAndAck(cdrom);
+        cdrom.tick(1u);
+
+        assert(irqType(cdrom) == 0x01u);
+        assert(cdrom.debugSnapshot().pendingIrqCount == 0u);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 7: Clearing BFRD hides sector data; re-enabling loads the same
     //         active sector (not the next one) on a fresh 0->1 transition.
     // -----------------------------------------------------------------------
     {
@@ -258,7 +297,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x02u); // LBA=2
-        cdrom.writeCommand(0x06u); // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -282,7 +321,7 @@ int main()
     }
 
     // -----------------------------------------------------------------------
-    // Test 7: INT1 response stat byte is readable after BFRD is set.
+    // Test 8: INT1 response stat byte is readable after BFRD is set.
     //         The stat byte must come from the response FIFO (offset 1 bank 1),
     //         not the data FIFO (offset 2).
     // -----------------------------------------------------------------------
@@ -293,7 +332,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u); // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 

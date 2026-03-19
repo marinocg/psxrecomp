@@ -200,9 +200,24 @@ Commands are written to 0x1F801810:
 - `0x1F801803` (R, index 1/3): interrupt flags.
 - `0x1F801803` (W, index 1): interrupt flag acknowledge.
 - IRQ delivery is queued: a later IRQ type becomes visible only after ACK clears the current one.
+- BIOS/kernel CD events are not a 1:1 mirror of higher-level libcd completion semantics: the raw subtype mapping is `INT3->0x0010`, `INT2->0x0020`, `INT1->0x0040`, `INT4->0x0080`, `INT5->0x8000`, while BIOS helper APIs may translate specific INT3 completions onto `0x0020`.
+- Finite `ReadN/ReadS` streams terminate with `INT4/DataEnd` after the last accepted/buffered data phase is exhausted; end-of-stream should clear the read-active state rather than leaving the controller spinning on more `INT1`s.
+- `HCLRCTL` drains unread result bytes for the acknowledged IRQ; software must
+  not expect post-ACK reads from the old response FIFO contents.
 - `BFRD` requests accept the sector for the currently pending `INT1` and lock that
   transfer window, so a fresh request can replace unread tail bytes from the
   previous sector when software mixes header probes with payload DMA.
+- The controller state is best modeled as three separate ownership stages:
+  buffered-next sector, published/current-INT1 sector, and currently draining
+  sector. A newer INT1 can advance the published sector while `RDDATA`/DMA still
+  drains bytes from the older accepted sector.
+- Even if later sectors are already buffered, the next `INT1` is not surfaced in
+  the same instant as the ACK; there is a short post-ACK gap where `BFRD` still
+  refers to the old interrupt's sector, matching PSX-SPX host-transfer notes.
+- During `ReadN`/`ReadS`, the drive buffers only a small number of sectors; if
+  software falls behind, older sectors can be dropped instead of creating an
+  unbounded `INT1` backlog. PSX-SPX explicitly warns that sector overrun skips
+  data without reporting an error.
 
 ## Controllers
 
@@ -250,6 +265,12 @@ IRQ sources:
 - Timers (3x)
 - Controller/Memory Card
 - SPU
+
+BIOS software IRQ notes:
+
+- `SysEnqIntRP` / `SysDeqIntRP` manage BIOS interrupt callback chains by priority.
+- Per PSX-SPX, the BIOS exception handler walks those priority chains before `HookEntryInt`.
+- The BIOS CD-ROM handlers are part of the priority-0 chain, so CD IRQ work happens before lower-priority user callbacks observe IRQ2.
 
 ## Timers
 

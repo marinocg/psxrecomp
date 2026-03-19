@@ -32,19 +32,21 @@ class PatternDisc final : public psxrecomp::runtime::Disc
     {
         for (size_t i = 0; i < out.size(); ++i)
         {
-            out[i] = static_cast<psxrecomp::u8>(
-                (lba * 11u + static_cast<psxrecomp::u32>(i)) & 0xFFu);
+            out[i] =
+                static_cast<psxrecomp::u8>((lba * 11u + static_cast<psxrecomp::u32>(i)) & 0xFFu);
         }
         return true;
     }
 
-    bool readRawSector2352(psxrecomp::u32 /*lba*/,
-                           std::span<psxrecomp::u8, 2352> /*out*/) override
+    bool readRawSector2352(psxrecomp::u32 /*lba*/, std::span<psxrecomp::u8, 2352> /*out*/) override
     {
         return false;
     }
 
-    psxrecomp::u32 userSectorCount() const override { return 8u; }
+    psxrecomp::u32 userSectorCount() const override
+    {
+        return 8u;
+    }
 };
 
 psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
@@ -97,8 +99,7 @@ void issueSetloc(psxrecomp::runtime::Cdrom& cdrom, psxrecomp::u8 mm, psxrecomp::
 
 psxrecomp::u8 sectorByte(psxrecomp::u32 lba, size_t byteIndex)
 {
-    return static_cast<psxrecomp::u8>(
-        (lba * 11u + static_cast<psxrecomp::u32>(byteIndex)) & 0xFFu);
+    return static_cast<psxrecomp::u8>((lba * 11u + static_cast<psxrecomp::u32>(byteIndex)) & 0xFFu);
 }
 
 // Build the little-endian u32 word that readDma() should return for successive
@@ -134,7 +135,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -162,7 +163,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -201,7 +202,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -239,7 +240,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x01u); // LBA=1
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -273,7 +274,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x02u); // LBA=2
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -305,7 +306,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x00u); // LBA=0
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -322,7 +323,8 @@ int main()
         disableBufferRead(cdrom);
         readAndAck(cdrom);
 
-        // INT1 for sector 1 is now active.
+        // INT1 for sector 1 becomes visible after the short post-ACK delay.
+        cdrom.tick(1u);
         assert(irqType(cdrom) == 0x01u);
 
         // DRQSTS must be 0 until BFRD is re-armed.

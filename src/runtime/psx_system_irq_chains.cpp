@@ -16,10 +16,7 @@ bool PsxSystem::dispatchIrqChains()
     {
         return false;
     }
-    if (!m_callbackInvoker)
-    {
-        return false;
-    }
+    const bool canInvokeUserChains = static_cast<bool>(m_callbackInvoker);
 
     // Restore any MMIO pointers that a buffer overrun may have zeroed.
     for (u32 prio = 0; prio < m_irqChainHeads.size(); ++prio)
@@ -45,6 +42,11 @@ bool PsxSystem::dispatchIrqChains()
                     << " index=" << safety << " node=0x" << std::hex << node << " func1=0x" << func1
                     << " func2=0x" << func2;
                 m_logger.log(LogLevel::Info, "irq_trace", msg.str());
+            }
+
+            if (!canInvokeUserChains)
+            {
+                break;
             }
 
             if (func1 != 0)
@@ -84,6 +86,27 @@ bool PsxSystem::dispatchIrqChains()
 
             node = read<u32>(node + 0x00);
         }
+
+        // PSX-SPX: the default priority-0 chain includes the BIOS CD-ROM IRQ
+        // handlers ahead of lower-priority chains. Model the BIOS-owned CD IRQ
+        // service path as the built-in tail of prio 0 so user-installed prio 2
+        // nodes (such as libcd-style handlers) observe the same ordering.
+        if (prio == 0)
+        {
+            try
+            {
+                (void)serviceBiosCdromInterrupt();
+            }
+            catch (const ReturnFromExceptionSignal&)
+            {
+                if (traceIrqFlowEnabled())
+                {
+                    m_logger.log(LogLevel::Info, "irq_trace",
+                                 "event=return_from_exception source=irq_chain_bios_cdrom");
+                }
+                return true;
+            }
+        }
     }
     return false;
 }
@@ -101,7 +124,6 @@ void PsxSystem::saveIrqChainSnapshot(u32 priority, u32 structAddress)
     }
     auto& snap = m_irqChainSnapshots[priority];
     snap.baseAddress = structAddress;
-    const Address physical = normalizeAddress(structAddress);
     for (u32 i = 0; i < IRQ_CHAIN_DATA_SNAPSHOT_WORDS; ++i)
     {
         const u32 addr = structAddress + i * sizeof(u32);

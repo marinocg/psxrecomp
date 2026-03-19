@@ -554,8 +554,7 @@ int main()
         for (psxrecomp::u32 c = 0; c < chunksPerSector; ++c)
         {
             const psxrecomp::u32 chunk = s * chunksPerSector + c;
-            const Address chunkDest =
-                dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
+            const Address chunkDest = dmaLoopOutBase + static_cast<Address>(chunk * bytesPerChunk);
             dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x0,
                                                 static_cast<psxrecomp::u32>(chunkDest));
             dmaLoopSystem.write<psxrecomp::u32>(dmaLoopCdromBase + 0x4, dmaWordsPerChunk);

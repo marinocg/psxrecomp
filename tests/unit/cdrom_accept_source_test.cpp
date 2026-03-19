@@ -43,8 +43,14 @@ class PatternDisc final : public psxrecomp::runtime::Disc
             out[i] = static_cast<u8>((lba * 7u + static_cast<u32>(i)) & 0xFFu);
         return true;
     }
-    bool readRawSector2352(u32, std::span<u8, 2352>) override { return false; }
-    u32 userSectorCount() const override { return 8u; }
+    bool readRawSector2352(u32, std::span<u8, 2352>) override
+    {
+        return false;
+    }
+    u32 userSectorCount() const override
+    {
+        return 8u;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -191,7 +197,7 @@ static void test2_bios_enableDataRead_exposes_sector()
 
     // AcceptBiosAuto must be in trace, followed by DrqstsOn.
     const int idxAuto = findTrace(cdrom, 0u, Reason::AcceptBiosAuto);
-    const int idxDrq  = findTrace(cdrom, 0u, Reason::DrqstsOn);
+    const int idxDrq = findTrace(cdrom, 0u, Reason::DrqstsOn);
     assert(idxAuto >= 0);
     assert(idxDrq > idxAuto);
 
@@ -254,7 +260,8 @@ static void test3_accept_source_distinct_trace_reasons()
 
     // ---- Handoff to B ----
     disableBfrd(cdrom);
-    ack(cdrom); // ack INT1-A → INT1-B fires
+    ack(cdrom);
+    cdrom.tick(1u);
     assert(irqType(cdrom) == 0x01u);
 
     // No accept yet for B.
@@ -306,8 +313,10 @@ static void test4_ack_only_does_not_auto_accept_next_sector()
         (void)cdrom.readData();
     assert(!drqsts(cdrom));
 
-    // Ack INT1-A → INT1-B fires; auto-reload arms B because BFRD is held.
+    // Ack INT1-A, then advance a cycle so INT1-B can surface; auto-reload
+    // arms B because BFRD is held.
     ack(cdrom);
+    cdrom.tick(1u);
     assert(irqType(cdrom) == 0x01u);
 
     // B was armed by auto-reload — no explicit accept trace recorded.
@@ -357,30 +366,32 @@ static void test_integration_bios_accept_chain()
     assert(!drqsts(cdrom));
 
     // Ordering for A.
-    const int iA_q    = findTrace(cdrom, 0u, Reason::QueuePromote);
-    const int iA_p1   = findTrace(cdrom, 0u, Reason::PublishInt1);
+    const int iA_q = findTrace(cdrom, 0u, Reason::QueuePromote);
+    const int iA_p1 = findTrace(cdrom, 0u, Reason::PublishInt1);
     const int iA_auto = findTrace(cdrom, 0u, Reason::AcceptBiosAuto);
-    const int iA_drq  = findTrace(cdrom, 0u, Reason::DrqstsOn);
-    const int iA_cpu  = findTrace(cdrom, 0u, Reason::CpuRddatRead);
+    const int iA_drq = findTrace(cdrom, 0u, Reason::DrqstsOn);
+    const int iA_cpu = findTrace(cdrom, 0u, Reason::CpuRddatRead);
     const int iA_done = findTrace(cdrom, 0u, Reason::DrainComplete);
-    assert(iA_q   >= 0);
-    assert(iA_p1  >= 0);
+    assert(iA_q >= 0);
+    assert(iA_p1 >= 0);
     assert(iA_auto >= 0);
-    assert(iA_drq  >= 0);
-    assert(iA_cpu  >= 0);
+    assert(iA_drq >= 0);
+    assert(iA_cpu >= 0);
     assert(iA_done >= 0);
-    assert(iA_q   < iA_p1);
-    assert(iA_p1  < iA_auto);
+    assert(iA_q < iA_p1);
+    assert(iA_p1 < iA_auto);
     assert(iA_auto < iA_drq);
-    assert(iA_drq  < iA_cpu);
-    assert(iA_cpu  < iA_done);
+    assert(iA_drq < iA_cpu);
+    assert(iA_cpu < iA_done);
 
     // AcceptBfrd must be absent throughout.
     assert(findTrace(cdrom, Reason::AcceptBfrd) == -1);
 
     // ---- Handoff A → B ----
-    // Ack INT1-A → INT1-B fires; BFRD is still held, so auto-reload arms B.
+    // Ack INT1-A, then advance a cycle; BFRD is still held, so auto-reload
+    // arms B when INT1-B publishes.
     ack(cdrom);
+    cdrom.tick(1u);
     assert(irqType(cdrom) == 0x01u);
 
     // ---- Sector B ----
@@ -394,14 +405,14 @@ static void test_integration_bios_accept_chain()
 
     // Ordering for B: auto-reload fires within publishNextInterruptEvent,
     // so DrqstsOn is recorded at INT1 time; AcceptBiosAuto is absent.
-    const int iB_p1   = findTrace(cdrom, 1u, Reason::PublishInt1);
-    const int iB_drq  = findTrace(cdrom, 1u, Reason::DrqstsOn);
+    const int iB_p1 = findTrace(cdrom, 1u, Reason::PublishInt1);
+    const int iB_drq = findTrace(cdrom, 1u, Reason::DrqstsOn);
     const int iB_done = findTrace(cdrom, 1u, Reason::DrainComplete);
-    assert(iB_p1   >= 0);
-    assert(iB_drq  >= 0);
+    assert(iB_p1 >= 0);
+    assert(iB_drq >= 0);
     assert(iB_done >= 0);
     assert(findTrace(cdrom, 1u, Reason::AcceptBiosAuto) == -1);
-    assert(iB_p1  < iB_drq);
+    assert(iB_p1 < iB_drq);
     assert(iB_drq < iB_done);
 
     // Cross-sector ordering: drain_complete(A) before drqsts_on(B).
@@ -452,6 +463,7 @@ static void test_integration_mixed_accept_sources()
     // ---- Handoff: disable BFRD, ack INT1-A → INT1-B fires ----
     disableBfrd(cdrom);
     ack(cdrom);
+    cdrom.tick(1u);
     assert(irqType(cdrom) == 0x01u);
 
     // ---- Sector B: BIOS path (enableDataRead) ----

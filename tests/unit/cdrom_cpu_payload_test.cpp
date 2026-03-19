@@ -86,22 +86,32 @@ class PayloadDisc final : public psxrecomp::runtime::Disc
 
     bool readUserSector(u32 lba, std::span<u8, 2048> out) override
     {
-        if (lba >= 3u) return false;
-        for (size_t i = 0; i < out.size(); ++i) out[i] = m_raw[lba][24 + i];
+        if (lba >= 3u)
+            return false;
+        for (size_t i = 0; i < out.size(); ++i)
+            out[i] = m_raw[lba][24 + i];
         return true;
     }
 
     bool readRawSector2352(u32 lba, std::span<u8, 2352> out) override
     {
-        if (lba >= 3u) return false;
-        for (size_t i = 0; i < out.size(); ++i) out[i] = m_raw[lba][i];
+        if (lba >= 3u)
+            return false;
+        for (size_t i = 0; i < out.size(); ++i)
+            out[i] = m_raw[lba][i];
         return true;
     }
 
-    u32 userSectorCount() const override { return 3u; }
+    u32 userSectorCount() const override
+    {
+        return 3u;
+    }
 
     // Expose raw sector data for test verification.
-    u8 rawByte(u32 lba, size_t offset) const { return m_raw[lba][offset]; }
+    u8 rawByte(u32 lba, size_t offset) const
+    {
+        return m_raw[lba][offset];
+    }
 
   private:
     std::array<std::array<u8, 2352>, 3> m_raw;
@@ -115,7 +125,10 @@ u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
     return static_cast<u8>(cdrom.readInterruptFlags() & 0x07u);
 }
 
-void ack(psxrecomp::runtime::Cdrom& cdrom) { cdrom.writeInterruptFlags(0x07); }
+void ack(psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeInterruptFlags(0x07);
+}
 
 void readAndAck(psxrecomp::runtime::Cdrom& cdrom)
 {
@@ -188,7 +201,8 @@ void testForm2NonAudioRecordedAs2324()
 
     enableBfrd(cdrom);
     // Read enough DMA words to drain the sector (2324 bytes = 581 words).
-    for (int i = 0; i < 581; ++i) (void)cdrom.readDma();
+    for (int i = 0; i < 581; ++i)
+        (void)cdrom.readDma();
     readAndAck(cdrom);
 
     const std::string summary = cdrom.formatCpuPayloadSummary();
@@ -198,7 +212,7 @@ void testForm2NonAudioRecordedAs2324()
     // First recorded sector must have size 2324.
     assert(summary.find("size=2324") != std::string::npos);
     // First byte of LBA 0 payload is raw[24] = (0 + 0xA0) & 0xFF = 0xa0.
-    assert(summary.find("first16:  a0") != std::string::npos);
+    assert(summary.find("first16: a0") != std::string::npos);
     // DMA3 was used (581 reads).
     assert(summary.find("dma3=yes") != std::string::npos);
 }
@@ -225,8 +239,10 @@ void testMode1RecordedAsUser2048()
     assert(irqType(cdrom) == 0x01);
 
     enableBfrd(cdrom);
-    for (int i = 0; i < 512; ++i) (void)cdrom.readDma();
-    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    for (int i = 0; i < 512; ++i)
+        (void)cdrom.readDma();
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+        (void)cdrom.readResponse();
     ack(cdrom);
 
     // Tick again for finalization (LBA 2 XA-ADPCM does NOT generate INT1,
@@ -293,9 +309,11 @@ void testReadWindowCpuOnly()
     assert(irqType(cdrom) == 0x01);
     enableBfrd(cdrom);
 
-    for (int i = 0; i < 16; ++i) (void)cdrom.readData();
+    for (int i = 0; i < 16; ++i)
+        (void)cdrom.readData();
 
-    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+        (void)cdrom.readResponse();
     ack(cdrom);
 
     // Second sector (LBA 1 Mode1) → INT1 → finalizes LBA 0 record.
@@ -335,9 +353,11 @@ void testReadWindowDmaOnly()
     enableBfrd(cdrom);
 
     // Drain all 2324 bytes via DMA (581 × 4-byte words).
-    for (int i = 0; i < 581; ++i) (void)cdrom.readDma();
+    for (int i = 0; i < 581; ++i)
+        (void)cdrom.readDma();
 
-    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+        (void)cdrom.readResponse();
     ack(cdrom);
 
     cdrom.tick(kReadCycles);
@@ -376,11 +396,14 @@ void testReadWindowMixed()
     enableBfrd(cdrom);
 
     // CPU reads first 4 bytes.
-    for (int i = 0; i < 4; ++i) (void)cdrom.readData();
+    for (int i = 0; i < 4; ++i)
+        (void)cdrom.readData();
     // DMA drains remaining 2320 bytes (580 × 4-byte words).
-    for (int i = 0; i < 580; ++i) (void)cdrom.readDma();
+    for (int i = 0; i < 580; ++i)
+        (void)cdrom.readDma();
 
-    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+        (void)cdrom.readResponse();
     ack(cdrom);
 
     cdrom.tick(kReadCycles);
@@ -417,7 +440,8 @@ void testBfrdHeldFifoEmptyArmedAtInt1()
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x01);
     enableBfrd(cdrom);
-    for (int i = 0; i < 581; ++i) (void)cdrom.readDma(); // drain 2324 bytes
+    for (int i = 0; i < 581; ++i)
+        (void)cdrom.readDma(); // drain 2324 bytes
     assert(cdrom.debugSnapshot().dataFifoSize == 0);
     readAndAck(cdrom);
 
@@ -451,16 +475,18 @@ void testSectorNotPreloadedBeforeInt1()
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x01);
     enableBfrd(cdrom);
-    for (int i = 0; i < 581; ++i) (void)cdrom.readDma(); // drain LBA 0
+    for (int i = 0; i < 581; ++i)
+        (void)cdrom.readDma(); // drain LBA 0
 
     // Do NOT ack INT1.  Second sector (LBA 1) arrives but INT1 is blocked.
     cdrom.tick(kReadCycles);
-    assert(irqType(cdrom) == 0x01); // Previous INT1 still set.
+    assert(irqType(cdrom) == 0x01);                  // Previous INT1 still set.
     assert(cdrom.debugSnapshot().dataFifoSize == 0); // LBA 1 NOT preloaded.
 
-    // Ack previous INT1 → publishNextInterruptEvent fires for LBA 1.
+    // Ack previous INT1, then advance a cycle so LBA 1's INT1 can publish.
     readAndAck(cdrom);
-    assert(irqType(cdrom) == 0x01); // LBA 1 INT1 now live.
+    cdrom.tick(1u);
+    assert(irqType(cdrom) == 0x01);                     // LBA 1 INT1 now live.
     assert(cdrom.debugSnapshot().dataFifoSize == 2048); // LBA 1 armed.
 }
 
@@ -489,13 +515,15 @@ void testTracerRecordsDmaOnSecondSector()
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x01);
     enableBfrd(cdrom);
-    for (int i = 0; i < 581; ++i) (void)cdrom.readDma();
+    for (int i = 0; i < 581; ++i)
+        (void)cdrom.readDma();
     readAndAck(cdrom);
 
     // LBA 1 (Mode1, 2048 bytes): INT1 with BFRD held, FIFO armed at publish.
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x01);
-    for (int i = 0; i < 512; ++i) (void)cdrom.readDma(); // drain 2048 bytes
+    for (int i = 0; i < 512; ++i)
+        (void)cdrom.readDma(); // drain 2048 bytes
 
     const std::string s = cdrom.formatCpuPayloadSummary();
     // Both sectors must be recorded (snapshotCpuSector called for each).
@@ -529,18 +557,20 @@ void testSplitDmaWindow()
     enableBfrd(cdrom);
 
     // Burst 1: 3 DMA words = 12 bytes (header read).
-    for (int i = 0; i < 3; ++i) (void)cdrom.readDma();
+    for (int i = 0; i < 3; ++i)
+        (void)cdrom.readDma();
     // BFRD=1 again: 1→1 no-op, FIFO pointer unchanged.
     enableBfrd(cdrom);
     // Burst 2: 512 DMA words = 2048 bytes (payload read).
-    for (int i = 0; i < 512; ++i) (void)cdrom.readDma();
+    for (int i = 0; i < 512; ++i)
+        (void)cdrom.readDma();
 
     readAndAck(cdrom); // LBA 0 finalized via INT1-no-buffered (finalOffset=2060).
 
     const std::string s = cdrom.formatCpuPayloadSummary();
-    assert(s.find("dma_start=0")    != std::string::npos);
+    assert(s.find("dma_start=0") != std::string::npos);
     assert(s.find("dma_bytes=2060") != std::string::npos);
-    assert(s.find("final=2060")     != std::string::npos);
+    assert(s.find("final=2060") != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------
@@ -569,7 +599,8 @@ void testFifoNonEmptyAtInt1NoAutoReload()
     enableBfrd(cdrom); // FIFO loaded: 2324 bytes.
 
     // Partial read: 3 DMA words = 12 bytes. 2312 bytes remain.
-    for (int i = 0; i < 3; ++i) (void)cdrom.readDma();
+    for (int i = 0; i < 3; ++i)
+        (void)cdrom.readDma();
     assert(cdrom.debugSnapshot().dataFifoSize == 2312);
 
     readAndAck(cdrom); // LBA 0 finalized; FIFO still has 2312 stale bytes.
@@ -583,7 +614,7 @@ void testFifoNonEmptyAtInt1NoAutoReload()
     // Game toggles BFRD to discard stale data and load the new sector.
     disableBfrd(cdrom); // BFRD 1→0: FIFO cleared.
     assert(cdrom.debugSnapshot().dataFifoSize == 0);
-    enableBfrd(cdrom);  // BFRD 0→1: m_activeSector (LBA 1, 2048 bytes) loaded.
+    enableBfrd(cdrom); // BFRD 0→1: m_activeSector (LBA 1, 2048 bytes) loaded.
     assert(cdrom.debugSnapshot().dataFifoSize == 2048);
 }
 

@@ -29,15 +29,18 @@ class PatternDisc final : public psxrecomp::runtime::Disc
     bool readUserSector(psxrecomp::u32 lba, std::span<psxrecomp::u8, 2048> out) override
     {
         for (size_t i = 0; i < out.size(); ++i)
-            out[i] = static_cast<psxrecomp::u8>(
-                (lba * 13u + static_cast<psxrecomp::u32>(i)) & 0xFFu);
+            out[i] =
+                static_cast<psxrecomp::u8>((lba * 13u + static_cast<psxrecomp::u32>(i)) & 0xFFu);
         return true;
     }
     bool readRawSector2352(psxrecomp::u32, std::span<psxrecomp::u8, 2352>) override
     {
         return false;
     }
-    psxrecomp::u32 userSectorCount() const override { return 8u; }
+    psxrecomp::u32 userSectorCount() const override
+    {
+        return 8u;
+    }
 };
 
 psxrecomp::u8 irqType(const psxrecomp::runtime::Cdrom& c)
@@ -50,7 +53,10 @@ bool drqsts(const psxrecomp::runtime::Cdrom& c)
     return (c.readStatus() & (1u << 6)) != 0u;
 }
 
-void ack(psxrecomp::runtime::Cdrom& c) { c.writeInterruptFlags(0x07u); }
+void ack(psxrecomp::runtime::Cdrom& c)
+{
+    c.writeInterruptFlags(0x07u);
+}
 
 void readAndAck(psxrecomp::runtime::Cdrom& c)
 {
@@ -71,8 +77,7 @@ void disableBfrd(psxrecomp::runtime::Cdrom& c)
     c.writeReg(3u, 0x00u);
 }
 
-void issueSetloc(psxrecomp::runtime::Cdrom& c, psxrecomp::u8 mm, psxrecomp::u8 ss,
-                 psxrecomp::u8 ff)
+void issueSetloc(psxrecomp::runtime::Cdrom& c, psxrecomp::u8 mm, psxrecomp::u8 ss, psxrecomp::u8 ff)
 {
     c.writeParam(mm);
     c.writeParam(ss);
@@ -120,7 +125,7 @@ int main()
         cdrom.writeInterruptEnable(0x1Fu);
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x00u); // LBA=0
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -179,6 +184,7 @@ int main()
 
         // Acknowledge INT1 for A \u2192 INT1 for B fires, B \u2192 m_activeSector.
         readAndAck(cdrom);
+        cdrom.tick(1u);
         assert(irqType(cdrom) == 0x01u); // INT1 for sector B
 
         // (a) Without BFRD: sector B is not readable.
@@ -268,6 +274,7 @@ int main()
 
         // HCL RCTL: ack INT1 for A \u2192 INT1 for B fires, B \u2192 m_activeSector.
         readAndAck(cdrom);
+        cdrom.tick(1u);
         assert(irqType(cdrom) == 0x01u); // INT1 for B is now active
 
         // BFRD is 0: even though B is now the active sector, it is NOT readable.
@@ -322,12 +329,13 @@ int main()
 
         // Sector B: DRQSTS must stay 0 until its own INT1 + BFRD.
         disableBfrd(cdrom);
-        readAndAck(cdrom);                // ack INT1-A \u2192 INT1-B fires
+        readAndAck(cdrom);
+        cdrom.tick(1u);
         assert(irqType(cdrom) == 0x01u);
-        assert(!drqsts(cdrom));           // BFRD=0 \u2192 DRQSTS=0
+        assert(!drqsts(cdrom)); // BFRD=0 \u2192 DRQSTS=0
 
         enableBfrd(cdrom);
-        assert(drqsts(cdrom));            // BFRD armed for B \u2192 DRQSTS=1
+        assert(drqsts(cdrom)); // BFRD armed for B \u2192 DRQSTS=1
 
         readAndAck(cdrom);
     }
@@ -354,7 +362,7 @@ int main()
         const psxrecomp::u32 lbaB = 1u;
 
         issueSetloc(cdrom, 0x00u, 0x02u, 0x00u); // LBA=0
-        cdrom.writeCommand(0x06u);                // ReadN
+        cdrom.writeCommand(0x06u);               // ReadN
         assert(irqType(cdrom) == 0x03u);
         readAndAck(cdrom);
 
@@ -378,13 +386,14 @@ int main()
 
         // ---- Sector A → sector B transition ----
         disableBfrd(cdrom);
-        readAndAck(cdrom); // ack INT1-A → INT1-B fires, B → m_activeSector
+        readAndAck(cdrom);
+        cdrom.tick(1u);
         assert(irqType(cdrom) == 0x01u);
 
         // ---- Sector B phase ----
         assert(!drqsts(cdrom)); // BFRD cleared
 
-        enableBfrd(cdrom);      // 0\u21921: load sector B
+        enableBfrd(cdrom); // 0\u21921: load sector B
         assert(drqsts(cdrom));
 
         for (size_t i = 0; i < 2048u; ++i)
@@ -431,7 +440,8 @@ int main()
 
         // ---- Transition to sector B ----
         disableBfrd(cdrom);
-        readAndAck(cdrom); // ack INT1-A \u2192 INT1-B fires
+        readAndAck(cdrom);
+        cdrom.tick(1u);
         assert(irqType(cdrom) == 0x01u);
 
         // ---- Sector B DMA phase ----

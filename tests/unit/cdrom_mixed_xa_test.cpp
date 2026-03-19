@@ -53,10 +53,14 @@ class MixedXaDisc final : public psxrecomp::runtime::Disc
         auto& s1 = m_raw[1];
         s1.fill(0);
         s1[15] = 0x02;
-        s1[16] = 0x01; s1[17] = 0x02;
+        s1[16] = 0x01;
+        s1[17] = 0x02;
         s1[18] = 0x64; // form2(0x20)|realtime(0x40)|audio(0x04)
         s1[19] = 0x01; // stereo 4-bit
-        s1[20] = s1[16]; s1[21] = s1[17]; s1[22] = s1[18]; s1[23] = s1[19];
+        s1[20] = s1[16];
+        s1[21] = s1[17];
+        s1[22] = s1[18];
+        s1[23] = s1[19];
         for (size_t i = 0; i < 2324; ++i)
             s1[24 + i] = static_cast<u8>((i + 0xC0u) & 0xFFu);
 
@@ -65,30 +69,44 @@ class MixedXaDisc final : public psxrecomp::runtime::Disc
         auto& s2 = m_raw[2];
         s2.fill(0);
         s2[15] = 0x02;
-        s2[16] = 0x01; s2[17] = 0x03;
+        s2[16] = 0x01;
+        s2[17] = 0x03;
         s2[18] = 0x20; // form2 only; no audio, no realtime
         s2[19] = 0x00;
-        s2[20] = s2[16]; s2[21] = s2[17]; s2[22] = s2[18]; s2[23] = s2[19];
+        s2[20] = s2[16];
+        s2[21] = s2[17];
+        s2[22] = s2[18];
+        s2[23] = s2[19];
         for (size_t i = 0; i < 2324; ++i)
             s2[24 + i] = static_cast<u8>((i + 0xB0u) & 0xFFu);
     }
 
     bool readUserSector(u32 lba, std::span<u8, 2048> out) override
     {
-        if (lba >= 3u) return false;
-        for (size_t i = 0; i < out.size(); ++i) out[i] = m_raw[lba][24 + i];
+        if (lba >= 3u)
+            return false;
+        for (size_t i = 0; i < out.size(); ++i)
+            out[i] = m_raw[lba][24 + i];
         return true;
     }
 
     bool readRawSector2352(u32 lba, std::span<u8, 2352> out) override
     {
-        if (lba >= 3u) return false;
-        for (size_t i = 0; i < out.size(); ++i) out[i] = m_raw[lba][i];
+        if (lba >= 3u)
+            return false;
+        for (size_t i = 0; i < out.size(); ++i)
+            out[i] = m_raw[lba][i];
         return true;
     }
 
-    u32 userSectorCount() const override { return 3u; }
-    u8 rawByte(u32 lba, size_t offset) const { return m_raw[lba][offset]; }
+    u32 userSectorCount() const override
+    {
+        return 3u;
+    }
+    u8 rawByte(u32 lba, size_t offset) const
+    {
+        return m_raw[lba][offset];
+    }
 
   private:
     std::array<std::array<u8, 2352>, 3> m_raw;
@@ -102,7 +120,10 @@ u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
     return static_cast<u8>(cdrom.readInterruptFlags() & 0x07u);
 }
 
-void ack(psxrecomp::runtime::Cdrom& cdrom) { cdrom.writeInterruptFlags(0x07); }
+void ack(psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeInterruptFlags(0x07);
+}
 
 void readAndAck(psxrecomp::runtime::Cdrom& cdrom)
 {
@@ -169,7 +190,7 @@ void testUnreadRemainderPreservedAtInt1()
     cdrom.setDiscBackend(&disc);
     cdrom.writeInterruptEnable(0x1F);
 
-    issueSetmode(cdrom, 0x40); // XA streaming on
+    issueSetmode(cdrom, 0x40);            // XA streaming on
     issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0
     issueReadN(cdrom);
 
@@ -178,8 +199,10 @@ void testUnreadRemainderPreservedAtInt1()
     assert(irqType(cdrom) == 0x01);
     enableBfrd(cdrom);
     // Read only 511 of 512 words — 4 bytes intentionally left in FIFO.
-    for (int i = 0; i < 511; ++i) (void)cdrom.readDma();
-    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    for (int i = 0; i < 511; ++i)
+        (void)cdrom.readDma();
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+        (void)cdrom.readResponse();
     ack(cdrom); // ACK INT1; BFRD stays 1
 
     // --- LBA 1 (XA-ADPCM) — no INT1 ---
@@ -195,11 +218,8 @@ void testUnreadRemainderPreservedAtInt1()
 
     // First DMA word is the stale LBA 0 tail: raw[24+2044..2047] = 0x9C..0x9F (LE).
     // PR-RV35 does not flush the remainder at INT1.
-    const u32 staleLba0Word =
-        static_cast<u32>(0x9Cu) |
-        (static_cast<u32>(0x9Du) << 8) |
-        (static_cast<u32>(0x9Eu) << 16) |
-        (static_cast<u32>(0x9Fu) << 24);
+    const u32 staleLba0Word = static_cast<u32>(0x9Cu) | (static_cast<u32>(0x9Du) << 8) |
+                              (static_cast<u32>(0x9Eu) << 16) | (static_cast<u32>(0x9Fu) << 24);
     assert(cdrom.readDma() == staleLba0Word);
 
     // Game must toggle BFRD 1→0→1 to advance to LBA 2.
@@ -210,11 +230,8 @@ void testUnreadRemainderPreservedAtInt1()
     assert((cdrom.readStatus() & 0x40u) != 0u);
 
     // First DMA word must now be LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 } (LE).
-    const u32 expectedLba2Word =
-        static_cast<u32>(0xB0u) |
-        (static_cast<u32>(0xB1u) << 8) |
-        (static_cast<u32>(0xB2u) << 16) |
-        (static_cast<u32>(0xB3u) << 24);
+    const u32 expectedLba2Word = static_cast<u32>(0xB0u) | (static_cast<u32>(0xB1u) << 8) |
+                                 (static_cast<u32>(0xB2u) << 16) | (static_cast<u32>(0xB3u) << 24);
     assert(cdrom.readDma() == expectedLba2Word);
 }
 
@@ -270,11 +287,10 @@ void testDma3EqualsCpuRddat()
     // Compare word-by-word (little-endian).
     for (int i = 0; i < kWords; ++i)
     {
-        const u32 cpuWord =
-            static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4)]) |
-            (static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4 + 1)]) << 8) |
-            (static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4 + 2)]) << 16) |
-            (static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4 + 3)]) << 24);
+        const u32 cpuWord = static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4)]) |
+                            (static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4 + 1)]) << 8) |
+                            (static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4 + 2)]) << 16) |
+                            (static_cast<u32>(cpuBytes[static_cast<size_t>(i * 4 + 3)]) << 24);
         assert(dmaWords[static_cast<size_t>(i)] == cpuWord);
     }
 }

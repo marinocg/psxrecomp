@@ -61,12 +61,14 @@ class AdpbusyDisc final : public psxrecomp::runtime::Disc
     {
         if (lba == 0)
         {
-            for (size_t i = 0; i < out.size(); ++i) out[i] = m_xa[24 + i];
+            for (size_t i = 0; i < out.size(); ++i)
+                out[i] = m_xa[24 + i];
             return true;
         }
         if (lba == 1)
         {
-            for (size_t i = 0; i < out.size(); ++i) out[i] = m_mode1[24 + i];
+            for (size_t i = 0; i < out.size(); ++i)
+                out[i] = m_mode1[24 + i];
             return true;
         }
         return false;
@@ -76,18 +78,23 @@ class AdpbusyDisc final : public psxrecomp::runtime::Disc
     {
         if (lba == 0)
         {
-            for (size_t i = 0; i < out.size(); ++i) out[i] = m_xa[i];
+            for (size_t i = 0; i < out.size(); ++i)
+                out[i] = m_xa[i];
             return true;
         }
         if (lba == 1)
         {
-            for (size_t i = 0; i < out.size(); ++i) out[i] = m_mode1[i];
+            for (size_t i = 0; i < out.size(); ++i)
+                out[i] = m_mode1[i];
             return true;
         }
         return false;
     }
 
-    u32 userSectorCount() const override { return 2u; }
+    u32 userSectorCount() const override
+    {
+        return 2u;
+    }
 
   private:
     std::array<u8, 2352> m_xa;
@@ -102,7 +109,10 @@ u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
     return static_cast<u8>(cdrom.readInterruptFlags() & 0x07u);
 }
 
-void ack(psxrecomp::runtime::Cdrom& cdrom) { cdrom.writeInterruptFlags(0x07); }
+void ack(psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeInterruptFlags(0x07);
+}
 
 void readAndAck(psxrecomp::runtime::Cdrom& cdrom)
 {
@@ -185,7 +195,8 @@ void testAdpbusyNotSetForMode1Sector()
     assert((cdrom.readStatus() & kAdpbusyBit) == 0u);
 
     // Ack INT1.
-    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    while ((cdrom.readStatus() & (1u << 5)) != 0u)
+        (void)cdrom.readResponse();
     ack(cdrom);
 }
 
@@ -214,7 +225,8 @@ void testAdpbusyClearedOnPause()
     readAndAck(cdrom);
     // Second response for Pause.
     cdrom.tick(100u);
-    if (irqType(cdrom) != 0u) readAndAck(cdrom);
+    if (irqType(cdrom) != 0u)
+        readAndAck(cdrom);
 
     // ADPBUSY must now be clear (readActive=false).
     assert((cdrom.readStatus() & kAdpbusyBit) == 0u);
@@ -240,14 +252,15 @@ void testAdpbusyResetBetweenStreams()
     issueSetloc(cdrom, 0x00, 0x02, 0x00);
     issueReadN(cdrom);
     cdrom.tick(kReadCycles);
-    assert(irqType(cdrom) == 0x00);             // INT1 suppressed (XA)
+    assert(irqType(cdrom) == 0x00);                   // INT1 suppressed (XA)
     assert((cdrom.readStatus() & kAdpbusyBit) != 0u); // ADPBUSY set
 
     // Stop: ADPBUSY must clear explicitly.
     cdrom.writeCommand(0x08);
     assert(irqType(cdrom) == 0x03);
     readAndAck(cdrom);
-    if (irqType(cdrom) != 0u) readAndAck(cdrom); // INT2
+    if (irqType(cdrom) != 0u)
+        readAndAck(cdrom); // INT2
     assert((cdrom.readStatus() & kAdpbusyBit) == 0u);
 
     // Second stream: ADPBUSY must stay clear before any XA sector arrives.
@@ -291,7 +304,8 @@ void testAdpbusyLifecycleSummary()
     cdrom.writeCommand(0x09);
     assert(irqType(cdrom) == 0x03);
     readAndAck(cdrom);
-    if (irqType(cdrom) != 0u) readAndAck(cdrom);
+    if (irqType(cdrom) != 0u)
+        readAndAck(cdrom);
 
     s = cdrom.formatAdpbusyLifecycleSummary();
     assert(s.find("fell_at_lba:") != std::string::npos);

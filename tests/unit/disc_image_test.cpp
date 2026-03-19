@@ -3,12 +3,94 @@
 
 #include <array>
 #include <cassert>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <vector>
 
 namespace
 {
+std::filesystem::path createRegionTestIso(const std::filesystem::path& root, const char* filename,
+                                          const char* bootExe)
+{
+    using psxrecomp::u8;
+
+    const std::filesystem::path isoPath = root / filename;
+    const uint32_t totalSectors = 32;
+    const uint32_t rootDirSector = 20;
+    const uint32_t rootDirSize = 2048;
+    const uint32_t systemCnfSector = 21;
+    const uint32_t exeSector = 22;
+
+    std::vector<u8> image(totalSectors * 2048u, 0);
+    const size_t pvdOffset = 16u * 2048u;
+    image[pvdOffset] = 1;
+    std::memcpy(image.data() + pvdOffset + 1u, "CD001", 5);
+    image[pvdOffset + 6u] = 1;
+
+    auto writeLe16 = [&image](size_t offset, uint16_t value)
+    {
+        image[offset + 0u] = static_cast<u8>(value & 0xFFu);
+        image[offset + 1u] = static_cast<u8>((value >> 8) & 0xFFu);
+    };
+    auto writeLe32 = [&image](size_t offset, uint32_t value)
+    {
+        image[offset + 0u] = static_cast<u8>(value & 0xFFu);
+        image[offset + 1u] = static_cast<u8>((value >> 8) & 0xFFu);
+        image[offset + 2u] = static_cast<u8>((value >> 16) & 0xFFu);
+        image[offset + 3u] = static_cast<u8>((value >> 24) & 0xFFu);
+    };
+    auto writeDirRecord =
+        [&](size_t offset, const std::string& name, uint32_t lba, uint32_t size, u8 flags)
+    {
+        const u8 nameLen = static_cast<u8>(name.size());
+        const size_t recordLen = 33u + nameLen + (nameLen % 2u == 0u ? 1u : 0u);
+        image[offset] = static_cast<u8>(recordLen);
+        writeLe32(offset + 2u, lba);
+        writeLe32(offset + 10u, size);
+        image[offset + 25u] = flags;
+        writeLe16(offset + 28u, 1u);
+        image[offset + 32u] = nameLen;
+        std::memcpy(image.data() + offset + 33u, name.data(), name.size());
+        return recordLen;
+    };
+
+    writeLe32(pvdOffset + 80u, totalSectors);
+    writeLe16(pvdOffset + 120u, 1u);
+    writeLe16(pvdOffset + 124u, 1u);
+    writeLe16(pvdOffset + 128u, 2048u);
+
+    const size_t rootRecordOffset = pvdOffset + 156u;
+    image[rootRecordOffset] = 34u;
+    writeLe32(rootRecordOffset + 2u, rootDirSector);
+    writeLe32(rootRecordOffset + 10u, rootDirSize);
+    image[rootRecordOffset + 25u] = 0x02u;
+    writeLe16(rootRecordOffset + 28u, 1u);
+    image[rootRecordOffset + 32u] = 1u;
+    image[rootRecordOffset + 33u] = 0u;
+
+    const size_t terminatorOffset = 17u * 2048u;
+    image[terminatorOffset] = 255u;
+    std::memcpy(image.data() + terminatorOffset + 1u, "CD001", 5);
+    image[terminatorOffset + 6u] = 1u;
+
+    size_t cursor = rootDirSector * 2048u;
+    cursor += writeDirRecord(cursor, std::string("\0", 1), rootDirSector, rootDirSize, 0x02u);
+    cursor += writeDirRecord(cursor, std::string("\1", 1), rootDirSector, rootDirSize, 0x02u);
+    cursor += writeDirRecord(cursor, "SYSTEM.CNF;1", systemCnfSector, 64u, 0x00u);
+    cursor += writeDirRecord(cursor, std::string(bootExe) + ";1", exeSector, 16u, 0x00u);
+    (void)cursor;
+
+    const std::string systemCnf = std::string("BOOT = cdrom:\\") + bootExe + ";1\n";
+    std::memcpy(image.data() + systemCnfSector * 2048u, systemCnf.data(), systemCnf.size());
+    std::memcpy(image.data() + exeSector * 2048u, "PS-X EXE", 8u);
+
+    std::ofstream out(isoPath, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(image.data()),
+              static_cast<std::streamsize>(image.size()));
+    return isoPath;
+}
+
 void ack(psxrecomp::runtime::Cdrom& cdrom)
 {
     // Drain all response bytes before acknowledging, so none are left in the ack buffer.
@@ -30,6 +112,7 @@ int main()
 {
     using psxrecomp::u8;
     using psxrecomp::runtime::Cdrom;
+    using psxrecomp::runtime::Disc;
     using psxrecomp::runtime::DiscImage;
 
     const std::filesystem::path root =
@@ -116,6 +199,25 @@ int main()
 
     image.close();
 
+    const std::filesystem::path jpIso = createRegionTestIso(root, "jp.iso", "SLPS_000.00");
+    const std::filesystem::path naIso = createRegionTestIso(root, "na.iso", "SLUS_000.00");
+    const std::filesystem::path euIso = createRegionTestIso(root, "eu.iso", "SLES_000.00");
+
+    DiscImage jpImage;
+    assert(jpImage.open(jpIso));
+    assert(jpImage.region() == Disc::Region::Japan);
+    jpImage.close();
+
+    DiscImage naImage;
+    assert(naImage.open(naIso));
+    assert(naImage.region() == Disc::Region::NorthAmerica);
+    naImage.close();
+
+    DiscImage euImage;
+    assert(euImage.open(euIso));
+    assert(euImage.region() == Disc::Region::Europe);
+    euImage.close();
+
     const std::filesystem::path binPath = root / "tiny.bin";
     {
         std::ofstream out(binPath, std::ios::binary);
@@ -141,6 +243,9 @@ int main()
     rawImage.close();
 
     std::filesystem::remove(isoPath);
+    std::filesystem::remove(jpIso);
+    std::filesystem::remove(naIso);
+    std::filesystem::remove(euIso);
     std::filesystem::remove(binPath);
     std::filesystem::remove(root);
     return 0;

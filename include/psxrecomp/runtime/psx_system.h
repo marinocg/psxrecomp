@@ -450,6 +450,9 @@ class PsxSystem
         bool initialized = false;
         u32 handleStorageAddress = 0;
         std::array<u32, 5> eventHandles{};
+        bool asyncReadActive = false; ///< BIOS-owned CdAsyncReadSector still owns IRQ ack/drain.
+        bool asyncCommandDoneOnAck =
+            false;                    ///< BIOS helper completion is translated from INT3 to 0x0020.
         u32 asyncResultPtr = 0;       ///< Destination for CdAsyncGetStatus result.
         u32 asyncReadBuffer = 0;      ///< Destination buffer for sector reads.
         u32 asyncReadCount = 0;       ///< Sectors remaining to read.

@@ -18,6 +18,13 @@ Address canonicalRamAddress(Address physical)
     return CanonicalRamBase | (physical & 0x1FFFFFFFu);
 }
 
+struct ObservedRamWrite
+{
+    Address physicalAddress = 0;
+    u8 oldValue = 0;
+    u8 newValue = 0;
+};
+
 } // namespace
 
 PsxSystem::RamCopyBounds PsxSystem::planRamCopy(Address destination, u32 requestedLength) const
@@ -83,9 +90,38 @@ u32 PsxSystem::copyBufferToRam(Address destination, const u8* source, u32 actual
     const u32 copiedLength = (bounds.destinationInRam && source != nullptr)
                                  ? std::min(actualLength, bounds.writableLength)
                                  : 0u;
+    std::vector<ObservedRamWrite> observedWrites;
+    if (copiedLength > 0)
+    {
+        observedWrites.reserve(copiedLength);
+        for (u32 i = 0; i < copiedLength; ++i)
+        {
+            const Address physical = bounds.physicalDestination + i;
+            if (!m_stallClassifier.shouldWatchRamWrite(physical, 1) &&
+                !m_diagWatchpoints.shouldWatchRamWrite(physical, 1))
+            {
+                continue;
+            }
+
+            observedWrites.push_back({physical, m_ram[bounds.physicalDestination + i], source[i]});
+        }
+    }
     if (copiedLength > 0)
     {
         std::memcpy(m_ram.data() + bounds.physicalDestination, source, copiedLength);
+    }
+    for (const ObservedRamWrite& write : observedWrites)
+    {
+        if (m_stallClassifier.shouldWatchRamWrite(write.physicalAddress, 1))
+        {
+            m_stallClassifier.recordRamWrite(writerPc, write.physicalAddress, 1, write.oldValue,
+                                             write.newValue);
+        }
+        if (m_diagWatchpoints.shouldWatchRamWrite(write.physicalAddress, 1))
+        {
+            m_diagWatchpoints.recordRamWrite(writerPc, write.physicalAddress, 1, write.oldValue,
+                                             write.newValue, &m_logger, m_lastResumeAddress);
+        }
     }
 
     if (!bounds.destinationInRam || bounds.destinationOverflow || actualLength < requestedLength)
@@ -106,10 +142,39 @@ u32 PsxSystem::fillBufferToRam(Address destination, u8 value, u32 requestedLengt
 {
     const RamCopyBounds bounds = planRamCopy(destination, requestedLength);
     const u32 writtenLength = bounds.destinationInRam ? bounds.writableLength : 0u;
+    std::vector<ObservedRamWrite> observedWrites;
+    if (writtenLength > 0)
+    {
+        observedWrites.reserve(writtenLength);
+        for (u32 i = 0; i < writtenLength; ++i)
+        {
+            const Address physical = bounds.physicalDestination + i;
+            if (!m_stallClassifier.shouldWatchRamWrite(physical, 1) &&
+                !m_diagWatchpoints.shouldWatchRamWrite(physical, 1))
+            {
+                continue;
+            }
+
+            observedWrites.push_back({physical, m_ram[bounds.physicalDestination + i], value});
+        }
+    }
     if (writtenLength > 0)
     {
         std::memset(m_ram.data() + bounds.physicalDestination, static_cast<int>(value),
                     writtenLength);
+    }
+    for (const ObservedRamWrite& write : observedWrites)
+    {
+        if (m_stallClassifier.shouldWatchRamWrite(write.physicalAddress, 1))
+        {
+            m_stallClassifier.recordRamWrite(writerPc, write.physicalAddress, 1, write.oldValue,
+                                             write.newValue);
+        }
+        if (m_diagWatchpoints.shouldWatchRamWrite(write.physicalAddress, 1))
+        {
+            m_diagWatchpoints.recordRamWrite(writerPc, write.physicalAddress, 1, write.oldValue,
+                                             write.newValue, &m_logger, m_lastResumeAddress);
+        }
     }
 
     if (!bounds.destinationInRam || bounds.destinationOverflow)

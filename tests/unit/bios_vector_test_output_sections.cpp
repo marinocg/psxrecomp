@@ -160,7 +160,7 @@ void runBiosVectorOutputTests()
 
         bool callbackInvoked = false;
         [[maybe_unused]] const u32 handle = system.events().openEvent(
-            EventClass::Cdrom, EventSpec::CommandDone, EventMode::Callback, 0x80014000u);
+            EventClass::Cdrom, EventSpec::CommandAck, EventMode::Callback, 0x80014000u);
         assert(handle != 0xFFFFFFFFu);
         assert(system.events().enableEvent(handle));
         system.setCallbackInvoker(
@@ -176,13 +176,13 @@ void runBiosVectorOutputTests()
 
         system.interrupts().writeMask(system.interrupts().readMask() |
                                       static_cast<u32>(InterruptLine::Cdrom));
-        system.cdrom().writeCommand(0x01); // Getstat -> INT3
+        system.cdrom().writeCommand(0x01); // Getstat -> raw INT3 / CommandAck
         system.serviceInterrupts();
 
         assert(callbackInvoked);
         assert((system.cdrom().readInterruptFlags() & 0x07u) == 0u);
 
-        std::cerr << "[PASS] A0 _96_remove leaves BIOS CD-ROM routing intact\n";
+        std::cerr << "[PASS] A0 _96_remove leaves raw BIOS CD-ROM routing intact\n";
     }
 
     // ---------------------------------------------------------------

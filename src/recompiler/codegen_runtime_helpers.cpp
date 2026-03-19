@@ -288,8 +288,7 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.openBlock("");
     emitter.writeLine("RecompilerContext& context;");
     emitter.writeLine("explicit CycleScope(RecompilerContext& ctx) : context(ctx) {}");
-    emitter.writeLine(
-        "~CycleScope() { try { flushCycles(context); } catch (...) {} }");
+    emitter.writeLine("~CycleScope() { try { flushCycles(context); } catch (...) {} }");
     emitter.closeBlock(";");
     emitter.writeBlank();
     emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");
@@ -321,44 +320,35 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.closeBlock();
     emitter.writeLine("if (context.system.diagCdromBankTracer().isEnabled())");
     emitter.openBlock("");
-    emitter.writeLine(
-        "stream << runtime::DiagExplainerEngine::explainCdromBankSummary("
-        "context.system.diagCdromBankTracer());");
+    emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromBankSummary("
+                      "context.system.diagCdromBankTracer());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
-    emitter.writeLine(
-        "if (context.system.diagExplainers().isEnabled("
-        "runtime::ExplainerKind::CdromPhaseSummary))");
+    emitter.writeLine("if (context.system.diagExplainers().isEnabled("
+                      "runtime::ExplainerKind::CdromPhaseSummary))");
     emitter.openBlock("");
-    emitter.writeLine(
-        "stream << context.system.cdrom().formatPhaseTraceSummary(32);");
+    emitter.writeLine("stream << context.system.cdrom().formatPhaseTraceSummary(32);");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
-    emitter.writeLine(
-        "if (context.system.diagExplainers().isEnabled("
-        "runtime::ExplainerKind::CdromXaClassification))");
+    emitter.writeLine("if (context.system.diagExplainers().isEnabled("
+                      "runtime::ExplainerKind::CdromXaClassification))");
     emitter.openBlock("");
-    emitter.writeLine(
-        "stream << runtime::DiagExplainerEngine::explainCdromXaClassification("
-        "context.system.cdrom());");
+    emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromXaClassification("
+                      "context.system.cdrom());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
-    emitter.writeLine(
-        "if (context.system.diagExplainers().isEnabled("
-        "runtime::ExplainerKind::CdromPostStreamValidator))");
+    emitter.writeLine("if (context.system.diagExplainers().isEnabled("
+                      "runtime::ExplainerKind::CdromPostStreamValidator))");
     emitter.openBlock("");
-    emitter.writeLine(
-        "stream << runtime::DiagExplainerEngine::explainCdromPostStreamValidator("
-        "context.system.cdrom());");
+    emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromPostStreamValidator("
+                      "context.system.cdrom());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
-    emitter.writeLine(
-        "if (context.system.diagExplainers().isEnabled("
-        "runtime::ExplainerKind::CdromCpuPayloadSummary))");
+    emitter.writeLine("if (context.system.diagExplainers().isEnabled("
+                      "runtime::ExplainerKind::CdromCpuPayloadSummary))");
     emitter.openBlock("");
-    emitter.writeLine(
-        "stream << runtime::DiagExplainerEngine::explainCdromCpuPayloadSummary("
-        "context.system.cdrom());");
+    emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromCpuPayloadSummary("
+                      "context.system.cdrom());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");

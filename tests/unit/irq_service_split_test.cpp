@@ -74,15 +74,13 @@ static void testNoFreshExceptionEnterDuringCallback()
                 // Verify pre-condition: shouldTakeInterruptException must be false.
                 assert(!system.cop0().shouldTakeInterruptException());
 
-                const u32 statusBeforeService =
-                    system.cop0().mfc0(Cop0::RegisterIndex::Status);
+                const u32 statusBeforeService = system.cop0().mfc0(Cop0::RegisterIndex::Status);
 
                 system.serviceInterrupts();
 
                 // exceptionEnter shifts mode bits left by 2 and would change Status.
                 // The in-flight path must NOT call exceptionEnter, so Status is unchanged.
-                const u32 statusAfterService =
-                    system.cop0().mfc0(Cop0::RegisterIndex::Status);
+                const u32 statusAfterService = system.cop0().mfc0(Cop0::RegisterIndex::Status);
                 assert(statusAfterService == statusBeforeService);
             }
             return 0;
@@ -131,7 +129,7 @@ static void testNormalFirstIrqEntersOnce()
     // Open a VBlank kernel event in Callback mode.
     constexpr u32 vblankCallbackAddr = 0x80015000u;
     const u32 handle = system.events().openEvent(EventClass::VBlank, EventSpec::Counter,
-                                                  EventMode::Callback, vblankCallbackAddr);
+                                                 EventMode::Callback, vblankCallbackAddr);
     assert(system.events().enableEvent(handle));
 
     bool callbackInvoked = false;

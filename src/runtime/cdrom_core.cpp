@@ -3,13 +3,13 @@
 #include "cdrom_shared.h"
 
 #include <cstdarg>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>
 #include <sstream>
 #include <utility>
-#include <cstddef>
 
 namespace psxrecomp
 {
@@ -18,6 +18,11 @@ namespace runtime
 
 namespace
 {
+bool isReadCommand(u8 command)
+{
+    return command == 0x06u || command == 0x1Bu;
+}
+
 bool traceCdromEnabled()
 {
     static const bool enabled = []()
@@ -57,22 +62,38 @@ const char* phaseReasonName(Cdrom::SectorPhaseReason r)
 {
     switch (r)
     {
-    case Cdrom::SectorPhaseReason::QueuePromote:   return "queue_promote";
-    case Cdrom::SectorPhaseReason::PublishInt3:    return "publish_int3";
-    case Cdrom::SectorPhaseReason::PublishInt1:    return "publish_int1";
-    case Cdrom::SectorPhaseReason::HclrctlAck:    return "hclrctl_ack";
-    case Cdrom::SectorPhaseReason::AcceptBfrd:    return "accept_bfrd";
-    case Cdrom::SectorPhaseReason::AcceptBiosAuto: return "accept_bios_auto";
-    case Cdrom::SectorPhaseReason::DrqstsOn:      return "drqsts_on";
-    case Cdrom::SectorPhaseReason::CpuRddatRead:  return "cpu_rddat_read";
-    case Cdrom::SectorPhaseReason::Dma3Read:      return "dma3_read";
-    case Cdrom::SectorPhaseReason::DrainComplete:  return "drain_complete";
-    case Cdrom::SectorPhaseReason::XaAudioDeliver: return "xa_audio_deliver";
-    case Cdrom::SectorPhaseReason::CpuDataDeliver: return "cpu_data_deliver";
-    case Cdrom::SectorPhaseReason::FilterReject:   return "filter_reject";
-    case Cdrom::SectorPhaseReason::FormatReject:   return "format_reject";
-    case Cdrom::SectorPhaseReason::SubmodeReject:  return "submode_reject";
-    default:                                       return "unknown";
+    case Cdrom::SectorPhaseReason::QueuePromote:
+        return "queue_promote";
+    case Cdrom::SectorPhaseReason::PublishInt3:
+        return "publish_int3";
+    case Cdrom::SectorPhaseReason::PublishInt1:
+        return "publish_int1";
+    case Cdrom::SectorPhaseReason::HclrctlAck:
+        return "hclrctl_ack";
+    case Cdrom::SectorPhaseReason::AcceptBfrd:
+        return "accept_bfrd";
+    case Cdrom::SectorPhaseReason::AcceptBiosAuto:
+        return "accept_bios_auto";
+    case Cdrom::SectorPhaseReason::DrqstsOn:
+        return "drqsts_on";
+    case Cdrom::SectorPhaseReason::CpuRddatRead:
+        return "cpu_rddat_read";
+    case Cdrom::SectorPhaseReason::Dma3Read:
+        return "dma3_read";
+    case Cdrom::SectorPhaseReason::DrainComplete:
+        return "drain_complete";
+    case Cdrom::SectorPhaseReason::XaAudioDeliver:
+        return "xa_audio_deliver";
+    case Cdrom::SectorPhaseReason::CpuDataDeliver:
+        return "cpu_data_deliver";
+    case Cdrom::SectorPhaseReason::FilterReject:
+        return "filter_reject";
+    case Cdrom::SectorPhaseReason::FormatReject:
+        return "format_reject";
+    case Cdrom::SectorPhaseReason::SubmodeReject:
+        return "submode_reject";
+    default:
+        return "unknown";
     }
 }
 
@@ -80,21 +101,31 @@ const char* phaseStateName(Cdrom::SectorPhaseReason r)
 {
     switch (r)
     {
-    case Cdrom::SectorPhaseReason::QueuePromote:   return "buffered";
-    case Cdrom::SectorPhaseReason::PublishInt3:    return "published";
-    case Cdrom::SectorPhaseReason::PublishInt1:    return "published";
+    case Cdrom::SectorPhaseReason::QueuePromote:
+        return "buffered";
+    case Cdrom::SectorPhaseReason::PublishInt3:
+        return "published";
+    case Cdrom::SectorPhaseReason::PublishInt1:
+        return "published";
     case Cdrom::SectorPhaseReason::AcceptBfrd:
     case Cdrom::SectorPhaseReason::AcceptBiosAuto:
     case Cdrom::SectorPhaseReason::DrqstsOn:
     case Cdrom::SectorPhaseReason::CpuRddatRead:
     case Cdrom::SectorPhaseReason::Dma3Read:
-    case Cdrom::SectorPhaseReason::DrainComplete:  return "accepted";
-    case Cdrom::SectorPhaseReason::XaAudioDeliver: return "xa_audio";
-    case Cdrom::SectorPhaseReason::CpuDataDeliver: return "cpu_data";
-    case Cdrom::SectorPhaseReason::FilterReject:   return "filtered";
-    case Cdrom::SectorPhaseReason::FormatReject:   return "cpu_data";
-    case Cdrom::SectorPhaseReason::SubmodeReject:  return "cpu_data";
-    default:                                       return "";
+    case Cdrom::SectorPhaseReason::DrainComplete:
+        return "accepted";
+    case Cdrom::SectorPhaseReason::XaAudioDeliver:
+        return "xa_audio";
+    case Cdrom::SectorPhaseReason::CpuDataDeliver:
+        return "cpu_data";
+    case Cdrom::SectorPhaseReason::FilterReject:
+        return "filtered";
+    case Cdrom::SectorPhaseReason::FormatReject:
+        return "cpu_data";
+    case Cdrom::SectorPhaseReason::SubmodeReject:
+        return "cpu_data";
+    default:
+        return "";
     }
 }
 } // namespace
@@ -133,8 +164,7 @@ std::string Cdrom::formatPhaseTraceSummary(size_t last) const
         const PhaseTraceEntry e = phaseTraceEntry(i);
         os << "  [" << std::setw(2) << i << "] lba=0x" << std::hex << std::setw(6)
            << std::setfill('0') << e.lba << std::dec << std::setfill(' ')
-           << " reason=" << std::setw(16) << std::left << phaseReasonName(e.reason)
-           << std::right;
+           << " reason=" << std::setw(16) << std::left << phaseReasonName(e.reason) << std::right;
         const char* state = phaseStateName(e.reason);
         if (state[0] != '\0')
         {
@@ -149,8 +179,7 @@ std::string Cdrom::formatXaClassificationSummary() const
 {
     std::ostringstream os;
     const u32 int1Count = m_formatRejectCount + m_submodeRejectCount + m_cpuDeliveryCount;
-    const u32 totalSectors =
-        m_xaDeliveryCount + m_filterRejectCount + int1Count;
+    const u32 totalSectors = m_xaDeliveryCount + m_filterRejectCount + int1Count;
 
     const bool xaStream = (m_execution.mode & cdrom_detail::SETMODE_XA_STREAM_ENABLE) != 0;
     const bool xaFilter = (m_execution.mode & cdrom_detail::SETMODE_XA_FILTER_ENABLE) != 0;
@@ -159,15 +188,14 @@ std::string Cdrom::formatXaClassificationSummary() const
     os << "=== CDROM XA Sector Classification Summary ===\n";
     os << "  setmode:          0x" << std::hex << std::setw(2) << std::setfill('0')
        << static_cast<unsigned>(m_execution.mode) << std::dec << std::setfill(' ')
-       << " (xa_stream=" << xaStream << " xa_filter=" << xaFilter
-       << " double_speed=" << dblSpeed << ")\n";
+       << " (xa_stream=" << xaStream << " xa_filter=" << xaFilter << " double_speed=" << dblSpeed
+       << ")\n";
     os << "  setfilter:        file=0x" << std::hex << std::setw(2) << std::setfill('0')
        << static_cast<unsigned>(m_execution.xaFilterFile) << " channel=0x" << std::setw(2)
        << std::setfill('0') << static_cast<unsigned>(m_execution.xaFilterChannel) << std::dec
        << std::setfill(' ') << " (" << (xaFilter ? "enabled" : "disabled") << ")\n";
     os << "  sectors_total:    " << totalSectors << "\n";
-    os << "    xa_audio_deliver:  " << std::setw(6) << m_xaDeliveryCount
-       << "  (INT1 suppressed)\n";
+    os << "    xa_audio_deliver:  " << std::setw(6) << m_xaDeliveryCount << "  (INT1 suppressed)\n";
     os << "    cpu_data_deliver:  " << std::setw(6) << m_cpuDeliveryCount << "  (INT1 fired)\n";
     os << "    filter_reject:     " << std::setw(6) << m_filterRejectCount << "\n";
     os << "    format_reject:     " << std::setw(6) << m_formatRejectCount
@@ -179,8 +207,7 @@ std::string Cdrom::formatXaClassificationSummary() const
     const u32 consumedBytes =
         m_xaDeliveryCount * static_cast<u32>(cdrom_detail::XA_FORM2_USER_BYTES);
     os << "  xa_sink:          " << (m_xaAudioSink ? "real" : "stub") << "\n";
-    os << "  xa_consumed:      " << m_xaDeliveryCount << " sectors, " << consumedBytes
-       << " bytes";
+    os << "  xa_consumed:      " << m_xaDeliveryCount << " sectors, " << consumedBytes << " bytes";
     if (m_xaDeliveryCount > 0)
     {
         os << ", last_coding=0x" << std::hex << std::setw(2) << std::setfill('0')
@@ -212,6 +239,7 @@ void Cdrom::reset()
     m_bufferedReadSectors.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
+    m_drainingSector.clear();
     m_interruptFlags = 0;
     m_interruptEnable = 0;
     m_requestControl = 0;
@@ -228,6 +256,7 @@ void Cdrom::reset()
     m_phaseRingHead = 0;
     m_phaseRingCount = 0;
     m_activeLba = 0;
+    m_drainingLba = 0;
     m_bufferedReadLbas.clear();
     m_phaseFirstCpuReadFired = false;
     m_phaseFirstDmaFired = false;
@@ -240,7 +269,13 @@ void Cdrom::reset()
     m_xaPlaybackBusyRoseLba = m_xaPlaybackBusyFellLba = m_xaSectorsWhileBusy = 0;
     m_streamStartXaCount = m_streamStartCpuCount = 0;
     m_streamStarted = false;
+    m_cpuPayloadCaptureActive = false;
+    m_cpuRecordHead = 0;
     m_cpuRecordCount = 0;
+    m_publishedCpuRecord = {};
+    m_publishedCpuRecordValid = false;
+    m_drainingCpuRecord = {};
+    m_drainingCpuRecordValid = false;
     m_dataFifoConsumedBytes = 0;
 }
 
@@ -281,10 +316,14 @@ void Cdrom::primeBootState(bool discPresent)
     m_responseFifo.clear();
     m_bufferedReadSectors.clear();
     m_bufferedReadLbas.clear();
+    m_activeSector.clear();
+    m_drainingSector.clear();
 }
 
 void Cdrom::tick(u32 cpuCycles)
 {
+    advanceBufferedInt1Delay(cpuCycles);
+
     if (m_doorOpen && m_doorCloseCycles > 0)
     {
         if (cpuCycles >= m_doorCloseCycles)
@@ -320,13 +359,63 @@ void Cdrom::tick(u32 cpuCycles)
         remaining -= m_execution.cyclesUntilSector;
         m_execution.cyclesUntilSector = currentReadCycles();
 
-        if (queueReadSector())
+        const ReadSectorResult result = queueReadSector();
+        if (result == ReadSectorResult::BufferedSector)
         {
             m_execution.seekActive = false;
             m_execution.readActive = true;
             queueInterruptEvent(cdrom_detail::INT1, {currentStat()});
         }
+        else if (result == ReadSectorResult::NoHostData)
+        {
+            m_execution.seekActive = false;
+            m_execution.readActive = true;
+        }
+        else if (result == ReadSectorResult::ReadFailure)
+        {
+            queueErrorInterrupt(cdrom_detail::ERR_READ_FAIL);
+            break;
+        }
+        else
+        {
+            m_execution.seekActive = false;
+            m_execution.readActive = false;
+            m_execution.bufferedInt1Pending = false;
+            m_execution.cyclesUntilBufferedInt1 = 0u;
+            m_execution.dataEndPending = true;
+            if (m_xaPlaybackBusy)
+            {
+                m_xaPlaybackBusy = false;
+                m_xaPlaybackBusyFellLba = m_activeLba;
+            }
+            maybeQueueReadEndInterrupt();
+            break;
+        }
     }
+}
+
+void Cdrom::maybeQueueReadEndInterrupt()
+{
+    if (!m_execution.dataEndPending || m_execution.readActive || m_execution.seekActive ||
+        !isReadCommand(m_execution.currentCommand))
+    {
+        return;
+    }
+
+    if (m_execution.bufferedInt1Pending || !m_bufferedReadSectors.empty() ||
+        !m_execution.pendingResponseIrqs.empty())
+    {
+        return;
+    }
+
+    const u8 activeIrq = static_cast<u8>(m_interruptFlags & 0x07u);
+    if (activeIrq == cdrom_detail::INT4)
+    {
+        return;
+    }
+
+    m_execution.dataEndPending = false;
+    queueInterruptEvent(cdrom_detail::INT4, {currentStat()});
 }
 
 u8 Cdrom::readReg(u8 offset)
@@ -406,7 +495,7 @@ u8 Cdrom::readStatus() const
     {
         status |= cdrom_detail::STATUS_PARAM_FIFO_WRITE_READY;
     }
-    if (!m_responseFifo.empty() || !m_ackResponseFifo.empty())
+    if (!m_responseFifo.empty())
     {
         status |= cdrom_detail::STATUS_RESPONSE_READY;
     }
@@ -414,7 +503,10 @@ u8 Cdrom::readStatus() const
     {
         status |= cdrom_detail::STATUS_DATA_READY;
     }
-    if (m_xaPlaybackBusy && (m_execution.readActive || m_execution.seekActive)) { status |= cdrom_detail::STATUS_ADPBUSY; }
+    if (m_xaPlaybackBusy && (m_execution.readActive || m_execution.seekActive))
+    {
+        status |= cdrom_detail::STATUS_ADPBUSY;
+    }
     status |= static_cast<u8>(m_status & cdrom_detail::STATUS_COMMAND_BUSY);
     return status;
 }
@@ -424,21 +516,7 @@ u8 Cdrom::readResponse()
     u8 value = 0;
     if (!m_responseFifo.popFront(value))
     {
-        // Active FIFO is empty; drain from the ack buffer instead.
-        if (!m_ackResponseFifo.popFront(value))
-        {
-            return 0;
-        }
-        // When the ack buffer is fully drained, the next queued interrupt can be promoted.
-        if (m_ackResponseFifo.empty())
-        {
-            publishNextInterruptEvent();
-            if (canExecutePendingCommand())
-            {
-                executePendingCommand();
-            }
-        }
-        return value;
+        return 0;
     }
     traceCdrom("readResponse value=0x%02X remaining=%zu irq=0x%02X", value,
                m_responseFifo.values.size(), m_interruptFlags);
@@ -486,9 +564,15 @@ Cdrom::DebugSnapshot Cdrom::debugSnapshot() const
     snapshot.responseFifoSize = m_responseFifo.values.size();
     snapshot.dataFifoSize = m_dataFifo.size();
     snapshot.pendingIrqCount = m_execution.pendingResponseIrqs.size();
+    snapshot.publishedSectorSize = m_activeSector.size();
+    snapshot.drainingSectorSize = m_drainingSector.size();
     snapshot.motorOn = m_execution.motorOn;
     snapshot.readActive = m_execution.readActive;
     snapshot.seekActive = m_execution.seekActive;
+    snapshot.publishedSectorValid = !m_activeSector.empty();
+    snapshot.drainingSectorValid = !m_drainingSector.empty();
+    snapshot.publishedLba = m_activeLba;
+    snapshot.drainingLba = m_drainingLba;
     return snapshot;
 }
 

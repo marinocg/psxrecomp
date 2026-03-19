@@ -11,12 +11,12 @@ namespace runtime
 namespace
 {
 
-constexpr std::array<u16, 5> CDROM_IRQ_EVENT_SPECS = {
-    0x0010u, // INT1 -> data-ready (CommandAck / 0x0010)
-    0x0020u, // INT2 -> complete (CommandDone / 0x0020)
-    0x0020u, // INT3 -> acknowledge; delivers CommandDone (0x0020) per PSX-SPX BIOS handler
-    0x0080u, // INT4 -> end-of-read style event
-    0x8000u, // INT5 -> error
+constexpr std::array<u16, 5> CDROM_RAW_IRQ_EVENT_SPECS = {
+    EventSpec::DataReady,   // INT1 -> data ready
+    EventSpec::CommandDone, // INT2 -> command completed
+    EventSpec::CommandAck,  // INT3 -> command acknowledged
+    EventSpec::DataEnd,     // INT4 -> data end
+    0x8000u,                // INT5 -> BIOS/libcd error class
 };
 
 bool traceCdCallbackEnabled()
@@ -53,7 +53,7 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     }
 
     const u8 irqType = static_cast<u8>(m_cdrom.readInterruptFlags() & 0x07u);
-    if (irqType < 1u || irqType > CDROM_IRQ_EVENT_SPECS.size())
+    if (irqType < 1u || irqType > CDROM_RAW_IRQ_EVENT_SPECS.size())
     {
         return false;
     }
@@ -70,8 +70,12 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
     }
 
+    const bool biosOwnsOperation = m_biosCdrom.asyncReadActive || m_biosCdrom.asyncResultPtr != 0 ||
+                                   m_biosCdrom.asyncCommandDoneOnAck;
+
     // Track whether the type-specific path already acknowledged the interrupt.
     bool interruptAcknowledged = false;
+    u16 translatedCompletionSpec = 0;
 
     // INT1 (data-ready): copy sector data for CdAsyncReadSector.
     if (irqType == 1u && m_biosCdrom.asyncReadCount > 0)
@@ -125,7 +129,7 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         // CDROM interrupt and try to DMA from an already-drained FIFO.
         // On real PSX the BIOS handler has higher priority and fully
         // handles each sector before HookEntryInt sees the interrupt.
-        m_cdrom.writeInterruptFlags(0x07u);
+        m_cdrom.writeInterruptFlags(0x1Fu);
         interruptAcknowledged = true;
 
         if (m_biosCdrom.asyncReadCount == 0)
@@ -144,6 +148,14 @@ bool PsxSystem::serviceBiosCdromInterrupt()
                 m_logger.log(LogLevel::Info, "cdcb_trace", msg.str());
             }
         }
+    }
+
+    // INT3 (acknowledge): some BIOS A0 helpers report completion on 0x0020
+    // even though the underlying hardware IRQ subtype is INT3/0x0010.
+    if (irqType == 3u && m_biosCdrom.asyncCommandDoneOnAck)
+    {
+        translatedCompletionSpec = EventSpec::CommandDone;
+        m_biosCdrom.asyncCommandDoneOnAck = false;
     }
 
     // INT3 (first ack): copy status byte for CdAsyncGetStatus.
@@ -167,19 +179,40 @@ bool PsxSystem::serviceBiosCdromInterrupt()
     // CdRead/CdReadSync), we must NOT drain or ack here — the game's
     // event callbacks need to read response bytes and see the interrupt
     // type. The game's HookEntryInt handler will ack instead.
-    const bool biosOwnsOperation =
-        m_biosCdrom.asyncReadCount > 0 || m_biosCdrom.asyncSectorsRead > 0;
     if (!interruptAcknowledged && biosOwnsOperation)
     {
         while ((m_cdrom.readStatus() & 0x20u) != 0)
         {
             (void)m_cdrom.readResponse();
         }
-        m_cdrom.writeInterruptFlags(0x07u);
+        m_cdrom.writeInterruptFlags(0x1Fu);
+    }
+
+    if (m_biosCdrom.asyncReadActive && (irqType == 2u || irqType == 4u || irqType == 5u))
+    {
+        // INT4 is the finite-read completion path (EOF/data end) when the
+        // controller runs out of sectors without an explicit Pause command.
+        m_biosCdrom.asyncReadActive = false;
+        if (irqType != 2u)
+        {
+            m_biosCdrom.asyncReadCount = 0;
+        }
+    }
+    if (irqType == 5u)
+    {
+        m_biosCdrom.asyncCommandDoneOnAck = false;
+        m_biosCdrom.asyncResultPtr = 0;
     }
 
     std::vector<u32> callbacks =
-        m_events.deliverByClassSpec(EventClass::Cdrom, CDROM_IRQ_EVENT_SPECS[irqType - 1u]);
+        m_events.deliverByClassSpec(EventClass::Cdrom, CDROM_RAW_IRQ_EVENT_SPECS[irqType - 1u]);
+    if (translatedCompletionSpec != 0 &&
+        translatedCompletionSpec != CDROM_RAW_IRQ_EVENT_SPECS[irqType - 1u])
+    {
+        auto translatedCallbacks =
+            m_events.deliverByClassSpec(EventClass::Cdrom, translatedCompletionSpec);
+        callbacks.insert(callbacks.end(), translatedCallbacks.begin(), translatedCallbacks.end());
+    }
     auto genericCallbacks = m_events.deliverByClassSpec(EventClass::Cdrom, EventSpec::Interrupted);
     callbacks.insert(callbacks.end(), genericCallbacks.begin(), genericCallbacks.end());
 

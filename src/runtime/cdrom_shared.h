@@ -17,6 +17,7 @@ namespace cdrom_detail
 inline constexpr u8 INT1 = 0x1u;
 inline constexpr u8 INT2 = 0x2u;
 inline constexpr u8 INT3 = 0x3u;
+inline constexpr u8 INT4 = 0x4u;
 inline constexpr u8 INT5 = 0x5u;
 
 inline constexpr u8 STATUS_RESPONSE_READY = 1u << 5;
@@ -64,7 +65,7 @@ inline constexpr u8 ERR_NO_DISC = 0x40;
 inline constexpr u8 ERR_READ_FAIL = 0x80;
 
 inline constexpr u32 CDROM_STATE_MAGIC = 0x4D524443u; // "CDRM"
-inline constexpr u32 CDROM_STATE_VERSION = 5u;
+inline constexpr u32 CDROM_STATE_VERSION = 8u;
 inline constexpr size_t MAX_SERIALIZED_SECTOR_BYTES = 4096;
 
 struct XaSubheader

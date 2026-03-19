@@ -33,9 +33,15 @@ class Cdrom
         size_t responseFifoSize = 0;
         size_t dataFifoSize = 0;
         size_t pendingIrqCount = 0;
+        size_t publishedSectorSize = 0;
+        size_t drainingSectorSize = 0;
         bool motorOn = false;
         bool readActive = false;
         bool seekActive = false;
+        bool publishedSectorValid = false;
+        bool drainingSectorValid = false;
+        u32 publishedLba = 0;
+        u32 drainingLba = 0;
     };
 
     /// Reasons that can trigger a sector-phase transition event.
@@ -43,20 +49,20 @@ class Cdrom
     {
         QueuePromote,   ///< Sector read from disc/queue; now in m_bufferedReadSectors (buffered).
         PublishInt3,    ///< INT3 (command-complete) published to the interrupt register.
-        PublishInt1,    ///< INT1 (data-ready) published; m_activeSector advances (published).
-        HclrctlAck,    ///< HCLRCTL write acknowledged and cleared the active interrupt.
-        AcceptBfrd,     ///< BFRD 0→1: m_activeSector loaded into data FIFO (accepted).
+        PublishInt1,    ///< INT1 (data-ready) published; the current host-visible sector advances.
+        HclrctlAck,     ///< HCLRCTL write acknowledged and cleared the active interrupt.
+        AcceptBfrd,     ///< BFRD 0→1: the published sector is accepted into the data FIFO.
         AcceptBiosAuto, ///< BIOS-owned CdAsyncReadSector path (enableDataRead()) loaded the FIFO.
         DrqstsOn,       ///< DRQSTS asserted (BFRD=1 and data FIFO non-empty).
-        CpuRddatRead,  ///< First readData() byte consumed from the current accepted-sector phase.
-        Dma3Read,      ///< First readDma() word consumed from the current accepted-sector phase.
+        CpuRddatRead,   ///< First readData() byte consumed from the current accepted-sector phase.
+        Dma3Read,       ///< First readDma() word consumed from the current accepted-sector phase.
         DrainComplete,  ///< Data FIFO exhausted; DRQSTS would fall.
         // XA sector classification events (PR-RV23)
-        XaAudioDeliver,  ///< XA-ADPCM sector decoded to SPU; INT1 suppressed.
-        CpuDataDeliver,  ///< Sector routed to CPU data FIFO; INT1 will fire.
-        FilterReject,    ///< XA-ADPCM sector rejected by file/channel filter; scan continues.
-        FormatReject,    ///< Raw Mode2 sector with invalid subheader in XA mode; CPU data path.
-        SubmodeReject,   ///< Mode2/Form2 sector without Audio+Realtime bits; CPU data path.
+        XaAudioDeliver, ///< XA-ADPCM sector decoded to SPU; INT1 suppressed.
+        CpuDataDeliver, ///< Sector routed to CPU data FIFO; INT1 will fire.
+        FilterReject,   ///< XA-ADPCM sector rejected by file/channel filter; scan continues.
+        FormatReject,   ///< Raw Mode2 sector with invalid subheader in XA mode; CPU data path.
+        SubmodeReject,  ///< Mode2/Form2 sector without Audio+Realtime bits; CPU data path.
     };
 
     /// One entry in the rolling sector-phase transition history.
@@ -92,11 +98,12 @@ class Cdrom
     /// noise from pre-stream initialization reads.
     std::string formatPostStreamSummary() const;
 
-    /// Compact per-sector breakdown of the first 32 CPU-visible sectors
-    /// delivered after the most recent XA-enabled ReadS/ReadN: LBA, payload
-    /// size and mode, XA subheader (if available), first/last 16 bytes, and
-    /// whether DMA3 drained the sector.  Answers "what exact bytes does the
-    /// game see for each non-ADPCM stream sector?" (PR-RV28).
+    /// Compact per-sector breakdown of the rolling last 32 accepted/read
+    /// CPU-visible sectors observed during ReadS/ReadN capture:
+    /// INT1-published LBA, accepted LBA, payload size and mode, XA subheader
+    /// (if available), first/last 16 bytes, first CPU/DMA read offsets,
+    /// consumed byte counts, final offset at next publish, and whether the
+    /// sector was superseded before full drain.
     std::string formatCpuPayloadSummary() const;
 
     void reset();
@@ -171,6 +178,14 @@ class Cdrom
     static constexpr size_t MAX_QUEUED_IRQ_EVENTS = 32;
     static constexpr u32 CDROM_READ_CYCLES = 451584; // 33.8688MHz / 75 sectors/sec (1x)
     static constexpr u32 CDROM_DOUBLE_SPEED_READ_CYCLES = CDROM_READ_CYCLES / 2u;
+    static constexpr u32 CDROM_BUFFERED_INT1_DELAY_CYCLES = 1u;
+    enum class ReadSectorResult
+    {
+        BufferedSector,
+        NoHostData,
+        EndOfStream,
+        ReadFailure,
+    };
 
     struct CommandFifo
     {
@@ -291,6 +306,7 @@ class Cdrom
         u32 nextReadLba = 0;
         u32 currentLba = 0;
         u32 cyclesUntilSector = 0;
+        u32 cyclesUntilBufferedInt1 = 0;
         int xaPrevLeft1 = 0;
         int xaPrevLeft2 = 0;
         int xaPrevRight1 = 0;
@@ -298,6 +314,8 @@ class Cdrom
         bool motorOn = false;
         bool readActive = false;
         bool seekActive = false;
+        bool bufferedInt1Pending = false;
+        bool dataEndPending = false;
         bool xaStreamingEnabled = false;
         bool xaFilterEnabled = false;
         std::deque<IrqEvent> pendingResponseIrqs;
@@ -311,6 +329,7 @@ class Cdrom
             nextReadLba = 0;
             currentLba = 0;
             cyclesUntilSector = readCycles;
+            cyclesUntilBufferedInt1 = 0;
             xaPrevLeft1 = 0;
             xaPrevLeft2 = 0;
             xaPrevRight1 = 0;
@@ -318,6 +337,8 @@ class Cdrom
             motorOn = false;
             readActive = false;
             seekActive = false;
+            bufferedInt1Pending = false;
+            dataEndPending = false;
             xaStreamingEnabled = false;
             xaFilterEnabled = false;
             pendingResponseIrqs.clear();
@@ -333,8 +354,9 @@ class Cdrom
     CommandExecutionState m_execution;
     std::deque<std::vector<u8>> m_sectorQueue;
     std::deque<std::vector<u8>> m_bufferedReadSectors;
-    std::vector<u8> m_activeSector;
+    std::vector<u8> m_activeSector; ///< Published/current INT1 sector.
     size_t m_activeSectorOffset = 0;
+    std::vector<u8> m_drainingSector; ///< Sector currently backing the FIFO drain phase.
     u8 m_interruptFlags = 0;
     u8 m_interruptEnable = 0;
     u8 m_requestControl = 0;
@@ -351,10 +373,11 @@ class Cdrom
 
     // ---- Sector phase trace ------------------------------------------------
     std::array<PhaseTraceEntry, PHASE_TRACE_CAPACITY> m_phaseRing{};
-    size_t m_phaseRingHead = 0;   ///< Next write slot.
-    size_t m_phaseRingCount = 0;  ///< Valid entries (≤ PHASE_TRACE_CAPACITY).
-    u32 m_activeLba = 0;          ///< LBA of the sector currently held in m_activeSector.
-    std::deque<u32> m_bufferedReadLbas; ///< Parallel to m_bufferedReadSectors.
+    size_t m_phaseRingHead = 0;            ///< Next write slot.
+    size_t m_phaseRingCount = 0;           ///< Valid entries (≤ PHASE_TRACE_CAPACITY).
+    u32 m_activeLba = 0;                   ///< LBA of the published/current INT1 sector.
+    u32 m_drainingLba = 0;                 ///< LBA currently associated with FIFO drain/readout.
+    std::deque<u32> m_bufferedReadLbas;    ///< Parallel to m_bufferedReadSectors.
     bool m_phaseFirstCpuReadFired = false; ///< Reset on AcceptBfrd; fires CpuRddatRead once.
     bool m_phaseFirstDmaFired = false;     ///< Reset on AcceptBfrd; fires Dma3Read once.
     bool m_phaseDrainFired = false;        ///< Reset on AcceptBfrd; fires DrainComplete once.
@@ -365,7 +388,7 @@ class Cdrom
     u32 m_formatRejectCount = 0;  ///< Mode2 sectors with invalid subheader in XA mode.
     u32 m_submodeRejectCount = 0; ///< Mode2/Form2 non-ADPCM sectors in XA mode.
     u32 m_cpuDeliveryCount = 0;   ///< Sectors routed to CPU data path (INT1 fired).
-    u8 m_xaLastCodingInfo = 0;    ///< codingInfo byte of the most recently consumed XA-ADPCM sector.
+    u8 m_xaLastCodingInfo = 0; ///< codingInfo byte of the most recently consumed XA-ADPCM sector.
 
     // ---- ADPBUSY + post-stream validator (PR-RV26/27/30) -------------------
     bool m_xaPlaybackBusy = false;   ///< ADPBUSY: disc-XA decoder active (bit 2 of HSTS).
@@ -373,37 +396,50 @@ class Cdrom
     u32 m_xaPlaybackBusyFellLba = 0; ///< LBA where ADPBUSY last fell; 0 if still busy or never.
     u32 m_xaSectorsWhileBusy = 0;    ///< XA-ADPCM sectors consumed since ADPBUSY rose.
     u32 m_streamStartXaCount = 0;    ///< m_xaDeliveryCount snapshot at last XA-enabled ReadS/ReadN.
-    u32 m_streamStartCpuCount = 0;   ///< m_cpuDeliveryCount snapshot at last XA-enabled ReadS/ReadN.
-    bool m_streamStarted = false;    ///< True once an XA-enabled ReadS/ReadN was issued.
+    u32 m_streamStartCpuCount = 0; ///< m_cpuDeliveryCount snapshot at last XA-enabled ReadS/ReadN.
+    bool m_streamStarted = false;  ///< True once an XA-enabled ReadS/ReadN was issued.
+    bool m_cpuPayloadCaptureActive =
+        false; ///< Capture CPU payloads while a ReadS/ReadN session is active.
 
-    // ---- Post-stream CPU payload tracer (PR-RV28) --------------------------
-    /// Per-sector snapshot recorded at INT1 publication for each CPU-visible
-    /// sector after an XA-enabled ReadS/ReadN.
+    // ---- Rolling CPU payload tracer (PR-RV28/37) --------------------------
+    /// Pending/current or retained per-sector snapshot for CPU-visible sectors
+    /// observed while ReadS/ReadN capture is active.
     struct CpuSectorRecord
     {
-        u32 lba = 0;
-        size_t fifoBytes = 0;      ///< Bytes loaded into the data FIFO (= sector payload size).
-        bool dma3Started = false;  ///< First readDma() byte consumed from this sector.
-        bool drained = false;      ///< Data FIFO fully exhausted (DrainComplete).
-        bool finalized = false;    ///< dma3Started/drained have been written by next-sector INT1.
-        u8 payloadMode = 0;        ///< 0=user2048, 1=form2-2324, 2=raw2340, 3=other.
-        bool hasXaSub = false;     ///< XA subheader decoded (only possible in raw2340 mode).
+        u32 int1PublishLba = 0;
+        u32 acceptedLba = 0;
+        bool accepted = false;
+        size_t fifoBytes = 0;     ///< Bytes loaded into the data FIFO (= sector payload size).
+        bool dma3Started = false; ///< First readDma() byte consumed from this sector.
+        bool drained = false;     ///< Data FIFO fully exhausted (DrainComplete).
+        bool finalized = false;   ///< dma3Started/drained have been written by next-sector INT1.
+        bool superseded = false;  ///< Next INT1 arrived before full drain of this accepted sector.
+        u8 payloadMode = 0;       ///< 0=user2048, 1=form2-2324, 2=raw2340, 3=other.
+        bool hasXaSub = false;    ///< XA subheader decoded (only possible in raw2340 mode).
         u8 xaFile = 0;
         u8 xaChannel = 0;
         u8 xaSubmode = 0;
         u8 xaCoding = 0;
         std::array<u8, 16> firstBytes{};
         std::array<u8, 16> lastBytes{};
-        size_t cpuFirstOffset = ~size_t{0}; ///< FIFO byte offset at first CPU readData(); ~0 if no CPU read.
-        size_t dmaFirstOffset = ~size_t{0}; ///< FIFO byte offset at first DMA readDma(); ~0 if no DMA read.
-        size_t cpuBytesRead = 0;            ///< Total bytes consumed via readData().
-        size_t dmaBytesRead = 0;            ///< Total bytes consumed via readDma().
-        size_t finalOffset = 0;             ///< Total bytes consumed (CPU+DMA) before next INT1.
+        size_t cpuFirstOffset =
+            ~size_t{0}; ///< FIFO byte offset at first CPU readData(); ~0 if no CPU read.
+        size_t dmaFirstOffset =
+            ~size_t{0};          ///< FIFO byte offset at first DMA readDma(); ~0 if no DMA read.
+        size_t cpuBytesRead = 0; ///< Total bytes consumed via readData().
+        size_t dmaBytesRead = 0; ///< Total bytes consumed via readDma().
+        size_t nextPublishOffset = ~size_t{0}; ///< Consumed offset when the next INT1 published.
+        size_t finalOffset = 0; ///< Total bytes consumed (CPU+DMA) when retired/reset.
     };
 
     static constexpr size_t CPU_RECORD_CAPACITY = 32u;
     std::array<CpuSectorRecord, CPU_RECORD_CAPACITY> m_cpuRecords{};
+    size_t m_cpuRecordHead = 0;
     size_t m_cpuRecordCount = 0;
+    CpuSectorRecord m_publishedCpuRecord{};
+    bool m_publishedCpuRecordValid = false;
+    CpuSectorRecord m_drainingCpuRecord{};
+    bool m_drainingCpuRecordValid = false;
     size_t m_dataFifoConsumedBytes = 0; ///< Bytes consumed from current accepted sector (CPU+DMA).
 
     void recordPhaseTrace(u32 lba, SectorPhaseReason reason);
@@ -417,13 +453,21 @@ class Cdrom
     void enqueueCommand(u8 value);
     void executePendingCommand();
     void queueInterruptEvent(u8 type, std::initializer_list<u8> responses = {});
-    void publishNextInterruptEvent();
-    void acceptBufferedReadSector(bool replaceExistingData);
-    void updateDataPadForActiveSector();
-    bool queueReadSector();
-    bool loadReadSector(std::vector<u8>& outSector);
+    void publishNextInterruptEvent(bool allowBufferedInt1 = false);
+    void scheduleBufferedInt1Promotion();
+    void advanceBufferedInt1Delay(u32 cpuCycles);
+    void maybeQueueReadEndInterrupt();
+    void acceptPublishedSector(bool replaceExistingData);
+    void updateDataPadForDrainingSector();
+    ReadSectorResult queueReadSector();
+    ReadSectorResult loadReadSector(std::vector<u8>& outSector);
     u32 currentReadCycles() const;
-    void snapshotCpuSector(u32 lba, const std::vector<u8>& sector);
+    void beginCpuPayloadRecord(u32 int1PublishLba, const std::vector<u8>& sector);
+    void noteCpuPayloadAccepted(u32 acceptedLba);
+    void noteCpuPayloadSuperseded();
+    void finalizeCpuPayloadRecord(bool supersededByNextInt1);
+    CpuSectorRecord* currentCpuPayloadRecord();
+    const CpuSectorRecord* currentCpuPayloadRecord() const;
 };
 
 } // namespace runtime

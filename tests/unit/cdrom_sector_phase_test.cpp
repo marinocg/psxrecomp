@@ -44,8 +44,14 @@ class PatternDisc final : public psxrecomp::runtime::Disc
             out[i] = static_cast<u8>((lba * 13u + static_cast<u32>(i)) & 0xFFu);
         return true;
     }
-    bool readRawSector2352(u32, std::span<u8, 2352>) override { return false; }
-    u32 userSectorCount() const override { return 8u; }
+    bool readRawSector2352(u32, std::span<u8, 2352>) override
+    {
+        return false;
+    }
+    u32 userSectorCount() const override
+    {
+        return 8u;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -62,7 +68,10 @@ bool drqsts(const psxrecomp::runtime::Cdrom& c)
     return (c.readStatus() & (1u << 6)) != 0u;
 }
 
-void ack(psxrecomp::runtime::Cdrom& c) { c.writeInterruptFlags(0x07u); }
+void ack(psxrecomp::runtime::Cdrom& c)
+{
+    c.writeInterruptFlags(0x07u);
+}
 
 void readAndAck(psxrecomp::runtime::Cdrom& c)
 {
@@ -166,10 +175,10 @@ static void test1_int1_before_bfrd()
     assert(drqsts(cdrom));
 
     const int idxAccept = findTrace(cdrom, 0u, Reason::AcceptBfrd);
-    const int idxDrq    = findTrace(cdrom, 0u, Reason::DrqstsOn);
-    assert(idxAccept > idxInt1);   // accept_bfrd must follow publish_int1
-    assert(idxDrq > idxAccept);    // drqsts_on must follow accept_bfrd
-    assert(idxDrq > idxInt1);      // no drqsts_on fired before publish_int1 was followed by accept
+    const int idxDrq = findTrace(cdrom, 0u, Reason::DrqstsOn);
+    assert(idxAccept > idxInt1); // accept_bfrd must follow publish_int1
+    assert(idxDrq > idxAccept);  // drqsts_on must follow accept_bfrd
+    assert(idxDrq > idxInt1);    // no drqsts_on fired before publish_int1 was followed by accept
 
     readAndAck(cdrom);
 }
@@ -248,8 +257,9 @@ static void test3_B_needs_own_int1_and_bfrd()
         (void)cdrom.readData();
     disableBfrd(cdrom);
 
-    // Ack INT1-A → INT1-B fires; LBA=1 moves to m_activeSector.
+    // Ack INT1-A, then advance a cycle so INT1-B can surface.
     readAndAck(cdrom);
+    cdrom.tick(1u);
     assert(irqType(cdrom) == 0x01u);
 
     // publish_int1 for LBA=1 must be in trace; no accept_bfrd for LBA=1 yet.
@@ -264,9 +274,9 @@ static void test3_B_needs_own_int1_and_bfrd()
     assert(drqsts(cdrom));
 
     const int idxAcceptB = findTrace(cdrom, 1u, Reason::AcceptBfrd);
-    const int idxDrqB    = findTrace(cdrom, 1u, Reason::DrqstsOn);
-    assert(idxAcceptB > idxInt1B);  // accept_bfrd(B) after publish_int1(B)
-    assert(idxDrqB >= idxAcceptB);  // drqsts_on(B) at or after accept_bfrd(B)
+    const int idxDrqB = findTrace(cdrom, 1u, Reason::DrqstsOn);
+    assert(idxAcceptB > idxInt1B); // accept_bfrd(B) after publish_int1(B)
+    assert(idxDrqB >= idxAcceptB); // drqsts_on(B) at or after accept_bfrd(B)
 
     readAndAck(cdrom);
 }
@@ -317,9 +327,10 @@ static void test4_dma3_obeys_phase_gate()
     assert(findTrace(cdrom, 1u, Reason::DrqstsOn) == -1);
     assert(findTrace(cdrom, 1u, Reason::Dma3Read) == -1);
 
-    // Proper handoff: disable BFRD, ack INT1-A → INT1-B fires.
+    // Proper handoff: disable BFRD, ack INT1-A, then advance a cycle.
     disableBfrd(cdrom);
     readAndAck(cdrom);
+    cdrom.tick(1u);
     assert(irqType(cdrom) == 0x01u);
     assert(findTrace(cdrom, 1u, Reason::PublishInt1) >= 0);
     assert(findTrace(cdrom, 1u, Reason::AcceptBfrd) == -1); // still not accepted
@@ -379,21 +390,22 @@ static void test_integration_two_sector_chain()
     assert(findTrace(cdrom, 1u, Reason::AcceptBfrd) == -1);
 
     // Check ordering in the trace up to this point.
-    const int iA_q    = findTrace(cdrom, 0u, Reason::QueuePromote);
-    const int iA_p1   = findTrace(cdrom, 0u, Reason::PublishInt1);
-    const int iA_acc  = findTrace(cdrom, 0u, Reason::AcceptBfrd);
-    const int iA_drq  = findTrace(cdrom, 0u, Reason::DrqstsOn);
-    const int iA_cpu  = findTrace(cdrom, 0u, Reason::CpuRddatRead);
+    const int iA_q = findTrace(cdrom, 0u, Reason::QueuePromote);
+    const int iA_p1 = findTrace(cdrom, 0u, Reason::PublishInt1);
+    const int iA_acc = findTrace(cdrom, 0u, Reason::AcceptBfrd);
+    const int iA_drq = findTrace(cdrom, 0u, Reason::DrqstsOn);
+    const int iA_cpu = findTrace(cdrom, 0u, Reason::CpuRddatRead);
     const int iA_done = findTrace(cdrom, 0u, Reason::DrainComplete);
     assert(iA_q < iA_p1);
     assert(iA_p1 < iA_acc);
     assert(iA_acc < iA_drq);
-    assert(iA_drq < iA_cpu);    // cpu_rddat_read must follow drqsts_on
-    assert(iA_cpu < iA_done);   // drain_complete is the last event for A
+    assert(iA_drq < iA_cpu);  // cpu_rddat_read must follow drqsts_on
+    assert(iA_cpu < iA_done); // drain_complete is the last event for A
 
     // ---- Sector A → B handoff ----
     disableBfrd(cdrom);
-    readAndAck(cdrom); // ack INT1-A → INT1-B fires
+    readAndAck(cdrom);
+    cdrom.tick(1u);
     assert(irqType(cdrom) == 0x01u);
 
     // accept_bfrd for B must NOT have fired yet (no BFRD write since ack).
@@ -410,25 +422,25 @@ static void test_integration_two_sector_chain()
     assert(!drqsts(cdrom));
 
     // Check full ordering for sector B.
-    const int iB_q    = findTrace(cdrom, 1u, Reason::QueuePromote);
-    const int iB_p1   = findTrace(cdrom, 1u, Reason::PublishInt1);
-    const int iB_acc  = findTrace(cdrom, 1u, Reason::AcceptBfrd);
-    const int iB_drq  = findTrace(cdrom, 1u, Reason::DrqstsOn);
-    const int iB_dma  = findTrace(cdrom, 1u, Reason::Dma3Read);
+    const int iB_q = findTrace(cdrom, 1u, Reason::QueuePromote);
+    const int iB_p1 = findTrace(cdrom, 1u, Reason::PublishInt1);
+    const int iB_acc = findTrace(cdrom, 1u, Reason::AcceptBfrd);
+    const int iB_drq = findTrace(cdrom, 1u, Reason::DrqstsOn);
+    const int iB_dma = findTrace(cdrom, 1u, Reason::Dma3Read);
     const int iB_done = findTrace(cdrom, 1u, Reason::DrainComplete);
-    assert(iB_q  >= 0);
+    assert(iB_q >= 0);
     assert(iB_p1 >= 0);
-    assert(iB_q  < iB_p1);
+    assert(iB_q < iB_p1);
     assert(iB_p1 < iB_acc);
     assert(iB_acc < iB_drq);
-    assert(iB_drq < iB_dma);   // dma3_read must follow drqsts_on
-    assert(iB_dma < iB_done);  // drain_complete is last for B
+    assert(iB_drq < iB_dma);  // dma3_read must follow drqsts_on
+    assert(iB_dma < iB_done); // drain_complete is last for B
 
     // Fundamental ordering guarantee: drain_complete(A) < accept_bfrd(B).
     assert(iA_done < iB_acc);
 
     // accept_bfrd for B must come after publish_int1 for B.
-    assert(iA_done < iB_p1);  // (already implied but be explicit)
+    assert(iA_done < iB_p1); // (already implied but be explicit)
 
     readAndAck(cdrom);
 }

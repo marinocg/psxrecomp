@@ -168,7 +168,7 @@ void testXaAdpcmSuppressesInt1()
     cdrom.setDiscBackend(&disc);
     cdrom.writeInterruptEnable(0x1F);
 
-    issueSetmode(cdrom, 0x40); // XA streaming enable
+    issueSetmode(cdrom, 0x40);            // XA streaming enable
     issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA=0 (ADPCM sector)
     issueReadN(cdrom);
 
@@ -208,7 +208,7 @@ void testNonAdpcmForm2GeneratesInt1()
     cdrom.setDiscBackend(&disc);
     cdrom.writeInterruptEnable(0x1F);
 
-    issueSetmode(cdrom, 0x40); // XA streaming enable
+    issueSetmode(cdrom, 0x40);            // XA streaming enable
     issueSetloc(cdrom, 0x00, 0x02, 0x01); // LBA=1 (Form2 but not ADPCM)
     issueReadN(cdrom);
 
@@ -260,10 +260,11 @@ void testFilterMismatchRejectsSector()
     issueSetloc(cdrom, 0x00, 0x02, 0x02); // LBA=2 (ADPCM, filter mismatch)
     issueReadN(cdrom);
 
-    // One cadence: LBA 2 → filter_reject, scan tries LBA 3 which doesn't
-    // exist → no sector produced → no INT1.
+    // One cadence: LBA 2 → filter_reject, scan tries LBA 3 which is past the
+    // finite disc → no INT1 data-ready, stream completes with INT4/DataEnd.
     cdrom.tick(kReadCycles);
-    assert(irqType(cdrom) == 0x00);
+    assert(irqType(cdrom) == 0x04);
+    readAndAck(cdrom);
 
     // filter_reject counter must be non-zero; INT1 must not have fired.
     const std::string summary = cdrom.formatXaClassificationSummary();

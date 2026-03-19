@@ -113,37 +113,11 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
         pendingForKernelEvents = pendingForHook;
     }
 
-    // PSX-SPX: CDROM IRQs expose five sub-interrupt types that the BIOS maps
-    // to separate kernel events during _96_init. Handle those before any
-    // generic kernel-event dispatch. Recompute the remaining hardware-pending
-    // mask afterward so HookEntryInt only runs for IRQ lines that are still
-    // visible to the BIOS handler.
-    if ((pendingForHook & static_cast<u32>(InterruptLine::Cdrom)) != 0u)
-    {
-        pendingForKernelEvents &= ~static_cast<u32>(InterruptLine::Cdrom);
-        try
-        {
-            (void)serviceBiosCdromInterrupt();
-        }
-        catch (const ReturnFromExceptionSignal&)
-        {
-            if (traceIrqFlowEnabled())
-            {
-                m_logger.log(LogLevel::Info, "irq_trace",
-                             "event=return_from_exception source=bios_cdrom_dispatch");
-            }
-            syncCop0InterruptPending();
-            return;
-        }
-
-        syncCop0InterruptPending();
-        if (!m_cdrom.hasIrqRequest())
-        {
-            m_interrupts.writeStatus(~static_cast<u32>(InterruptLine::Cdrom));
-            syncCop0InterruptPending();
-        }
-        pendingForHook = m_interrupts.readStatus() & m_interrupts.readMask();
-    }
+    // PSX-SPX: the BIOS CD-ROM IRQ handlers live in the priority-0 chain, so
+    // dispatchIrqChains() has already run them before lower priorities and
+    // HookEntryInt. Exclude IRQ2 from the generic kernel-event dispatcher here:
+    // serviceBiosCdromInterrupt() already delivered the F0000003 sub-events.
+    pendingForKernelEvents = pendingForHook & ~static_cast<u32>(InterruptLine::Cdrom);
 
     // PSX-accurate interrupt ordering: on real hardware, CDROM sectors arrive
     // between VBlanks so the CDROM handler fires and processes data before the
