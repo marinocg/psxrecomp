@@ -324,7 +324,6 @@ void Cdrom::tick(u32 cpuCycles)
         {
             m_execution.seekActive = false;
             m_execution.readActive = true;
-            acceptBufferedReadSector(false);
             queueInterruptEvent(cdrom_detail::INT1, {currentStat()});
         }
     }

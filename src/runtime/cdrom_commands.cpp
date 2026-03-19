@@ -580,10 +580,11 @@ void Cdrom::publishNextInterruptEvent()
         }
         recordPhaseTrace(m_activeLba, SectorPhaseReason::PublishInt1);
         snapshotCpuSector(m_activeLba, m_activeSector);
-        // PR-RV29: flush stale remainder and reload the new sector when BFRD
-        // is held across a boundary (mixed-XA).  Empty FIFO = no action.
-        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
-            !m_dataFifo.empty())
+        // PR-RV34: arm the new sector when BFRD is held across an INT1
+        // boundary, whether the FIFO had stale remainder (flush case) or was
+        // already fully drained.  Removes the pre-INT1 acceptBufferedReadSector
+        // call from tick() so no sector is readable before its own INT1.
+        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
         {
             m_dataFifo.clear();
             m_activeSectorOffset = 0;
@@ -591,6 +592,7 @@ void Cdrom::publishNextInterruptEvent()
                                      DATA_FIFO_CAPACITY);
             m_activeSectorOffset = m_activeSector.size();
             updateDataPadForActiveSector();
+            m_dataFifoConsumedBytes = 0;
             m_phaseFirstCpuReadFired = false;
             m_phaseFirstDmaFired     = false;
             m_phaseDrainFired        = false;

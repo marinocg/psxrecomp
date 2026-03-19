@@ -183,12 +183,7 @@ void testForm2NonAudioRecordedAs2324()
     enableBfrd(cdrom);
     // Read enough DMA words to drain the sector (2324 bytes = 581 words).
     for (int i = 0; i < 581; ++i) (void)cdrom.readDma();
-    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
-    ack(cdrom);
-
-    // Trigger a second sector (LBA 1 Mode1) so the Form2 record is finalized.
-    cdrom.tick(kReadCycles);
-    assert(irqType(cdrom) == 0x01);
+    readAndAck(cdrom);
 
     const std::string summary = cdrom.formatCpuPayloadSummary();
 
@@ -394,6 +389,115 @@ void testReadWindowMixed()
     assert(s.find("mixed=1") != std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// Test 7: BFRD held + FIFO empty → new sector armed in FIFO at INT1.
+//
+// PR-RV34 fix: tick() no longer calls acceptBufferedReadSector before INT1.
+// The auto-reload in publishNextInterruptEvent now fires when BFRD is held
+// regardless of FIFO state, so a fully-drained FIFO arms the new sector.
+// ---------------------------------------------------------------------------
+void testBfrdHeldFifoEmptyArmedAtInt1()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0 (Form2, 2324 bytes)
+    issueReadN(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom);
+    for (int i = 0; i < 581; ++i) (void)cdrom.readDma(); // drain 2324 bytes
+    assert(cdrom.debugSnapshot().dataFifoSize == 0);
+    readAndAck(cdrom);
+
+    // BFRD still held, FIFO empty.  Second sector (LBA 1 Mode1, 2048 bytes).
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    // Sector must be armed in FIFO immediately by publishNextInterruptEvent.
+    assert(cdrom.debugSnapshot().dataFifoSize == 2048);
+}
+
+// ---------------------------------------------------------------------------
+// Test 8: Sector must NOT be readable before its INT1 is published.
+//
+// With a previous INT1 still active (unacked), a new sector arriving in
+// tick() must NOT load into the FIFO.  Only after the game acks the
+// previous INT1 does publishNextInterruptEvent advance the sector and arm
+// the FIFO for the new INT1.
+// ---------------------------------------------------------------------------
+void testSectorNotPreloadedBeforeInt1()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0
+    issueReadN(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom);
+    for (int i = 0; i < 581; ++i) (void)cdrom.readDma(); // drain LBA 0
+
+    // Do NOT ack INT1.  Second sector (LBA 1) arrives but INT1 is blocked.
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01); // Previous INT1 still set.
+    assert(cdrom.debugSnapshot().dataFifoSize == 0); // LBA 1 NOT preloaded.
+
+    // Ack previous INT1 → publishNextInterruptEvent fires for LBA 1.
+    readAndAck(cdrom);
+    assert(irqType(cdrom) == 0x01); // LBA 1 INT1 now live.
+    assert(cdrom.debugSnapshot().dataFifoSize == 2048); // LBA 1 armed.
+}
+
+// ---------------------------------------------------------------------------
+// Test 9: Tracer records DMA reads on the second sector (PR-RV34 regression).
+//
+// Before the fix, tick() called acceptBufferedReadSector before publishing
+// INT1 when BFRD was held and the FIFO was drained.  This emptied the
+// buffer so publishNextInterruptEvent took the INT1-no-buffered path, which
+// skipped snapshotCpuSector.  DMA reads on the second sector were invisible.
+// After the fix, both sectors are snapshotted and dma_only=2.
+// ---------------------------------------------------------------------------
+void testTracerRecordsDmaOnSecondSector()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0 (Form2, 2324 bytes)
+    issueReadN(cdrom);
+
+    // LBA 0: INT1, drain via DMA, ack.
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom);
+    for (int i = 0; i < 581; ++i) (void)cdrom.readDma();
+    readAndAck(cdrom);
+
+    // LBA 1 (Mode1, 2048 bytes): INT1 with BFRD held, FIFO armed at publish.
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    for (int i = 0; i < 512; ++i) (void)cdrom.readDma(); // drain 2048 bytes
+
+    const std::string s = cdrom.formatCpuPayloadSummary();
+    // Both sectors must be recorded (snapshotCpuSector called for each).
+    assert(s.find("sectors_recorded:    2") != std::string::npos);
+    // Both sectors were DMA-only (no CPU reads).
+    assert(s.find("dma_only=2") != std::string::npos);
+}
+
 int main()
 {
     testForm2NonAudioRecordedAs2324();
@@ -402,5 +506,8 @@ int main()
     testReadWindowCpuOnly();
     testReadWindowDmaOnly();
     testReadWindowMixed();
+    testBfrdHeldFifoEmptyArmedAtInt1();
+    testSectorNotPreloadedBeforeInt1();
+    testTracerRecordsDmaOnSecondSector();
     return 0;
 }

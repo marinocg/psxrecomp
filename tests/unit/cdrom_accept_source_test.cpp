@@ -272,17 +272,17 @@ static void test3_accept_source_distinct_trace_reasons()
 }
 
 // ============================================================================
-// Test 4 — ACK-only (writeInterruptFlags without enableDataRead or BFRD)
-//           does NOT silently expose the next sector.
+// Test 4 — ACK with BFRD held auto-arms the next sector at INT1 time.
 //
 // Sequence:
 //   tick(2×) → INT1-A, B buffered.
-//   enableDataRead() for A → BIOS path accept.
+//   enableDataRead() for A → BIOS path accept (sets BFRD).
 //   Drain A via readData().
 //   Ack INT1-A (writeInterruptFlags) → INT1-B fires.
-//   Verify: B has no AcceptBiosAuto and no AcceptBfrd.
-//   Verify: DRQSTS=0 for B.
-//   Verify: readData() for B returns 0x00 (pad), not sector data.
+//   PR-RV34: INT1-B publication auto-reloads B because BFRD is held.
+//   Verify: B has no AcceptBiosAuto (armed by auto-reload, not enableDataRead).
+//   Verify: B has no AcceptBfrd (no BFRD register write occurred).
+//   Verify: DRQSTS=1 for B (auto-reload fired at INT1-B time).
 // ============================================================================
 static void test4_ack_only_does_not_auto_accept_next_sector()
 {
@@ -297,7 +297,7 @@ static void test4_ack_only_does_not_auto_accept_next_sector()
     cdrom.tick(kReadCycles * 2u);
     assert(irqType(cdrom) == 0x01u);
 
-    // Accept A via BIOS path.
+    // Accept A via BIOS path (sets BFRD).
     cdrom.enableDataRead();
     assert(drqsts(cdrom));
 
@@ -306,17 +306,14 @@ static void test4_ack_only_does_not_auto_accept_next_sector()
         (void)cdrom.readData();
     assert(!drqsts(cdrom));
 
-    // Ack INT1-A → INT1-B fires.
+    // Ack INT1-A → INT1-B fires; auto-reload arms B because BFRD is held.
     ack(cdrom);
     assert(irqType(cdrom) == 0x01u);
 
-    // B must NOT have been auto-accepted.
+    // B was armed by auto-reload — no explicit accept trace recorded.
     assert(findTrace(cdrom, 1u, Reason::AcceptBiosAuto) == -1);
     assert(findTrace(cdrom, 1u, Reason::AcceptBfrd) == -1);
-    assert(!drqsts(cdrom));
-
-    // readData() for B returns pad bytes (FIFO empty).
-    assert(cdrom.readData() == 0x00u);
+    assert(drqsts(cdrom));
 
     ack(cdrom);
 }
@@ -324,13 +321,18 @@ static void test4_ack_only_does_not_auto_accept_next_sector()
 // ============================================================================
 // Integration 1 — Two-sector BIOS-style chain with enableDataRead.
 //
-// Full ordering proof for sector A then B, both accepted via enableDataRead:
+// Full ordering proof for sector A then B:
 //   queue_promote(A) < publish_int1(A) < accept_bios_auto(A)
 //     < drqsts_on(A) < drain_complete(A)
-//   < publish_int1(B) < accept_bios_auto(B) < drqsts_on(B) < drain_complete(B)
+//   < publish_int1(B) < drqsts_on(B) < drain_complete(B)
+//
+// Sector A: enableDataRead() explicitly arms FIFO → AcceptBiosAuto recorded.
+// Sector B: BFRD held over the INT1-A boundary, so PR-RV34 auto-reload arms B
+//           during INT1-B publication → DrqstsOn recorded; AcceptBiosAuto
+//           absent (enableDataRead() is a no-op when FIFO already loaded).
 //
 // Also verifies that AcceptBfrd is absent throughout (no register write for
-// BFRD occured — only enableDataRead was used).
+// BFRD occurred — only enableDataRead was used).
 // ============================================================================
 static void test_integration_bios_accept_chain()
 {
@@ -377,10 +379,12 @@ static void test_integration_bios_accept_chain()
     assert(findTrace(cdrom, Reason::AcceptBfrd) == -1);
 
     // ---- Handoff A → B ----
-    ack(cdrom); // ack INT1-A → INT1-B fires
+    // Ack INT1-A → INT1-B fires; BFRD is still held, so auto-reload arms B.
+    ack(cdrom);
     assert(irqType(cdrom) == 0x01u);
 
     // ---- Sector B ----
+    // enableDataRead() is a no-op here: BFRD already set, FIFO already loaded.
     cdrom.enableDataRead();
     assert(drqsts(cdrom));
 
@@ -388,21 +392,20 @@ static void test_integration_bios_accept_chain()
         (void)cdrom.readData();
     assert(!drqsts(cdrom));
 
-    // Ordering for B.
+    // Ordering for B: auto-reload fires within publishNextInterruptEvent,
+    // so DrqstsOn is recorded at INT1 time; AcceptBiosAuto is absent.
     const int iB_p1   = findTrace(cdrom, 1u, Reason::PublishInt1);
-    const int iB_auto = findTrace(cdrom, 1u, Reason::AcceptBiosAuto);
     const int iB_drq  = findTrace(cdrom, 1u, Reason::DrqstsOn);
     const int iB_done = findTrace(cdrom, 1u, Reason::DrainComplete);
     assert(iB_p1   >= 0);
-    assert(iB_auto >= 0);
     assert(iB_drq  >= 0);
     assert(iB_done >= 0);
-    assert(iB_p1  < iB_auto);
-    assert(iB_auto < iB_drq);
-    assert(iB_drq  < iB_done);
+    assert(findTrace(cdrom, 1u, Reason::AcceptBiosAuto) == -1);
+    assert(iB_p1  < iB_drq);
+    assert(iB_drq < iB_done);
 
-    // Cross-sector ordering: drain_complete(A) before accept_bios_auto(B).
-    assert(iA_done < iB_auto);
+    // Cross-sector ordering: drain_complete(A) before drqsts_on(B).
+    assert(iA_done < iB_drq);
 
     ack(cdrom);
 }

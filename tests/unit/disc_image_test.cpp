@@ -108,6 +108,7 @@ int main()
     cdrom.writeCommand(0x06); // ReadN
     ack(cdrom);
     cdrom.tick(451584);
+    ack(cdrom); // ack ReadN's INT3 so INT1 can publish and arm the FIFO
     enableBufferRead(cdrom);
     assert(cdrom.readDma() == 0x02010200u); // MM:SS:FF:Mode as little-endian word
     assert(cdrom.readDma() == 0x00080000u); // subheader
