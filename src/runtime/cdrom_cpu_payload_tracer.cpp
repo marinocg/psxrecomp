@@ -180,7 +180,36 @@ std::string Cdrom::formatCpuPayloadSummary() const
                << unsigned(r.lastBytes[b]);
         }
         os << std::dec << "\n";
+
+        const size_t finalOff = r.finalized ? r.finalOffset : m_dataFifoConsumedBytes;
+        const size_t unread = (r.fifoBytes > finalOff) ? (r.fifoBytes - finalOff) : 0u;
+        os << "      read_window: cpu_start=";
+        if (r.cpuFirstOffset == ~size_t{0}) { os << "none"; } else { os << r.cpuFirstOffset; }
+        os << " cpu_bytes=" << r.cpuBytesRead << " dma_start=";
+        if (r.dmaFirstOffset == ~size_t{0}) { os << "none"; } else { os << r.dmaFirstOffset; }
+        os << " dma_bytes=" << r.dmaBytesRead
+           << " final=" << finalOff << " unread=" << unread << "\n";
     }
+
+    // Access pattern summary across all recorded sectors.
+    u32 cpuOnlyCount = 0;
+    u32 dmaOnlyCount = 0;
+    u32 mixedCount = 0;
+    u32 unreadCount = 0;
+    for (size_t i = 0; i < m_cpuRecordCount; ++i)
+    {
+        const CpuSectorRecord& r = m_cpuRecords[i];
+        const bool hasCpu = r.cpuBytesRead > 0;
+        const bool hasDma = r.dmaBytesRead > 0;
+        if      ( hasCpu && !hasDma) ++cpuOnlyCount;
+        else if (!hasCpu &&  hasDma) ++dmaOnlyCount;
+        else if ( hasCpu &&  hasDma) ++mixedCount;
+        else                         ++unreadCount;
+    }
+    os << "  access_patterns: cpu_only=" << cpuOnlyCount
+       << " dma_only=" << dmaOnlyCount
+       << " mixed=" << mixedCount
+       << " unread=" << unreadCount << "\n";
 
     return os.str();
 }

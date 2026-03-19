@@ -414,6 +414,7 @@ void Cdrom::writeRequestControl(u8 value)
         m_phaseFirstCpuReadFired = false;
         m_phaseFirstDmaFired = false;
         m_phaseDrainFired = false;
+        m_dataFifoConsumedBytes = 0;
     }
     else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
              (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
@@ -421,6 +422,7 @@ void Cdrom::writeRequestControl(u8 value)
         // BFRD cleared (1→0): PSX-SPX specifies that clearing the request bit
         // discards the data FIFO contents.
         m_dataFifo.clear();
+        m_dataFifoConsumedBytes = 0;
     }
     // BFRD 1→1 (re-write while already set): no-op.  The accepted sector is
     // not re-loaded; FIFO state is unchanged.  If BFRD is held across sectors,
@@ -558,10 +560,13 @@ void Cdrom::publishNextInterruptEvent()
     {
         if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
         {
-            m_cpuRecords[m_cpuRecordCount - 1].dma3Started = m_phaseFirstDmaFired;
-            m_cpuRecords[m_cpuRecordCount - 1].drained     = m_phaseDrainFired;
-            m_cpuRecords[m_cpuRecordCount - 1].finalized   = true;
+            CpuSectorRecord& rec = m_cpuRecords[m_cpuRecordCount - 1];
+            rec.dma3Started = m_phaseFirstDmaFired;
+            rec.drained     = m_phaseDrainFired;
+            rec.finalOffset = m_dataFifoConsumedBytes;
+            rec.finalized   = true;
         }
+        m_dataFifoConsumedBytes = 0;
         m_activeSector = std::move(m_bufferedReadSectors.front());
         m_bufferedReadSectors.pop_front();
         m_activeSectorOffset = 0;
@@ -594,7 +599,19 @@ void Cdrom::publishNextInterruptEvent()
     }
     else if (event.type == cdrom_detail::INT1)
     {
-        // INT1 with no buffered sectors: active sector is unchanged.
+        // INT1 with no buffered sectors: active sector was already loaded into
+        // the FIFO by acceptBufferedReadSector() in tick() (BFRD held, FIFO
+        // was empty).  Finalize the previous record here so finalOffset is
+        // captured before the counter resets for the new sector.
+        if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
+        {
+            CpuSectorRecord& rec = m_cpuRecords[m_cpuRecordCount - 1];
+            rec.dma3Started = m_phaseFirstDmaFired;
+            rec.drained     = m_phaseDrainFired;
+            rec.finalOffset = m_dataFifoConsumedBytes;
+            rec.finalized   = true;
+        }
+        m_dataFifoConsumedBytes = 0;
         recordPhaseTrace(m_activeLba, SectorPhaseReason::PublishInt1);
     }
     else

@@ -394,11 +394,17 @@ class Cdrom
         u8 xaCoding = 0;
         std::array<u8, 16> firstBytes{};
         std::array<u8, 16> lastBytes{};
+        size_t cpuFirstOffset = ~size_t{0}; ///< FIFO byte offset at first CPU readData(); ~0 if no CPU read.
+        size_t dmaFirstOffset = ~size_t{0}; ///< FIFO byte offset at first DMA readDma(); ~0 if no DMA read.
+        size_t cpuBytesRead = 0;            ///< Total bytes consumed via readData().
+        size_t dmaBytesRead = 0;            ///< Total bytes consumed via readDma().
+        size_t finalOffset = 0;             ///< Total bytes consumed (CPU+DMA) before next INT1.
     };
 
     static constexpr size_t CPU_RECORD_CAPACITY = 32u;
     std::array<CpuSectorRecord, CPU_RECORD_CAPACITY> m_cpuRecords{};
     size_t m_cpuRecordCount = 0;
+    size_t m_dataFifoConsumedBytes = 0; ///< Bytes consumed from current accepted sector (CPU+DMA).
 
     void recordPhaseTrace(u32 lba, SectorPhaseReason reason);
 

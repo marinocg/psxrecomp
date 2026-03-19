@@ -233,18 +233,15 @@ void Cdrom::reset()
     m_phaseFirstDmaFired = false;
     m_phaseDrainFired = false;
     // XA classification counters
-    m_xaDeliveryCount = 0;
-    m_filterRejectCount = 0;
-    m_formatRejectCount = 0;
-    m_submodeRejectCount = 0;
-    m_cpuDeliveryCount = 0;
-    m_xaLastCodingInfo = 0;
+    m_xaDeliveryCount = m_filterRejectCount = m_formatRejectCount = 0;
+    m_submodeRejectCount = m_cpuDeliveryCount = m_xaLastCodingInfo = 0;
     // ADPBUSY + post-stream validator
     m_xaPlaybackBusy = false;
     m_xaPlaybackBusyRoseLba = m_xaPlaybackBusyFellLba = m_xaSectorsWhileBusy = 0;
     m_streamStartXaCount = m_streamStartCpuCount = 0;
     m_streamStarted = false;
     m_cpuRecordCount = 0;
+    m_dataFifoConsumedBytes = 0;
 }
 
 void Cdrom::setDiscBackend(Disc* disc)

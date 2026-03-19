@@ -269,10 +269,138 @@ void testXaAdpcmNotRecorded()
     assert(summary.find("no post-stream CPU sectors recorded") != std::string::npos);
 }
 
+// ---------------------------------------------------------------------------
+// Test 4: CPU-only read — verify cpuFirstOffset, cpuBytesRead, dmaFirstOffset=none.
+//
+// ReadN at LBA 0 (Form2, 2324 bytes), BFRD, read 16 bytes via readData().
+// Second sector (LBA 1 Mode1) fires INT1 to finalize LBA 0's record.
+// Summary must show cpu_start=0, cpu_bytes=16, dma_start=none, final=16.
+// ---------------------------------------------------------------------------
+void testReadWindowCpuOnly()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0 (Form2, 2324 bytes)
+    issueReadN(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom);
+
+    for (int i = 0; i < 16; ++i) (void)cdrom.readData();
+
+    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    ack(cdrom);
+
+    // Second sector (LBA 1 Mode1) → INT1 → finalizes LBA 0 record.
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+
+    const std::string s = cdrom.formatCpuPayloadSummary();
+    assert(s.find("cpu_start=0") != std::string::npos);
+    assert(s.find("cpu_bytes=16") != std::string::npos);
+    assert(s.find("dma_start=none") != std::string::npos);
+    assert(s.find("dma_bytes=0") != std::string::npos);
+    assert(s.find("final=16") != std::string::npos);
+    assert(s.find("cpu_only=1") != std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// Test 5: DMA-only read — verify dmaFirstOffset=0, dmaBytesRead=2324.
+//
+// ReadN at LBA 0 (Form2, 2324 bytes), BFRD, drain all via readDma().
+// Second sector (LBA 1 Mode1) finalizes LBA 0's record.
+// Summary must show cpu_start=none, dma_start=0, dma_bytes=2324, final=2324.
+// ---------------------------------------------------------------------------
+void testReadWindowDmaOnly()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0 (Form2, 2324 bytes)
+    issueReadN(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom);
+
+    // Drain all 2324 bytes via DMA (581 × 4-byte words).
+    for (int i = 0; i < 581; ++i) (void)cdrom.readDma();
+
+    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    ack(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+
+    const std::string s = cdrom.formatCpuPayloadSummary();
+    assert(s.find("cpu_start=none") != std::string::npos);
+    assert(s.find("cpu_bytes=0") != std::string::npos);
+    assert(s.find("dma_start=0") != std::string::npos);
+    assert(s.find("dma_bytes=2324") != std::string::npos);
+    assert(s.find("final=2324") != std::string::npos);
+    assert(s.find("dma_only=1") != std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// Test 6: Mixed read — CPU reads 4 bytes then DMA drains the rest.
+//
+// ReadN at LBA 0 (Form2, 2324 bytes), read 4 bytes via readData() then
+// drain remaining 2320 bytes via readDma().  After finalization:
+//   cpu_start=0, cpu_bytes=4, dma_start=4, dma_bytes=2320, final=2324.
+// ---------------------------------------------------------------------------
+void testReadWindowMixed()
+{
+    PayloadDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00); // LBA 0 (Form2, 2324 bytes)
+    issueReadN(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBfrd(cdrom);
+
+    // CPU reads first 4 bytes.
+    for (int i = 0; i < 4; ++i) (void)cdrom.readData();
+    // DMA drains remaining 2320 bytes (580 × 4-byte words).
+    for (int i = 0; i < 580; ++i) (void)cdrom.readDma();
+
+    while ((cdrom.readStatus() & (1u << 5)) != 0u) (void)cdrom.readResponse();
+    ack(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+
+    const std::string s = cdrom.formatCpuPayloadSummary();
+    assert(s.find("cpu_start=0") != std::string::npos);
+    assert(s.find("cpu_bytes=4") != std::string::npos);
+    assert(s.find("dma_start=4") != std::string::npos);
+    assert(s.find("dma_bytes=2320") != std::string::npos);
+    assert(s.find("final=2324") != std::string::npos);
+    assert(s.find("mixed=1") != std::string::npos);
+}
+
 int main()
 {
     testForm2NonAudioRecordedAs2324();
     testMode1RecordedAsUser2048();
     testXaAdpcmNotRecorded();
+    testReadWindowCpuOnly();
+    testReadWindowDmaOnly();
+    testReadWindowMixed();
     return 0;
 }

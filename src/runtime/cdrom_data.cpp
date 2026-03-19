@@ -60,6 +60,14 @@ u8 Cdrom::readData()
         return m_dataPadValid ? m_dataPadByte : 0;
     }
 
+    if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
+    {
+        CpuSectorRecord& rec = m_cpuRecords[m_cpuRecordCount - 1];
+        if (rec.cpuFirstOffset == ~size_t{0}) { rec.cpuFirstOffset = m_dataFifoConsumedBytes; }
+        ++rec.cpuBytesRead;
+    }
+    ++m_dataFifoConsumedBytes;
+
     if (!m_phaseFirstCpuReadFired)
     {
         m_phaseFirstCpuReadFired = true;
@@ -110,21 +118,25 @@ u32 Cdrom::readDma()
     const bool wasNonEmpty = !m_dataFifo.empty();
     bool firstByteFromFifo = false;
 
-    const auto consumeDataByte = [this, &firstByteFromFifo]() -> u8
+    u32 value = 0;
+    for (u32 i = 0; i < sizeof(u32); ++i)
     {
         u8 byte = 0;
         if (m_dataFifo.popFront(byte))
         {
             firstByteFromFifo = true;
-            return byte;
+            if (m_cpuRecordCount > 0 && !m_cpuRecords[m_cpuRecordCount - 1].finalized)
+            {
+                CpuSectorRecord& rec = m_cpuRecords[m_cpuRecordCount - 1];
+                if (rec.dmaFirstOffset == ~size_t{0}) { rec.dmaFirstOffset = m_dataFifoConsumedBytes; }
+                ++rec.dmaBytesRead;
+            }
+            ++m_dataFifoConsumedBytes;
         }
-        return m_dataPadValid ? m_dataPadByte : 0;
-    };
-
-    u32 value = 0;
-    for (u32 i = 0; i < sizeof(u32); ++i)
-    {
-        const u8 byte = consumeDataByte();
+        else
+        {
+            byte = m_dataPadValid ? m_dataPadByte : 0;
+        }
         value |= static_cast<u32>(byte) << (i * 8);
     }
 
@@ -217,6 +229,7 @@ void Cdrom::enableDataRead()
         m_dataFifo.pushBackRange(m_activeSector, 0, m_activeSector.size(), DATA_FIFO_CAPACITY);
         m_activeSectorOffset = m_activeSector.size();
         updateDataPadForActiveSector();
+        m_dataFifoConsumedBytes = 0;
         recordPhaseTrace(m_activeLba, SectorPhaseReason::AcceptBiosAuto);
         recordPhaseTrace(m_activeLba, SectorPhaseReason::DrqstsOn);
         m_phaseFirstCpuReadFired = false;
@@ -452,14 +465,7 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
         }
         else if (m_activeSector.size() >= 20)
         {
-            m_lastGetlocL[0] = m_activeSector[12];
-            m_lastGetlocL[1] = m_activeSector[13];
-            m_lastGetlocL[2] = m_activeSector[14];
-            m_lastGetlocL[3] = m_activeSector[15];
-            m_lastGetlocL[4] = m_activeSector[16];
-            m_lastGetlocL[5] = m_activeSector[17];
-            m_lastGetlocL[6] = m_activeSector[18];
-            m_lastGetlocL[7] = m_activeSector[19];
+            std::copy_n(m_activeSector.begin() + 12, 8, m_lastGetlocL.begin());
         }
         else
         {
