@@ -374,7 +374,8 @@ bool Cdrom::loadReadSector(std::vector<u8>& outSector)
                        loadedLba, xa.fileNumber, xa.channelNumber,
                        static_cast<unsigned>(xa.submode));
             recordPhaseTrace(loadedLba, SectorPhaseReason::XaAudioDeliver);
-            m_xaPlaybackBusy = true;
+            if (!m_xaPlaybackBusy) { m_xaPlaybackBusy = true; m_xaPlaybackBusyRoseLba = loadedLba; m_xaSectorsWhileBusy = 0; }
+            ++m_xaSectorsWhileBusy;
             m_xaLastCodingInfo = xa.codingInfo;
             ++m_xaDeliveryCount;
             break; // outSector stays empty → no INT1

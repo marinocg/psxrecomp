@@ -83,6 +83,10 @@ class Cdrom
     /// confirming how sectors were routed after Setmode 0xE0 + ReadS/ReadN.
     std::string formatXaClassificationSummary() const;
 
+    /// ADPBUSY lifecycle summary: when ADPBUSY rose/fell (LBA) and sector count
+    /// consumed while busy.  Answers "did XA playback actually run, and when?".
+    std::string formatAdpbusyLifecycleSummary() const;
+
     /// Post-ReadS/ReadN XA stream summary: counts and flags from the moment
     /// the most recent XA-enabled ReadS/ReadN was issued.  Avoids cumulative
     /// noise from pre-stream initialization reads.
@@ -363,8 +367,11 @@ class Cdrom
     u32 m_cpuDeliveryCount = 0;   ///< Sectors routed to CPU data path (INT1 fired).
     u8 m_xaLastCodingInfo = 0;    ///< codingInfo byte of the most recently consumed XA-ADPCM sector.
 
-    // ---- ADPBUSY + post-stream validator (PR-RV26/27) ----------------------
+    // ---- ADPBUSY + post-stream validator (PR-RV26/27/30) -------------------
     bool m_xaPlaybackBusy = false;   ///< ADPBUSY: disc-XA decoder active (bit 2 of HSTS).
+    u32 m_xaPlaybackBusyRoseLba = 0; ///< LBA where ADPBUSY rose; 0 if never set.
+    u32 m_xaPlaybackBusyFellLba = 0; ///< LBA where ADPBUSY last fell; 0 if still busy or never.
+    u32 m_xaSectorsWhileBusy = 0;    ///< XA-ADPCM sectors consumed since ADPBUSY rose.
     u32 m_streamStartXaCount = 0;    ///< m_xaDeliveryCount snapshot at last XA-enabled ReadS/ReadN.
     u32 m_streamStartCpuCount = 0;   ///< m_cpuDeliveryCount snapshot at last XA-enabled ReadS/ReadN.
     bool m_streamStarted = false;    ///< True once an XA-enabled ReadS/ReadN was issued.

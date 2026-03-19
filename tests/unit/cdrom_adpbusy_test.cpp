@@ -16,6 +16,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 namespace
@@ -219,10 +220,89 @@ void testAdpbusyClearedOnPause()
     assert((cdrom.readStatus() & kAdpbusyBit) == 0u);
 }
 
+// ---------------------------------------------------------------------------
+// Test 4: ADPBUSY explicitly cleared on Stop and does not re-appear at
+// the start of a subsequent ReadN (before any XA sector arrives).
+// This is the PR-RV30 sticky-latch regression test: previously
+// m_xaPlaybackBusy was never cleared on Stop, so seekActive=true at the
+// new ReadN was enough to show ADPBUSY before the first XA sector.
+// ---------------------------------------------------------------------------
+void testAdpbusyResetBetweenStreams()
+{
+    AdpbusyDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    // First stream: consume one XA-ADPCM sector.
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00);
+    issueReadN(cdrom);
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x00);             // INT1 suppressed (XA)
+    assert((cdrom.readStatus() & kAdpbusyBit) != 0u); // ADPBUSY set
+
+    // Stop: ADPBUSY must clear explicitly.
+    cdrom.writeCommand(0x08);
+    assert(irqType(cdrom) == 0x03);
+    readAndAck(cdrom);
+    if (irqType(cdrom) != 0u) readAndAck(cdrom); // INT2
+    assert((cdrom.readStatus() & kAdpbusyBit) == 0u);
+
+    // Second stream: ADPBUSY must stay clear before any XA sector arrives.
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00);
+    issueReadN(cdrom);
+    // seekActive=true here — with the old latch ADPBUSY would already be set.
+    assert((cdrom.readStatus() & kAdpbusyBit) == 0u);
+
+    // Confirm ADPBUSY rises again once the new XA sector arrives.
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x00);
+    assert((cdrom.readStatus() & kAdpbusyBit) != 0u);
+}
+
+// ---------------------------------------------------------------------------
+// Test 5: formatAdpbusyLifecycleSummary() reports rose/fell/sectors fields
+// after a complete play → pause lifecycle.
+// ---------------------------------------------------------------------------
+void testAdpbusyLifecycleSummary()
+{
+    AdpbusyDisc disc;
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1F);
+
+    issueSetmode(cdrom, 0x40);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00);
+    issueReadN(cdrom);
+    cdrom.tick(kReadCycles); // one XA sector
+
+    // Summary while busy.
+    std::string s = cdrom.formatAdpbusyLifecycleSummary();
+    assert(s.find("adpbusy_now:") != std::string::npos);
+    assert(s.find("rose_at_lba:") != std::string::npos);
+    assert(s.find("sectors_busy:") != std::string::npos);
+    assert(s.find("still busy") != std::string::npos);
+
+    // Pause → fell_at_lba appears.
+    cdrom.writeCommand(0x09);
+    assert(irqType(cdrom) == 0x03);
+    readAndAck(cdrom);
+    if (irqType(cdrom) != 0u) readAndAck(cdrom);
+
+    s = cdrom.formatAdpbusyLifecycleSummary();
+    assert(s.find("fell_at_lba:") != std::string::npos);
+}
+
 int main()
 {
     testAdpbusySetAfterXaSector();
     testAdpbusyNotSetForMode1Sector();
     testAdpbusyClearedOnPause();
+    testAdpbusyResetBetweenStreams();
+    testAdpbusyLifecycleSummary();
     return 0;
 }

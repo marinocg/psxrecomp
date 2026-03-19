@@ -241,8 +241,8 @@ void Cdrom::reset()
     m_xaLastCodingInfo = 0;
     // ADPBUSY + post-stream validator
     m_xaPlaybackBusy = false;
-    m_streamStartXaCount = 0;
-    m_streamStartCpuCount = 0;
+    m_xaPlaybackBusyRoseLba = m_xaPlaybackBusyFellLba = m_xaSectorsWhileBusy = 0;
+    m_streamStartXaCount = m_streamStartCpuCount = 0;
     m_streamStarted = false;
     m_cpuRecordCount = 0;
 }

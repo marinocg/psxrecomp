@@ -144,6 +144,7 @@ void Cdrom::executePendingCommand()
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_dataPadValid = false;
+        m_xaPlaybackBusy = false; // PR-RV30: fresh stream; ADPBUSY rises only when XA arrives.
         if (m_execution.xaStreamingEnabled) // Snapshot counters (PR-RV27).
         {
             m_streamStarted = true;
@@ -158,6 +159,7 @@ void Cdrom::executePendingCommand()
         const u8 firstStat = static_cast<u8>(currentStat() & ~cdrom_detail::STAT_READ_ACTIVE);
         m_execution.readActive = false;
         m_execution.seekActive = false;
+        if (m_xaPlaybackBusy) { m_xaPlaybackBusy = false; m_xaPlaybackBusyFellLba = m_activeLba; }
         m_execution.xaPrevLeft1 = 0;
         m_execution.xaPrevLeft2 = 0;
         m_execution.xaPrevRight1 = 0;
@@ -177,6 +179,7 @@ void Cdrom::executePendingCommand()
         const u8 firstStat = currentStat();
         m_execution.readActive = false;
         m_execution.seekActive = false;
+        if (m_xaPlaybackBusy) { m_xaPlaybackBusy = false; m_xaPlaybackBusyFellLba = m_activeLba; }
         m_execution.xaPrevLeft1 = 0;
         m_execution.xaPrevLeft2 = 0;
         m_execution.xaPrevRight1 = 0;
@@ -195,6 +198,7 @@ void Cdrom::executePendingCommand()
         m_execution.motorOn = true;
         m_execution.readActive = false;
         m_execution.seekActive = false;
+        m_xaPlaybackBusy = false;
         m_execution.xaStreamingEnabled = false;
         m_execution.xaFilterEnabled = false;
         m_execution.xaFilterFile = 0;
@@ -473,6 +477,7 @@ void Cdrom::queueErrorInterrupt(u8 reasonCode)
     traceCdrom("queueErrorInterrupt reason=0x%02X", reasonCode);
     m_execution.readActive = false;
     m_execution.seekActive = false;
+    if (m_xaPlaybackBusy) { m_xaPlaybackBusy = false; m_xaPlaybackBusyFellLba = m_execution.currentLba; }
     m_dataFifo.clear();
     m_bufferedReadSectors.clear();
     m_activeSector.clear();
@@ -489,6 +494,7 @@ void Cdrom::beginDoorOpenTransition(bool closeAfterTransition)
     m_doorCloseCycles = closeAfterTransition ? cdrom_detail::DOOR_CLOSE_TRANSITION_CYCLES : 0;
     m_execution.readActive = false;
     m_execution.seekActive = false;
+    m_xaPlaybackBusy = false;
     m_dataFifo.clear();
     m_bufferedReadSectors.clear();
     m_activeSector.clear();
