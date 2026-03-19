@@ -351,6 +351,13 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
                       "context.system.cdrom());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
+    emitter.writeLine("if (context.system.diagExplainers().isEnabled("
+                      "runtime::ExplainerKind::CdromIrqLifecycleSummary))");
+    emitter.openBlock("");
+    emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromIrqLifecycleSummary("
+                      "context.system.cdrom());");
+    emitter.writeLine("stream << \"\\n\";");
+    emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");
     emitter.writeLine("stream << context.system.formatHookEntryIntResumeTrace();");
     emitter.writeLine("throw std::runtime_error(stream.str());");

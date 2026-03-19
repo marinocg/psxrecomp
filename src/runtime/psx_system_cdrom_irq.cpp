@@ -204,17 +204,31 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         m_biosCdrom.asyncResultPtr = 0;
     }
 
-    std::vector<u32> callbacks =
-        m_events.deliverByClassSpec(EventClass::Cdrom, CDROM_RAW_IRQ_EVENT_SPECS[irqType - 1u]);
-    if (translatedCompletionSpec != 0 &&
-        translatedCompletionSpec != CDROM_RAW_IRQ_EVENT_SPECS[irqType - 1u])
+    const u32 irqGeneration = m_cdrom.irqPublishGeneration(irqType);
+    const bool shouldDeliverSoftwareDispatch =
+        m_biosCdrom.lastDeliveredIrqType != irqType ||
+        m_biosCdrom.lastDeliveredIrqGeneration != irqGeneration;
+
+    std::vector<u32> callbacks;
+    if (shouldDeliverSoftwareDispatch)
     {
-        auto translatedCallbacks =
-            m_events.deliverByClassSpec(EventClass::Cdrom, translatedCompletionSpec);
-        callbacks.insert(callbacks.end(), translatedCallbacks.begin(), translatedCallbacks.end());
+        callbacks =
+            m_events.deliverByClassSpec(EventClass::Cdrom, CDROM_RAW_IRQ_EVENT_SPECS[irqType - 1u]);
+        if (translatedCompletionSpec != 0 &&
+            translatedCompletionSpec != CDROM_RAW_IRQ_EVENT_SPECS[irqType - 1u])
+        {
+            auto translatedCallbacks =
+                m_events.deliverByClassSpec(EventClass::Cdrom, translatedCompletionSpec);
+            callbacks.insert(callbacks.end(), translatedCallbacks.begin(),
+                             translatedCallbacks.end());
+        }
+        auto genericCallbacks =
+            m_events.deliverByClassSpec(EventClass::Cdrom, EventSpec::Interrupted);
+        callbacks.insert(callbacks.end(), genericCallbacks.begin(), genericCallbacks.end());
+        m_biosCdrom.lastDeliveredIrqType = irqType;
+        m_biosCdrom.lastDeliveredIrqGeneration = irqGeneration;
+        m_cdrom.noteIrqCallbackDispatch(irqType, !callbacks.empty());
     }
-    auto genericCallbacks = m_events.deliverByClassSpec(EventClass::Cdrom, EventSpec::Interrupted);
-    callbacks.insert(callbacks.end(), genericCallbacks.begin(), genericCallbacks.end());
 
     for (u32 address : callbacks)
     {

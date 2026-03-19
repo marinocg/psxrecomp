@@ -334,7 +334,8 @@ int main()
     runtimeHeader << "enum class ExplainerKind : unsigned char {\n";
     runtimeHeader << "    Gpustat, CdromIrq, IrqController, DmaChannel,\n";
     runtimeHeader << "    CdromBankSummary, CdromPhaseSummary, CdromXaClassification,\n";
-    runtimeHeader << "    CdromPostStreamValidator, CdromCpuPayloadSummary\n";
+    runtimeHeader << "    CdromPostStreamValidator, CdromCpuPayloadSummary,\n";
+    runtimeHeader << "    CdromIrqLifecycleSummary\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class Cdrom {\n";
     runtimeHeader << "  public:\n";
@@ -343,7 +344,9 @@ int main()
     runtimeHeader << "    std::string formatXaClassificationSummary() const { return {}; }\n";
     runtimeHeader << "    std::string formatPostStreamSummary() const { return {}; }\n";
     runtimeHeader << "    std::string formatCpuPayloadSummary() const { return {}; }\n";
+    runtimeHeader << "    std::string formatIrqLifecycleSummary() const { return {}; }\n";
     runtimeHeader << "    std::string formatAdpbusyLifecycleSummary() const { return {}; }\n";
+    runtimeHeader << "    void noteIrqCallbackDispatch(unsigned char, bool) {}\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class DiagCdromBankTracer {\n";
     runtimeHeader << "  public:\n";
@@ -360,6 +363,8 @@ int main()
         << "    static std::string explainCdromPostStreamValidator(const Cdrom&) { return {}; }\n";
     runtimeHeader
         << "    static std::string explainCdromCpuPayloadSummary(const Cdrom&) { return {}; }\n";
+    runtimeHeader
+        << "    static std::string explainCdromIrqLifecycleSummary(const Cdrom&) { return {}; }\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class CallbackTraceEngine {\n";
     runtimeHeader << "  public:\n";

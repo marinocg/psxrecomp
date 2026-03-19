@@ -106,6 +106,11 @@ class Cdrom
     /// sector was superseded before full drain.
     std::string formatCpuPayloadSummary() const;
 
+    /// Compact raw-IRQ lifecycle summary with per-subtype publish generations,
+    /// queue/publish/ack/deassert counts, and INT4-specific redispatch and
+    /// deassert diagnostics.
+    std::string formatIrqLifecycleSummary() const;
+
     void reset();
     void tick(u32 cpuCycles);
     void setDiscBackend(Disc* disc);
@@ -146,6 +151,8 @@ class Cdrom
 
     void enqueueDataSector(const std::vector<u8>& data);
     bool hasIrqRequest() const;
+    u32 irqPublishGeneration(u8 irqType) const;
+    void noteIrqCallbackDispatch(u8 irqType, bool callbacksDispatched);
     std::vector<u8> serializeState() const;
     bool deserializeState(const std::vector<u8>& state);
 
@@ -441,6 +448,23 @@ class Cdrom
     CpuSectorRecord m_drainingCpuRecord{};
     bool m_drainingCpuRecordValid = false;
     size_t m_dataFifoConsumedBytes = 0; ///< Bytes consumed from current accepted sector (CPU+DMA).
+
+    struct IrqLifecycleRecord
+    {
+        u32 queuedCount = 0;
+        u32 publishedCount = 0;
+        u32 ackedCount = 0;
+        u32 deassertedCount = 0;
+        u32 publishGeneration = 0;
+        u32 callbackRedispatchCount = 0;
+    };
+
+    static constexpr size_t IRQ_LIFECYCLE_TYPE_COUNT = 5u;
+    std::array<IrqLifecycleRecord, IRQ_LIFECYCLE_TYPE_COUNT> m_irqLifecycle{};
+    u8 m_lastCallbackDispatchType = 0;
+    u32 m_lastCallbackDispatchGeneration = 0;
+    u32 m_int4HclrctlClearCount = 0;
+    bool m_int4TopLevelDeassertAfterAck = false;
 
     void recordPhaseTrace(u32 lba, SectorPhaseReason reason);
 

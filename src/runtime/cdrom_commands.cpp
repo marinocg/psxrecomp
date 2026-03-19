@@ -405,16 +405,28 @@ void Cdrom::writeInterruptFlags(u8 value)
                m_execution.pendingResponseIrqs.size());
     const u8 ackMask = static_cast<u8>(value & 0x1Fu);
     const u8 currentType = static_cast<u8>(m_interruptFlags & 0x07u);
+    const bool topLevelIrqBeforeAck = hasIrqRequest();
     if (ackMask != 0 && currentType >= 1u && currentType <= 5u)
     {
         const u8 currentTypeBit = static_cast<u8>(1u << (currentType - 1u));
         if ((ackMask & currentTypeBit) != 0u)
         {
+            IrqLifecycleRecord& lifecycle = m_irqLifecycle[currentType - 1u];
+            ++lifecycle.ackedCount;
             m_interruptFlags = static_cast<u8>(m_interruptFlags & 0xF8u);
+            ++lifecycle.deassertedCount;
             recordPhaseTrace(m_activeLba, SectorPhaseReason::HclrctlAck);
             // PSX-SPX: HCLRCTL drains unread result bytes for the acknowledged IRQ.
             m_responseFifo.clear();
             m_ackResponseFifo.clear();
+            if (currentType == cdrom_detail::INT4)
+            {
+                ++m_int4HclrctlClearCount;
+                if (topLevelIrqBeforeAck && !hasIrqRequest())
+                {
+                    m_int4TopLevelDeassertAfterAck = true;
+                }
+            }
             if (currentType == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
             {
                 scheduleBufferedInt1Promotion();

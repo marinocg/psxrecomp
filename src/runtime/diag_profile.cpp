@@ -114,6 +114,8 @@ ExplainerKind parseExplainerKind(const std::string& text)
         return ExplainerKind::CdromPostStreamValidator;
     if (text == "cdrom_cpu_payload_summary")
         return ExplainerKind::CdromCpuPayloadSummary;
+    if (text == "cdrom_irq_lifecycle_summary")
+        return ExplainerKind::CdromIrqLifecycleSummary;
     return ExplainerKind::Gpustat;
 }
 

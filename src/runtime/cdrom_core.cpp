@@ -277,6 +277,11 @@ void Cdrom::reset()
     m_drainingCpuRecord = {};
     m_drainingCpuRecordValid = false;
     m_dataFifoConsumedBytes = 0;
+    m_irqLifecycle = {};
+    m_lastCallbackDispatchType = 0;
+    m_lastCallbackDispatchGeneration = 0;
+    m_int4HclrctlClearCount = 0;
+    m_int4TopLevelDeassertAfterAck = false;
 }
 
 void Cdrom::setDiscBackend(Disc* disc)

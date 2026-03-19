@@ -53,6 +53,10 @@ class DiagExplainerEngine
     /// sectors. Delegates to Cdrom::formatCpuPayloadSummary().
     static std::string explainCdromCpuPayloadSummary(const Cdrom& cdrom);
 
+    /// Return a raw CD-ROM IRQ lifecycle summary with INT4 publish/ack/redispatch diagnostics.
+    /// Delegates to Cdrom::formatIrqLifecycleSummary().
+    static std::string explainCdromIrqLifecycleSummary(const Cdrom& cdrom);
+
     /// Number of configured explainers.
     size_t explainerCount() const;
 

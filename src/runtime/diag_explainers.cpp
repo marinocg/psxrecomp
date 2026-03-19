@@ -159,5 +159,10 @@ std::string DiagExplainerEngine::explainCdromCpuPayloadSummary(const Cdrom& cdro
     return cdrom.formatCpuPayloadSummary();
 }
 
+std::string DiagExplainerEngine::explainCdromIrqLifecycleSummary(const Cdrom& cdrom)
+{
+    return cdrom.formatIrqLifecycleSummary();
+}
+
 } // namespace runtime
 } // namespace psxrecomp

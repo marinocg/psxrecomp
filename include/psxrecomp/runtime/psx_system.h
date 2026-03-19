@@ -459,6 +459,9 @@ class PsxSystem
         u32 asyncSectorsRead = 0;     ///< Sectors copied so far.
         u32 asyncReadMode = 0;        ///< Full mode word passed to CdAsyncReadSector (bit8=ReadS).
         u32 asyncReadSectorBytes = 0; ///< Effective bytes per sector for the active read.
+        u8 lastDeliveredIrqType =
+            0; ///< Last raw CD subtype delivered to software events/callbacks.
+        u32 lastDeliveredIrqGeneration = 0; ///< Publish generation for the last delivered subtype.
     };
     struct GpuPortTraceEntry
     {

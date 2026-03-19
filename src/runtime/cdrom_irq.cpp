@@ -79,6 +79,7 @@ void Cdrom::queueInterruptEvent(u8 type, std::initializer_list<u8> responses)
     event.type = irqType;
     event.responses.assign(responses.begin(), responses.end());
     m_execution.pendingResponseIrqs.push_back(std::move(event));
+    ++m_irqLifecycle[irqType - 1u].queuedCount;
     publishNextInterruptEvent();
 }
 
@@ -111,6 +112,9 @@ void Cdrom::publishNextInterruptEvent(bool allowBufferedInt1)
     }
 
     m_interruptFlags = static_cast<u8>((m_interruptFlags & 0xF8u) | (event.type & 0x07u));
+    IrqLifecycleRecord& lifecycle = m_irqLifecycle[event.type - 1u];
+    ++lifecycle.publishedCount;
+    ++lifecycle.publishGeneration;
     m_responseFifo.clear();
     for (u8 byte : event.responses)
     {

@@ -149,7 +149,9 @@ enum class ExplainerKind : u8
     CdromPostStreamValidator,
     /// Per-sector CPU payload breakdown for the rolling last 32 accepted/read ReadS/ReadN sectors
     /// (PR-RV28/37).
-    CdromCpuPayloadSummary
+    CdromCpuPayloadSummary,
+    /// Raw CD-ROM IRQ lifecycle summary with INT4 publish/ack/redispatch/deassert diagnostics.
+    CdromIrqLifecycleSummary
 };
 
 /// A single device/register explainer from a profile.

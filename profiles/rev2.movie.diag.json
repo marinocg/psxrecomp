@@ -137,6 +137,9 @@
     },
     {
       "kind": "cdrom_cpu_payload_summary"
+    },
+    {
+      "kind": "cdrom_irq_lifecycle_summary"
     }
   ],
   "metadata_watches": [],
