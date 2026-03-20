@@ -61,6 +61,8 @@ void Cdrom::beginCpuPayloadRecord(u32 int1PublishLba, const std::vector<u8>& sec
 {
     m_publishedCpuRecord = {};
     m_publishedCpuRecordValid = false;
+    m_publishedInt1PublishGeneration = 0;
+    m_publishedInt1RecordValid = false;
 
     if (!m_cpuPayloadCaptureActive || sector.empty())
     {
@@ -117,6 +119,12 @@ void Cdrom::beginCpuPayloadRecord(u32 int1PublishLba, const std::vector<u8>& sec
     }
 
     m_publishedCpuRecordValid = true;
+    m_publishedInt1RecordValid = m_liveInt1RecordValid;
+    if (m_publishedInt1RecordValid)
+    {
+        m_publishedInt1RecordIndex = m_liveInt1RecordIndex;
+        m_publishedInt1PublishGeneration = m_int1Records[m_liveInt1RecordIndex].publishGeneration;
+    }
 }
 
 void Cdrom::noteCpuPayloadAccepted(u32 acceptedLba)
@@ -132,6 +140,21 @@ void Cdrom::noteCpuPayloadAccepted(u32 acceptedLba)
     m_drainingCpuRecord.finalOffset = 0;
     m_drainingCpuRecord.nextPublishOffset = kNoOffset;
     m_drainingCpuRecordValid = true;
+
+    m_drainingInt1PublishGeneration = 0;
+    m_drainingInt1RecordValid = false;
+    if (m_publishedInt1RecordValid)
+    {
+        if (Int1GenerationRecord* record =
+                findInt1RecordByGeneration(m_publishedInt1PublishGeneration))
+        {
+            record->accepted = true;
+            record->acceptedLba = acceptedLba;
+            m_drainingInt1RecordIndex = m_publishedInt1RecordIndex;
+            m_drainingInt1PublishGeneration = m_publishedInt1PublishGeneration;
+            m_drainingInt1RecordValid = true;
+        }
+    }
 }
 
 void Cdrom::noteCpuPayloadSuperseded()
@@ -186,6 +209,8 @@ void Cdrom::finalizeCpuPayloadRecord(bool supersededByNextInt1)
 
     m_drainingCpuRecord = {};
     m_drainingCpuRecordValid = false;
+    m_drainingInt1PublishGeneration = 0;
+    m_drainingInt1RecordValid = false;
 }
 
 std::string Cdrom::formatCpuPayloadSummary() const

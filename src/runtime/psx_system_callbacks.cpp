@@ -25,10 +25,12 @@ void PsxSystem::invokeCallback(u32 address, u32 descriptorAddress)
     const u32 callbackGenerationBefore = m_callbackContextCommitGeneration;
     const u32 irqStatusBefore = m_interrupts.readStatus();
     const u32 irqMaskBefore = m_interrupts.readMask();
+    const u8 cdHintStatusBefore = static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu);
+    const u8 cdHintMaskBefore = static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu);
     const bool cop0InterruptEligibleBefore = m_cop0.shouldTakeInterruptException();
-    m_callbackTrace.beginInvocation(address, descriptorAddress, returnSite,
-                                    callbackGenerationBefore, irqStatusBefore, irqMaskBefore,
-                                    cop0InterruptEligibleBefore);
+    m_callbackTrace.beginInvocation(
+        address, descriptorAddress, returnSite, callbackGenerationBefore, irqStatusBefore,
+        irqMaskBefore, cdHintStatusBefore, cdHintMaskBefore, cop0InterruptEligibleBefore);
     if (emitTraceLogs)
     {
         std::ostringstream msg;
@@ -48,10 +50,11 @@ void PsxSystem::invokeCallback(u32 address, u32 descriptorAddress)
     catch (const ReturnFromExceptionSignal&)
     {
         const Address exitPc = m_debugOverlay.lastProgramCounter();
-        m_callbackTrace.finishInvocation(exitPc, true, m_callbackContextCommitGeneration,
-                                         m_interrupts.readStatus(), m_interrupts.readMask(),
-                                         m_cop0.shouldTakeInterruptException(), &m_logger,
-                                         emitTraceLogs);
+        m_callbackTrace.finishInvocation(
+            exitPc, true, m_callbackContextCommitGeneration, m_interrupts.readStatus(),
+            m_interrupts.readMask(), static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu),
+            static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu),
+            m_cop0.shouldTakeInterruptException(), &m_logger, emitTraceLogs);
         if (emitTraceLogs)
         {
             std::ostringstream msg;
@@ -67,14 +70,18 @@ void PsxSystem::invokeCallback(u32 address, u32 descriptorAddress)
         m_callbackTrace.finishInvocation(
             m_debugOverlay.lastProgramCounter(), false, m_callbackContextCommitGeneration,
             m_interrupts.readStatus(), m_interrupts.readMask(),
+            static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu),
+            static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu),
             m_cop0.shouldTakeInterruptException(), &m_logger, emitTraceLogs);
         m_inCallbackInvocation = previousInCallbackInvocation;
         throw;
     }
-    m_callbackTrace.finishInvocation(m_debugOverlay.lastProgramCounter(), false,
-                                     m_callbackContextCommitGeneration, m_interrupts.readStatus(),
-                                     m_interrupts.readMask(), m_cop0.shouldTakeInterruptException(),
-                                     &m_logger, emitTraceLogs);
+    m_callbackTrace.finishInvocation(
+        m_debugOverlay.lastProgramCounter(), false, m_callbackContextCommitGeneration,
+        m_interrupts.readStatus(), m_interrupts.readMask(),
+        static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu),
+        static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu),
+        m_cop0.shouldTakeInterruptException(), &m_logger, emitTraceLogs);
     m_inCallbackInvocation = previousInCallbackInvocation;
 }
 
@@ -94,10 +101,12 @@ u32 PsxSystem::invokeCallbackRaw(u32 address, u32 descriptorAddress)
     const u32 callbackGenerationBefore = m_callbackContextCommitGeneration;
     const u32 irqStatusBefore = m_interrupts.readStatus();
     const u32 irqMaskBefore = m_interrupts.readMask();
+    const u8 cdHintStatusBefore = static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu);
+    const u8 cdHintMaskBefore = static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu);
     const bool cop0InterruptEligibleBefore = m_cop0.shouldTakeInterruptException();
-    m_callbackTrace.beginInvocation(address, descriptorAddress, returnSite,
-                                    callbackGenerationBefore, irqStatusBefore, irqMaskBefore,
-                                    cop0InterruptEligibleBefore);
+    m_callbackTrace.beginInvocation(
+        address, descriptorAddress, returnSite, callbackGenerationBefore, irqStatusBefore,
+        irqMaskBefore, cdHintStatusBefore, cdHintMaskBefore, cop0InterruptEligibleBefore);
     const bool previousInCallbackInvocation = m_inCallbackInvocation;
     m_inCallbackInvocation = true;
     try
@@ -116,6 +125,8 @@ u32 PsxSystem::invokeCallbackRaw(u32 address, u32 descriptorAddress)
         m_callbackTrace.finishInvocation(
             m_debugOverlay.lastProgramCounter(), false, m_callbackContextCommitGeneration,
             m_interrupts.readStatus(), m_interrupts.readMask(),
+            static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu),
+            static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu),
             m_cop0.shouldTakeInterruptException(), &m_logger, emitTraceLogs);
         if (emitTraceLogs)
         {
@@ -130,10 +141,11 @@ u32 PsxSystem::invokeCallbackRaw(u32 address, u32 descriptorAddress)
     catch (const ReturnFromExceptionSignal&)
     {
         const Address exitPc = m_debugOverlay.lastProgramCounter();
-        m_callbackTrace.finishInvocation(exitPc, true, m_callbackContextCommitGeneration,
-                                         m_interrupts.readStatus(), m_interrupts.readMask(),
-                                         m_cop0.shouldTakeInterruptException(), &m_logger,
-                                         emitTraceLogs);
+        m_callbackTrace.finishInvocation(
+            exitPc, true, m_callbackContextCommitGeneration, m_interrupts.readStatus(),
+            m_interrupts.readMask(), static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu),
+            static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu),
+            m_cop0.shouldTakeInterruptException(), &m_logger, emitTraceLogs);
         m_inCallbackInvocation = previousInCallbackInvocation;
         throw;
     }
@@ -142,6 +154,8 @@ u32 PsxSystem::invokeCallbackRaw(u32 address, u32 descriptorAddress)
         m_callbackTrace.finishInvocation(
             m_debugOverlay.lastProgramCounter(), false, m_callbackContextCommitGeneration,
             m_interrupts.readStatus(), m_interrupts.readMask(),
+            static_cast<u8>(m_cdrom.readInterruptFlags() & 0x1Fu),
+            static_cast<u8>(m_cdrom.readInterruptEnable() & 0x1Fu),
             m_cop0.shouldTakeInterruptException(), &m_logger, emitTraceLogs);
         m_inCallbackInvocation = previousInCallbackInvocation;
         throw;

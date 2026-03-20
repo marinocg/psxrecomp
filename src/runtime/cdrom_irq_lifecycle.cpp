@@ -13,6 +13,9 @@ namespace runtime
 
 namespace
 {
+constexpr size_t kNoInt1Record = ~size_t{0};
+constexpr size_t kInt1RecordCapacity = 8u;
+
 const char* irqLabel(u8 irqType)
 {
     switch (irqType)
@@ -31,7 +34,53 @@ const char* irqLabel(u8 irqType)
         return "INT?";
     }
 }
+
+size_t int1RecordPhysicalIndex(size_t head, size_t count, size_t logicalIndex)
+{
+    const size_t oldest = (head + kInt1RecordCapacity - count) % kInt1RecordCapacity;
+    return (oldest + logicalIndex) % kInt1RecordCapacity;
+}
 } // namespace
+
+Cdrom::Int1GenerationRecord* Cdrom::findInt1RecordByGeneration(u32 publishGeneration)
+{
+    if (publishGeneration == 0)
+    {
+        return nullptr;
+    }
+
+    for (size_t i = 0; i < m_int1RecordCount; ++i)
+    {
+        Int1GenerationRecord& record =
+            m_int1Records[int1RecordPhysicalIndex(m_int1RecordHead, m_int1RecordCount, i)];
+        if (record.publishGeneration == publishGeneration)
+        {
+            return &record;
+        }
+    }
+
+    return nullptr;
+}
+
+const Cdrom::Int1GenerationRecord* Cdrom::findInt1RecordByGeneration(u32 publishGeneration) const
+{
+    if (publishGeneration == 0)
+    {
+        return nullptr;
+    }
+
+    for (size_t i = 0; i < m_int1RecordCount; ++i)
+    {
+        const Int1GenerationRecord& record =
+            m_int1Records[int1RecordPhysicalIndex(m_int1RecordHead, m_int1RecordCount, i)];
+        if (record.publishGeneration == publishGeneration)
+        {
+            return &record;
+        }
+    }
+
+    return nullptr;
+}
 
 void Cdrom::noteIrqCallbackDispatch(u8 irqType, bool callbacksDispatched)
 {
@@ -65,6 +114,72 @@ u32 Cdrom::irqPublishGeneration(u8 irqType) const
     return m_irqLifecycle[irqType - 1u].publishGeneration;
 }
 
+void Cdrom::notePublishedInt1Generation(u32 publishGeneration)
+{
+    if (!m_loadedInt1RecordValid)
+    {
+        return;
+    }
+
+    Int1GenerationRecord record = m_loadedInt1Record;
+    record.publishGeneration = publishGeneration;
+    record.bfrdHighAtPublish = (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0u;
+    m_int1Records[m_int1RecordHead] = record;
+    m_liveInt1RecordIndex = m_int1RecordHead;
+    m_liveInt1RecordValid = true;
+    m_int1RecordHead = (m_int1RecordHead + 1u) % INT1_RECORD_CAPACITY;
+    if (m_int1RecordCount < INT1_RECORD_CAPACITY)
+    {
+        ++m_int1RecordCount;
+    }
+    m_publishedInt1RecordIndex = m_liveInt1RecordIndex;
+    m_publishedInt1PublishGeneration = publishGeneration;
+    m_publishedInt1RecordValid = true;
+    m_liveInt1AcceptedByBiosAuto = false;
+    m_loadedInt1Record = {};
+    m_loadedInt1RecordValid = false;
+}
+
+void Cdrom::noteInt1BfrdRiseAfterPublish()
+{
+    if (!m_liveInt1RecordValid)
+    {
+        return;
+    }
+
+    m_int1Records[m_liveInt1RecordIndex].bfrdRoseAfterPublish = true;
+}
+
+void Cdrom::noteInt1FirstDma()
+{
+    if (m_drainingInt1RecordValid)
+    {
+        if (Int1GenerationRecord* record =
+                findInt1RecordByGeneration(m_drainingInt1PublishGeneration))
+        {
+            record->firstDma = true;
+            return;
+        }
+    }
+
+    if (m_liveInt1RecordValid)
+    {
+        m_int1Records[m_liveInt1RecordIndex].firstDma = true;
+    }
+}
+
+void Cdrom::noteAckedInt1Generation(bool topLevelCdLineDeasserted)
+{
+    if (!m_liveInt1RecordValid)
+    {
+        return;
+    }
+
+    Int1GenerationRecord& record = m_int1Records[m_liveInt1RecordIndex];
+    record.acked = true;
+    record.topLevelCdLineDeasserted = topLevelCdLineDeasserted;
+}
+
 std::string Cdrom::formatIrqLifecycleSummary() const
 {
     std::ostringstream os;
@@ -87,6 +202,130 @@ std::string Cdrom::formatIrqLifecycleSummary() const
        << "\n";
     os << "  top-level CD IRQ deassert after INT4 ack: "
        << (m_int4TopLevelDeassertAfterAck ? "yes" : "no") << "\n";
+
+    std::vector<Int1GenerationRecord> int1Records;
+    int1Records.reserve(m_int1RecordCount);
+    for (size_t i = 0; i < m_int1RecordCount; ++i)
+    {
+        int1Records.push_back(
+            m_int1Records[int1RecordPhysicalIndex(m_int1RecordHead, m_int1RecordCount, i)]);
+    }
+
+    if (!int1Records.empty())
+    {
+        auto formatBfrdState = [](bool high) { return high ? "high" : "low"; };
+        auto formatYesNo = [](bool value) { return value ? "yes" : "no"; };
+
+        auto formatSubmode = [](const Int1GenerationRecord& record)
+        {
+            std::ostringstream s;
+            if (record.hasXaSub)
+            {
+                s << "0x" << std::hex << std::setw(2) << std::setfill('0')
+                  << static_cast<unsigned>(record.xaSubmode);
+            }
+            else
+            {
+                s << "none";
+            }
+            return s.str();
+        };
+
+        size_t lastAcked = kNoInt1Record;
+        for (size_t i = 0; i < int1Records.size(); ++i)
+        {
+            if (int1Records[i].acked)
+            {
+                lastAcked = i;
+            }
+        }
+
+        size_t firstUnacked = kNoInt1Record;
+        const size_t searchStart = lastAcked == kNoInt1Record ? 0u : lastAcked + 1u;
+        for (size_t i = searchStart; i < int1Records.size(); ++i)
+        {
+            if (!int1Records[i].acked)
+            {
+                firstUnacked = i;
+                break;
+            }
+        }
+
+        os << "  INT1 recent generations:\n";
+        for (const Int1GenerationRecord& record : int1Records)
+        {
+            os << "    gen=" << record.publishGeneration << " lba=" << record.publishedLba
+               << " publish_bfrd=" << formatBfrdState(record.bfrdHighAtPublish)
+               << " bfrd_rose=" << formatYesNo(record.bfrdRoseAfterPublish)
+               << " accept=" << formatYesNo(record.accepted)
+               << " accepted=" << (record.accepted ? std::to_string(record.acceptedLba) : "none")
+               << " dma=" << formatYesNo(record.firstDma) << " acked=" << formatYesNo(record.acked)
+               << " deassert=" << formatYesNo(record.topLevelCdLineDeasserted);
+            if (record.hasXaSub)
+            {
+                os << " file=" << static_cast<unsigned>(record.xaFile)
+                   << " channel=" << static_cast<unsigned>(record.xaChannel) << " submode=0x"
+                   << std::hex << std::setw(2) << std::setfill('0')
+                   << static_cast<unsigned>(record.xaSubmode) << " coding=0x" << std::setw(2)
+                   << static_cast<unsigned>(record.xaCoding) << std::dec << std::setfill(' ');
+            }
+            else
+            {
+                os << " file=none channel=none submode=none coding=none";
+            }
+            os << " eor=" << (record.hasEor ? "yes" : "no")
+               << " eof=" << (record.hasEof ? "yes" : "no") << "\n";
+        }
+
+        if (lastAcked != kNoInt1Record)
+        {
+            const Int1GenerationRecord& record = int1Records[lastAcked];
+            os << "  last_acked_int1_lba: " << record.publishedLba << "\n";
+            os << "  last_acked_submode: " << formatSubmode(record) << "\n";
+        }
+        else
+        {
+            os << "  last_acked_int1_lba: none\n";
+            os << "  last_acked_submode: none\n";
+        }
+
+        if (firstUnacked != kNoInt1Record)
+        {
+            const Int1GenerationRecord& record = int1Records[firstUnacked];
+            os << "  first_unacked_int1_lba: " << record.publishedLba << "\n";
+            os << "  first_unacked_submode: " << formatSubmode(record) << "\n";
+            os << "  first_unacked_int1_handshake: publish_bfrd="
+               << formatBfrdState(record.bfrdHighAtPublish)
+               << " bfrd_rose=" << formatYesNo(record.bfrdRoseAfterPublish)
+               << " accept=" << formatYesNo(record.accepted)
+               << " dma=" << formatYesNo(record.firstDma) << " ack=" << formatYesNo(record.acked)
+               << " top_level_cd_line_deassert=" << formatYesNo(record.topLevelCdLineDeasserted)
+               << "\n";
+        }
+        else
+        {
+            os << "  first_unacked_int1_lba: none\n";
+            os << "  first_unacked_submode: none\n";
+            os << "  first_unacked_int1_handshake: none\n";
+        }
+
+        bool sameFileChannel = false;
+        bool stalledOnSectorAfterEof = false;
+        if (lastAcked != kNoInt1Record && firstUnacked != kNoInt1Record)
+        {
+            const Int1GenerationRecord& acked = int1Records[lastAcked];
+            const Int1GenerationRecord& unacked = int1Records[firstUnacked];
+            sameFileChannel = acked.hasXaSub && unacked.hasXaSub &&
+                              acked.xaFile == unacked.xaFile &&
+                              acked.xaChannel == unacked.xaChannel;
+            stalledOnSectorAfterEof = (acked.hasEof || acked.hasEor) && sameFileChannel &&
+                                      unacked.publishedLba == acked.publishedLba + 1u;
+        }
+        os << "  same_file_channel = " << (sameFileChannel ? "yes" : "no") << "\n";
+        os << "  stalled_on_sector_after_eof = " << (stalledOnSectorAfterEof ? "yes" : "no")
+           << "\n";
+    }
+
     return os.str();
 }
 

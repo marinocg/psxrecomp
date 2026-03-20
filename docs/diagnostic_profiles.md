@@ -121,6 +121,10 @@ problem to one subsystem:
   handlers, and interrupt-controller state.
 - `profiles/rev2.next.diag.json`: delay-helper churn and the nearby consumer
   path.
+- `profiles/rev2.request_path.diag.json`: the `0x154718..0x154778` parser loop,
+  the `0x15abf8/0x15ace0` result-ack path, the `0x15d1b8/0x15d248`
+  `REQUEST/BFRD + DMA3` path, and the `0x80166440/0x80166480/0x80166490`
+  state block.
 - `profiles/rev2.dma_setup.diag.json`: DMA setup investigation around the
   control-object family at `0x801666b0..0x801666d0`, the later programming
   window at `0x15f410..0x15f68c`, and DMA channel MMIO writes.

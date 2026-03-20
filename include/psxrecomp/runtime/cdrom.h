@@ -74,41 +74,17 @@ class Cdrom
 
     static constexpr size_t PHASE_TRACE_CAPACITY = 32u;
 
-    /// Number of valid entries in the rolling phase-trace ring (≤ PHASE_TRACE_CAPACITY).
     size_t phaseTraceCount() const;
-
-    /// Retrieve an entry by logical index where 0 is the oldest retained entry.
     PhaseTraceEntry phaseTraceEntry(size_t index) const;
-
-    /// Compact multi-line textual summary of the last @p last transitions.
-    /// Suitable for end-of-run diagnostics output.
     std::string formatPhaseTraceSummary(size_t last = 10) const;
-
-    /// End-of-run XA sector classification summary: per-category counts, INT1
-    /// suppression totals, and current mode/filter state.  Suitable for
-    /// confirming how sectors were routed after Setmode 0xE0 + ReadS/ReadN.
     std::string formatXaClassificationSummary() const;
-
-    /// ADPBUSY lifecycle summary: when ADPBUSY rose/fell (LBA) and sector count
-    /// consumed while busy.  Answers "did XA playback actually run, and when?".
     std::string formatAdpbusyLifecycleSummary() const;
-
-    /// Post-ReadS/ReadN XA stream summary: counts and flags from the moment
-    /// the most recent XA-enabled ReadS/ReadN was issued.  Avoids cumulative
-    /// noise from pre-stream initialization reads.
     std::string formatPostStreamSummary() const;
 
-    /// Compact per-sector breakdown of the rolling last 32 accepted/read
-    /// CPU-visible sectors observed during ReadS/ReadN capture:
-    /// INT1-published LBA, accepted LBA, payload size and mode, XA subheader
-    /// (if available), first/last 16 bytes, first CPU/DMA read offsets,
-    /// consumed byte counts, final offset at next publish, and whether the
-    /// sector was superseded before full drain.
+    /// Rolling last-32 accepted/read CPU-visible sectors observed during ReadS/ReadN capture.
     std::string formatCpuPayloadSummary() const;
 
-    /// Compact raw-IRQ lifecycle summary with per-subtype publish generations,
-    /// queue/publish/ack/deassert counts, and INT4-specific redispatch and
-    /// deassert diagnostics.
+    /// Raw-IRQ lifecycle summary including INT4 dispatch/deassert diagnostics.
     std::string formatIrqLifecycleSummary() const;
 
     void reset();
@@ -131,15 +107,7 @@ class Cdrom
     void writeInterruptFlags(u8 value);
     void writeInterruptEnable(u8 value);
 
-    /// Load the next buffered read sector into the data FIFO so that
-    /// subsequent readData()/readDma() calls return valid sector data.
-    /// Used by the BIOS async-read path after consuming the current sector.
     void loadNextSectorToFifo();
-
-    /// Enable data-buffer reads (set REQUEST_ENABLE_BUFFER_READ) and populate
-    /// the data FIFO from the active sector if the bit was previously clear.
-    /// Equivalent to the BIOS writing 0x80 to the request register before
-    /// reading sector data. Must be called before readData() in the INT1 path.
     void enableDataRead();
 
     void primeBootState(bool discPresent);
@@ -429,12 +397,10 @@ class Cdrom
         u8 xaCoding = 0;
         std::array<u8, 16> firstBytes{};
         std::array<u8, 16> lastBytes{};
-        size_t cpuFirstOffset =
-            ~size_t{0}; ///< FIFO byte offset at first CPU readData(); ~0 if no CPU read.
-        size_t dmaFirstOffset =
-            ~size_t{0};          ///< FIFO byte offset at first DMA readDma(); ~0 if no DMA read.
-        size_t cpuBytesRead = 0; ///< Total bytes consumed via readData().
-        size_t dmaBytesRead = 0; ///< Total bytes consumed via readDma().
+        size_t cpuFirstOffset = ~size_t{0};    ///< ~0 if no CPU read.
+        size_t dmaFirstOffset = ~size_t{0};    ///< ~0 if no DMA read.
+        size_t cpuBytesRead = 0;               ///< Total bytes consumed via readData().
+        size_t dmaBytesRead = 0;               ///< Total bytes consumed via readDma().
         size_t nextPublishOffset = ~size_t{0}; ///< Consumed offset when the next INT1 published.
         size_t finalOffset = 0; ///< Total bytes consumed (CPU+DMA) when retired/reset.
     };
@@ -448,6 +414,26 @@ class Cdrom
     CpuSectorRecord m_drainingCpuRecord{};
     bool m_drainingCpuRecordValid = false;
     size_t m_dataFifoConsumedBytes = 0; ///< Bytes consumed from current accepted sector (CPU+DMA).
+
+    struct Int1GenerationRecord
+    {
+        u32 publishGeneration = 0;
+        u32 publishedLba = 0;
+        u32 acceptedLba = 0;
+        bool bfrdHighAtPublish = false;
+        bool bfrdRoseAfterPublish = false;
+        bool accepted = false;
+        bool firstDma = false;
+        bool acked = false;
+        bool topLevelCdLineDeasserted = false;
+        bool hasXaSub = false;
+        bool hasEor = false;
+        bool hasEof = false;
+        u8 xaFile = 0;
+        u8 xaChannel = 0;
+        u8 xaSubmode = 0;
+        u8 xaCoding = 0;
+    };
 
     struct IrqLifecycleRecord
     {
@@ -465,6 +451,23 @@ class Cdrom
     u32 m_lastCallbackDispatchGeneration = 0;
     u32 m_int4HclrctlClearCount = 0;
     bool m_int4TopLevelDeassertAfterAck = false;
+    bool m_liveInt1AcceptedByBiosAuto = false;
+    bool m_eofBoundaryInt1PublishGatePending = false;
+    static constexpr size_t INT1_RECORD_CAPACITY = 8u;
+    std::deque<Int1GenerationRecord> m_bufferedInt1Records;
+    std::array<Int1GenerationRecord, INT1_RECORD_CAPACITY> m_int1Records{};
+    size_t m_int1RecordHead = 0;
+    size_t m_int1RecordCount = 0;
+    size_t m_liveInt1RecordIndex = 0;
+    bool m_liveInt1RecordValid = false;
+    size_t m_publishedInt1RecordIndex = 0;
+    u32 m_publishedInt1PublishGeneration = 0;
+    bool m_publishedInt1RecordValid = false;
+    size_t m_drainingInt1RecordIndex = 0;
+    u32 m_drainingInt1PublishGeneration = 0;
+    bool m_drainingInt1RecordValid = false;
+    Int1GenerationRecord m_loadedInt1Record{};
+    bool m_loadedInt1RecordValid = false;
 
     void recordPhaseTrace(u32 lba, SectorPhaseReason reason);
 
@@ -490,6 +493,15 @@ class Cdrom
     void noteCpuPayloadAccepted(u32 acceptedLba);
     void noteCpuPayloadSuperseded();
     void finalizeCpuPayloadRecord(bool supersededByNextInt1);
+    Int1GenerationRecord* findInt1RecordByGeneration(u32 publishGeneration);
+    const Int1GenerationRecord* findInt1RecordByGeneration(u32 publishGeneration) const;
+    void notePublishedInt1Generation(u32 publishGeneration);
+    void noteInt1BfrdRiseAfterPublish();
+    void noteInt1FirstDma();
+    void noteAckedInt1Generation(bool topLevelCdLineDeasserted);
+    bool eofBoundaryPublishGateExperimentEnabled() const;
+    bool shouldGateBufferedInt1AfterAck() const;
+    void releaseEofBoundaryInt1PublishGate();
     CpuSectorRecord* currentCpuPayloadRecord();
     const CpuSectorRecord* currentCpuPayloadRecord() const;
 };

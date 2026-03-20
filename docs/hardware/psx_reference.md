@@ -209,8 +209,9 @@ Commands are written to 0x1F801810:
   previous sector when software mixes header probes with payload DMA.
 - The controller state is best modeled as three separate ownership stages:
   buffered-next sector, published/current-INT1 sector, and currently draining
-  sector. A newer INT1 can advance the published sector while `RDDATA`/DMA still
-  drains bytes from the older accepted sector.
+  sector. With `BFRD` cleared, a newer `INT1` only advances the published
+  sector; with `BFRD` still armed, that newer `INT1` can replace the readable
+  block and discard the older sector's unread tail.
 - Even if later sectors are already buffered, the next `INT1` is not surfaced in
   the same instant as the ACK; there is a short post-ACK gap where `BFRD` still
   refers to the old interrupt's sector, matching PSX-SPX host-transfer notes.

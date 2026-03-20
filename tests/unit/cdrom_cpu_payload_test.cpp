@@ -142,12 +142,6 @@ void enableBfrd(psxrecomp::runtime::Cdrom& cdrom)
     cdrom.writeReg(3, 0x80);
 }
 
-void disableBfrd(psxrecomp::runtime::Cdrom& cdrom)
-{
-    cdrom.writeReg(0, 0);
-    cdrom.writeReg(3, 0x00);
-}
-
 void issueSetmode(psxrecomp::runtime::Cdrom& cdrom, u8 mode)
 {
     cdrom.writeParam(mode);
@@ -574,15 +568,14 @@ void testSplitDmaWindow()
 }
 
 // ---------------------------------------------------------------------------
-// Test 11: FIFO non-empty at INT1 → auto-reload suppressed (PR-RV35).
+// Test 11: FIFO non-empty at INT1 → readable block replaced (PR-RV55).
 //
-// When bytes remain unread at the next INT1 boundary, publishNextInterruptEvent
-// must NOT silently discard them and reload the next sector.  The game must
-// write BFRD 1→0→1 explicitly to advance.  Verifies:
-//   - FIFO still holds old-sector bytes after INT1 fires.
-//   - After BFRD toggle the new sector is loaded (m_activeSector updated).
+// When bytes remain unread at the next INT1 boundary and BFRD is still armed,
+// the new INT1 becomes the new host-visible data phase immediately. Verifies:
+//   - the unread remainder is discarded at the new INT1 boundary
+//   - FIFO now exposes the next sector without requiring a BFRD toggle
 // ---------------------------------------------------------------------------
-void testFifoNonEmptyAtInt1NoAutoReload()
+void testFifoNonEmptyAtInt1ReplacesReadableBlock()
 {
     PayloadDisc disc;
     psxrecomp::runtime::Cdrom cdrom;
@@ -603,19 +596,17 @@ void testFifoNonEmptyAtInt1NoAutoReload()
         (void)cdrom.readDma();
     assert(cdrom.debugSnapshot().dataFifoSize == 2312);
 
-    readAndAck(cdrom); // LBA 0 finalized; FIFO still has 2312 stale bytes.
+    readAndAck(cdrom); // LBA 0 finalized; BFRD stays 1.
 
-    // Second tick: LBA 1 INT1 fires (BFRD held, FIFO non-empty).
-    // PR-RV35: auto-reload must NOT fire; stale bytes must remain.
+    // Second tick: LBA 1 INT1 fires with BFRD still held.
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x01);
-    assert(cdrom.debugSnapshot().dataFifoSize == 2312); // unchanged
-
-    // Game toggles BFRD to discard stale data and load the new sector.
-    disableBfrd(cdrom); // BFRD 1→0: FIFO cleared.
-    assert(cdrom.debugSnapshot().dataFifoSize == 0);
-    enableBfrd(cdrom); // BFRD 0→1: m_activeSector (LBA 1, 2048 bytes) loaded.
     assert(cdrom.debugSnapshot().dataFifoSize == 2048);
+    const u32 expectedLba1Word = static_cast<u32>(disc.rawByte(1u, 24u)) |
+                                 (static_cast<u32>(disc.rawByte(1u, 25u)) << 8) |
+                                 (static_cast<u32>(disc.rawByte(1u, 26u)) << 16) |
+                                 (static_cast<u32>(disc.rawByte(1u, 27u)) << 24);
+    assert(cdrom.readDma() == expectedLba1Word);
 }
 
 int main()
@@ -630,6 +621,6 @@ int main()
     testSectorNotPreloadedBeforeInt1();
     testTracerRecordsDmaOnSecondSector();
     testSplitDmaWindow();
-    testFifoNonEmptyAtInt1NoAutoReload();
+    testFifoNonEmptyAtInt1ReplacesReadableBlock();
     return 0;
 }

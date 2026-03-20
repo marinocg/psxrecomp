@@ -11,7 +11,8 @@ int main()
     using Registers = std::array<psxrecomp::u32, 32>;
 
     CallbackTraceEngine engine;
-    engine.beginInvocation(0x80011000u, 0x80012000u, 0x80013000u, 3u, 0x4u, 0x9u, true);
+    engine.beginInvocation(0x80011000u, 0x80012000u, 0x80013000u, 3u, 0x4u, 0x9u, 0x01u, 0x1Fu,
+                           true);
     engine.setActiveInvocationStackPointer(0x80021000u);
     engine.recordRamWrite(0x80020000u, 4u, 0u, 1u);
     engine.recordRamWrite(0x80020000u, 4u, 1u, 2u);
@@ -22,12 +23,13 @@ int main()
     after[2] = 1u;
     after[29] = 0x8001FFF0u;
     engine.recordCommittedRegisterDelta(before, after, 0u, 0x1234u, 0u, 0u, true);
-    engine.finishInvocation(0x80014000u, true, 4u, 0x0u, 0x9u, false, nullptr, false);
-    engine.beginInvocation(0x80011000u, 0x80012000u, 0x80013000u, 4u, 0x4u, 0x9u, true);
+    engine.finishInvocation(0x80014000u, true, 4u, 0x0u, 0x9u, 0x00u, 0x1Fu, false, nullptr, false);
+    engine.beginInvocation(0x80011000u, 0x80012000u, 0x80013000u, 4u, 0x4u, 0x9u, 0x01u, 0x1Fu,
+                           true);
     engine.setActiveInvocationStackPointer(0x80021000u);
     engine.recordRamWrite(0x80020000u, 4u, 2u, 3u);
     engine.recordRamWrite(0x80020ffcu, 4u, 0x30u, 0x40u);
-    engine.finishInvocation(0x80014000u, true, 5u, 0x0u, 0x9u, false, nullptr, false);
+    engine.finishInvocation(0x80014000u, true, 5u, 0x0u, 0x9u, 0x00u, 0x1Fu, false, nullptr, false);
 
     const std::string summary = engine.formatRecentCallbacks();
     assert(summary.find("entry=0x80011000") != std::string::npos);
@@ -35,6 +37,10 @@ int main()
     assert(summary.find("descriptor=0x80012000") != std::string::npos);
     assert(summary.find("return_site=0x80013000") != std::string::npos);
     assert(summary.find("rfe=1") != std::string::npos);
+    assert(summary.find("top_level_irq=0x4/0x9 -> 0x0/0x9") != std::string::npos);
+    assert(summary.find("top_level_cd_line=on->off") != std::string::npos);
+    assert(summary.find("raw_cd_irq=INT1->none") != std::string::npos);
+    assert(summary.find("cd_hint=sts=0x1/msk=0x1f -> sts=0x0/msk=0x1f") != std::string::npos);
     assert(summary.find("repeat=2") != std::string::npos);
     assert(summary.find("count=2") != std::string::npos);
     assert(summary.find("total_writes=6") != std::string::npos);

@@ -192,10 +192,9 @@ void testRollingSummaryRetainsLast32AcceptedSectors()
 
         if (lba + 1u < kSectorCount)
         {
+            disableBfrd(cdrom);
             cdrom.tick(kReadCycles);
             assert(irqType(cdrom) == 0x01);
-            disableBfrd(cdrom);
-            enableBfrd(cdrom);
         }
     }
 
@@ -208,7 +207,7 @@ void testRollingSummaryRetainsLast32AcceptedSectors()
     assert(summary.find("int1_publish_lba=39 accepted_lba=39") != std::string::npos);
     assert(summary.find("dma_bytes=2060") != std::string::npos);
     assert(summary.find("mode=raw2340") != std::string::npos);
-    assert(summary.find("superseded=yes") != std::string::npos);
+    assert(summary.find("superseded:         0") != std::string::npos);
     assert(summary.find("superseded=no") != std::string::npos);
 }
 
@@ -234,17 +233,18 @@ void testSupersededSectorReportsFinalOffsetAtNextPublish()
     assert(irqType(cdrom) == 0x01);
 
     const std::string summary = cdrom.formatCpuPayloadSummary();
-    assert(summary.find("sectors_recorded:    1") != std::string::npos);
-    assert(summary.find("int1_publish_lba_range: 0..0") != std::string::npos);
-    assert(summary.find("accepted_lba_range:     0..0") != std::string::npos);
+    assert(summary.find("sectors_recorded:    2") != std::string::npos);
+    assert(summary.find("int1_publish_lba_range: 0..1") != std::string::npos);
+    assert(summary.find("accepted_lba_range:     0..1") != std::string::npos);
     assert(summary.find("int1_publish_lba=0 accepted_lba=0") != std::string::npos);
+    assert(summary.find("int1_publish_lba=1 accepted_lba=1") != std::string::npos);
     assert(summary.find("superseded=yes") != std::string::npos);
     assert(summary.find("next_publish=2060") != std::string::npos);
     assert(summary.find("final=2060") != std::string::npos);
     assert(summary.find("unread=280") != std::string::npos);
 }
 
-void testPublishedAndDrainingSectorStateStayDistinct()
+void testHeldBfrdInt1ReplacesUnreadTailWithNextSector()
 {
     RollingPayloadDisc disc;
     psxrecomp::runtime::Cdrom cdrom;
@@ -269,23 +269,33 @@ void testPublishedAndDrainingSectorStateStayDistinct()
     assert(snapshot.publishedSectorValid);
     assert(snapshot.drainingSectorValid);
     assert(snapshot.publishedLba == 1u);
-    assert(snapshot.drainingLba == 0u);
+    assert(snapshot.drainingLba == 1u);
+    assert(snapshot.dataFifoSize == 2340u);
 
     const std::string beforeMoreDma = cdrom.formatCpuPayloadSummary();
     assert(beforeMoreDma.find("int1_publish_lba=0 accepted_lba=0") != std::string::npos);
-    assert(beforeMoreDma.find("accepted_lba=1") == std::string::npos);
     assert(beforeMoreDma.find("next_publish=2060") != std::string::npos);
     assert(beforeMoreDma.find("final=2060") != std::string::npos);
+    assert(beforeMoreDma.find("unread=280") != std::string::npos);
+    assert(beforeMoreDma.find("superseded=yes") != std::string::npos);
+    assert(beforeMoreDma.find("int1_publish_lba=1 accepted_lba=1") != std::string::npos);
     assert(hasPhase(cdrom, 0u, psxrecomp::runtime::Cdrom::SectorPhaseReason::Dma3Read));
     assert(!hasPhase(cdrom, 1u, psxrecomp::runtime::Cdrom::SectorPhaseReason::Dma3Read));
 
-    (void)cdrom.readDma();
+    const u32 firstWord = cdrom.readDma();
+    const u32 secondWord = cdrom.readDma();
+    assert(firstWord == 0x02000000u);
+    assert(secondWord == 0x00200101u);
+    for (int i = 0; i < 513; ++i)
+    {
+        (void)cdrom.readDma();
+    }
+    readAndAck(cdrom);
 
     const std::string afterMoreDma = cdrom.formatCpuPayloadSummary();
-    assert(afterMoreDma.find("int1_publish_lba=0 accepted_lba=0") != std::string::npos);
-    assert(afterMoreDma.find("accepted_lba=1") == std::string::npos);
-    assert(afterMoreDma.find("next_publish=2060") != std::string::npos);
-    assert(afterMoreDma.find("final=2064") != std::string::npos);
+    assert(afterMoreDma.find("int1_publish_lba=1 accepted_lba=1") != std::string::npos);
+    assert(afterMoreDma.find("dma_bytes=2060") != std::string::npos);
+    assert(hasPhase(cdrom, 1u, psxrecomp::runtime::Cdrom::SectorPhaseReason::Dma3Read));
 }
 
 void testReadRestartKeepsPriorAcceptedWindow()
@@ -311,9 +321,9 @@ void testReadRestartKeepsPriorAcceptedWindow()
 
         if (lba + 1u < 3u)
         {
+            disableBfrd(cdrom);
             cdrom.tick(kReadCycles);
             assert(irqType(cdrom) == 0x01);
-            disableBfrd(cdrom);
         }
     }
 
@@ -363,7 +373,7 @@ int main()
 {
     testRollingSummaryRetainsLast32AcceptedSectors();
     testSupersededSectorReportsFinalOffsetAtNextPublish();
-    testPublishedAndDrainingSectorStateStayDistinct();
+    testHeldBfrdInt1ReplacesUnreadTailWithNextSector();
     testReadRestartKeepsPriorAcceptedWindow();
     testNonXaReadStillCapturesPayloadWindow();
     return 0;

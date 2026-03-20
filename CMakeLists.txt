@@ -139,6 +139,7 @@ set(RUNTIME_SOURCES
     src/runtime/cdrom_commands.cpp
     src/runtime/cdrom_irq.cpp
     src/runtime/cdrom_irq_lifecycle.cpp
+    src/runtime/cdrom_sector_loader.cpp
     src/runtime/cdrom_data.cpp
     src/runtime/cdrom_state.cpp
     src/runtime/cdrom_stream_validator.cpp
@@ -560,6 +561,11 @@ if(BUILD_TESTS)
         tests/unit/cdrom_irq_lifecycle_test.cpp
     )
     target_link_libraries(cdrom_irq_lifecycle_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_int1_eof_boundary_test
+        tests/unit/cdrom_int1_eof_boundary_test.cpp
+    )
+    target_link_libraries(cdrom_int1_eof_boundary_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(cdrom_mixed_xa_test
         tests/unit/cdrom_mixed_xa_test.cpp

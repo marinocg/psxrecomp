@@ -2,10 +2,63 @@
 
 #include "cdrom_shared.h"
 
+#include <cstdlib>
+
 namespace psxrecomp
 {
 namespace runtime
 {
+
+namespace
+{
+constexpr u8 XA_SUBMODE_DATA = 0x08u;
+constexpr const char* kGateEnv = "PSXRECOMP_EXPERIMENT_GATE_EOF_BOUNDARY_INT1";
+} // namespace
+
+bool Cdrom::eofBoundaryPublishGateExperimentEnabled() const
+{
+    if (const char* env = std::getenv(kGateEnv))
+    {
+        return env[0] == '1';
+    }
+    return false;
+}
+
+bool Cdrom::shouldGateBufferedInt1AfterAck() const
+{
+    if (!eofBoundaryPublishGateExperimentEnabled() || !m_liveInt1RecordValid ||
+        m_liveInt1AcceptedByBiosAuto || m_bufferedInt1Records.empty())
+    {
+        return false;
+    }
+
+    const Int1GenerationRecord& current = m_int1Records[m_liveInt1RecordIndex];
+    const Int1GenerationRecord& next = m_bufferedInt1Records.front();
+    const bool currentIsData = current.hasXaSub && (current.xaSubmode & XA_SUBMODE_DATA) != 0;
+    const bool nextIsData = next.hasXaSub && (next.xaSubmode & XA_SUBMODE_DATA) != 0;
+    const bool fileChannelChanged =
+        current.hasXaSub && next.hasXaSub &&
+        (current.xaFile != next.xaFile || current.xaChannel != next.xaChannel);
+    return currentIsData && current.hasEof && nextIsData && fileChannelChanged;
+}
+
+void Cdrom::releaseEofBoundaryInt1PublishGate()
+{
+    if (!m_eofBoundaryInt1PublishGatePending)
+    {
+        return;
+    }
+
+    m_eofBoundaryInt1PublishGatePending = false;
+    m_execution.bufferedInt1Pending =
+        !m_bufferedReadSectors.empty() && (m_execution.readActive || m_execution.dataEndPending);
+    m_execution.cyclesUntilBufferedInt1 =
+        m_execution.bufferedInt1Pending ? CDROM_BUFFERED_INT1_DELAY_CYCLES : 0u;
+    if (m_execution.pendingResponseIrqs.empty())
+    {
+        publishNextInterruptEvent(true);
+    }
+}
 
 void Cdrom::pushResponse(u8 value)
 {
@@ -14,6 +67,12 @@ void Cdrom::pushResponse(u8 value)
 
 void Cdrom::scheduleBufferedInt1Promotion()
 {
+    if (m_eofBoundaryInt1PublishGatePending)
+    {
+        m_execution.bufferedInt1Pending = false;
+        m_execution.cyclesUntilBufferedInt1 = 0u;
+        return;
+    }
     m_execution.bufferedInt1Pending =
         !m_bufferedReadSectors.empty() && (m_execution.readActive || m_execution.dataEndPending);
     m_execution.cyclesUntilBufferedInt1 =
@@ -132,10 +191,21 @@ void Cdrom::publishNextInterruptEvent(bool allowBufferedInt1)
             m_activeLba = m_bufferedReadLbas.front();
             m_bufferedReadLbas.pop_front();
         }
+        if (!m_bufferedInt1Records.empty())
+        {
+            m_loadedInt1Record = m_bufferedInt1Records.front();
+            m_bufferedInt1Records.pop_front();
+            m_loadedInt1RecordValid = true;
+        }
+        else
+        {
+            m_loadedInt1Record = {};
+            m_loadedInt1RecordValid = false;
+        }
+        notePublishedInt1Generation(lifecycle.publishGeneration);
         recordPhaseTrace(m_activeLba, SectorPhaseReason::PublishInt1);
         beginCpuPayloadRecord(m_activeLba, m_activeSector);
-        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
-            m_dataFifo.empty())
+        if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
         {
             acceptPublishedSector(true);
             recordPhaseTrace(m_drainingLba, SectorPhaseReason::DrqstsOn);

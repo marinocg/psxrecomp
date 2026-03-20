@@ -34,6 +34,10 @@ struct CallbackTraceEntry
     u32 irqMaskBefore = 0;
     u32 irqStatusAfter = 0;
     u32 irqMaskAfter = 0;
+    u8 cdHintStatusBefore = 0;
+    u8 cdHintMaskBefore = 0;
+    u8 cdHintStatusAfter = 0;
+    u8 cdHintMaskAfter = 0;
     bool cop0InterruptEligibleBefore = false;
     bool cop0InterruptEligibleAfter = false;
     u32 consecutiveRepeatCount = 1;
@@ -61,11 +65,13 @@ class CallbackTraceEngine
 
     void beginInvocation(Address entryPc, Address descriptorAddress, Address returnSite,
                          u32 callbackGenerationBefore, u32 irqStatusBefore, u32 irqMaskBefore,
+                         u8 cdHintStatusBefore, u8 cdHintMaskBefore,
                          bool cop0InterruptEligibleBefore);
 
     void finishInvocation(Address exitPc, bool threwReturnFromException,
                           u32 callbackGenerationAfter, u32 irqStatusAfter, u32 irqMaskAfter,
-                          bool cop0InterruptEligibleAfter, RuntimeLogger* logger, bool emitLogs);
+                          u8 cdHintStatusAfter, u8 cdHintMaskAfter, bool cop0InterruptEligibleAfter,
+                          RuntimeLogger* logger, bool emitLogs);
 
     bool hasActiveInvocation() const;
 
@@ -88,6 +94,8 @@ class CallbackTraceEngine
         u32 callbackGenerationBefore = 0;
         u32 irqStatusBefore = 0;
         u32 irqMaskBefore = 0;
+        u8 cdHintStatusBefore = 0;
+        u8 cdHintMaskBefore = 0;
         bool cop0InterruptEligibleBefore = false;
         u32 totalRamWrites = 0;
         u32 persistentRamWrites = 0;

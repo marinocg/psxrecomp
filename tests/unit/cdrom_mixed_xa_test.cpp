@@ -1,12 +1,11 @@
-// PR-RV35: Mixed-XA CPU delivery correctness tests.
+// PR-RV55: Mixed-XA CPU delivery correctness tests.
 //
 // Verifies two behavioural contracts:
 //
-//   1. Unread-remainder preserved (PR-RV35): when BFRD=1 is held across a
+//   1. Unread-remainder replaced (PR-RV55): when BFRD=1 is held across a
 //      sector boundary and the game partially reads the first sector (leaving
-//      bytes in the FIFO), INT1 delivery for the next CPU sector does NOT
-//      discard those stale bytes.  The game must write BFRD 1→0→1 to clear
-//      the stale remainder and arm the FIFO with the new sector's payload.
+//      bytes in the FIFO), INT1 delivery for the next CPU sector discards the
+//      stale remainder and immediately exposes the new sector's payload.
 //
 //   2. DMA3 == CPU RDDAT parity: both readDma() and readData() drain the same
 //      data FIFO byte-for-byte, so a game switching between DMA3 and register
@@ -137,12 +136,6 @@ void enableBfrd(psxrecomp::runtime::Cdrom& cdrom)
     cdrom.writeReg(3, 0x80);
 }
 
-void disableBfrd(psxrecomp::runtime::Cdrom& cdrom)
-{
-    cdrom.writeReg(0, 0);
-    cdrom.writeReg(3, 0x00);
-}
-
 void issueSetmode(psxrecomp::runtime::Cdrom& cdrom, u8 mode)
 {
     cdrom.writeParam(mode);
@@ -170,19 +163,17 @@ void issueReadN(psxrecomp::runtime::Cdrom& cdrom)
 } // namespace
 
 // ---------------------------------------------------------------------------
-// Test 1: Unread-remainder is preserved (not flushed) when BFRD is held
-//         across a sector boundary — PR-RV35 semantics.
+// Test 1: Unread-remainder is replaced when BFRD is held across a sector
+//         boundary — PR-RV55 semantics.
 //
 // Game reads only 511 of 512 words from a 2048-byte Mode1 sector (leaving
 // 4 bytes in the FIFO), ACKs INT1, and keeps BFRD=1.  An XA-ADPCM sector
 // arrives (no INT1), then a Form2 non-audio sector fires INT1.
 //
-// PR-RV35: INT1 delivery does NOT silently flush unread remainder.  The 4
-// stale LBA 0 bytes remain at the front of the FIFO.  The game must write
-// BFRD 1→0→1 to discard the stale bytes and load LBA 2.  Only after that
-// toggle does readDma() return LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 }.
+// PR-RV55: INT1 delivery discards the 4 stale LBA 0 bytes and immediately
+// exposes LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 }.
 // ---------------------------------------------------------------------------
-void testUnreadRemainderPreservedAtInt1()
+void testUnreadRemainderReplacedAtInt1()
 {
     MixedXaDisc disc;
     psxrecomp::runtime::Cdrom cdrom;
@@ -209,27 +200,14 @@ void testUnreadRemainderPreservedAtInt1()
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x00);
 
-    // --- LBA 2 (Form2 non-audio) — INT1; PR-RV35 must preserve FIFO remainder ---
+    // --- LBA 2 (Form2 non-audio) — INT1; PR-RV55 must replace FIFO remainder ---
     cdrom.tick(kReadCycles);
     assert(irqType(cdrom) == 0x01);
 
-    // DRQSTS (bit 6) is still set because the 4 stale LBA 0 bytes remain.
+    // DRQSTS (bit 6) remains set because LBA 2 payload is immediately readable.
     assert((cdrom.readStatus() & 0x40u) != 0u);
 
-    // First DMA word is the stale LBA 0 tail: raw[24+2044..2047] = 0x9C..0x9F (LE).
-    // PR-RV35 does not flush the remainder at INT1.
-    const u32 staleLba0Word = static_cast<u32>(0x9Cu) | (static_cast<u32>(0x9Du) << 8) |
-                              (static_cast<u32>(0x9Eu) << 16) | (static_cast<u32>(0x9Fu) << 24);
-    assert(cdrom.readDma() == staleLba0Word);
-
-    // Game must toggle BFRD 1→0→1 to advance to LBA 2.
-    disableBfrd(cdrom); // BFRD 1→0: FIFO cleared.
-    enableBfrd(cdrom);  // BFRD 0→1: m_activeSector (LBA 2) loaded into FIFO.
-
-    // DRQSTS must be set: LBA 2 payload is now in FIFO.
-    assert((cdrom.readStatus() & 0x40u) != 0u);
-
-    // First DMA word must now be LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 } (LE).
+    // First DMA word must be LBA 2 raw[24..27] = { 0xB0, 0xB1, 0xB2, 0xB3 } (LE).
     const u32 expectedLba2Word = static_cast<u32>(0xB0u) | (static_cast<u32>(0xB1u) << 8) |
                                  (static_cast<u32>(0xB2u) << 16) | (static_cast<u32>(0xB3u) << 24);
     assert(cdrom.readDma() == expectedLba2Word);
@@ -297,7 +275,7 @@ void testDma3EqualsCpuRddat()
 
 int main()
 {
-    testUnreadRemainderPreservedAtInt1();
+    testUnreadRemainderReplacedAtInt1();
     testDma3EqualsCpuRddat();
     return 0;
 }

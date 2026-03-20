@@ -282,6 +282,20 @@ void Cdrom::reset()
     m_lastCallbackDispatchGeneration = 0;
     m_int4HclrctlClearCount = 0;
     m_int4TopLevelDeassertAfterAck = false;
+    m_liveInt1AcceptedByBiosAuto = false;
+    m_eofBoundaryInt1PublishGatePending = false;
+    m_bufferedInt1Records.clear();
+    m_int1Records = {};
+    m_int1RecordHead = 0;
+    m_int1RecordCount = 0;
+    m_liveInt1RecordIndex = 0;
+    m_liveInt1RecordValid = false;
+    m_publishedInt1RecordIndex = 0;
+    m_publishedInt1RecordValid = false;
+    m_drainingInt1RecordIndex = 0;
+    m_drainingInt1RecordValid = false;
+    m_loadedInt1Record = {};
+    m_loadedInt1RecordValid = false;
 }
 
 void Cdrom::setDiscBackend(Disc* disc)

@@ -153,13 +153,21 @@ void Cdrom::executePendingCommand()
         m_execution.bufferedInt1Pending = false;
         m_execution.cyclesUntilBufferedInt1 = 0u;
         m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
         finalizeCpuPayloadRecord(false);
         m_dataFifo.clear();
         m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_drainingSector.clear();
         m_drainingLba = 0;
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
         m_publishedCpuRecord = {};
         m_publishedCpuRecordValid = false;
         m_dataPadValid = false;
@@ -192,14 +200,22 @@ void Cdrom::executePendingCommand()
         m_execution.bufferedInt1Pending = false;
         m_execution.cyclesUntilBufferedInt1 = 0u;
         m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
         m_cpuPayloadCaptureActive = false;
         finalizeCpuPayloadRecord(false);
         m_dataFifo.clear();
         m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_drainingSector.clear();
         m_drainingLba = 0;
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
         m_publishedCpuRecord = {};
         m_publishedCpuRecordValid = false;
         m_dataPadValid = false;
@@ -225,14 +241,22 @@ void Cdrom::executePendingCommand()
         m_execution.bufferedInt1Pending = false;
         m_execution.cyclesUntilBufferedInt1 = 0u;
         m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
         m_cpuPayloadCaptureActive = false;
         finalizeCpuPayloadRecord(false);
         m_dataFifo.clear();
         m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_drainingSector.clear();
         m_drainingLba = 0;
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
         m_publishedCpuRecord = {};
         m_publishedCpuRecordValid = false;
         m_dataPadValid = false;
@@ -260,13 +284,21 @@ void Cdrom::executePendingCommand()
         m_execution.bufferedInt1Pending = false;
         m_execution.cyclesUntilBufferedInt1 = 0u;
         m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
         finalizeCpuPayloadRecord(false);
         m_dataFifo.clear();
         m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
         m_drainingSector.clear();
         m_drainingLba = 0;
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
         m_publishedCpuRecord = {};
         m_publishedCpuRecordValid = false;
         m_dataPadValid = false;
@@ -427,7 +459,26 @@ void Cdrom::writeInterruptFlags(u8 value)
                     m_int4TopLevelDeassertAfterAck = true;
                 }
             }
-            if (currentType == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
+            else if (currentType == cdrom_detail::INT1)
+            {
+                const bool topLevelCdLineDeasserted = topLevelIrqBeforeAck && !hasIrqRequest();
+                noteAckedInt1Generation(topLevelCdLineDeasserted);
+                m_liveInt1AcceptedByBiosAuto = false;
+            }
+            if (currentType == cdrom_detail::INT1 && shouldGateBufferedInt1AfterAck())
+            {
+                m_eofBoundaryInt1PublishGatePending = true;
+                m_execution.bufferedInt1Pending = false;
+                m_execution.cyclesUntilBufferedInt1 = 0u;
+                m_activeSector.clear();
+                m_activeSectorOffset = 0;
+                m_liveInt1RecordValid = false;
+                m_publishedInt1RecordValid = false;
+                m_drainingInt1RecordValid = false;
+                m_loadedInt1Record = {};
+                m_loadedInt1RecordValid = false;
+            }
+            else if (currentType == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
             {
                 scheduleBufferedInt1Promotion();
             }
@@ -464,6 +515,12 @@ void Cdrom::writeRequestControl(u8 value)
 
     if (bfrdRising)
     {
+        noteInt1BfrdRiseAfterPublish();
+        if (m_eofBoundaryInt1PublishGatePending)
+        {
+            releaseEofBoundaryInt1PublishGate();
+            return;
+        }
         // PSX-SPX: setting BFRD arms the current host-visible data phase.
         // Only the sector published with the most recent INT1 (held in
         // m_activeSector) is loaded into the data FIFO on the 0→1 edge.
@@ -551,6 +608,8 @@ void Cdrom::queueErrorInterrupt(u8 reasonCode)
     m_execution.bufferedInt1Pending = false;
     m_execution.cyclesUntilBufferedInt1 = 0u;
     m_execution.dataEndPending = false;
+    m_eofBoundaryInt1PublishGatePending = false;
+    m_liveInt1AcceptedByBiosAuto = false;
     m_cpuPayloadCaptureActive = false;
     if (m_xaPlaybackBusy)
     {
@@ -560,10 +619,16 @@ void Cdrom::queueErrorInterrupt(u8 reasonCode)
     finalizeCpuPayloadRecord(false);
     m_dataFifo.clear();
     m_bufferedReadSectors.clear();
+    m_bufferedInt1Records.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
     m_drainingSector.clear();
     m_drainingLba = 0;
+    m_liveInt1RecordValid = false;
+    m_publishedInt1RecordValid = false;
+    m_drainingInt1RecordValid = false;
+    m_loadedInt1Record = {};
+    m_loadedInt1RecordValid = false;
     m_publishedCpuRecord = {};
     m_publishedCpuRecordValid = false;
     m_dataPadValid = false;
@@ -581,15 +646,23 @@ void Cdrom::beginDoorOpenTransition(bool closeAfterTransition)
     m_execution.bufferedInt1Pending = false;
     m_execution.cyclesUntilBufferedInt1 = 0u;
     m_execution.dataEndPending = false;
+    m_eofBoundaryInt1PublishGatePending = false;
+    m_liveInt1AcceptedByBiosAuto = false;
     m_cpuPayloadCaptureActive = false;
     m_xaPlaybackBusy = false;
     finalizeCpuPayloadRecord(false);
     m_dataFifo.clear();
     m_bufferedReadSectors.clear();
+    m_bufferedInt1Records.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
     m_drainingSector.clear();
     m_drainingLba = 0;
+    m_liveInt1RecordValid = false;
+    m_publishedInt1RecordValid = false;
+    m_drainingInt1RecordValid = false;
+    m_loadedInt1Record = {};
+    m_loadedInt1RecordValid = false;
     m_publishedCpuRecord = {};
     m_publishedCpuRecordValid = false;
     m_dataPadValid = false;

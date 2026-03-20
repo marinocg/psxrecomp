@@ -91,6 +91,12 @@ void issueRead(psxrecomp::runtime::Cdrom& cdrom, u8 command)
     ackCdrom(cdrom);
 }
 
+void enableBufferRead(psxrecomp::runtime::Cdrom& cdrom)
+{
+    cdrom.writeReg(0u, 0u);
+    cdrom.writeReg(3u, 0x80u);
+}
+
 void assertContains(const std::string& text, const std::string& needle)
 {
     assert(text.find(needle) != std::string::npos);
@@ -160,6 +166,42 @@ void testFiniteReadInt4LifecycleSummary()
     assertContains(summary, "INT4 redispatched without new publish: 0");
     assertContains(summary, "INT4 HCLRCTL cleared active: yes");
     assertContains(summary, "top-level CD IRQ deassert after INT4 ack: yes");
+}
+
+void testInt1HandshakeSummary()
+{
+    FiniteDisc disc(2);
+    psxrecomp::runtime::Cdrom cdrom;
+    cdrom.reset();
+    cdrom.setDiscBackend(&disc);
+    cdrom.writeInterruptEnable(0x1Fu);
+
+    issueSetloc(cdrom, 0x00, 0x02, 0x00);
+    issueRead(cdrom, 0x06);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBufferRead(cdrom);
+    (void)cdrom.readDma();
+    ackCdrom(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+
+    const std::string summary = cdrom.formatIrqLifecycleSummary();
+    const std::string payloadSummary = cdrom.formatCpuPayloadSummary();
+    assertContains(summary,
+                   "gen=1 lba=0 publish_bfrd=low bfrd_rose=yes accept=yes accepted=0 dma=yes "
+                   "acked=yes deassert=yes");
+    assertContains(summary,
+                   "gen=2 lba=1 publish_bfrd=high bfrd_rose=no accept=yes accepted=1 dma=no "
+                   "acked=no deassert=no");
+    assertContains(summary, "first_unacked_int1_lba: 1");
+    assertContains(summary,
+                   "first_unacked_int1_handshake: publish_bfrd=high bfrd_rose=no accept=yes "
+                   "dma=no ack=no top_level_cd_line_deassert=no");
+    assertContains(payloadSummary, "int1_publish_lba=0 accepted_lba=0");
+    assertContains(payloadSummary, "int1_publish_lba=1 accepted_lba=1");
 }
 
 void testStuckUnackedInt4ReportsRedispatch()
@@ -278,6 +320,7 @@ void testPublishAckRepublishDeliversOncePerGeneration()
 int main()
 {
     testFiniteReadInt4LifecycleSummary();
+    testInt1HandshakeSummary();
     testStuckUnackedInt4ReportsRedispatch();
     testPublishAckRepublishDeliversOncePerGeneration();
     return 0;
