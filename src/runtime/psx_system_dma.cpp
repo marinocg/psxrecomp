@@ -59,10 +59,26 @@ u32 normalTransferWordCount(const DmaChannel& channel, u32 syncMode)
     return static_cast<u32>(totalWords);
 }
 
+struct ScopedDmaTransferFlag
+{
+    bool& flag;
+
+    explicit ScopedDmaTransferFlag(bool& value) : flag(value)
+    {
+        flag = true;
+    }
+
+    ~ScopedDmaTransferFlag()
+    {
+        flag = false;
+    }
+};
+
 } // namespace
 
 void PsxSystem::handleDmaTransfer(DmaPort port)
 {
+    ScopedDmaTransferFlag dmaTransferFlag(m_inDmaTransfer);
     const auto& channel = m_dma.channel(port);
     const bool fromRam = (channel.channelControl & DMA_DIRECTION_FROM_RAM) != 0;
 
@@ -135,6 +151,13 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
 
         const Address base = channel.baseAddress & 0x1FFFFC;
         const bool decrementAddress = (channel.channelControl & DMA_ADDRESS_DECREMENT) != 0;
+        if (port == DmaPort::Cdrom)
+        {
+            m_cdrom.beginInt1DmaTransfer(0x80000000u | base);
+            m_diagCdromLateBufferTracker.beginCdromDma(m_cdrom.currentDrainingInt1Generation(),
+                                                       m_cdrom.currentDrainingLba(),
+                                                       0x80000000u | base, wordCount * sizeof(u32));
+        }
         Address current = base;
         for (u32 i = 0; i < wordCount; ++i)
         {
@@ -149,6 +172,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 break;
             case DmaPort::Cdrom:
                 value = m_cdrom.readDma();
+                m_diagCdromLateBufferTracker.noteCdromDmaWord(value);
                 break;
             case DmaPort::Spu:
                 value = m_spu.readDma();
@@ -294,6 +318,11 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
     }
 
 dma_transfer_complete:
+    if (!fromRam && port == DmaPort::Cdrom)
+    {
+        m_diagCdromLateBufferTracker.endCdromDma(transferredWords * sizeof(u32));
+        m_cdrom.endInt1DmaTransfer();
+    }
     m_dma.clearTrigger(port);
     m_dma.notifyTransferComplete(port);
     m_debugOverlay.incrementDmaTransfers();

@@ -164,5 +164,11 @@ std::string DiagExplainerEngine::explainCdromIrqLifecycleSummary(const Cdrom& cd
     return cdrom.formatIrqLifecycleSummary();
 }
 
+std::string
+DiagExplainerEngine::explainCdromLateBufferSummary(const DiagCdromLateBufferTracker& tracker)
+{
+    return tracker.formatSummary();
+}
+
 } // namespace runtime
 } // namespace psxrecomp

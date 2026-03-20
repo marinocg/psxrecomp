@@ -1,6 +1,7 @@
 #pragma once
 
 #include "psxrecomp/runtime/diag_cdrom_bank_tracer.h"
+#include "psxrecomp/runtime/diag_cdrom_late_buffer_tracker.h"
 #include "psxrecomp/runtime/diag_types.h"
 
 #include <string>
@@ -56,6 +57,9 @@ class DiagExplainerEngine
     /// Return a raw CD-ROM IRQ lifecycle summary with INT4 publish/ack/redispatch diagnostics.
     /// Delegates to Cdrom::formatIrqLifecycleSummary().
     static std::string explainCdromIrqLifecycleSummary(const Cdrom& cdrom);
+
+    /// Return a summary of recent sector-sized CD DMA destinations and later CPU reads.
+    static std::string explainCdromLateBufferSummary(const DiagCdromLateBufferTracker& tracker);
 
     /// Number of configured explainers.
     size_t explainerCount() const;

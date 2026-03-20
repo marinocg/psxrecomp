@@ -1,0 +1,233 @@
+{
+  "name": "rev2-gen120-parser-correlation",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_cd_bank_select",
+      "kind": "mmio_write",
+      "range": "0x1F801800-0x1F801800",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_status_reads",
+      "kind": "mmio_read",
+      "range": "0x1F801800-0x1F801800",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_cd_result_reads",
+      "kind": "mmio_read",
+      "range": "0x1F801801-0x1F801801",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_hintmsk_writes",
+      "kind": "mmio_write",
+      "range": "0x1F801802-0x1F801802",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_hintsts_reads",
+      "kind": "mmio_read",
+      "range": "0x1F801803-0x1F801803",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_cd_request_or_hclrctl",
+      "kind": "mmio_write",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    },
+    {
+      "name": "rev2_dma3_cdrom_channel",
+      "kind": "mmio_write",
+      "range": "0x1F8010B8-0x1F8010BF",
+      "action": "log"
+    },
+    {
+      "name": "rev2_state_166440_writes",
+      "kind": "ram_write",
+      "range": "0x80166440-0x80166443",
+      "action": "log"
+    },
+    {
+      "name": "rev2_state_166440_reads",
+      "kind": "ram_read",
+      "range": "0x80166440-0x80166443",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_state_166480_writes",
+      "kind": "ram_write",
+      "range": "0x80166480-0x80166483",
+      "action": "log"
+    },
+    {
+      "name": "rev2_state_166480_reads",
+      "kind": "ram_read",
+      "range": "0x80166480-0x80166483",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_state_166490_writes",
+      "kind": "ram_write",
+      "range": "0x80166490-0x8016649B",
+      "action": "log"
+    },
+    {
+      "name": "rev2_state_166490_reads",
+      "kind": "ram_read",
+      "range": "0x80166490-0x8016649B",
+      "action": "summarize"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_parser_pc_154718",
+      "pc_range": "0x154718-0x154718",
+      "registers": ["a0", "a1", "a2", "a3", "v0", "v1", "s0", "s1", "t0", "t1", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_parser_pc_15473c",
+      "pc_range": "0x15473C-0x15473C",
+      "registers": ["a0", "a1", "a2", "a3", "v0", "v1", "s0", "s1", "t0", "t1", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_parser_pc_15475c",
+      "pc_range": "0x15475C-0x15475C",
+      "registers": ["a0", "a1", "a2", "a3", "v0", "v1", "s0", "s1", "t0", "t1", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_parser_pc_154778",
+      "pc_range": "0x154778-0x154778",
+      "registers": ["a0", "a1", "a2", "a3", "v0", "v1", "s0", "s1", "t0", "t1", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_cd_result_ack_path",
+      "pc_range": "0x15ABF8-0x15ACF4",
+      "registers": ["a0", "v0", "v1", "s0", "s1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": ["0x1F801800", "0x1F801803"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_cd_request_dma_path",
+      "pc_range": "0x15D1A8-0x15D24C",
+      "registers": ["a0", "a1", "a2", "v0", "v1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": ["0x1F801803"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    },
+    {
+      "kind": "cdrom_bank_summary"
+    },
+    {
+      "kind": "cdrom_cpu_payload_summary"
+    },
+    {
+      "kind": "cdrom_irq_lifecycle_summary"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_parser_pc_154718",
+      "pc_range": "0x154718-0x154718",
+      "watched_cells": [
+        "0x80166440",
+        "0x80166480",
+        "0x80166490"
+      ]
+    },
+    {
+      "name": "rev2_parser_pc_15473c",
+      "pc_range": "0x15473C-0x15473C",
+      "watched_cells": [
+        "0x80166440",
+        "0x80166480",
+        "0x80166490"
+      ]
+    },
+    {
+      "name": "rev2_parser_pc_15475c",
+      "pc_range": "0x15475C-0x15475C",
+      "watched_cells": [
+        "0x80166440",
+        "0x80166480",
+        "0x80166490"
+      ]
+    },
+    {
+      "name": "rev2_parser_pc_154778",
+      "pc_range": "0x154778-0x154778",
+      "watched_cells": [
+        "0x80166440",
+        "0x80166480",
+        "0x80166490"
+      ]
+    },
+    {
+      "name": "rev2_cd_result_ack_path",
+      "pc_range": "0x15ABF8-0x15ACF4",
+      "watched_cells": [
+        "0x80166440",
+        "0x80166480",
+        "0x80166490"
+      ]
+    },
+    {
+      "name": "rev2_cd_request_dma_path",
+      "pc_range": "0x15D1A8-0x15D24C",
+      "watched_cells": [
+        "0x80166440",
+        "0x80166480",
+        "0x80166490"
+      ]
+    }
+  ]
+}

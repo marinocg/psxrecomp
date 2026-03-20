@@ -1,0 +1,69 @@
+{
+  "name": "rev2-last-meaningful-sector",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_last_meaningful_dma3_cdrom_channel",
+      "kind": "mmio_write",
+      "range": "0x1F8010B8-0x1F8010BF",
+      "action": "log"
+    },
+    {
+      "name": "rev2_last_meaningful_cd_request_or_hclrctl",
+      "kind": "mmio_write",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_last_meaningful_parser_hotloop",
+      "pc_range": "0x154718-0x154790",
+      "registers": ["a0", "a1", "a2", "a3", "v0", "v1", "t0", "t1", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 6
+    },
+    {
+      "name": "rev2_last_meaningful_cd_request_dma_path",
+      "pc_range": "0x15D1A8-0x15D24C",
+      "registers": ["a0", "a1", "a2", "v0", "v1", "ra"],
+      "mmio_reads": ["0x1F801803"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 6
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    },
+    {
+      "kind": "cdrom_cpu_payload_summary"
+    },
+    {
+      "kind": "cdrom_irq_lifecycle_summary"
+    },
+    {
+      "kind": "cdrom_late_buffer_summary"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": []
+}

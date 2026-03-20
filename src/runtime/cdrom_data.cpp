@@ -124,6 +124,7 @@ u32 Cdrom::readDma()
 
     const bool wasNonEmpty = !m_dataFifo.empty();
     bool firstByteFromFifo = false;
+    u32 bytesFromFifo = 0;
 
     u32 value = 0;
     for (u32 i = 0; i < sizeof(u32); ++i)
@@ -142,6 +143,7 @@ u32 Cdrom::readDma()
                 ++rec->dmaBytesRead;
             }
             ++m_dataFifoConsumedBytes;
+            ++bytesFromFifo;
         }
         else
         {
@@ -151,11 +153,11 @@ u32 Cdrom::readDma()
     }
 
     m_lastDmaWord = value;
+    noteInt1DmaBytes(bytesFromFifo);
 
     if (firstByteFromFifo && !m_phaseFirstDmaFired)
     {
         m_phaseFirstDmaFired = true;
-        noteInt1FirstDma();
         recordPhaseTrace(m_drainingLba, SectorPhaseReason::Dma3Read);
     }
     if (wasNonEmpty && m_dataFifo.empty() && !m_phaseDrainFired)

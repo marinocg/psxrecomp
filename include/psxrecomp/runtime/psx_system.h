@@ -7,6 +7,7 @@
 #include "psxrecomp/runtime/debug_overlay.h"
 #include "psxrecomp/runtime/diag_boundaries.h"
 #include "psxrecomp/runtime/diag_cdrom_bank_tracer.h"
+#include "psxrecomp/runtime/diag_cdrom_late_buffer_tracker.h"
 #include "psxrecomp/runtime/diag_explainers.h"
 #include "psxrecomp/runtime/diag_metadata_watch.h"
 #include "psxrecomp/runtime/diag_profile.h"
@@ -137,6 +138,11 @@ class PsxSystem
                 m_diagWatchpoints.recordRamRead(m_debugOverlay.lastProgramCounter(), physical,
                                                 readSize, static_cast<u32>(value), &m_logger,
                                                 m_lastResumeAddress);
+            }
+            if (m_diagCdromLateBufferTracker.isEnabled() && !m_inDmaTransfer)
+            {
+                m_diagCdromLateBufferTracker.noteCpuRead(m_debugOverlay.lastProgramCounter(),
+                                                         0x80000000u | offset, readSize);
             }
             return value;
         }
@@ -269,6 +275,9 @@ class PsxSystem
     /// Access the CDROM bank-aware register tracer.
     DiagCdromBankTracer& diagCdromBankTracer();
 
+    /// Access the late CD DMA destination tracker.
+    DiagCdromLateBufferTracker& diagCdromLateBufferTracker();
+
     /// Set the most recent resume address for diagnostic context.
     /// Called by generated code when a function is entered via mid-block resume.
     void setLastResumeAddress(Address address);
@@ -277,7 +286,7 @@ class PsxSystem
     Address lastResumeAddress() const;
 
     /// Record the current recompiled program counter and run targeted diagnostics.
-    void observeProgramCounter(Address pc);
+    void observeProgramCounter(Address pc, const u32* regs = nullptr, size_t regCount = 0);
 
     /// Validate the allocator heap at a risky runtime boundary when enabled.
     void validateAllocatorHeapBoundary(const std::string& source, Address relatedAddress = 0);
@@ -439,6 +448,7 @@ class PsxSystem
     u32 m_frameCount = 0;
     u32 m_pendingSpuDmaCompletionCycles = 0;
     bool m_pendingSpuDmaCompletion = false;
+    bool m_inDmaTransfer = false;
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState
@@ -518,6 +528,7 @@ class PsxSystem
     DiagBoundaryDispatcher m_diagBoundaries;
     DiagMetadataWatchEngine m_diagMetadataWatch;
     DiagCdromBankTracer m_diagCdromBankTracer;
+    DiagCdromLateBufferTracker m_diagCdromLateBufferTracker;
 
     /// Last resume address set by generated code (0 = not a resumed entry).
     Address m_lastResumeAddress = 0;

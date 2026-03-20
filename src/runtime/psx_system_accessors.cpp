@@ -161,6 +161,8 @@ bool PsxSystem::loadDiagProfile(const std::string& path)
     {
         m_diagCdromBankTracer.enable();
     }
+    m_diagCdromLateBufferTracker.setEnabled(
+        m_diagExplainers.isEnabled(ExplainerKind::CdromLateBufferSummary));
     return true;
 }
 
@@ -207,6 +209,11 @@ DiagMetadataWatchEngine& PsxSystem::diagMetadataWatch()
 DiagCdromBankTracer& PsxSystem::diagCdromBankTracer()
 {
     return m_diagCdromBankTracer;
+}
+
+DiagCdromLateBufferTracker& PsxSystem::diagCdromLateBufferTracker()
+{
+    return m_diagCdromLateBufferTracker;
 }
 
 void PsxSystem::setLastResumeAddress(Address address)

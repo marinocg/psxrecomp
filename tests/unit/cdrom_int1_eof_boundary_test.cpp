@@ -186,11 +186,11 @@ void testBoundarySummary()
     const std::string summary = cdrom.formatIrqLifecycleSummary();
     assertContains(summary,
                    "gen=1 lba=0 publish_bfrd=low bfrd_rose=no accept=yes accepted=0 dma=no "
-                   "acked=yes deassert=yes");
+                   "dma_bytes=0 dma_dst=none hclrctl=yes acked=yes deassert=yes");
     assertContains(summary, "submode=0x89 coding=0x11 eor=yes eof=yes");
     assertContains(summary,
                    "gen=2 lba=1 publish_bfrd=high bfrd_rose=no accept=yes accepted=1 dma=no "
-                   "acked=no deassert=no");
+                   "dma_bytes=0 dma_dst=none hclrctl=no acked=no deassert=no");
     assertContains(summary, "submode=0x08 coding=0x22 eor=no eof=no");
     assertContains(summary, "last_acked_int1_lba: 0");
     assertContains(summary, "last_acked_submode: 0x89");

@@ -1,16 +1,21 @@
 #include "psxrecomp/runtime/cdrom.h"
 #include "psxrecomp/runtime/disc.h"
+#include "psxrecomp/runtime/dma.h"
 #include "psxrecomp/runtime/kernel_events.h"
 #include "psxrecomp/runtime/psx_system.h"
 
+#include <array>
 #include <cassert>
 #include <memory>
 #include <string>
 
 namespace
 {
+using psxrecomp::Address;
 using psxrecomp::u32;
 using psxrecomp::u8;
+using psxrecomp::runtime::DmaController;
+using psxrecomp::runtime::DmaPort;
 using psxrecomp::runtime::EventMode;
 using psxrecomp::runtime::InterruptLine;
 using psxrecomp::runtime::PsxSystem;
@@ -19,6 +24,12 @@ namespace EventSpec = psxrecomp::runtime::EventSpec;
 
 constexpr u32 kReadCycles = 451584u;
 constexpr u32 kDataEndCallback = 0x80012000u;
+constexpr u32 kDmaToRam = 0x01000200u;
+
+Address dmaBase(DmaPort port)
+{
+    return DmaController::ChannelBase + DmaController::ChannelStride * static_cast<Address>(port);
+}
 
 class FiniteDisc final : public psxrecomp::runtime::Disc
 {
@@ -60,6 +71,66 @@ class FiniteDisc final : public psxrecomp::runtime::Disc
     u32 m_sectorCount = 0;
 };
 
+class RawReadSDisc final : public psxrecomp::runtime::Disc
+{
+  public:
+    RawReadSDisc()
+    {
+        for (u32 lba = 0; lba < 2u; ++lba)
+        {
+            auto& sector = m_raw[lba];
+            sector.fill(0);
+            sector[15] = 0x02;
+            sector[16] = 0x01;
+            sector[17] = static_cast<u8>(lba);
+            sector[18] = 0x20;
+            sector[19] = 0x00;
+            sector[20] = sector[16];
+            sector[21] = sector[17];
+            sector[22] = sector[18];
+            sector[23] = sector[19];
+            for (size_t i = 24; i < sector.size(); ++i)
+            {
+                sector[i] = static_cast<u8>((0x30u * lba + static_cast<u32>(i)) & 0xFFu);
+            }
+        }
+    }
+
+    bool readUserSector(u32 lba, std::span<u8, 2048> out) override
+    {
+        if (lba >= m_raw.size())
+        {
+            return false;
+        }
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            out[i] = m_raw[lba][24 + i];
+        }
+        return true;
+    }
+
+    bool readRawSector2352(u32 lba, std::span<u8, 2352> out) override
+    {
+        if (lba >= m_raw.size())
+        {
+            return false;
+        }
+        for (size_t i = 0; i < out.size(); ++i)
+        {
+            out[i] = m_raw[lba][i];
+        }
+        return true;
+    }
+
+    u32 userSectorCount() const override
+    {
+        return static_cast<u32>(m_raw.size());
+    }
+
+  private:
+    std::array<std::array<u8, 2352>, 2> m_raw{};
+};
+
 u8 irqType(const psxrecomp::runtime::Cdrom& cdrom)
 {
     return static_cast<u8>(cdrom.readInterruptFlags() & 0x07u);
@@ -91,10 +162,26 @@ void issueRead(psxrecomp::runtime::Cdrom& cdrom, u8 command)
     ackCdrom(cdrom);
 }
 
+void issueSetmode(psxrecomp::runtime::Cdrom& cdrom, u8 mode)
+{
+    cdrom.writeParam(mode);
+    cdrom.writeCommand(0x0E);
+    assert(irqType(cdrom) == 0x03);
+    ackCdrom(cdrom);
+}
+
 void enableBufferRead(psxrecomp::runtime::Cdrom& cdrom)
 {
     cdrom.writeReg(0u, 0u);
     cdrom.writeReg(3u, 0x80u);
+}
+
+void triggerCdromDmaToRam(PsxSystem& system, Address base, u32 words)
+{
+    const Address dma3 = dmaBase(DmaPort::Cdrom);
+    system.writeMmioExplicit<u32>(dma3 + 0x0, base);
+    system.writeMmioExplicit<u32>(dma3 + 0x4, words | (1u << 16));
+    system.writeMmioExplicit<u32>(dma3 + 0x8, kDmaToRam);
 }
 
 void assertContains(const std::string& text, const std::string& needle)
@@ -192,16 +279,48 @@ void testInt1HandshakeSummary()
     const std::string payloadSummary = cdrom.formatCpuPayloadSummary();
     assertContains(summary,
                    "gen=1 lba=0 publish_bfrd=low bfrd_rose=yes accept=yes accepted=0 dma=yes "
-                   "acked=yes deassert=yes");
+                   "dma_bytes=4 dma_dst=none hclrctl=yes acked=yes deassert=yes");
     assertContains(summary,
                    "gen=2 lba=1 publish_bfrd=high bfrd_rose=no accept=yes accepted=1 dma=no "
-                   "acked=no deassert=no");
+                   "dma_bytes=0 dma_dst=none hclrctl=no acked=no deassert=no");
     assertContains(summary, "first_unacked_int1_lba: 1");
     assertContains(summary,
                    "first_unacked_int1_handshake: publish_bfrd=high bfrd_rose=no accept=yes "
-                   "dma=no ack=no top_level_cd_line_deassert=no");
+                   "dma=no dma_bytes=0 dma_dst=none hclrctl=no ack=no "
+                   "top_level_cd_line_deassert=no");
     assertContains(payloadSummary, "int1_publish_lba=0 accepted_lba=0");
     assertContains(payloadSummary, "int1_publish_lba=1 accepted_lba=1");
+}
+
+void testReadSGenerationTracksLateDmaDestination()
+{
+    PsxSystem system;
+    auto disc = std::make_shared<RawReadSDisc>();
+    system.setDisc(disc);
+    assert(system.initialize());
+
+    auto& cdrom = system.cdrom();
+    cdrom.writeInterruptEnable(0x1Fu);
+
+    issueSetmode(cdrom, 0x60);
+    issueSetloc(cdrom, 0x00, 0x02, 0x00);
+    issueRead(cdrom, 0x1B);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    enableBufferRead(cdrom);
+    triggerCdromDmaToRam(system, 0x10000u, 515u);
+    ackCdrom(cdrom);
+
+    cdrom.tick(kReadCycles);
+    assert(irqType(cdrom) == 0x01);
+    triggerCdromDmaToRam(system, 0x12000u, 515u);
+
+    const std::string summary = cdrom.formatIrqLifecycleSummary();
+    assertContains(summary,
+                   "gen=2 lba=1 publish_bfrd=high bfrd_rose=no accept=yes accepted=1 dma=yes "
+                   "dma_bytes=2060 dma_dst=0x80012000 hclrctl=no acked=no deassert=no");
+    assert(system.read<u32>(0x12000u) != 0u);
 }
 
 void testStuckUnackedInt4ReportsRedispatch()
@@ -321,6 +440,7 @@ int main()
 {
     testFiniteReadInt4LifecycleSummary();
     testInt1HandshakeSummary();
+    testReadSGenerationTracksLateDmaDestination();
     testStuckUnackedInt4ReportsRedispatch();
     testPublishAckRepublishDeliversOncePerGeneration();
     return 0;

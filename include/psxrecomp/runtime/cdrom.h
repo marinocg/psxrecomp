@@ -21,6 +21,8 @@ class Disc;
 class Cdrom
 {
   public:
+    friend class PsxSystem;
+
     struct DebugSnapshot
     {
         u8 currentCommand = 0;
@@ -120,6 +122,8 @@ class Cdrom
     void enqueueDataSector(const std::vector<u8>& data);
     bool hasIrqRequest() const;
     u32 irqPublishGeneration(u8 irqType) const;
+    u32 currentDrainingInt1Generation() const;
+    u32 currentDrainingLba() const;
     void noteIrqCallbackDispatch(u8 irqType, bool callbacksDispatched);
     std::vector<u8> serializeState() const;
     bool deserializeState(const std::vector<u8>& state);
@@ -420,10 +424,14 @@ class Cdrom
         u32 publishGeneration = 0;
         u32 publishedLba = 0;
         u32 acceptedLba = 0;
+        Address firstDmaDestination = 0;
+        u32 totalDmaBytes = 0;
         bool bfrdHighAtPublish = false;
-        bool bfrdRoseAfterPublish = false;
+        bool sawBfrdAfterPublish = false;
         bool accepted = false;
         bool firstDma = false;
+        bool hasFirstDmaDestination = false;
+        bool sawHclrctlAfterPublish = false;
         bool acked = false;
         bool topLevelCdLineDeasserted = false;
         bool hasXaSub = false;
@@ -458,6 +466,7 @@ class Cdrom
     std::array<Int1GenerationRecord, INT1_RECORD_CAPACITY> m_int1Records{};
     size_t m_int1RecordHead = 0;
     size_t m_int1RecordCount = 0;
+    u32 m_liveInt1PublishGeneration = 0;
     size_t m_liveInt1RecordIndex = 0;
     bool m_liveInt1RecordValid = false;
     size_t m_publishedInt1RecordIndex = 0;
@@ -466,6 +475,8 @@ class Cdrom
     size_t m_drainingInt1RecordIndex = 0;
     u32 m_drainingInt1PublishGeneration = 0;
     bool m_drainingInt1RecordValid = false;
+    Address m_pendingInt1DmaDestination = 0;
+    bool m_pendingInt1DmaDestinationValid = false;
     Int1GenerationRecord m_loadedInt1Record{};
     bool m_loadedInt1RecordValid = false;
 
@@ -497,8 +508,10 @@ class Cdrom
     const Int1GenerationRecord* findInt1RecordByGeneration(u32 publishGeneration) const;
     void notePublishedInt1Generation(u32 publishGeneration);
     void noteInt1BfrdRiseAfterPublish();
-    void noteInt1FirstDma();
+    void noteInt1DmaBytes(u32 bytesTransferred);
     void noteAckedInt1Generation(bool topLevelCdLineDeasserted);
+    void beginInt1DmaTransfer(Address destinationBase);
+    void endInt1DmaTransfer();
     bool eofBoundaryPublishGateExperimentEnabled() const;
     bool shouldGateBufferedInt1AfterAck() const;
     void releaseEofBoundaryInt1PublishGate();

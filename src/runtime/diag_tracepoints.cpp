@@ -3,6 +3,7 @@
 #include "psxrecomp/runtime/logger.h"
 
 #include <algorithm>
+#include <cctype>
 #include <sstream>
 
 namespace psxrecomp
@@ -16,6 +17,143 @@ namespace
 {
 
 constexpr size_t kMaxRecentHits = 32;
+
+std::string toLower(std::string text)
+{
+    for (char& ch : text)
+    {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return text;
+}
+
+bool tryResolveRegisterIndex(const std::string& name, u32& outIndex)
+{
+    const std::string lowered = toLower(name);
+    if (lowered == "zero")
+        outIndex = Registers::ZERO;
+    else if (lowered == "at")
+        outIndex = Registers::AT;
+    else if (lowered == "v0")
+        outIndex = Registers::V0;
+    else if (lowered == "v1")
+        outIndex = Registers::V1;
+    else if (lowered == "a0")
+        outIndex = Registers::A0;
+    else if (lowered == "a1")
+        outIndex = Registers::A1;
+    else if (lowered == "a2")
+        outIndex = Registers::A2;
+    else if (lowered == "a3")
+        outIndex = Registers::A3;
+    else if (lowered == "t0")
+        outIndex = Registers::T0;
+    else if (lowered == "t1")
+        outIndex = Registers::T1;
+    else if (lowered == "t2")
+        outIndex = Registers::T2;
+    else if (lowered == "t3")
+        outIndex = Registers::T3;
+    else if (lowered == "t4")
+        outIndex = Registers::T4;
+    else if (lowered == "t5")
+        outIndex = Registers::T5;
+    else if (lowered == "t6")
+        outIndex = Registers::T6;
+    else if (lowered == "t7")
+        outIndex = Registers::T7;
+    else if (lowered == "s0")
+        outIndex = Registers::S0;
+    else if (lowered == "s1")
+        outIndex = Registers::S1;
+    else if (lowered == "s2")
+        outIndex = Registers::S2;
+    else if (lowered == "s3")
+        outIndex = Registers::S3;
+    else if (lowered == "s4")
+        outIndex = Registers::S4;
+    else if (lowered == "s5")
+        outIndex = Registers::S5;
+    else if (lowered == "s6")
+        outIndex = Registers::S6;
+    else if (lowered == "s7")
+        outIndex = Registers::S7;
+    else if (lowered == "t8")
+        outIndex = Registers::T8;
+    else if (lowered == "t9")
+        outIndex = Registers::T9;
+    else if (lowered == "k0")
+        outIndex = Registers::K0;
+    else if (lowered == "k1")
+        outIndex = Registers::K1;
+    else if (lowered == "gp")
+        outIndex = Registers::GP;
+    else if (lowered == "sp")
+        outIndex = Registers::SP;
+    else if (lowered == "fp" || lowered == "s8")
+        outIndex = Registers::FP;
+    else if (lowered == "ra")
+        outIndex = Registers::RA;
+    else
+        return false;
+    return true;
+}
+
+std::vector<TracepointRegisterValue> captureRegisterValues(const TracepointConfig& config,
+                                                           const u32* regs, size_t regCount)
+{
+    std::vector<TracepointRegisterValue> values;
+    if (regs == nullptr || regCount == 0)
+    {
+        return values;
+    }
+    values.reserve(config.registers.size());
+    for (const std::string& name : config.registers)
+    {
+        u32 index = 0;
+        if (!tryResolveRegisterIndex(name, index) || index >= regCount)
+        {
+            continue;
+        }
+        values.push_back({name, regs[index]});
+    }
+    return values;
+}
+
+bool sameRegisterValues(const std::vector<TracepointRegisterValue>& lhs,
+                        const std::vector<TracepointRegisterValue>& rhs)
+{
+    if (lhs.size() != rhs.size())
+    {
+        return false;
+    }
+    for (size_t i = 0; i < lhs.size(); ++i)
+    {
+        if (lhs[i].name != rhs[i].name || lhs[i].value != rhs[i].value)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+void appendRegisterValues(std::ostringstream& msg,
+                          const std::vector<TracepointRegisterValue>& registerValues)
+{
+    if (registerValues.empty())
+    {
+        return;
+    }
+    msg << " regs=";
+    for (size_t i = 0; i < registerValues.size(); ++i)
+    {
+        if (i != 0)
+        {
+            msg << ",";
+        }
+        msg << registerValues[i].name << "=0x" << std::hex << registerValues[i].value;
+    }
+}
 
 void appendRecentHit(std::vector<TracepointHit>& hits, const TracepointHit& hit)
 {
@@ -45,10 +183,53 @@ void DiagTracepointEngine::configure(const std::vector<TracepointConfig>& config
 
 void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                                      u32 callbackCommitGeneration, u32 irqStatus, u32 irqMask,
-                                     RuntimeLogger* logger)
+                                     const u32* regs, size_t regCount, RuntimeLogger* logger)
 {
     for (auto& range : m_ranges)
     {
+        if (range.pendingBranchDecision && pc != range.pendingBranchPc)
+        {
+            const bool tookTaken = pc == range.pendingBranchTakenPc;
+            const bool tookNotTaken = pc == range.pendingBranchNotTakenPc;
+            if (tookTaken || tookNotTaken)
+            {
+                TracepointHit hit;
+                hit.config = range.config;
+                hit.pc = pc;
+                hit.branchPc = range.pendingBranchPc;
+                hit.nextPc = pc;
+                hit.callerPc = range.pendingBranchCallerPc;
+                hit.resumeAddress = range.pendingBranchResumeAddress;
+                hit.callbackCommitGeneration = range.pendingBranchCallbackCommitGeneration;
+                hit.irqStatus = range.pendingBranchIrqStatus;
+                hit.irqMask = range.pendingBranchIrqMask;
+                hit.irqPendingMasked = range.pendingBranchIrqPendingMasked;
+                hit.registerValues = range.pendingBranchRegisterValues;
+                hit.isBranchDecision = true;
+                hit.branchTaken = tookTaken;
+                appendRecentHit(m_recentHits, hit);
+
+                if (logger != nullptr && !range.suppressCurrentVisit)
+                {
+                    std::ostringstream msg;
+                    msg << "tracepoint=" << range.config->name << " event=branch branch_pc=0x"
+                        << std::hex << range.pendingBranchPc << " next_pc=0x" << pc
+                        << " result=" << (tookTaken ? "taken" : "not_taken");
+                    if (range.config->captureContext)
+                    {
+                        msg << " caller=0x" << range.pendingBranchCallerPc << " resume=0x"
+                            << range.pendingBranchResumeAddress << " callback_gen=" << std::dec
+                            << range.pendingBranchCallbackCommitGeneration << std::hex
+                            << " irq_pending=0x" << range.pendingBranchIrqPendingMasked;
+                    }
+                    appendRegisterValues(msg, range.pendingBranchRegisterValues);
+                    logger->log(LogLevel::Info, "tracepoint", msg.str());
+                }
+            }
+            range.pendingBranchDecision = false;
+            range.pendingBranchRegisterValues.clear();
+        }
+
         const bool inRange = pc >= range.config->pcRangeStart && pc <= range.config->pcRangeEnd;
         const u32 irqPendingMasked = irqStatus & irqMask;
 
@@ -62,6 +243,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             range.entryIrqStatus = irqStatus;
             range.entryIrqMask = irqMask;
             range.entryIrqPendingMasked = irqPendingMasked;
+            range.entryRegisterValues = captureRegisterValues(*range.config, regs, regCount);
             if (range.config->callerHistogram)
             {
                 ++range.callerHistogram[range.entryCallerPc];
@@ -71,19 +253,42 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                 range.entryCallerPc == range.lastRepeatedCallerPc &&
                 range.entryResumeAddress == range.lastRepeatedResumeAddress &&
                 range.entryCallbackCommitGeneration == range.lastRepeatedCallbackCommitGeneration &&
-                range.entryIrqPendingMasked == range.lastRepeatedIrqPendingMasked;
+                range.entryIrqPendingMasked == range.lastRepeatedIrqPendingMasked &&
+                sameRegisterValues(range.entryRegisterValues, range.lastRepeatedRegisterValues);
             if (sameRepeatedSignature)
             {
                 ++range.repeatCount;
+                range.suppressCurrentVisit = range.config->repeatThreshold > 0 &&
+                                             range.repeatCount > range.config->repeatThreshold;
+                if (range.suppressCurrentVisit)
+                {
+                    ++range.suppressedVisitCount;
+                }
             }
             else
             {
+                if (range.suppressedVisitCount > 0 && logger != nullptr)
+                {
+                    std::ostringstream suppressed;
+                    suppressed << "tracepoint=" << range.config->name
+                               << " event=suppressed count=" << std::dec
+                               << range.suppressedVisitCount << std::hex << " caller=0x"
+                               << range.lastRepeatedCallerPc << " resume=0x"
+                               << range.lastRepeatedResumeAddress << " callback_gen=" << std::dec
+                               << range.lastRepeatedCallbackCommitGeneration << std::hex
+                               << " irq_pending=0x" << range.lastRepeatedIrqPendingMasked;
+                    appendRegisterValues(suppressed, range.lastRepeatedRegisterValues);
+                    logger->log(LogLevel::Info, "tracepoint", suppressed.str());
+                }
                 range.lastRepeatedCallerPc = range.entryCallerPc;
                 range.lastRepeatedResumeAddress = range.entryResumeAddress;
                 range.lastRepeatedCallbackCommitGeneration = callbackCommitGeneration;
                 range.lastRepeatedIrqPendingMasked = irqPendingMasked;
+                range.lastRepeatedRegisterValues = range.entryRegisterValues;
                 range.repeatCount = 1;
                 range.repeatLogged = false;
+                range.suppressCurrentVisit = false;
+                range.suppressedVisitCount = 0;
             }
 
             TracepointHit hit;
@@ -95,10 +300,27 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             hit.irqStatus = irqStatus;
             hit.irqMask = irqMask;
             hit.irqPendingMasked = irqPendingMasked;
+            hit.registerValues = range.entryRegisterValues;
             hit.isEntry = true;
             appendRecentHit(m_recentHits, hit);
 
-            if (logger != nullptr)
+            if (range.config->logBranches &&
+                (range.config->branchTakenPc != 0 || range.config->branchNotTakenPc != 0))
+            {
+                range.pendingBranchDecision = true;
+                range.pendingBranchPc = pc;
+                range.pendingBranchTakenPc = range.config->branchTakenPc;
+                range.pendingBranchNotTakenPc = range.config->branchNotTakenPc;
+                range.pendingBranchCallerPc = range.entryCallerPc;
+                range.pendingBranchResumeAddress = resumeAddress;
+                range.pendingBranchCallbackCommitGeneration = callbackCommitGeneration;
+                range.pendingBranchIrqStatus = irqStatus;
+                range.pendingBranchIrqMask = irqMask;
+                range.pendingBranchIrqPendingMasked = irqPendingMasked;
+                range.pendingBranchRegisterValues = range.entryRegisterValues;
+            }
+
+            if (logger != nullptr && !range.suppressCurrentVisit)
             {
                 std::ostringstream msg;
                 msg << "tracepoint=" << range.config->name << " event=entry pc=0x" << std::hex
@@ -111,6 +333,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                         << range.entryIrqStatus << " irq_mask=0x" << range.entryIrqMask
                         << " irq_pending=0x" << range.entryIrqPendingMasked;
                 }
+                appendRegisterValues(msg, range.entryRegisterValues);
                 logger->log(LogLevel::Info, "tracepoint", msg.str());
 
                 if (range.config->repeatThreshold > 0 &&
@@ -123,6 +346,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                            << range.entryResumeAddress << " callback_gen=" << std::dec
                            << range.entryCallbackCommitGeneration << std::hex << " irq_pending=0x"
                            << range.entryIrqPendingMasked;
+                    appendRegisterValues(repeat, range.entryRegisterValues);
                     logger->log(LogLevel::Info, "tracepoint", repeat.str());
                     range.repeatLogged = true;
                 }
@@ -145,7 +369,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             hit.isExit = true;
             appendRecentHit(m_recentHits, hit);
 
-            if (logger != nullptr)
+            if (logger != nullptr && !range.suppressCurrentVisit)
             {
                 std::ostringstream msg;
                 msg << "tracepoint=" << range.config->name << " event=exit pc=0x" << std::hex << pc;
@@ -158,6 +382,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                 }
                 logger->log(LogLevel::Info, "tracepoint", msg.str());
             }
+            range.suppressCurrentVisit = false;
         }
     }
     m_previousPc = pc;
@@ -174,7 +399,7 @@ void DiagTracepointEngine::recordMmioRead(Address mmioAddress, u32 value, Addres
         }
         for (Address watchAddr : range.config->mmioReads)
         {
-            if (watchAddr == mmioAddress && logger != nullptr)
+            if (watchAddr == mmioAddress && logger != nullptr && !range.suppressCurrentVisit)
             {
                 std::ostringstream msg;
                 msg << "tracepoint=" << range.config->name << " event=mmio_read pc=0x" << std::hex
@@ -215,8 +440,16 @@ std::string DiagTracepointEngine::formatRecentTraces() const
     for (size_t i = 0; i < count; ++i)
     {
         const auto& hit = m_recentHits[m_recentHits.size() - 1 - i];
-        os << "  [" << (hit.config != nullptr ? hit.config->name : "?") << "] "
-           << (hit.isEntry ? "entry" : "exit") << " pc=0x" << std::hex << hit.pc;
+        os << "  [" << (hit.config != nullptr ? hit.config->name : "?") << "] ";
+        if (hit.isBranchDecision)
+        {
+            os << "branch pc=0x" << std::hex << hit.branchPc << " next=0x" << hit.nextPc
+               << " result=" << (hit.branchTaken ? "taken" : "not_taken");
+        }
+        else
+        {
+            os << (hit.isEntry ? "entry" : "exit") << " pc=0x" << std::hex << hit.pc;
+        }
         if (hit.callerPc != 0)
         {
             os << " caller=0x" << hit.callerPc;
@@ -232,6 +465,7 @@ std::string DiagTracepointEngine::formatRecentTraces() const
                << hit.callbackCommitGeneration << std::hex << " irq_pending=0x"
                << hit.irqPendingMasked;
         }
+        appendRegisterValues(os, hit.registerValues);
         os << "\n";
     }
     for (const auto& range : m_ranges)
@@ -265,7 +499,19 @@ std::string DiagTracepointEngine::formatRecentTraces() const
                << range.lastRepeatedCallerPc << " resume=0x" << range.lastRepeatedResumeAddress
                << " callback_gen=" << std::dec << range.lastRepeatedCallbackCommitGeneration
                << std::hex << " irq_pending=0x" << range.lastRepeatedIrqPendingMasked
-               << " count=" << std::dec << range.repeatCount << "\n";
+               << " count=" << std::dec << range.repeatCount;
+            appendRegisterValues(os, range.lastRepeatedRegisterValues);
+            os << "\n";
+        }
+        if (range.suppressedVisitCount > 0)
+        {
+            os << "Suppressed repeats [" << range.config->name << "]: count=" << std::dec
+               << range.suppressedVisitCount << std::hex << " caller=0x"
+               << range.lastRepeatedCallerPc << " resume=0x" << range.lastRepeatedResumeAddress
+               << " callback_gen=" << std::dec << range.lastRepeatedCallbackCommitGeneration
+               << std::hex << " irq_pending=0x" << range.lastRepeatedIrqPendingMasked;
+            appendRegisterValues(os, range.lastRepeatedRegisterValues);
+            os << "\n";
         }
     }
     return os.str();

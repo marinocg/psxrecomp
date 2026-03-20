@@ -67,6 +67,8 @@ struct TracepointConfig
     Address pcRangeEnd = 0;
     std::vector<std::string> registers;
     bool logBranches = false;
+    Address branchTakenPc = 0;
+    Address branchNotTakenPc = 0;
     std::vector<Address> mmioReads;
     bool captureContext = false;
     bool callerHistogram = false;
@@ -151,7 +153,9 @@ enum class ExplainerKind : u8
     /// (PR-RV28/37).
     CdromCpuPayloadSummary,
     /// Raw CD-ROM IRQ lifecycle summary with INT4 publish/ack/redispatch/deassert diagnostics.
-    CdromIrqLifecycleSummary
+    CdromIrqLifecycleSummary,
+    /// Late CD DMA destination summary for recent sector-sized transfers.
+    CdromLateBufferSummary
 };
 
 /// A single device/register explainer from a profile.

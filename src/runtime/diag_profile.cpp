@@ -116,6 +116,8 @@ ExplainerKind parseExplainerKind(const std::string& text)
         return ExplainerKind::CdromCpuPayloadSummary;
     if (text == "cdrom_irq_lifecycle_summary")
         return ExplainerKind::CdromIrqLifecycleSummary;
+    if (text == "cdrom_late_buffer_summary")
+        return ExplainerKind::CdromLateBufferSummary;
     return ExplainerKind::Gpustat;
 }
 
@@ -145,6 +147,8 @@ TracepointConfig parseTracepoint(const JsonValue& obj)
     tp.name = obj.getString("name");
     parseAddressRange(obj.getString("pc_range"), tp.pcRangeStart, tp.pcRangeEnd);
     tp.logBranches = obj.getBool("log_branches");
+    tp.branchTakenPc = parseHexAddress(obj.getString("branch_taken_pc", "0x0"));
+    tp.branchNotTakenPc = parseHexAddress(obj.getString("branch_not_taken_pc", "0x0"));
     tp.captureContext = obj.getBool("capture_context");
     tp.callerHistogram = obj.getBool("caller_histogram");
     tp.repeatThreshold = static_cast<u32>(obj.getNumber("repeat_threshold"));

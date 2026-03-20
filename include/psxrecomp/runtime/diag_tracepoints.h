@@ -13,11 +13,19 @@ namespace runtime
 
 class RuntimeLogger;
 
+struct TracepointRegisterValue
+{
+    std::string name;
+    u32 value = 0;
+};
+
 /// Record of a tracepoint hit.
 struct TracepointHit
 {
     const TracepointConfig* config = nullptr;
     Address pc = 0;
+    Address branchPc = 0;
+    Address nextPc = 0;
     Address callerPc = 0;
     Address returnPc = 0;
     Address resumeAddress = 0;
@@ -25,8 +33,11 @@ struct TracepointHit
     u32 irqStatus = 0;
     u32 irqMask = 0;
     u32 irqPendingMasked = 0;
+    std::vector<TracepointRegisterValue> registerValues;
     bool isEntry = false; ///< true if this is entry into the PC range
     bool isExit = false;  ///< true if this is exit from the PC range
+    bool isBranchDecision = false;
+    bool branchTaken = false;
 };
 
 /// Profile-driven PC-range tracepoint engine.
@@ -40,7 +51,7 @@ class DiagTracepointEngine
 
     /// Observe a program counter and emit trace events if inside a traced range.
     void observePc(Address pc, Address resumeAddress, u32 callbackCommitGeneration, u32 irqStatus,
-                   u32 irqMask, RuntimeLogger* logger);
+                   u32 irqMask, const u32* regs, size_t regCount, RuntimeLogger* logger);
 
     /// Record an MMIO read and log if it falls within a traced address set.
     void recordMmioRead(Address mmioAddress, u32 value, Address pc, RuntimeLogger* logger);
@@ -69,13 +80,28 @@ class DiagTracepointEngine
         u32 entryIrqStatus = 0;
         u32 entryIrqMask = 0;
         u32 entryIrqPendingMasked = 0;
+        std::vector<TracepointRegisterValue> entryRegisterValues;
         Address lastRepeatedCallerPc = 0;
         Address lastRepeatedResumeAddress = 0;
         u32 lastRepeatedCallbackCommitGeneration = 0;
         u32 lastRepeatedIrqPendingMasked = 0;
+        std::vector<TracepointRegisterValue> lastRepeatedRegisterValues;
         u32 repeatCount = 0;
         bool repeatLogged = false;
+        bool suppressCurrentVisit = false;
+        u32 suppressedVisitCount = 0;
         std::unordered_map<Address, u32> callerHistogram;
+        bool pendingBranchDecision = false;
+        Address pendingBranchPc = 0;
+        Address pendingBranchTakenPc = 0;
+        Address pendingBranchNotTakenPc = 0;
+        Address pendingBranchCallerPc = 0;
+        Address pendingBranchResumeAddress = 0;
+        u32 pendingBranchCallbackCommitGeneration = 0;
+        u32 pendingBranchIrqStatus = 0;
+        u32 pendingBranchIrqMask = 0;
+        u32 pendingBranchIrqPendingMasked = 0;
+        std::vector<TracepointRegisterValue> pendingBranchRegisterValues;
     };
 
     std::vector<TracepointConfig> m_configs;

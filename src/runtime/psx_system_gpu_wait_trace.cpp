@@ -5,12 +5,13 @@ namespace psxrecomp
 namespace runtime
 {
 
-void PsxSystem::observeProgramCounter(Address pc)
+void PsxSystem::observeProgramCounter(Address pc, const u32* regs, size_t regCount)
 {
     m_debugOverlay.setLastProgramCounter(pc);
     m_stallClassifier.recordPc(pc);
     m_diagTracepoints.observePc(pc, m_lastResumeAddress, callbackContextCommitGeneration(),
-                                m_interrupts.readStatus(), m_interrupts.readMask(), &m_logger);
+                                m_interrupts.readStatus(), m_interrupts.readMask(), regs, regCount,
+                                &m_logger);
 }
 
 } // namespace runtime

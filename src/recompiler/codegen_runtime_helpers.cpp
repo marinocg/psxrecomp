@@ -293,7 +293,8 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.writeBlank();
     emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");
     emitter.openBlock("");
-    emitter.writeLine("context.system.observeProgramCounter(pc);");
+    emitter.writeLine("context.system.observeProgramCounter(pc, context.regs.data(),");
+    emitter.writeLine("                                  context.regs.size());");
     emitter.writeBlank();
     emitter.writeLine("// Step budget: throw after N PC updates to break hangs.");
     emitter.writeLine("static uint64_t stepCount = 0;");
@@ -356,6 +357,13 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.openBlock("");
     emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromIrqLifecycleSummary("
                       "context.system.cdrom());");
+    emitter.writeLine("stream << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("if (context.system.diagExplainers().isEnabled("
+                      "runtime::ExplainerKind::CdromLateBufferSummary))");
+    emitter.openBlock("");
+    emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromLateBufferSummary("
+                      "context.system.diagCdromLateBufferTracker());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");

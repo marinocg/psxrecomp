@@ -114,6 +114,16 @@ u32 Cdrom::irqPublishGeneration(u8 irqType) const
     return m_irqLifecycle[irqType - 1u].publishGeneration;
 }
 
+u32 Cdrom::currentDrainingInt1Generation() const
+{
+    return m_drainingInt1RecordValid ? m_drainingInt1PublishGeneration : 0u;
+}
+
+u32 Cdrom::currentDrainingLba() const
+{
+    return m_drainingLba;
+}
+
 void Cdrom::notePublishedInt1Generation(u32 publishGeneration)
 {
     if (!m_loadedInt1RecordValid)
@@ -125,6 +135,7 @@ void Cdrom::notePublishedInt1Generation(u32 publishGeneration)
     record.publishGeneration = publishGeneration;
     record.bfrdHighAtPublish = (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0u;
     m_int1Records[m_int1RecordHead] = record;
+    m_liveInt1PublishGeneration = publishGeneration;
     m_liveInt1RecordIndex = m_int1RecordHead;
     m_liveInt1RecordValid = true;
     m_int1RecordHead = (m_int1RecordHead + 1u) % INT1_RECORD_CAPACITY;
@@ -147,24 +158,45 @@ void Cdrom::noteInt1BfrdRiseAfterPublish()
         return;
     }
 
-    m_int1Records[m_liveInt1RecordIndex].bfrdRoseAfterPublish = true;
+    if (Int1GenerationRecord* record = findInt1RecordByGeneration(m_liveInt1PublishGeneration))
+    {
+        record->sawBfrdAfterPublish = true;
+    }
 }
 
-void Cdrom::noteInt1FirstDma()
+void Cdrom::beginInt1DmaTransfer(Address destinationBase)
 {
+    m_pendingInt1DmaDestination = destinationBase;
+    m_pendingInt1DmaDestinationValid = true;
+}
+
+void Cdrom::endInt1DmaTransfer()
+{
+    m_pendingInt1DmaDestination = 0;
+    m_pendingInt1DmaDestinationValid = false;
+}
+
+void Cdrom::noteInt1DmaBytes(u32 bytesTransferred)
+{
+    if (bytesTransferred == 0)
+    {
+        return;
+    }
+
     if (m_drainingInt1RecordValid)
     {
         if (Int1GenerationRecord* record =
                 findInt1RecordByGeneration(m_drainingInt1PublishGeneration))
         {
             record->firstDma = true;
+            record->totalDmaBytes += bytesTransferred;
+            if (!record->hasFirstDmaDestination && m_pendingInt1DmaDestinationValid)
+            {
+                record->firstDmaDestination = m_pendingInt1DmaDestination;
+                record->hasFirstDmaDestination = true;
+            }
             return;
         }
-    }
-
-    if (m_liveInt1RecordValid)
-    {
-        m_int1Records[m_liveInt1RecordIndex].firstDma = true;
     }
 }
 
@@ -175,9 +207,12 @@ void Cdrom::noteAckedInt1Generation(bool topLevelCdLineDeasserted)
         return;
     }
 
-    Int1GenerationRecord& record = m_int1Records[m_liveInt1RecordIndex];
-    record.acked = true;
-    record.topLevelCdLineDeasserted = topLevelCdLineDeasserted;
+    if (Int1GenerationRecord* record = findInt1RecordByGeneration(m_liveInt1PublishGeneration))
+    {
+        record->sawHclrctlAfterPublish = true;
+        record->acked = true;
+        record->topLevelCdLineDeasserted = topLevelCdLineDeasserted;
+    }
 }
 
 std::string Cdrom::formatIrqLifecycleSummary() const
@@ -256,10 +291,21 @@ std::string Cdrom::formatIrqLifecycleSummary() const
         {
             os << "    gen=" << record.publishGeneration << " lba=" << record.publishedLba
                << " publish_bfrd=" << formatBfrdState(record.bfrdHighAtPublish)
-               << " bfrd_rose=" << formatYesNo(record.bfrdRoseAfterPublish)
+               << " bfrd_rose=" << formatYesNo(record.sawBfrdAfterPublish)
                << " accept=" << formatYesNo(record.accepted)
                << " accepted=" << (record.accepted ? std::to_string(record.acceptedLba) : "none")
-               << " dma=" << formatYesNo(record.firstDma) << " acked=" << formatYesNo(record.acked)
+               << " dma=" << formatYesNo(record.firstDma) << " dma_bytes=" << record.totalDmaBytes
+               << " dma_dst=";
+            if (record.hasFirstDmaDestination)
+            {
+                os << "0x" << std::hex << record.firstDmaDestination << std::dec;
+            }
+            else
+            {
+                os << "none";
+            }
+            os << " hclrctl=" << formatYesNo(record.sawHclrctlAfterPublish)
+               << " acked=" << formatYesNo(record.acked)
                << " deassert=" << formatYesNo(record.topLevelCdLineDeasserted);
             if (record.hasXaSub)
             {
@@ -296,9 +342,20 @@ std::string Cdrom::formatIrqLifecycleSummary() const
             os << "  first_unacked_submode: " << formatSubmode(record) << "\n";
             os << "  first_unacked_int1_handshake: publish_bfrd="
                << formatBfrdState(record.bfrdHighAtPublish)
-               << " bfrd_rose=" << formatYesNo(record.bfrdRoseAfterPublish)
+               << " bfrd_rose=" << formatYesNo(record.sawBfrdAfterPublish)
                << " accept=" << formatYesNo(record.accepted)
-               << " dma=" << formatYesNo(record.firstDma) << " ack=" << formatYesNo(record.acked)
+               << " dma=" << formatYesNo(record.firstDma) << " dma_bytes=" << record.totalDmaBytes
+               << " dma_dst=";
+            if (record.hasFirstDmaDestination)
+            {
+                os << "0x" << std::hex << record.firstDmaDestination << std::dec;
+            }
+            else
+            {
+                os << "none";
+            }
+            os << " hclrctl=" << formatYesNo(record.sawHclrctlAfterPublish)
+               << " ack=" << formatYesNo(record.acked)
                << " top_level_cd_line_deassert=" << formatYesNo(record.topLevelCdLineDeasserted)
                << "\n";
         }

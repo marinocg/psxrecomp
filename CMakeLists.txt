@@ -207,6 +207,7 @@ set(RUNTIME_SOURCES
     src/runtime/diag_boundaries.cpp
     src/runtime/diag_metadata_watch.cpp
     src/runtime/diag_cdrom_bank_tracer.cpp
+    src/runtime/diag_cdrom_late_buffer_tracker.cpp
     src/runtime/json_helpers.cpp
     src/runtime/semantic_audit.cpp
     src/runtime/timers.cpp
@@ -386,6 +387,16 @@ if(BUILD_TESTS)
         tests/unit/diag_watchpoints_test.cpp
     )
     target_link_libraries(diag_watchpoints_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_tracepoint_registers_test
+        tests/unit/diag_tracepoint_registers_test.cpp
+    )
+    target_link_libraries(diag_tracepoint_registers_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_tracepoint_branch_test
+        tests/unit/diag_tracepoint_branch_test.cpp
+    )
+    target_link_libraries(diag_tracepoint_branch_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(callback_bridge_test
         tests/unit/callback_bridge_test.cpp
@@ -582,6 +593,11 @@ if(BUILD_TESTS)
         tests/unit/stall_classifier_test.cpp
     )
     target_link_libraries(stall_classifier_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_cdrom_late_buffer_tracker_test
+        tests/unit/diag_cdrom_late_buffer_tracker_test.cpp
+    )
+    target_link_libraries(diag_cdrom_late_buffer_tracker_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(wait_event_test
         tests/unit/wait_event_test.cpp

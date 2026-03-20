@@ -58,12 +58,20 @@ Current runtime behavior:
 
 - logs entry into a traced PC range
 - logs exit from a traced PC range
+- logs named register snapshots on entry when the profile supplies `registers`
 - logs configured GPU `GP1` MMIO reads while the tracepoint is active
 - optional `capture_context` adds caller PC, resume address, callback generation,
   and IRQ snapshot to entry/exit logs
 - optional `caller_histogram` keeps a compact caller count summary
 - optional `repeat_threshold` emits a repeat signature when the same caller,
-  callback context, and pending IRQ state re-enter a range repeatedly
+  callback context, pending IRQ state, and captured register snapshot re-enter
+  a range repeatedly; once the threshold is exceeded, the runtime suppresses
+  further per-visit entry/exit/branch/MMIO logs for that unchanged signature
+  and keeps only a compact suppressed-repeat summary
+- optional `log_branches` now emits a branch-decision event when the profile
+  also supplies `branch_taken_pc` and `branch_not_taken_pc`; the log includes
+  the branch PC, the observed next PC, the taken/not-taken result, and the
+  captured operand registers
 - step-budget stall reports include recent callback-path summaries with
   callback entry/exit PCs, descriptor/return-site context, IRQ snapshots,
   callback-generation changes, repeat counts, per-callback RAM write deltas,
@@ -71,10 +79,6 @@ Current runtime behavior:
 - callback RAM-write summaries now separate likely callback stack traffic from
   persistent RAM writes so nearby stack frames do not masquerade as game-state
   latches during investigation
-
-The `registers` and `log_branches` fields are accepted by the profile parser so
-the intent stays documented, but the runtime currently emits entry/exit events
-only.
 
 ### `validators`, `boundaries`, `metadata_watches`, `suspect_functions`
 
@@ -125,6 +129,28 @@ problem to one subsystem:
   the `0x15abf8/0x15ace0` result-ack path, the `0x15d1b8/0x15d248`
   `REQUEST/BFRD + DMA3` path, and the `0x80166440/0x80166480/0x80166490`
   state block.
+- `profiles/rev2.gen120.parser.diag.json`: exact-PC parser probes at
+  `0x154718`, `0x15473c`, `0x15475c`, and `0x154778`, plus the
+  `REQUEST/BFRD`, `HCLRCTL`, and `0x80166440/0x80166480/0x80166490` state
+  correlation needed for the gen-120 parser-consumer investigation.
+- `profiles/rev2.gen120.story.diag.json`: a semantic story profile for the
+  final unacked `INT1` generation that watches the `0x80166490` header slot,
+  the nearby `0x80166440/0x80166480` stream/frame state cells, and the
+  `REQUEST/BFRD` and `HCLRCTL` paths so one run can answer whether the header
+  arrives, is reread, advances counters, and reaches request/ack.
+- `profiles/rev2.last_meaningful_sector.diag.json`: a compact late-buffer
+  profile that correlates recent sector-sized CD DMA destinations with the
+  source `INT1` generation/LBA, payload fingerprints, and later CPU reads so
+  one run can explain whether buffers like `0x80187158` are parser-consumed or
+  side buffers unrelated to the ack path.
+- `profiles/rev2.hotloop_state.diag.json`: exact-PC hot-loop probes at
+  `0x154718`, `0x15473c`, `0x15475c`, and `0x154778` with per-visit register
+  snapshots, plus the `REQUEST/BFRD`, `HCLRCTL`, and
+  `0x80166440/0x80166480/0x80166490` state correlation needed for the final
+  unacked-INT1 parser-state investigation.
+- `profiles/rev2.hotloop_branches.diag.json`: branch-decision probes for the
+  conditional hot-loop edges at `0x154720`, `0x154734`, and `0x154778`, with
+  compared-register snapshots and taken/not-taken results.
 - `profiles/rev2.dma_setup.diag.json`: DMA setup investigation around the
   control-object family at `0x801666b0..0x801666d0`, the later programming
   window at `0x15f410..0x15f68c`, and DMA channel MMIO writes.
