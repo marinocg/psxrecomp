@@ -11,6 +11,7 @@
 #include "psxrecomp/runtime/diag_explainers.h"
 #include "psxrecomp/runtime/diag_metadata_watch.h"
 #include "psxrecomp/runtime/diag_profile.h"
+#include "psxrecomp/runtime/diag_rev2_decoder_handoff_tracker.h"
 #include "psxrecomp/runtime/diag_tracepoints.h"
 #include "psxrecomp/runtime/diag_validators.h"
 #include "psxrecomp/runtime/diag_watchpoints.h"
@@ -183,6 +184,15 @@ class PsxSystem
             {
                 const T oldValue = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
                 writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
+                if (m_diagRev2DecoderHandoffTracker.isEnabled())
+                {
+                    const auto writeKind = m_inDmaTransfer
+                                               ? DiagRev2DecoderHandoffTracker::WriteKind::Dma
+                                               : DiagRev2DecoderHandoffTracker::WriteKind::CpuStore;
+                    m_diagRev2DecoderHandoffTracker.noteScalarWrite(
+                        *this, m_debugOverlay.lastProgramCounter(), 0x80000000u | physical,
+                        writeSize, static_cast<u32>(value), writeKind);
+                }
                 if (callbackTraceActive)
                 {
                     m_callbackTrace.recordRamWrite(0x80000000u | physical, writeSize,
@@ -206,6 +216,15 @@ class PsxSystem
             else
             {
                 writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
+                if (m_diagRev2DecoderHandoffTracker.isEnabled())
+                {
+                    const auto writeKind = m_inDmaTransfer
+                                               ? DiagRev2DecoderHandoffTracker::WriteKind::Dma
+                                               : DiagRev2DecoderHandoffTracker::WriteKind::CpuStore;
+                    m_diagRev2DecoderHandoffTracker.noteScalarWrite(
+                        *this, m_debugOverlay.lastProgramCounter(), 0x80000000u | physical,
+                        writeSize, static_cast<u32>(value), writeKind);
+                }
             }
             return;
         }
@@ -277,6 +296,9 @@ class PsxSystem
 
     /// Access the late CD DMA destination tracker.
     DiagCdromLateBufferTracker& diagCdromLateBufferTracker();
+
+    /// Access the focused Reversi decoder-handoff tracker.
+    DiagRev2DecoderHandoffTracker& diagRev2DecoderHandoffTracker();
 
     /// Set the most recent resume address for diagnostic context.
     /// Called by generated code when a function is entered via mid-block resume.
@@ -529,6 +551,7 @@ class PsxSystem
     DiagMetadataWatchEngine m_diagMetadataWatch;
     DiagCdromBankTracer m_diagCdromBankTracer;
     DiagCdromLateBufferTracker m_diagCdromLateBufferTracker;
+    DiagRev2DecoderHandoffTracker m_diagRev2DecoderHandoffTracker;
 
     /// Last resume address set by generated code (0 = not a resumed entry).
     Address m_lastResumeAddress = 0;

@@ -60,12 +60,22 @@ struct WatchpointConfig
 };
 
 /// A single PC-range tracepoint definition from a profile.
+struct TracepointMemorySampleConfig
+{
+    std::string name;
+    std::string baseRegister;
+    Address offset = 0;
+    u32 width = 1;
+    u32 count = 1;
+};
+
 struct TracepointConfig
 {
     std::string name;
     Address pcRangeStart = 0;
     Address pcRangeEnd = 0;
     std::vector<std::string> registers;
+    std::vector<TracepointMemorySampleConfig> memorySamples;
     bool logBranches = false;
     Address branchTakenPc = 0;
     Address branchNotTakenPc = 0;
@@ -73,6 +83,7 @@ struct TracepointConfig
     bool captureContext = false;
     bool callerHistogram = false;
     u32 repeatThreshold = 0;
+    u32 maxLogEvents = 0;
 };
 
 /// Validator type enumeration.
@@ -155,7 +166,9 @@ enum class ExplainerKind : u8
     /// Raw CD-ROM IRQ lifecycle summary with INT4 publish/ack/redispatch/deassert diagnostics.
     CdromIrqLifecycleSummary,
     /// Late CD DMA destination summary for recent sector-sized transfers.
-    CdromLateBufferSummary
+    CdromLateBufferSummary,
+    /// Focused Reversi decoder-handoff provenance and output-span summary.
+    Rev2DecoderHandoffSummary
 };
 
 /// A single device/register explainer from a profile.

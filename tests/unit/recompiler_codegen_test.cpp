@@ -238,6 +238,7 @@ int main()
     std::filesystem::path sourcePath = outputDir / "module.cpp";
     std::filesystem::path harnessPath = outputDir / "harness.cpp";
     std::filesystem::path runtimeHeaderPath = includeDir / "psx_system.h";
+    std::filesystem::path unalignedHeaderPath = includeDir / "mips_unaligned_access.h";
     std::filesystem::path exePath = outputDir / "module_test";
 
     std::ofstream headerFile(headerPath);
@@ -255,6 +256,7 @@ int main()
     runtimeHeader << "#include <cstring>\n";
     runtimeHeader << "#include <functional>\n";
     runtimeHeader << "#include <optional>\n";
+    runtimeHeader << "#include <cstddef>\n";
     runtimeHeader << "#include <string>\n";
     runtimeHeader << "#include <type_traits>\n";
     runtimeHeader << "#include <vector>\n";
@@ -331,11 +333,15 @@ int main()
     runtimeHeader << "    std::size_t eventCount() const { return 0; }\n";
     runtimeHeader << "    std::string formatSummary() const { return {}; }\n";
     runtimeHeader << "};\n";
+    runtimeHeader << "class DiagCdromLateBufferTracker {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    bool isEnabled() const { return false; }\n";
+    runtimeHeader << "};\n";
     runtimeHeader << "enum class ExplainerKind : unsigned char {\n";
     runtimeHeader << "    Gpustat, CdromIrq, IrqController, DmaChannel,\n";
     runtimeHeader << "    CdromBankSummary, CdromPhaseSummary, CdromXaClassification,\n";
     runtimeHeader << "    CdromPostStreamValidator, CdromCpuPayloadSummary,\n";
-    runtimeHeader << "    CdromIrqLifecycleSummary\n";
+    runtimeHeader << "    CdromIrqLifecycleSummary, CdromLateBufferSummary\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class Cdrom {\n";
     runtimeHeader << "  public:\n";
@@ -365,6 +371,8 @@ int main()
         << "    static std::string explainCdromCpuPayloadSummary(const Cdrom&) { return {}; }\n";
     runtimeHeader
         << "    static std::string explainCdromIrqLifecycleSummary(const Cdrom&) { return {}; }\n";
+    runtimeHeader << "    static std::string explainCdromLateBufferSummary("
+                     "const DiagCdromLateBufferTracker&) { return {}; }\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class CallbackTraceEngine {\n";
     runtimeHeader << "  public:\n";
@@ -415,7 +423,8 @@ int main()
     runtimeHeader << "    void tickCpuCycles(u32) {}\n";
     runtimeHeader << "    u32 frameCount() const { return 0; }\n";
     runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
-    runtimeHeader << "    void observeProgramCounter(Address pc) { "
+    runtimeHeader << "    void observeProgramCounter(Address pc, const u32* = nullptr,"
+                     " std::size_t = 0) { "
                      "m_overlay.setLastProgramCounter(pc); m_stallClassifier.recordPc(pc); }\n";
     runtimeHeader
         << "    void setLastResumeAddress(Address address) { m_lastResumeAddress = address; }\n";
@@ -437,6 +446,8 @@ int main()
     runtimeHeader << "    DiagWatchpointEngine& diagWatchpoints() { return m_diagWatchpoints; }\n";
     runtimeHeader
         << "    DiagCdromBankTracer& diagCdromBankTracer() { return m_diagCdromBankTracer; }\n";
+    runtimeHeader << "    DiagCdromLateBufferTracker& diagCdromLateBufferTracker() { "
+                     "return m_diagCdromLateBufferTracker; }\n";
     runtimeHeader << "    DiagExplainerEngine& diagExplainers() { return m_diagExplainers; }\n";
     runtimeHeader << "    Cdrom& cdrom() { return m_cdrom; }\n";
     runtimeHeader << "    CallbackTraceEngine& callbackTrace() { return m_callbackTrace; }\n";
@@ -450,6 +461,7 @@ int main()
     runtimeHeader << "    DiagTracepointEngine m_diagTracepoints;\n";
     runtimeHeader << "    DiagWatchpointEngine m_diagWatchpoints;\n";
     runtimeHeader << "    DiagCdromBankTracer m_diagCdromBankTracer;\n";
+    runtimeHeader << "    DiagCdromLateBufferTracker m_diagCdromLateBufferTracker;\n";
     runtimeHeader << "    DiagExplainerEngine m_diagExplainers;\n";
     runtimeHeader << "    Cdrom m_cdrom;\n";
     runtimeHeader << "    CallbackTraceEngine m_callbackTrace;\n";
@@ -457,6 +469,19 @@ int main()
     runtimeHeader << "};\n";
     runtimeHeader << "} }\n";
     runtimeHeader.close();
+
+    std::ofstream unalignedHeader(unalignedHeaderPath);
+    unalignedHeader << "#pragma once\n";
+    unalignedHeader << "#include \"psxrecomp/runtime/psx_system.h\"\n";
+    unalignedHeader << "namespace psxrecomp { namespace runtime {\n";
+    unalignedHeader
+        << "inline u32 loadWordLeft(PsxSystem&, Address, u32 value) { return value; }\n";
+    unalignedHeader
+        << "inline u32 loadWordRight(PsxSystem&, Address, u32 value) { return value; }\n";
+    unalignedHeader << "inline void storeWordLeft(PsxSystem&, Address, u32) {}\n";
+    unalignedHeader << "inline void storeWordRight(PsxSystem&, Address, u32) {}\n";
+    unalignedHeader << "} }\n";
+    unalignedHeader.close();
 
     std::ofstream harnessFile(harnessPath);
     harnessFile << "#include \"module.h\"\n";

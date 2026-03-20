@@ -439,6 +439,43 @@ int main()
     }
 
     // ---------------------------------------------------------------
+    // Test 10: Unaligned merge ops lower to dedicated helpers.
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_unaligned_lowering", 0x800A1800);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::LOAD_LEFT, {Value::makeAddress(0x80011003), Value::makeRegister(2)},
+            {Value::makeRegister(2)}, 0x800A1800));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::LOAD_RIGHT, {Value::makeAddress(0x80011000), Value::makeRegister(2)},
+            {Value::makeRegister(2)}, 0x800A1804));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::STORE_LEFT, {Value::makeAddress(0x80011003), Value::makeRegister(2)}, {},
+            0x800A1808));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::STORE_RIGHT, {Value::makeAddress(0x80011000), Value::makeRegister(2)}, {},
+            0x800A180C));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x800A1810));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "unaligned_lowering_module");
+
+        assert(source.find("readMemoryLwl(context, 0x80011003, context.regs[Registers::V0])") !=
+               std::string::npos);
+        assert(source.find("readMemoryLwr(context, 0x80011000, context.regs[Registers::V0])") !=
+               std::string::npos);
+        assert(source.find("writeMemorySwl(context, 0x80011003, context.regs[Registers::V0]);") !=
+               std::string::npos);
+        assert(source.find("writeMemorySwr(context, 0x80011000, context.regs[Registers::V0]);") !=
+               std::string::npos);
+
+        std::cerr << "[PASS] unaligned merge ops lower to dedicated helpers\n";
+    }
+
     runCodegenLoweringCopTests();
     // Test 13 moved to a dedicated companion translation unit.
     runCodegenLoweringSourceCommentsCase();

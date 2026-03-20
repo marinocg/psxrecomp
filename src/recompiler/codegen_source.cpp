@@ -113,6 +113,7 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
         moduleEntryAddress = functionSymbols.front().first;
     }
     emitter.writeLine("#include \"" + moduleName + ".h\"");
+    emitter.writeLine("#include \"psxrecomp/runtime/mips_unaligned_access.h\"");
     emitter.writeBlank();
     emitter.writeLine("#include <algorithm>");
     emitter.writeLine("#include <array>");

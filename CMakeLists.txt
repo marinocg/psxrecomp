@@ -208,6 +208,8 @@ set(RUNTIME_SOURCES
     src/runtime/diag_metadata_watch.cpp
     src/runtime/diag_cdrom_bank_tracer.cpp
     src/runtime/diag_cdrom_late_buffer_tracker.cpp
+    src/runtime/diag_rev2_decoder_handoff_tracker.cpp
+    src/runtime/diag_rev2_decoder_handoff_tracker_summary.cpp
     src/runtime/json_helpers.cpp
     src/runtime/semantic_audit.cpp
     src/runtime/timers.cpp
@@ -382,6 +384,16 @@ if(BUILD_TESTS)
         tests/unit/runtime_ram_mirror_test.cpp
     )
     target_link_libraries(runtime_ram_mirror_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mips_unaligned_access_test
+        tests/unit/mips_unaligned_access_test.cpp
+    )
+    target_link_libraries(mips_unaligned_access_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(reversi_1598f0_consumer_test
+        tests/unit/reversi_1598f0_consumer_test.cpp
+    )
+    target_link_libraries(reversi_1598f0_consumer_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(diag_watchpoints_test
         tests/unit/diag_watchpoints_test.cpp
@@ -598,6 +610,11 @@ if(BUILD_TESTS)
         tests/unit/diag_cdrom_late_buffer_tracker_test.cpp
     )
     target_link_libraries(diag_cdrom_late_buffer_tracker_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_rev2_decoder_handoff_tracker_test
+        tests/unit/diag_rev2_decoder_handoff_tracker_test.cpp
+    )
+    target_link_libraries(diag_rev2_decoder_handoff_tracker_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(wait_event_test
         tests/unit/wait_event_test.cpp

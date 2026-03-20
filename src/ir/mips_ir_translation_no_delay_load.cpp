@@ -72,7 +72,11 @@ void MipsIrTranslator::translateNoDelayLoadStoreAndBranch(
     case disasm::Opcode::LWR:
     case disasm::Opcode::LW:
     {
-        if (isMmioImmediate(instr.rs, instr.immediate))
+        const bool supportsMmioShortcut =
+            instr.opcode == disasm::Opcode::LB || instr.opcode == disasm::Opcode::LBU ||
+            instr.opcode == disasm::Opcode::LH || instr.opcode == disasm::Opcode::LHU ||
+            instr.opcode == disasm::Opcode::LW;
+        if (supportsMmioShortcut && isMmioImmediate(instr.rs, instr.immediate))
         {
             emit(Opcode::MMIO_LOAD,
                  {Value::makeAddress(static_cast<Address>(static_cast<s32>(instr.immediate)))},
@@ -93,7 +97,16 @@ void MipsIrTranslator::translateNoDelayLoadStoreAndBranch(
             loadOp = Opcode::LOAD16;
         else if (instr.opcode == disasm::Opcode::LHU)
             loadOp = Opcode::LOAD16U;
-        emit(loadOp, {addressTemp}, {Value::makeRegister(instr.rt)});
+        else if (instr.opcode == disasm::Opcode::LWL)
+            loadOp = Opcode::LOAD_LEFT;
+        else if (instr.opcode == disasm::Opcode::LWR)
+            loadOp = Opcode::LOAD_RIGHT;
+        std::vector<Value> loadInputs = {addressTemp};
+        if (loadOp == Opcode::LOAD_LEFT || loadOp == Opcode::LOAD_RIGHT)
+        {
+            loadInputs.push_back(Value::makeRegister(instr.rt));
+        }
+        emit(loadOp, std::move(loadInputs), {Value::makeRegister(instr.rt)});
         break;
     }
     case disasm::Opcode::SB:
@@ -102,7 +115,10 @@ void MipsIrTranslator::translateNoDelayLoadStoreAndBranch(
     case disasm::Opcode::SWR:
     case disasm::Opcode::SW:
     {
-        if (isMmioImmediate(instr.rs, instr.immediate))
+        const bool supportsMmioShortcut = instr.opcode == disasm::Opcode::SB ||
+                                          instr.opcode == disasm::Opcode::SH ||
+                                          instr.opcode == disasm::Opcode::SW;
+        if (supportsMmioShortcut && isMmioImmediate(instr.rs, instr.immediate))
         {
             emit(Opcode::MMIO_STORE,
                  {Value::makeAddress(static_cast<Address>(static_cast<s32>(instr.immediate))),
@@ -120,6 +136,10 @@ void MipsIrTranslator::translateNoDelayLoadStoreAndBranch(
             storeOp = Opcode::STORE8;
         else if (instr.opcode == disasm::Opcode::SH)
             storeOp = Opcode::STORE16;
+        else if (instr.opcode == disasm::Opcode::SWL)
+            storeOp = Opcode::STORE_LEFT;
+        else if (instr.opcode == disasm::Opcode::SWR)
+            storeOp = Opcode::STORE_RIGHT;
         emit(storeOp, {addressTemp, Value::makeRegister(instr.rt)}, {});
         break;
     }

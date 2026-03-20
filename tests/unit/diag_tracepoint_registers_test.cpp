@@ -102,5 +102,77 @@ int main()
     {
         throw std::runtime_error("missing register snapshot in summary");
     }
+
+    PsxSystem sampledSystem;
+    if (!sampledSystem.initialize())
+    {
+        throw std::runtime_error("failed to initialize memory-sample test system");
+    }
+
+    constexpr psxrecomp::Address sampleBase = 0x80100000u;
+    sampledSystem.write<u32>(sampleBase + 0u, 0x02030405u);
+    sampledSystem.write<u32>(sampleBase + 4u, 0x11223344u);
+
+    TracepointConfig sampledTracepoint;
+    sampledTracepoint.name = "decoder_entry";
+    sampledTracepoint.pcRangeStart = 0x15452Cu;
+    sampledTracepoint.pcRangeEnd = 0x15452Cu;
+    sampledTracepoint.maxLogEvents = 2;
+    sampledTracepoint.registers = {"a0", "a1", "v0", "v1", "t1", "t3"};
+    sampledTracepoint.memorySamples = {
+        {"input_bytes", "a0", 0u, 1u, 4u},
+        {"input_word", "a0", 0u, 4u, 1u},
+    };
+    sampledSystem.diagTracepoints().configure({sampledTracepoint});
+
+    logs.clear();
+    sampledSystem.logger().setMinLevel(LogLevel::Info);
+    sampledSystem.logger().setCallback(
+        [&logs](const psxrecomp::runtime::LogEvent& event)
+        {
+            if (event.category == "tracepoint")
+            {
+                logs.push_back(event.message);
+            }
+        });
+
+    regs = {};
+    regs[psxrecomp::Registers::A0] = sampleBase;
+    regs[psxrecomp::Registers::A1] = 0x80185558u;
+    regs[psxrecomp::Registers::V0] = 0x16u;
+    regs[psxrecomp::Registers::V1] = 0x8u;
+    regs[psxrecomp::Registers::T1] = 0x44332211u;
+    regs[psxrecomp::Registers::T3] = 0u;
+
+    for (int i = 0; i < 4; ++i)
+    {
+        sampledSystem.observeProgramCounter(0x15452Cu, regs.data(), regs.size());
+        sampledSystem.observeProgramCounter(0x154530u, regs.data(), regs.size());
+    }
+
+    if (!contains("tracepoint=decoder_entry event=entry pc=0x15452c"))
+    {
+        throw std::runtime_error("missing decoder-entry tracepoint log");
+    }
+    if (!contains("samples=input_bytes@0x80100000=[05 04 03 02],input_word@0x80100000=[0x2030405]"))
+    {
+        throw std::runtime_error("missing memory samples in tracepoint log");
+    }
+    if (!contains("tracepoint=decoder_entry event=log_limit max=2 suppressed=1"))
+    {
+        throw std::runtime_error("missing log-limit event");
+    }
+
+    const std::string sampledSummary = sampledSystem.diagTracepoints().formatRecentTraces();
+    if (sampledSummary.find(
+            "samples=input_bytes@0x80100000=[05 04 03 02],input_word@0x80100000=[0x2030405]") ==
+        std::string::npos)
+    {
+        throw std::runtime_error("missing memory samples in summary");
+    }
+    if (sampledSummary.find("Log limit [decoder_entry]: max=2 suppressed=") == std::string::npos)
+    {
+        throw std::runtime_error("missing log-limit summary");
+    }
     return 0;
 }

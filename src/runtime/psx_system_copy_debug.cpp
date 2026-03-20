@@ -134,6 +134,12 @@ u32 PsxSystem::copyBufferToRam(Address destination, const u8* source, u32 actual
         bounds.destinationInRam ? canonicalRamAddress(bounds.physicalDestination) : destination,
         copiedLength, requestedLength, bounds.destinationInRam, bounds.destinationOverflow,
         actualLength < requestedLength);
+    if (bounds.destinationInRam && copiedLength > 0 && m_diagRev2DecoderHandoffTracker.isEnabled())
+    {
+        m_diagRev2DecoderHandoffTracker.noteBulkCopy(
+            *this, writerPc, canonicalRamAddress(bounds.physicalDestination), source, copiedLength,
+            sourceTag, detail);
+    }
     return copiedLength;
 }
 
@@ -186,6 +192,12 @@ u32 PsxSystem::fillBufferToRam(Address destination, u8 value, u32 requestedLengt
         sourceTag, detail, writerPc,
         bounds.destinationInRam ? canonicalRamAddress(bounds.physicalDestination) : destination,
         writtenLength, requestedLength, bounds.destinationInRam, bounds.destinationOverflow, false);
+    if (bounds.destinationInRam && writtenLength > 0 && m_diagRev2DecoderHandoffTracker.isEnabled())
+    {
+        m_diagRev2DecoderHandoffTracker.noteBulkFill(
+            *this, writerPc, canonicalRamAddress(bounds.physicalDestination), value, writtenLength,
+            sourceTag, detail);
+    }
     return writtenLength;
 }
 

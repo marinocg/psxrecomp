@@ -308,6 +308,42 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             emitter.writeLine(dest + " = readMemory16(context, " + address + ");");
         }
         break;
+    case ir::Opcode::LOAD_LEFT:
+        if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string address = valueToExpr(instruction.inputs[0], context);
+            std::string value = valueToExpr(instruction.inputs[1], context);
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
+            emitter.writeLine(dest + " = readMemoryLwl(context, " + address + ", " + value + ");");
+            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
+                              sourcePc + ");");
+        }
+        break;
+    case ir::Opcode::LOAD_RIGHT:
+        if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
+        {
+            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            std::string address = valueToExpr(instruction.inputs[0], context);
+            std::string value = valueToExpr(instruction.inputs[1], context);
+            std::string sourcePc = "0";
+            if (instruction.sourceAddress.has_value())
+            {
+                std::ostringstream sourceStream;
+                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+                sourcePc = sourceStream.str();
+            }
+            emitter.writeLine(dest + " = readMemoryLwr(context, " + address + ", " + value + ");");
+            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
+                              sourcePc + ");");
+        }
+        break;
     case ir::Opcode::STORE:
         if (instruction.inputs.size() >= 2)
         {
@@ -330,6 +366,22 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
             std::string address = valueToExpr(instruction.inputs[0], context);
             std::string value = valueToExpr(instruction.inputs[1], context);
             emitter.writeLine("writeMemory16(context, " + address + ", " + value + ");");
+        }
+        break;
+    case ir::Opcode::STORE_LEFT:
+        if (instruction.inputs.size() >= 2)
+        {
+            std::string address = valueToExpr(instruction.inputs[0], context);
+            std::string value = valueToExpr(instruction.inputs[1], context);
+            emitter.writeLine("writeMemorySwl(context, " + address + ", " + value + ");");
+        }
+        break;
+    case ir::Opcode::STORE_RIGHT:
+        if (instruction.inputs.size() >= 2)
+        {
+            std::string address = valueToExpr(instruction.inputs[0], context);
+            std::string value = valueToExpr(instruction.inputs[1], context);
+            emitter.writeLine("writeMemorySwr(context, " + address + ", " + value + ");");
         }
         break;
     case ir::Opcode::MMIO_LOAD:

@@ -91,12 +91,16 @@ int main()
     assert(branchAddress == 0x80010008);
 
     std::vector<psxrecomp::u8> extendedBuffer;
-    extendedBuffer.reserve(44);
+    extendedBuffer.reserve(60);
     appendLe32(extendedBuffer, encodeR(9, 10, 11, 0, 0x27)); // nor $t3, $t1, $t2
     appendLe32(extendedBuffer, encodeI(0x0A, 11, 12, 5));    // slti $t4, $t3, 5
     appendLe32(extendedBuffer, encodeI(0x0B, 11, 14, 5));    // sltiu $t6, $t3, 5
     appendLe32(extendedBuffer, encodeI(0x20, 8, 13, 1));     // lb $t5, 1($t0)
     appendLe32(extendedBuffer, encodeI(0x28, 8, 13, 2));     // sb $t5, 2($t0)
+    appendLe32(extendedBuffer, encodeI(0x22, 8, 14, 3));     // lwl $t6, 3($t0)
+    appendLe32(extendedBuffer, encodeI(0x26, 8, 14, 0));     // lwr $t6, 0($t0)
+    appendLe32(extendedBuffer, encodeI(0x2A, 8, 14, 3));     // swl $t6, 3($t0)
+    appendLe32(extendedBuffer, encodeI(0x2E, 8, 14, 0));     // swr $t6, 0($t0)
     appendLe32(extendedBuffer, encodeJ(0x03, 0x00000028u));  // jal 0xA0 (BIOS)
     appendLe32(extendedBuffer, encodeR(0, 0, 0, 0, 0x00));   // nop delay slot
     appendLe32(extendedBuffer, encodeI(0x01, 4, 17, 1));     // bgezal $a0, +1
@@ -111,6 +115,10 @@ int main()
     [[maybe_unused]] bool foundSlti = false;
     [[maybe_unused]] bool foundSltu = false;
     [[maybe_unused]] bool foundLoadStore = false;
+    [[maybe_unused]] bool foundLoadLeft = false;
+    [[maybe_unused]] bool foundLoadRight = false;
+    [[maybe_unused]] bool foundStoreLeft = false;
+    [[maybe_unused]] bool foundStoreRight = false;
     [[maybe_unused]] bool foundBiosSyscall = false;
     [[maybe_unused]] bool foundConditionalLink = false;
     for (const auto& instruction : extended.instructions)
@@ -131,9 +139,27 @@ int main()
         if (instruction.opcode == Opcode::LOAD || instruction.opcode == Opcode::STORE ||
             instruction.opcode == Opcode::LOAD8 || instruction.opcode == Opcode::LOAD8U ||
             instruction.opcode == Opcode::LOAD16 || instruction.opcode == Opcode::LOAD16U ||
-            instruction.opcode == Opcode::STORE8 || instruction.opcode == Opcode::STORE16)
+            instruction.opcode == Opcode::LOAD_LEFT || instruction.opcode == Opcode::LOAD_RIGHT ||
+            instruction.opcode == Opcode::STORE8 || instruction.opcode == Opcode::STORE16 ||
+            instruction.opcode == Opcode::STORE_LEFT || instruction.opcode == Opcode::STORE_RIGHT)
         {
             foundLoadStore = true;
+        }
+        if (instruction.opcode == Opcode::LOAD_LEFT)
+        {
+            foundLoadLeft = true;
+        }
+        if (instruction.opcode == Opcode::LOAD_RIGHT)
+        {
+            foundLoadRight = true;
+        }
+        if (instruction.opcode == Opcode::STORE_LEFT)
+        {
+            foundStoreLeft = true;
+        }
+        if (instruction.opcode == Opcode::STORE_RIGHT)
+        {
+            foundStoreRight = true;
         }
         if (instruction.opcode == Opcode::CALL && !instruction.inputs.empty() &&
             instruction.inputs.front().kind == psxrecomp::ir::ValueKind::ADDRESS &&
@@ -151,6 +177,10 @@ int main()
     assert(foundSlti);
     assert(foundLoadStore);
     assert(foundSltu);
+    assert(foundLoadLeft);
+    assert(foundLoadRight);
+    assert(foundStoreLeft);
+    assert(foundStoreRight);
     assert(foundBiosSyscall);
     assert(foundConditionalLink);
 

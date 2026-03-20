@@ -1,0 +1,266 @@
+{
+  "name": "rev2-decoder-handoff",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_decoder_cd_request_or_hclrctl",
+      "kind": "mmio_write",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    },
+    {
+      "name": "rev2_decoder_input_range",
+      "kind": "ram_read",
+      "range": "0x80070400-0x8007043F",
+      "action": "summarize"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_descriptor_selector_15a00c",
+      "pc_range": "0x15A00C-0x15A0BC",
+      "registers": ["a0", "a1", "a2", "a3", "t0", "v0", "v1", "ra"],
+      "memory_samples": [
+        {
+          "name": "selector_desc_state",
+          "base": "a2",
+          "offset": "0x0",
+          "width": 2,
+          "count": 1
+        },
+        {
+          "name": "selector_desc_len",
+          "base": "a2",
+          "offset": "0x8",
+          "width": 4,
+          "count": 1
+        },
+        {
+          "name": "selector_desc_f16_18",
+          "base": "a2",
+          "offset": "0x10",
+          "width": 2,
+          "count": 2
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 24
+    },
+    {
+      "name": "rev2_handoff_152304",
+      "pc_range": "0x152304-0x152304",
+      "registers": ["sp", "gp", "a0", "v0", "v1", "ra"],
+      "memory_samples": [
+        {
+          "name": "stack_payload_slot",
+          "base": "sp",
+          "offset": "0x18",
+          "width": 4,
+          "count": 1
+        },
+        {
+          "name": "stack_desc_slot",
+          "base": "sp",
+          "offset": "0x1C",
+          "width": 4,
+          "count": 1
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 24
+    },
+    {
+      "name": "rev2_decoder_entry_15452c",
+      "pc_range": "0x15452C-0x15452C",
+      "registers": ["a0", "a1", "a2", "a3", "t1", "ra"],
+      "memory_samples": [
+        {
+          "name": "input_bytes",
+          "base": "a0",
+          "offset": "0x0",
+          "width": 1,
+          "count": 8
+        },
+        {
+          "name": "input_words",
+          "base": "a0",
+          "offset": "0x0",
+          "width": 4,
+          "count": 2
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4,
+      "max_log_events": 24
+    },
+    {
+      "name": "rev2_decoder_table0_154718",
+      "pc_range": "0x154718-0x154718",
+      "registers": ["a0", "a1", "v0", "v1", "t0", "t1", "t3", "ra"],
+      "memory_samples": [
+        {
+          "name": "table0_word",
+          "base": "t0",
+          "offset": "0x0",
+          "width": 4,
+          "count": 1
+        },
+        {
+          "name": "input_peek",
+          "base": "a0",
+          "offset": "0x0",
+          "width": 2,
+          "count": 2
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4,
+      "max_log_events": 64
+    },
+    {
+      "name": "rev2_decoder_table1_154758",
+      "pc_range": "0x154758-0x154758",
+      "registers": ["a0", "a1", "v0", "v1", "t0", "t1", "t3", "ra"],
+      "memory_samples": [
+        {
+          "name": "table1_word",
+          "base": "t0",
+          "offset": "0x0",
+          "width": 4,
+          "count": 1
+        },
+        {
+          "name": "output_halfwords",
+          "base": "a1",
+          "offset": "0x0",
+          "width": 2,
+          "count": 2
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 4,
+      "max_log_events": 64
+    },
+    {
+      "name": "rev2_producer_161da8",
+      "pc_range": "0x161DA8-0x161F34",
+      "registers": ["a0", "a1", "a2", "a3", "s0", "s1", "v0", "v1", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 24
+    },
+    {
+      "name": "rev2_producer_161f38",
+      "pc_range": "0x161F38-0x162268",
+      "registers": ["a0", "a1", "a2", "a3", "s0", "s1", "v0", "v1", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 24
+    },
+    {
+      "name": "rev2_producer_16226c",
+      "pc_range": "0x16226C-0x162358",
+      "registers": ["a0", "a1", "a2", "a3", "s0", "s1", "v0", "v1", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 24
+    },
+    {
+      "name": "rev2_hotspot_159dcc",
+      "pc_range": "0x159DCC-0x159DDC",
+      "registers": ["a0", "a1", "v0", "v1", "t0", "t1", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 12
+    },
+    {
+      "name": "rev2_hotspot_15a394",
+      "pc_range": "0x15A394-0x15A3A4",
+      "registers": ["a0", "a1", "v0", "v1", "t0", "t1", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 12
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    },
+    {
+      "kind": "cdrom_bank_summary"
+    },
+    {
+      "kind": "cdrom_cpu_payload_summary"
+    },
+    {
+      "kind": "cdrom_irq_lifecycle_summary"
+    },
+    {
+      "kind": "cdrom_late_buffer_summary"
+    },
+    {
+      "kind": "rev2_decoder_handoff_summary"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_descriptor_selector_15a00c",
+      "pc_range": "0x15A00C-0x15A0BC",
+      "watched_cells": ["0x8018553C", "0x80185550", "0x80185554", "0x80185558"]
+    },
+    {
+      "name": "rev2_handoff_152304",
+      "pc_range": "0x152304-0x152304",
+      "watched_cells": ["0x80070400", "0x80070410", "0x80166440", "0x80166490"]
+    },
+    {
+      "name": "rev2_decoder_entry_15452c",
+      "pc_range": "0x15452C-0x15452C",
+      "watched_cells": ["0x80166440", "0x80166480", "0x80166490", "0x80166498"]
+    },
+    {
+      "name": "rev2_decoder_table0_154718",
+      "pc_range": "0x154718-0x154718",
+      "watched_cells": ["0x80166440", "0x80166480", "0x80166490", "0x80166498"]
+    },
+    {
+      "name": "rev2_decoder_table1_154758",
+      "pc_range": "0x154758-0x154758",
+      "watched_cells": ["0x80166440", "0x80166480", "0x80166490", "0x80166498"]
+    },
+    {
+      "name": "rev2_producer_161f38",
+      "pc_range": "0x161F38-0x162268",
+      "watched_cells": ["0x80070400", "0x80070410", "0x8018553C", "0x80185558"]
+    }
+  ]
+}

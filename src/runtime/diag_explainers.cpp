@@ -170,5 +170,11 @@ DiagExplainerEngine::explainCdromLateBufferSummary(const DiagCdromLateBufferTrac
     return tracker.formatSummary();
 }
 
+std::string
+DiagExplainerEngine::explainRev2DecoderHandoffSummary(const DiagRev2DecoderHandoffTracker& tracker)
+{
+    return tracker.formatSummary();
+}
+
 } // namespace runtime
 } // namespace psxrecomp

@@ -59,10 +59,14 @@ Current runtime behavior:
 - logs entry into a traced PC range
 - logs exit from a traced PC range
 - logs named register snapshots on entry when the profile supplies `registers`
+- logs inline RAM samples when the profile supplies `memory_samples`
 - logs configured GPU `GP1` MMIO reads while the tracepoint is active
 - optional `capture_context` adds caller PC, resume address, callback generation,
   and IRQ snapshot to entry/exit logs
 - optional `caller_histogram` keeps a compact caller count summary
+- optional `max_log_events` hard-caps per-tracepoint emitted log lines; once the
+  cap is reached the runtime emits one `event=log_limit` line and keeps only a
+  compact suppressed-count summary
 - optional `repeat_threshold` emits a repeat signature when the same caller,
   callback context, pending IRQ state, and captured register snapshot re-enter
   a range repeatedly; once the threshold is exceeded, the runtime suppresses
@@ -143,6 +147,7 @@ problem to one subsystem:
   source `INT1` generation/LBA, payload fingerprints, and later CPU reads so
   one run can explain whether buffers like `0x80187158` are parser-consumed or
   side buffers unrelated to the ack path.
+- `profiles/rev2.decoder_handoff.diag.json`: merged decoder-handoff investigation for `0x8015221C`, `0x8015A00C`, the producer windows at `0x80161DA8/0x80161F38/0x8016226C`, the upstream hotspots at `0x80159DCC` and `0x8015A394`, and the `0x8015452C` decoder loop itself. It combines compact selector/producer tracepoints with an end-of-run provenance summary for the `0x80070400` input window, a zero-payload guard, and output-span accounting so one run can say whether the decoder got the wrong slot, a zero-only payload, or a runaway segment without multi-GB output.
 - `profiles/rev2.hotloop_state.diag.json`: exact-PC hot-loop probes at
   `0x154718`, `0x15473c`, `0x15475c`, and `0x154778` with per-visit register
   snapshots, plus the `REQUEST/BFRD`, `HCLRCTL`, and

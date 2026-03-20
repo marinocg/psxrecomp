@@ -2,6 +2,7 @@
 
 #include "psxrecomp/runtime/diag_cdrom_bank_tracer.h"
 #include "psxrecomp/runtime/diag_cdrom_late_buffer_tracker.h"
+#include "psxrecomp/runtime/diag_rev2_decoder_handoff_tracker.h"
 #include "psxrecomp/runtime/diag_types.h"
 
 #include <string>
@@ -60,6 +61,10 @@ class DiagExplainerEngine
 
     /// Return a summary of recent sector-sized CD DMA destinations and later CPU reads.
     static std::string explainCdromLateBufferSummary(const DiagCdromLateBufferTracker& tracker);
+
+    /// Return the focused Reversi decoder-handoff provenance summary.
+    static std::string
+    explainRev2DecoderHandoffSummary(const DiagRev2DecoderHandoffTracker& tracker);
 
     /// Number of configured explainers.
     size_t explainerCount() const;

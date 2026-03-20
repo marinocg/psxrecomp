@@ -122,12 +122,20 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "load16";
     case ir::Opcode::LOAD16U:
         return "load16u";
+    case ir::Opcode::LOAD_LEFT:
+        return "load_left";
+    case ir::Opcode::LOAD_RIGHT:
+        return "load_right";
     case ir::Opcode::STORE:
         return "store";
     case ir::Opcode::STORE8:
         return "store8";
     case ir::Opcode::STORE16:
         return "store16";
+    case ir::Opcode::STORE_LEFT:
+        return "store_left";
+    case ir::Opcode::STORE_RIGHT:
+        return "store_right";
     case ir::Opcode::MMIO_LOAD:
         return "mmio_load";
     case ir::Opcode::MMIO_STORE:

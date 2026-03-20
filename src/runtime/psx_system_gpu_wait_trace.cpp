@@ -9,9 +9,10 @@ void PsxSystem::observeProgramCounter(Address pc, const u32* regs, size_t regCou
 {
     m_debugOverlay.setLastProgramCounter(pc);
     m_stallClassifier.recordPc(pc);
+    m_diagRev2DecoderHandoffTracker.observePc(pc, regs, regCount, *this, &m_logger);
     m_diagTracepoints.observePc(pc, m_lastResumeAddress, callbackContextCommitGeneration(),
                                 m_interrupts.readStatus(), m_interrupts.readMask(), regs, regCount,
-                                &m_logger);
+                                this, &m_logger);
 }
 
 } // namespace runtime

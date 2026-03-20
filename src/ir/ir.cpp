@@ -67,12 +67,20 @@ std::string opcodeToString(Opcode opcode)
         return "load16";
     case Opcode::LOAD16U:
         return "load16u";
+    case Opcode::LOAD_LEFT:
+        return "load_left";
+    case Opcode::LOAD_RIGHT:
+        return "load_right";
     case Opcode::STORE:
         return "store";
     case Opcode::STORE8:
         return "store8";
     case Opcode::STORE16:
         return "store16";
+    case Opcode::STORE_LEFT:
+        return "store_left";
+    case Opcode::STORE_RIGHT:
+        return "store_right";
     case Opcode::MMIO_LOAD:
         return "mmio_load";
     case Opcode::MMIO_STORE:

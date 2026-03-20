@@ -133,6 +133,20 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
                       "static_cast<s16>(context.system.read<u16>(address))));");
     emitter.closeBlock();
     emitter.writeBlank();
+    emitter.writeLine(
+        "inline u32 readMemoryLwl(RecompilerContext& context, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
+    emitter.writeLine("return runtime::loadWordLeft(context.system, address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline u32 readMemoryLwr(RecompilerContext& context, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
+    emitter.writeLine("return runtime::loadWordRight(context.system, address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
 
     // writeMemory8 — byte store.
     emitter.writeLine(
@@ -155,6 +169,20 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.closeBlock();
     emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
     emitter.writeLine("context.system.write<u16>(address, static_cast<u16>(value & 0xFFFF));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void writeMemorySwl(RecompilerContext& context, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
+    emitter.writeLine("runtime::storeWordLeft(context.system, address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void writeMemorySwr(RecompilerContext& context, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
+    emitter.writeLine("runtime::storeWordRight(context.system, address, value);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline u32 readMmio32(RecompilerContext& context, Address address)");
@@ -364,6 +392,13 @@ void emitRuntimeSupportHelpers(CppEmitter& emitter)
     emitter.openBlock("");
     emitter.writeLine("stream << runtime::DiagExplainerEngine::explainCdromLateBufferSummary("
                       "context.system.diagCdromLateBufferTracker());");
+    emitter.writeLine("stream << \"\\n\";");
+    emitter.closeBlock();
+    emitter.writeLine("if (context.system.diagExplainers().isEnabled("
+                      "runtime::ExplainerKind::Rev2DecoderHandoffSummary))");
+    emitter.openBlock("");
+    emitter.writeLine("stream << runtime::DiagExplainerEngine::explainRev2DecoderHandoffSummary("
+                      "context.system.diagRev2DecoderHandoffTracker());");
     emitter.writeLine("stream << \"\\n\";");
     emitter.closeBlock();
     emitter.writeLine("stream << context.system.callbackTrace().formatRecentCallbacks();");

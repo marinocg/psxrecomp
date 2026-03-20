@@ -1,9 +1,12 @@
 #include "psxrecomp/runtime/diag_tracepoints.h"
 
 #include "psxrecomp/runtime/logger.h"
+#include "psxrecomp/runtime/memory_map.h"
+#include "psxrecomp/runtime/psx_system.h"
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <sstream>
 
 namespace psxrecomp
@@ -137,6 +140,25 @@ bool sameRegisterValues(const std::vector<TracepointRegisterValue>& lhs,
     return true;
 }
 
+bool sameMemorySamples(const std::vector<TracepointMemorySampleValue>& lhs,
+                       const std::vector<TracepointMemorySampleValue>& rhs)
+{
+    if (lhs.size() != rhs.size())
+    {
+        return false;
+    }
+    for (size_t i = 0; i < lhs.size(); ++i)
+    {
+        if (lhs[i].name != rhs[i].name || lhs[i].address != rhs[i].address ||
+            lhs[i].width != rhs[i].width || lhs[i].valid != rhs[i].valid ||
+            lhs[i].values != rhs[i].values)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
 void appendRegisterValues(std::ostringstream& msg,
                           const std::vector<TracepointRegisterValue>& registerValues)
 {
@@ -152,6 +174,119 @@ void appendRegisterValues(std::ostringstream& msg,
             msg << ",";
         }
         msg << registerValues[i].name << "=0x" << std::hex << registerValues[i].value;
+    }
+}
+
+bool tryReadRamSample(const PsxSystem& system, Address address, u32 width, u32& outValue)
+{
+    const Address physical = address & 0x1FFFFFFFu;
+    if (!isMainRamAddress(physical, width))
+    {
+        return false;
+    }
+    const Address offset = foldMainRamAddress(physical);
+    const u8* ram = system.getRam();
+    if (ram == nullptr || offset > (MemoryMap::RAM_SIZE - width))
+    {
+        return false;
+    }
+    outValue = 0;
+    std::memcpy(&outValue, ram + offset, width);
+    return true;
+}
+
+std::vector<TracepointMemorySampleValue> captureMemorySamples(const TracepointConfig& config,
+                                                              const u32* regs, size_t regCount,
+                                                              const PsxSystem* system)
+{
+    std::vector<TracepointMemorySampleValue> samples;
+    if (regs == nullptr || regCount == 0 || system == nullptr)
+    {
+        return samples;
+    }
+    samples.reserve(config.memorySamples.size());
+    for (const auto& sampleConfig : config.memorySamples)
+    {
+        TracepointMemorySampleValue sample;
+        sample.name = sampleConfig.name;
+        sample.width = sampleConfig.width;
+        u32 baseIndex = 0;
+        if (!tryResolveRegisterIndex(sampleConfig.baseRegister, baseIndex) || baseIndex >= regCount)
+        {
+            samples.push_back(std::move(sample));
+            continue;
+        }
+        sample.address = regs[baseIndex] + sampleConfig.offset;
+        const u32 clampedWidth =
+            sampleConfig.width == 1 || sampleConfig.width == 2 || sampleConfig.width == 4
+                ? sampleConfig.width
+                : 1u;
+        const u32 clampedCount = std::max<u32>(1u, sampleConfig.count);
+        sample.width = clampedWidth;
+        sample.values.reserve(clampedCount);
+        sample.valid = true;
+        for (u32 index = 0; index < clampedCount; ++index)
+        {
+            const Address currentAddress = sample.address + (index * clampedWidth);
+            u32 value = 0;
+            if (!tryReadRamSample(*system, currentAddress, clampedWidth, value))
+            {
+                sample.valid = false;
+                sample.values.clear();
+                break;
+            }
+            sample.values.push_back(value);
+        }
+        samples.push_back(std::move(sample));
+    }
+    return samples;
+}
+
+void appendMemorySamples(std::ostringstream& msg,
+                         const std::vector<TracepointMemorySampleValue>& samples)
+{
+    if (samples.empty())
+    {
+        return;
+    }
+    msg << " samples=";
+    for (size_t i = 0; i < samples.size(); ++i)
+    {
+        if (i != 0)
+        {
+            msg << ",";
+        }
+        msg << samples[i].name << "@0x" << std::hex << samples[i].address << "=[";
+        if (!samples[i].valid)
+        {
+            msg << "unavailable";
+        }
+        else
+        {
+            for (size_t valueIndex = 0; valueIndex < samples[i].values.size(); ++valueIndex)
+            {
+                if (valueIndex != 0)
+                {
+                    msg << " ";
+                }
+                if (samples[i].width == 1)
+                {
+                    msg.width(2);
+                    msg.fill('0');
+                    msg << (samples[i].values[valueIndex] & 0xFFu);
+                    msg.fill(' ');
+                }
+                else if (samples[i].width == 2)
+                {
+                    msg << "0x" << samples[i].values[valueIndex];
+                }
+                else
+                {
+                    msg << "0x" << samples[i].values[valueIndex];
+                }
+            }
+        }
+        msg << "]";
     }
 }
 
@@ -181,9 +316,34 @@ void DiagTracepointEngine::configure(const std::vector<TracepointConfig>& config
     }
 }
 
+bool DiagTracepointEngine::consumeLogBudget(ActiveRange& range, RuntimeLogger* logger)
+{
+    if (range.suppressCurrentVisit)
+    {
+        return false;
+    }
+    if (range.config->maxLogEvents == 0 || range.emittedLogCount < range.config->maxLogEvents)
+    {
+        ++range.emittedLogCount;
+        return true;
+    }
+    ++range.suppressedByLimitCount;
+    if (!range.limitLogged && logger != nullptr)
+    {
+        std::ostringstream msg;
+        msg << "tracepoint=" << range.config->name
+            << " event=log_limit max=" << range.config->maxLogEvents
+            << " suppressed=" << range.suppressedByLimitCount;
+        logger->log(LogLevel::Info, "tracepoint", msg.str());
+        range.limitLogged = true;
+    }
+    return false;
+}
+
 void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                                      u32 callbackCommitGeneration, u32 irqStatus, u32 irqMask,
-                                     const u32* regs, size_t regCount, RuntimeLogger* logger)
+                                     const u32* regs, size_t regCount, const PsxSystem* system,
+                                     RuntimeLogger* logger)
 {
     for (auto& range : m_ranges)
     {
@@ -205,11 +365,12 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                 hit.irqMask = range.pendingBranchIrqMask;
                 hit.irqPendingMasked = range.pendingBranchIrqPendingMasked;
                 hit.registerValues = range.pendingBranchRegisterValues;
+                hit.memorySamples = range.pendingBranchMemorySamples;
                 hit.isBranchDecision = true;
                 hit.branchTaken = tookTaken;
                 appendRecentHit(m_recentHits, hit);
 
-                if (logger != nullptr && !range.suppressCurrentVisit)
+                if (logger != nullptr && consumeLogBudget(range, logger))
                 {
                     std::ostringstream msg;
                     msg << "tracepoint=" << range.config->name << " event=branch branch_pc=0x"
@@ -223,11 +384,13 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                             << " irq_pending=0x" << range.pendingBranchIrqPendingMasked;
                     }
                     appendRegisterValues(msg, range.pendingBranchRegisterValues);
+                    appendMemorySamples(msg, range.pendingBranchMemorySamples);
                     logger->log(LogLevel::Info, "tracepoint", msg.str());
                 }
             }
             range.pendingBranchDecision = false;
             range.pendingBranchRegisterValues.clear();
+            range.pendingBranchMemorySamples.clear();
         }
 
         const bool inRange = pc >= range.config->pcRangeStart && pc <= range.config->pcRangeEnd;
@@ -244,6 +407,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             range.entryIrqMask = irqMask;
             range.entryIrqPendingMasked = irqPendingMasked;
             range.entryRegisterValues = captureRegisterValues(*range.config, regs, regCount);
+            range.entryMemorySamples = captureMemorySamples(*range.config, regs, regCount, system);
             if (range.config->callerHistogram)
             {
                 ++range.callerHistogram[range.entryCallerPc];
@@ -254,7 +418,8 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                 range.entryResumeAddress == range.lastRepeatedResumeAddress &&
                 range.entryCallbackCommitGeneration == range.lastRepeatedCallbackCommitGeneration &&
                 range.entryIrqPendingMasked == range.lastRepeatedIrqPendingMasked &&
-                sameRegisterValues(range.entryRegisterValues, range.lastRepeatedRegisterValues);
+                sameRegisterValues(range.entryRegisterValues, range.lastRepeatedRegisterValues) &&
+                sameMemorySamples(range.entryMemorySamples, range.lastRepeatedMemorySamples);
             if (sameRepeatedSignature)
             {
                 ++range.repeatCount;
@@ -285,6 +450,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                 range.lastRepeatedCallbackCommitGeneration = callbackCommitGeneration;
                 range.lastRepeatedIrqPendingMasked = irqPendingMasked;
                 range.lastRepeatedRegisterValues = range.entryRegisterValues;
+                range.lastRepeatedMemorySamples = range.entryMemorySamples;
                 range.repeatCount = 1;
                 range.repeatLogged = false;
                 range.suppressCurrentVisit = false;
@@ -301,6 +467,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             hit.irqMask = irqMask;
             hit.irqPendingMasked = irqPendingMasked;
             hit.registerValues = range.entryRegisterValues;
+            hit.memorySamples = range.entryMemorySamples;
             hit.isEntry = true;
             appendRecentHit(m_recentHits, hit);
 
@@ -318,9 +485,10 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                 range.pendingBranchIrqMask = irqMask;
                 range.pendingBranchIrqPendingMasked = irqPendingMasked;
                 range.pendingBranchRegisterValues = range.entryRegisterValues;
+                range.pendingBranchMemorySamples = range.entryMemorySamples;
             }
 
-            if (logger != nullptr && !range.suppressCurrentVisit)
+            if (logger != nullptr && consumeLogBudget(range, logger))
             {
                 std::ostringstream msg;
                 msg << "tracepoint=" << range.config->name << " event=entry pc=0x" << std::hex
@@ -334,6 +502,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                         << " irq_pending=0x" << range.entryIrqPendingMasked;
                 }
                 appendRegisterValues(msg, range.entryRegisterValues);
+                appendMemorySamples(msg, range.entryMemorySamples);
                 logger->log(LogLevel::Info, "tracepoint", msg.str());
 
                 if (range.config->repeatThreshold > 0 &&
@@ -347,6 +516,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                            << range.entryCallbackCommitGeneration << std::hex << " irq_pending=0x"
                            << range.entryIrqPendingMasked;
                     appendRegisterValues(repeat, range.entryRegisterValues);
+                    appendMemorySamples(repeat, range.entryMemorySamples);
                     logger->log(LogLevel::Info, "tracepoint", repeat.str());
                     range.repeatLogged = true;
                 }
@@ -366,10 +536,11 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
             hit.irqStatus = range.entryIrqStatus;
             hit.irqMask = range.entryIrqMask;
             hit.irqPendingMasked = range.entryIrqPendingMasked;
+            hit.memorySamples = range.entryMemorySamples;
             hit.isExit = true;
             appendRecentHit(m_recentHits, hit);
 
-            if (logger != nullptr && !range.suppressCurrentVisit)
+            if (logger != nullptr && consumeLogBudget(range, logger))
             {
                 std::ostringstream msg;
                 msg << "tracepoint=" << range.config->name << " event=exit pc=0x" << std::hex << pc;
@@ -380,6 +551,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
                         << range.entryCallbackCommitGeneration << std::hex << " irq_pending=0x"
                         << range.entryIrqPendingMasked;
                 }
+                appendMemorySamples(msg, range.entryMemorySamples);
                 logger->log(LogLevel::Info, "tracepoint", msg.str());
             }
             range.suppressCurrentVisit = false;
@@ -391,7 +563,7 @@ void DiagTracepointEngine::observePc(Address pc, Address resumeAddress,
 void DiagTracepointEngine::recordMmioRead(Address mmioAddress, u32 value, Address pc,
                                           RuntimeLogger* logger)
 {
-    for (const auto& range : m_ranges)
+    for (auto& range : m_ranges)
     {
         if (!range.inside)
         {
@@ -399,7 +571,7 @@ void DiagTracepointEngine::recordMmioRead(Address mmioAddress, u32 value, Addres
         }
         for (Address watchAddr : range.config->mmioReads)
         {
-            if (watchAddr == mmioAddress && logger != nullptr && !range.suppressCurrentVisit)
+            if (watchAddr == mmioAddress && logger != nullptr && consumeLogBudget(range, logger))
             {
                 std::ostringstream msg;
                 msg << "tracepoint=" << range.config->name << " event=mmio_read pc=0x" << std::hex
@@ -466,33 +638,33 @@ std::string DiagTracepointEngine::formatRecentTraces() const
                << hit.irqPendingMasked;
         }
         appendRegisterValues(os, hit.registerValues);
+        appendMemorySamples(os, hit.memorySamples);
         os << "\n";
     }
     for (const auto& range : m_ranges)
     {
-        if (!range.config->callerHistogram || range.callerHistogram.empty())
+        if (range.config->callerHistogram && !range.callerHistogram.empty())
         {
-            continue;
-        }
-        std::vector<std::pair<Address, u32>> sorted(range.callerHistogram.begin(),
-                                                    range.callerHistogram.end());
-        std::sort(sorted.begin(), sorted.end(),
-                  [](const auto& lhs, const auto& rhs)
-                  {
-                      if (lhs.second != rhs.second)
+            std::vector<std::pair<Address, u32>> sorted(range.callerHistogram.begin(),
+                                                        range.callerHistogram.end());
+            std::sort(sorted.begin(), sorted.end(),
+                      [](const auto& lhs, const auto& rhs)
                       {
-                          return lhs.second > rhs.second;
-                      }
-                      return lhs.first < rhs.first;
-                  });
-        os << "Caller histogram [" << range.config->name << "]:";
-        const size_t limit = std::min<size_t>(sorted.size(), 4);
-        for (size_t index = 0; index < limit; ++index)
-        {
-            os << (index == 0 ? " " : ", ") << "0x" << std::hex << sorted[index].first << "="
-               << std::dec << sorted[index].second;
+                          if (lhs.second != rhs.second)
+                          {
+                              return lhs.second > rhs.second;
+                          }
+                          return lhs.first < rhs.first;
+                      });
+            os << "Caller histogram [" << range.config->name << "]:";
+            const size_t limit = std::min<size_t>(sorted.size(), 4);
+            for (size_t index = 0; index < limit; ++index)
+            {
+                os << (index == 0 ? " " : ", ") << "0x" << std::hex << sorted[index].first << "="
+                   << std::dec << sorted[index].second;
+            }
+            os << "\n";
         }
-        os << "\n";
         if (range.config->repeatThreshold > 0 && range.repeatCount >= range.config->repeatThreshold)
         {
             os << "Repeat signature [" << range.config->name << "]: caller=0x" << std::hex
@@ -501,6 +673,7 @@ std::string DiagTracepointEngine::formatRecentTraces() const
                << std::hex << " irq_pending=0x" << range.lastRepeatedIrqPendingMasked
                << " count=" << std::dec << range.repeatCount;
             appendRegisterValues(os, range.lastRepeatedRegisterValues);
+            appendMemorySamples(os, range.lastRepeatedMemorySamples);
             os << "\n";
         }
         if (range.suppressedVisitCount > 0)
@@ -511,7 +684,14 @@ std::string DiagTracepointEngine::formatRecentTraces() const
                << " callback_gen=" << std::dec << range.lastRepeatedCallbackCommitGeneration
                << std::hex << " irq_pending=0x" << range.lastRepeatedIrqPendingMasked;
             appendRegisterValues(os, range.lastRepeatedRegisterValues);
+            appendMemorySamples(os, range.lastRepeatedMemorySamples);
             os << "\n";
+        }
+        if (range.suppressedByLimitCount > 0)
+        {
+            os << "Log limit [" << range.config->name << "]: max=" << std::dec
+               << range.config->maxLogEvents << " suppressed=" << range.suppressedByLimitCount
+               << "\n";
         }
     }
     return os.str();
