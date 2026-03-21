@@ -1,6 +1,7 @@
 #include "codegen_lowering_helpers.h"
 
 #include "codegen_helpers.h"
+#include "codegen_lowering_detail.h"
 
 #include <array>
 #include <set>
@@ -74,8 +75,12 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "phi";
     case ir::Opcode::MOVE:
         return "move";
+    case ir::Opcode::ADD_TRAP:
+        return "add_trap";
     case ir::Opcode::ADD:
         return "add";
+    case ir::Opcode::SUB_TRAP:
+        return "sub_trap";
     case ir::Opcode::SUB:
         return "sub";
     case ir::Opcode::AND:
@@ -136,8 +141,20 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "store_left";
     case ir::Opcode::STORE_RIGHT:
         return "store_right";
+    case ir::Opcode::MMIO_LOAD8:
+        return "mmio_load8";
+    case ir::Opcode::MMIO_LOAD8U:
+        return "mmio_load8u";
+    case ir::Opcode::MMIO_LOAD16:
+        return "mmio_load16";
+    case ir::Opcode::MMIO_LOAD16U:
+        return "mmio_load16u";
     case ir::Opcode::MMIO_LOAD:
         return "mmio_load";
+    case ir::Opcode::MMIO_STORE8:
+        return "mmio_store8";
+    case ir::Opcode::MMIO_STORE16:
+        return "mmio_store16";
     case ir::Opcode::MMIO_STORE:
         return "mmio_store";
     case ir::Opcode::BRANCH:
@@ -267,8 +284,7 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
         }
         if (instruction.outputs.empty() || instruction.inputs.size() != predecessors.size())
         {
-            emitter.writeLine("// TODO: malformed phi node");
-            continue;
+            throwLoweringError(instruction, "Malformed phi node");
         }
         std::string dest = valueToExpr(instruction.outputs.front(), context);
         for (size_t index = 0; index < predecessors.size(); ++index)

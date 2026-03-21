@@ -1,3 +1,4 @@
+#include "codegen_lowering_detail.h"
 #include "codegen_lowering_helpers.h"
 
 #include <optional>
@@ -236,7 +237,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
         }
         else
         {
-            emitter.writeLine("// TODO: call lowering");
+            throwLoweringError(instruction, "Call instruction is missing a target operand");
         }
         return true;
     default:

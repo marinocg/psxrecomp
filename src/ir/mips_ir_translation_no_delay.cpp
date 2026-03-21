@@ -63,11 +63,17 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
     switch (instr.opcode)
     {
     case disasm::Opcode::ADD:
+        emit(Opcode::ADD_TRAP, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
+             {Value::makeRegister(instr.rd)});
+        break;
     case disasm::Opcode::ADDU:
         emit(Opcode::ADD, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
              {Value::makeRegister(instr.rd)});
         break;
     case disasm::Opcode::SUB:
+        emit(Opcode::SUB_TRAP, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
+             {Value::makeRegister(instr.rd)});
+        break;
     case disasm::Opcode::SUBU:
         emit(Opcode::SUB, {Value::makeRegister(instr.rs), Value::makeRegister(instr.rt)},
              {Value::makeRegister(instr.rd)});
@@ -244,6 +250,11 @@ void MipsIrTranslator::translateNoDelay(const disasm::Instruction& instr,
         emitCpuException(EXCEPTION_CODE_COPROCESSOR_UNUSABLE);
         break;
     case disasm::Opcode::ADDI:
+        emit(Opcode::ADD_TRAP,
+             {Value::makeRegister(instr.rs),
+              Value::makeImmediate(static_cast<s32>(instr.immediate))},
+             {Value::makeRegister(instr.rt)});
+        break;
     case disasm::Opcode::ADDIU:
         emit(Opcode::ADD,
              {Value::makeRegister(instr.rs),

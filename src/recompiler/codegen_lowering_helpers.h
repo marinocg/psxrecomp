@@ -37,6 +37,9 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
 bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
                                 const std::unordered_map<std::string, std::string>& blockNames,
                                 LoweringContext& context, CppEmitter& emitter);
+bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
+                                    const std::unordered_map<std::string, std::string>& blockNames,
+                                    LoweringContext& context, CppEmitter& emitter);
 void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
                      const std::unordered_map<std::string, std::string>& blockNames,
                      LoweringContext& context, CppEmitter& emitter);

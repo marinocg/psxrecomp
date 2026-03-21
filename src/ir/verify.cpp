@@ -1,6 +1,7 @@
 #include "psxrecomp/ir/verify.h"
 
 #include <algorithm>
+#include <cctype>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -19,6 +20,24 @@ std::unordered_map<std::string, size_t> buildBlockIndex(const Function& function
         indexMap[function.blocks[index].name] = index;
     }
     return indexMap;
+}
+
+bool isSyntheticExternalSuccessor(const std::string& successor)
+{
+    constexpr std::string_view blockPrefix = "block_0x";
+    if (successor == "block_external")
+    {
+        return true;
+    }
+
+    if (successor.size() <= blockPrefix.size() ||
+        successor.compare(0, blockPrefix.size(), blockPrefix) != 0)
+    {
+        return false;
+    }
+
+    return std::all_of(successor.begin() + static_cast<std::ptrdiff_t>(blockPrefix.size()),
+                       successor.end(), [](unsigned char ch) { return std::isxdigit(ch) != 0; });
 }
 
 std::vector<std::vector<size_t>>
@@ -114,7 +133,8 @@ VerificationResult verifyFunction(const Function& function)
     {
         for (const auto& successor : block.successors)
         {
-            if (indexMap.find(successor) == indexMap.end())
+            if (indexMap.find(successor) == indexMap.end() &&
+                !isSyntheticExternalSuccessor(successor))
             {
                 result.errors.push_back("Unknown successor block: " + successor);
             }

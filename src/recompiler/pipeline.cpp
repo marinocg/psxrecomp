@@ -4,6 +4,7 @@
 #include "pipeline_helpers.h"
 #include "pipeline_input_loader.h"
 #include "pipeline_selection_helpers.h"
+#include "pipeline_validation.h"
 #include "psxrecomp/disasm/analysis.h"
 #include "psxrecomp/disasm/instruction.h"
 #include "psxrecomp/ir/control_flow.h"
@@ -179,6 +180,12 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             return fail(stream.str());
         }
 
+        if (auto verifyError = detail::verifyFunctionForCodegen(flowResult.function, activeDiscPath,
+                                                                "post-cfg", diagnostics))
+        {
+            return fail(*verifyError);
+        }
+
         PipelineResult::FunctionMetadata metadataEntry;
         metadataEntry.name = functionName;
         metadataEntry.entryAddress = adjustedBoundary.start;
@@ -216,6 +223,23 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
     if (m_options.enableOptimizations)
     {
         ir::runOptimizations(program);
+        for (const auto& function : program.functions)
+        {
+            if (auto verifyError = detail::verifyFunctionForCodegen(
+                    function, activeDiscPath, "post-optimization", diagnostics))
+            {
+                return fail(*verifyError);
+            }
+        }
+    }
+
+    for (const auto& function : program.functions)
+    {
+        if (auto verifyError = detail::verifyFunctionForCodegen(function, activeDiscPath,
+                                                                "pre-codegen", diagnostics))
+        {
+            return fail(*verifyError);
+        }
     }
 
     CodeGenOptions codegenOptions;
@@ -287,10 +311,27 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         metadata.discs.push_back(std::move(entry));
     }
 
-    const std::string header = codeGenerator.generateHeader(program, moduleName);
-    const std::string source = codeGenerator.generateSource(program, moduleName, metadata);
-    const std::string buildFile = codeGenerator.generateBuildFile(moduleName);
-    const std::string runnerSource = codeGenerator.generateRunnerSource(moduleName);
+    std::string header;
+    std::string source;
+    std::string buildFile;
+    std::string runnerSource;
+    try
+    {
+        header = codeGenerator.generateHeader(program, moduleName);
+        source = codeGenerator.generateSource(program, moduleName, metadata);
+        buildFile = codeGenerator.generateBuildFile(moduleName);
+        runnerSource = codeGenerator.generateRunnerSource(moduleName);
+    }
+    catch (const std::exception& exception)
+    {
+        PipelineDiagnostic entry;
+        entry.code = "CodegenFailure";
+        entry.severity = "error";
+        entry.message = std::string("Code generation failed: ") + exception.what();
+        entry.context.file = activeDiscPath;
+        diagnostics.push_back(std::move(entry));
+        return fail(std::string("Code generation failed: ") + exception.what());
+    }
 
     std::filesystem::path outputDir =
         detail::buildOutputDirectory(std::filesystem::path(m_options.outputDirectory), inputStem,

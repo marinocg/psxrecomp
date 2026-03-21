@@ -30,11 +30,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         emitter.openBlock("");
         if (function.blocks.empty())
         {
-            emitter.writeLine("// TODO: empty function body");
-            emitter.writeLine("return true;");
-            emitter.closeBlock();
-            emitter.writeBlank();
-            continue;
+            throw std::runtime_error("Cannot lower function '" + function.name +
+                                     "' because it has no basic blocks.");
         }
 
         emitter.writeLine("CycleScope cycleScope(context);");
