@@ -159,6 +159,31 @@ void KernelEventTable::undeliverEvent(u32 handle)
     }
 }
 
+bool KernelEventTable::hasDeliveredEventForClassSpec(u32 classId, u16 spec) const
+{
+    for (const auto& event : m_events)
+    {
+        if (event.status == EventStatus::Delivered && event.classId == classId &&
+            event.spec == spec)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void KernelEventTable::undeliverByClassSpec(u32 classId, u16 spec)
+{
+    for (auto& event : m_events)
+    {
+        if (event.status == EventStatus::Delivered && event.classId == classId &&
+            event.spec == spec)
+        {
+            event.status = EventStatus::Enabled;
+        }
+    }
+}
+
 const KernelEvent* KernelEventTable::getEvent(u32 handle) const
 {
     const size_t index = handleToIndex(handle);

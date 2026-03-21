@@ -172,6 +172,19 @@ class KernelEventTable
     std::vector<u32> deliverByClassSpec(u32 classId, u16 spec);
 
     /**
+     * @brief Check if any event matching class+spec is already Delivered.
+     */
+    bool hasDeliveredEventForClassSpec(u32 classId, u16 spec) const;
+
+    /**
+     * @brief Reset all Delivered events matching class+spec back to Enabled.
+     *
+     * Used by the CDROM back-pressure fix to allow re-delivery of DataReady
+     * events when a new INT1 arrives before the game consumed the previous one.
+     */
+    void undeliverByClassSpec(u32 classId, u16 spec);
+
+    /**
      * @brief Undeliver an event (BIOS B0:20 UnDeliverEvent).
      *
      * Resets the Delivered flag back to Enabled.

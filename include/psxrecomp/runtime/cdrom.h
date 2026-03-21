@@ -121,6 +121,10 @@ class Cdrom
 
     void enqueueDataSector(const std::vector<u8>& data);
     bool hasIrqRequest() const;
+    bool isReadActive() const
+    {
+        return m_execution.readActive;
+    }
     u32 irqPublishGeneration(u8 irqType) const;
     u32 currentDrainingInt1Generation() const;
     u32 currentDrainingLba() const;
@@ -495,7 +499,7 @@ class Cdrom
     void scheduleBufferedInt1Promotion();
     void advanceBufferedInt1Delay(u32 cpuCycles);
     void maybeQueueReadEndInterrupt();
-    void acceptPublishedSector(bool replaceExistingData);
+    void acceptPublishedSector(bool replaceExistingData, bool bypassRequestControl = false);
     void updateDataPadForDrainingSector();
     ReadSectorResult queueReadSector();
     ReadSectorResult loadReadSector(std::vector<u8>& outSector);
@@ -510,6 +514,8 @@ class Cdrom
     void noteInt1BfrdRiseAfterPublish();
     void noteInt1DmaBytes(u32 bytesTransferred);
     void noteAckedInt1Generation(bool topLevelCdLineDeasserted);
+    bool prepareControllerDmaRead(bool forceTransferStart);
+    u32 readControllerDma(bool forceTransferStart);
     void beginInt1DmaTransfer(Address destinationBase);
     void endInt1DmaTransfer();
     bool eofBoundaryPublishGateExperimentEnabled() const;
@@ -517,6 +523,7 @@ class Cdrom
     void releaseEofBoundaryInt1PublishGate();
     CpuSectorRecord* currentCpuPayloadRecord();
     const CpuSectorRecord* currentCpuPayloadRecord() const;
+    u32 readDmaInternal(bool bypassRequestControl);
 };
 
 } // namespace runtime

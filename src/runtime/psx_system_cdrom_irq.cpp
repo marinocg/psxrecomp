@@ -188,6 +188,32 @@ bool PsxSystem::serviceBiosCdromInterrupt()
         m_cdrom.writeInterruptFlags(0x1Fu);
     }
 
+    // PSX-SPX: CDROM back-pressure for batched-cycle delivery.
+    //
+    // On real hardware, INT1 (DataReady) fires once per sector (~13ms at
+    // 1x speed).  The game's main loop calls TestEvent between sectors,
+    // consuming the DataReady kernel event (Delivered → Enabled) before
+    // the next INT1 arrives.  The batched-cycle model in the recompiler
+    // can promote a new INT1 immediately after the previous one is acked
+    // (inside writeInterruptFlags), before the game's main loop has a
+    // chance to call TestEvent.
+    //
+    // When this happens the DataReady event is still in Delivered status
+    // (from the previous INT1).  deliverByClassSpec below will skip the
+    // re-delivery → the game never learns about the new sector → data is
+    // lost → the game stalls waiting for missing sectors.
+    //
+    // Fix: un-deliver any stale DataReady events so that the
+    // deliverByClassSpec call below can re-deliver them for this new INT1.
+    // The game still sees the interrupt type via readInterruptFlags() and
+    // can process sector data normally.  This preserves the illusion that
+    // each INT1 carries its own event delivery, matching real-hardware
+    // timing where events are always consumed between sectors.
+    if (irqType == 1u && !biosOwnsOperation)
+    {
+        m_events.undeliverByClassSpec(EventClass::Cdrom, EventSpec::DataReady);
+    }
+
     if (m_biosCdrom.asyncReadActive && (irqType == 2u || irqType == 4u || irqType == 5u))
     {
         // INT4 is the finite-read completion path (EOF/data end) when the

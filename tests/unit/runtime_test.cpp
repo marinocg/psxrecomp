@@ -227,6 +227,8 @@ int main()
     Address gpuBase = DmaController::ChannelBase +
                       DmaController::ChannelStride * static_cast<Address>(DmaPort::Gpu);
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x04000002u);
+    // Disable all DICR channel enables so we can test gating behaviour.
+    system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg, 0u);
     system.write<psxrecomp::u32>(0x00010000, 0x11111111);
     system.write<psxrecomp::u32>(0x00010004, 0x22222222);
     system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00010000);

@@ -348,14 +348,24 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
     case 0x4B: // send_gpu_linked_list (GPU ordering table DMA)
     {
         // PSX-SPX sequence:
-        //   GP1(04h)=2 (DMA CPU->GP0), DICR=0, DPCR|=0x800, CHCR setup/start.
-        // This path intentionally models register side-effects instead of a
-        // direct software push of OT words.
+        //   GP1(04h)=2 (DMA CPU->GP0), ack GPU flag in DICR, DPCR|=0x800,
+        //   CHCR setup/start.
+        // Some BIOS revisions destructively zero DICR here, which clobbers
+        // channel enables that other subsystems (CDROM, SPU) have already
+        // configured.  We only acknowledge the GPU channel flag (bit 26)
+        // to match corrected BIOS behaviour and avoid breaking DMA IRQs.
         constexpr Address gpuDmaBase =
             DmaController::ChannelBase +
             static_cast<Address>(DmaPort::Gpu) * DmaController::ChannelStride;
         writeMmio32(Mmio::GPU_GP1, 0x04000002u);
-        writeMmio32(DmaController::InterruptReg, 0u);
+        {
+            // Preserve control bits (0-23), acknowledge GPU channel flag only.
+            // Must NOT feed back existing flags (24-30) because those bits use
+            // write-1-to-clear semantics and would accidentally ack other channels.
+            const u32 curDicr = readMmio32(DmaController::InterruptReg);
+            constexpr u32 gpuChannelFlag = 1u << 26;
+            writeMmio32(DmaController::InterruptReg, (curDicr & 0x00FFFFFFu) | gpuChannelFlag);
+        }
         const u32 dpcr = readMmio32(DmaController::ControlReg);
         writeMmio32(DmaController::ControlReg, dpcr | 0x00000800u);
         writeMmio32(gpuDmaBase + 0x0, a0 & 0x1FFFFCu);

@@ -89,7 +89,7 @@ u8 Cdrom::readData()
     return value;
 }
 
-u32 Cdrom::readDma()
+u32 Cdrom::readDmaInternal(bool bypassRequestControl)
 {
     if (traceCdromEnabled())
     {
@@ -103,12 +103,10 @@ u32 Cdrom::readDma()
         }
     }
 
-    // Gate all DMA reads on BFRD (REQUEST_ENABLE_BUFFER_READ, bit 7 of the
-    // REQUEST register written at bank 0, offset 3).  This mirrors the CPU
-    // RDDATA path: per PSX-SPX the host-visible DRQSTS signal in the status
-    // register is only asserted when BFRD=1 and the data FIFO has bytes to
-    // serve.  DMA3 obeys the same gate so no software bypass is possible.
-    if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
+    // Host-visible DMA reads obey the same BFRD gate as the CPU RDDATA path.
+    // The DMA controller can optionally bypass that host gate for SyncMode 0
+    // CHCR.bit28 forced-start transfers via readControllerDma().
+    if (!bypassRequestControl && (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
     {
         return 0;
     }
@@ -169,6 +167,41 @@ u32 Cdrom::readDma()
     return value;
 }
 
+u32 Cdrom::readDma()
+{
+    return readDmaInternal(false);
+}
+
+bool Cdrom::prepareControllerDmaRead(bool forceTransferStart)
+{
+    if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+    {
+        return !m_dataFifo.empty();
+    }
+
+    if (!forceTransferStart)
+    {
+        return false;
+    }
+
+    // SyncMode=0 + CHCR.bit28 lets software force a DMA3 pull without waiting
+    // for the host-visible DRQSTS/BFRD gate. Expose the currently published
+    // sector to the DMA engine, but only once per publication.
+    if (m_dataFifo.empty() && m_drainingSector.empty() && !m_activeSector.empty())
+    {
+        traceCdrom("prepareControllerDmaRead force_start lba=%u published=%zu", m_activeLba,
+                   m_activeSector.size());
+        acceptPublishedSector(true, true);
+    }
+
+    return !m_dataFifo.empty();
+}
+
+u32 Cdrom::readControllerDma(bool forceTransferStart)
+{
+    return readDmaInternal(forceTransferStart);
+}
+
 void Cdrom::enqueueDataSector(const std::vector<u8>& data)
 {
     if (m_sectorQueue.size() >= MAX_QUEUED_SECTORS)
@@ -199,9 +232,10 @@ void Cdrom::updateDataPadForDrainingSector()
     m_dataPadValid = true;
 }
 
-void Cdrom::acceptPublishedSector(bool replaceExistingData)
+void Cdrom::acceptPublishedSector(bool replaceExistingData, bool bypassRequestControl)
 {
-    if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0 ||
+    if ((!bypassRequestControl &&
+         (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0) ||
         m_activeSector.empty())
     {
         return;

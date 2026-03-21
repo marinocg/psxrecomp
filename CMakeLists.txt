@@ -530,6 +530,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(cdrom_drqsts_gate_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(cdrom_dma_force_start_test
+        tests/unit/cdrom_dma_force_start_test.cpp
+    )
+    target_link_libraries(cdrom_dma_force_start_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(cdrom_sector_advance_test
         tests/unit/cdrom_sector_advance_test.cpp
     )

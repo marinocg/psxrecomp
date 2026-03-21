@@ -224,9 +224,8 @@ void PsxSystem::bindGteRuntimeHooks()
 
 void PsxSystem::boot()
 {
-    // Emulate BIOS-ready COP0 defaults before handing control to the game:
-    // IEc=1 and IM2=1 (mask for Cause.IP2 / IRQ controller line), while
-    // remaining in kernel mode.
+    // Emulate BIOS-ready COP0 defaults: IEc=1 and IM2=1 (mask for
+    // Cause.IP2 / IRQ controller line), remaining in kernel mode.
     constexpr u32 StatusIEcBit = 1u << 0;
     constexpr u32 StatusKUcBit = 1u << 1;
     constexpr u32 StatusIM2Bit = 1u << 10;
@@ -234,15 +233,25 @@ void PsxSystem::boot()
     const u32 bootStatus = (statusBefore & ~StatusKUcBit) | StatusIEcBit | StatusIM2Bit;
     m_cop0.mtc0(Cop0::RegisterIndex::Status, bootStatus);
 
-    // Emulate the real PSX BIOS boot sequence: the kernel enables VBlank
-    // and timer interrupts in I_MASK before calling the game's entry point.
-    // Without this, serviceInterrupts() will never see pending IRQs and
-    // VSync/timer callbacks will not fire.
+    // Emulate the real PSX BIOS boot sequence: the kernel enables VBlank,
+    // timer, and DMA interrupts in I_MASK before calling the game's entry
+    // point.  Without this, serviceInterrupts() will never see pending
+    // IRQs and VSync/timer/DMA callbacks will not fire.
     const u32 bootMask =
         static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
-        static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2);
+        static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2) |
+        static_cast<u32>(InterruptLine::Dma);
     m_interrupts.writeMask(bootMask);
     syncCop0InterruptPending();
+
+    // PSX-SPX: the kernel initialises DPCR to 0x07654321 which enables all
+    // seven DMA channels with ascending priority.  DICR is initialised with
+    // the master-enable flag (bit 23) and all seven per-channel enable bits
+    // (bits 16-22) so that DMA completion on any channel raises I_STAT.DMA.
+    // Real BIOS progressively enables channels via library init functions but
+    // the runtime pre-enables them since it does not replicate every init path.
+    writeMmio32(DmaController::ControlReg, 0x07654321u);
+    writeMmio32(DmaController::InterruptReg, 0x00FF0000u);
 
     // PSX-SPX: GetC0Table/GetB0Table expose BIOS-owned writable table roots in
     // kernel RAM. Games such as Crash patch the C0 handler table during boot.
@@ -285,16 +294,13 @@ void PsxSystem::boot()
 
     // Diagnostic: dump CD driver hardware pointers from EXE data section
     {
-        std::ostringstream msg;
-        msg << "cd_hw_ptrs";
         constexpr u32 addrs[] = {0x80163CEC, 0x80163CF0, 0x80163CF4, 0x80163D18, 0x8016531C};
         const char* names[] = {"D3_MADR_ptr", "D3_BCR_ptr", "D3_CHCR_ptr", "DICR_ptr",
                                "CD_STATUS_ptr"};
+        std::ostringstream msg;
+        msg << "cd_hw_ptrs";
         for (int i = 0; i < 5; ++i)
-        {
-            const u32 val = read<u32>(addrs[i]);
-            msg << " " << names[i] << "=0x" << std::hex << val;
-        }
+            msg << " " << names[i] << "=0x" << std::hex << read<u32>(addrs[i]);
         m_logger.log(LogLevel::Info, "boot_diag", msg.str());
     }
 }
@@ -377,7 +383,20 @@ void PsxSystem::syncLevelInterruptSources()
     const bool cdromIrq = m_cdrom.hasIrqRequest();
     raiseIfRequested(cdromIrq, InterruptLine::Cdrom);
     raiseIfRequested(m_spu.hasIrqRequest(), InterruptLine::Spu);
-    raiseIfRequested(m_dma.irqRequested(), InterruptLine::Dma);
+    const bool dmaIrq = m_dma.irqRequested();
+    if (dmaIrq)
+    {
+        static bool loggedOnce = false;
+        if (!loggedOnce)
+        {
+            const u32 dicr = m_dma.readRegister(DmaController::InterruptReg);
+            std::ostringstream msg;
+            msg << "DMA IRQ requested! DICR=0x" << std::hex << dicr;
+            m_logger.log(LogLevel::Info, "dma_irq", msg.str());
+            loggedOnce = true;
+        }
+    }
+    raiseIfRequested(dmaIrq, InterruptLine::Dma);
     syncCop0InterruptPending();
 }
 

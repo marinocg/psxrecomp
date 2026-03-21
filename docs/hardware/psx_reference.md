@@ -212,6 +212,10 @@ Commands are written to 0x1F801810:
   sector. With `BFRD` cleared, a newer `INT1` only advances the published
   sector; with `BFRD` still armed, that newer `INT1` can replace the readable
   block and discard the older sector's unread tail.
+- Host-visible `DRQSTS` still tracks `BFRD && readable-bytes`, but DMA3 normal
+  mode also has CHCR bit 28 "force transfer start"; games can use that path to
+  pull from the currently published CD sector without first asserting the
+  host-side `BFRD` gate.
 - Even if later sectors are already buffered, the next `INT1` is not surfaced in
   the same instant as the ACK; there is a short post-ACK gap where `BFRD` still
   refers to the old interrupt's sector, matching PSX-SPX host-transfer notes.
