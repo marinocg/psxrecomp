@@ -156,13 +156,19 @@ void Cdrom::executePendingCommand()
         m_eofBoundaryInt1PublishGatePending = false;
         m_liveInt1AcceptedByBiosAuto = false;
         finalizeCpuPayloadRecord(false);
+        // PSX-SPX: issuing ReadN/ReadS resets the drive's internal read
+        // pipeline (seek to new Setloc position, discard un-published buffered
+        // sectors) but does NOT invalidate the CPU-visible sector buffer
+        // (m_activeSector) that was published with the most recent INT1.  On
+        // real hardware the game can still accept that data via BFRD=1 / DMA3
+        // after re-issuing ReadN; the buffer is replaced only when the next
+        // INT1 fires with fresh sector data.  Clearing m_activeSector here
+        // breaks games that write BFRD=1 *after* issuing ReadN (a common
+        // pattern where the game issues SetLoc+ReadN to cue the next sector
+        // while draining the current one).
         m_dataFifo.clear();
         m_bufferedReadSectors.clear();
         m_bufferedInt1Records.clear();
-        m_activeSector.clear();
-        m_activeSectorOffset = 0;
-        m_drainingSector.clear();
-        m_drainingLba = 0;
         m_liveInt1RecordValid = false;
         m_publishedInt1RecordValid = false;
         m_drainingInt1RecordValid = false;
@@ -170,7 +176,6 @@ void Cdrom::executePendingCommand()
         m_loadedInt1RecordValid = false;
         m_publishedCpuRecord = {};
         m_publishedCpuRecordValid = false;
-        m_dataPadValid = false;
         m_xaPlaybackBusy = false; // PR-RV30: fresh stream; ADPBUSY rises only when XA arrives.
         m_cpuPayloadCaptureActive = true;
         if (m_execution.xaStreamingEnabled) // Snapshot counters (PR-RV27).

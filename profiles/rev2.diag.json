@@ -78,6 +78,30 @@
       "action": "summarize"
     },
     {
+      "name": "rev2_ringbuf_descriptor_state",
+      "kind": "ram_write",
+      "range": "0x80070000-0x80070001",
+      "action": "log"
+    },
+    {
+      "name": "rev2_ringbuf_base_ptr",
+      "kind": "ram_write",
+      "range": "0x80185550-0x80185557",
+      "action": "log"
+    },
+    {
+      "name": "rev2_ringbuf_index",
+      "kind": "ram_write",
+      "range": "0x80185538-0x8018553f",
+      "action": "log"
+    },
+    {
+      "name": "rev2_staging_buf_fields",
+      "kind": "ram_write",
+      "range": "0x80185540-0x8018554f",
+      "action": "log"
+    },
+    {
       "name": "rev2_consumer_pointer_slot_reads",
       "kind": "ram_read",
       "range": "0x8016547c-0x8016547f",
@@ -190,6 +214,9 @@
     },
     {
       "kind": "irq_controller"
+    },
+    {
+      "kind": "rev2_decoder_handoff_summary"
     }
   ],
   "metadata_watches": [],

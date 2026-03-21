@@ -1,0 +1,21 @@
+{
+  "name": "rev2_counter_trace",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_dispatch_counter",
+      "kind": "ram_write",
+      "range": "0x801654F8-0x801654FB",
+      "action": "log"
+    },
+    {
+      "name": "rev2_init_counter",
+      "kind": "ram_write",
+      "range": "0x801654E8-0x801654EB",
+      "action": "log"
+    }
+  ]
+}

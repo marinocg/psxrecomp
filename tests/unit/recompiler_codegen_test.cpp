@@ -341,7 +341,12 @@ int main()
     runtimeHeader << "    Gpustat, CdromIrq, IrqController, DmaChannel,\n";
     runtimeHeader << "    CdromBankSummary, CdromPhaseSummary, CdromXaClassification,\n";
     runtimeHeader << "    CdromPostStreamValidator, CdromCpuPayloadSummary,\n";
-    runtimeHeader << "    CdromIrqLifecycleSummary, CdromLateBufferSummary\n";
+    runtimeHeader << "    CdromIrqLifecycleSummary, CdromLateBufferSummary,\n";
+    runtimeHeader << "    Rev2DecoderHandoffSummary\n";
+    runtimeHeader << "};\n";
+    runtimeHeader << "class DiagRev2DecoderHandoffTracker {\n";
+    runtimeHeader << "  public:\n";
+    runtimeHeader << "    bool isEnabled() const { return false; }\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class Cdrom {\n";
     runtimeHeader << "  public:\n";
@@ -373,6 +378,9 @@ int main()
         << "    static std::string explainCdromIrqLifecycleSummary(const Cdrom&) { return {}; }\n";
     runtimeHeader << "    static std::string explainCdromLateBufferSummary("
                      "const DiagCdromLateBufferTracker&) { return {}; }\n";
+    runtimeHeader
+        << "    static std::string explainRev2DecoderHandoffSummary("
+             "const DiagRev2DecoderHandoffTracker&) { return {}; }\n";
     runtimeHeader << "};\n";
     runtimeHeader << "class CallbackTraceEngine {\n";
     runtimeHeader << "  public:\n";
@@ -448,6 +456,8 @@ int main()
         << "    DiagCdromBankTracer& diagCdromBankTracer() { return m_diagCdromBankTracer; }\n";
     runtimeHeader << "    DiagCdromLateBufferTracker& diagCdromLateBufferTracker() { "
                      "return m_diagCdromLateBufferTracker; }\n";
+    runtimeHeader << "    DiagRev2DecoderHandoffTracker& diagRev2DecoderHandoffTracker() { "
+                     "return m_diagRev2DecoderHandoffTracker; }\n";
     runtimeHeader << "    DiagExplainerEngine& diagExplainers() { return m_diagExplainers; }\n";
     runtimeHeader << "    Cdrom& cdrom() { return m_cdrom; }\n";
     runtimeHeader << "    CallbackTraceEngine& callbackTrace() { return m_callbackTrace; }\n";
@@ -462,6 +472,7 @@ int main()
     runtimeHeader << "    DiagWatchpointEngine m_diagWatchpoints;\n";
     runtimeHeader << "    DiagCdromBankTracer m_diagCdromBankTracer;\n";
     runtimeHeader << "    DiagCdromLateBufferTracker m_diagCdromLateBufferTracker;\n";
+    runtimeHeader << "    DiagRev2DecoderHandoffTracker m_diagRev2DecoderHandoffTracker;\n";
     runtimeHeader << "    DiagExplainerEngine m_diagExplainers;\n";
     runtimeHeader << "    Cdrom m_cdrom;\n";
     runtimeHeader << "    CallbackTraceEngine m_callbackTrace;\n";

@@ -139,14 +139,47 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             transferredWords = 0;
             goto dma_transfer_complete;
         }
-        // Gate DMA3 (CD-ROM→RAM) on DRQSTS (STATUS_DATA_READY, bit 6 of HSTS).
-        // Per PSX-SPX, DMA3 only transfers when BFRD=1 and the data FIFO has
-        // bytes to serve.  Initiating a transfer before BFRD=1 yields no data;
-        // mirroring the hardware stall with an immediate skip is correct here.
-        if (port == DmaPort::Cdrom && (m_cdrom.readStatus() & 0x40u) == 0u)
+        // PSX-SPX CHCR bit 28 "Start/Force": DMA3 may be triggered without
+        // waiting for DRQSTS (BFRD=1).  When the force bit is clear, the normal
+        // gate applies — DMA3 only transfers when the data FIFO is ready.
+        constexpr u32 CHCR_FORCE_START = 0x10000000u;
+        const bool forceDmaStart = (channel.channelControl & CHCR_FORCE_START) != 0;
+        if (port == DmaPort::Cdrom)
         {
-            transferredWords = 0;
-            goto dma_transfer_complete;
+            if (!forceDmaStart)
+            {
+                // Gate DMA3 (CD-ROM→RAM) on DRQSTS (STATUS_DATA_READY, bit 6 of HSTS).
+                // Per PSX-SPX, DMA3 only transfers when BFRD=1 and the data FIFO has
+                // bytes to serve.
+                //
+                // When DRQSTS=0 the hardware stalls (CHCR busy stays set) and waits for
+                // DRQSTS to rise before moving data.  In psxrecomp's synchronous DMA
+                // model we cannot stall indefinitely, so we clear the trigger to free
+                // the channel (CHCR busy cleared) but deliberately skip
+                // notifyTransferComplete.  Raising a DICR completion event with zero
+                // bytes transferred would allow the game's ring-buffer state-machine to
+                // advance to "decode-ready" before any sector data has been copied,
+                // causing the decoder to run against an empty buffer.  By withholding
+                // the completion event the game can re-arm DMA3 once BFRD=1 has filled
+                // the FIFO, and the interrupt will fire only after a real transfer.
+                if ((m_cdrom.readStatus() & 0x40u) == 0u)
+                {
+                    m_dma.clearTrigger(port);
+                    m_debugOverlay.incrementDmaTransfers();
+                    return; // no data moved; no DICR
+                }
+            }
+            else
+            {
+                // Force-start: bypass the DRQSTS gate.  Accept the published sector
+                // into the FIFO now if the request-enable bit was not set by the game.
+                // If no sector is available at all, skip quietly.
+                if (!m_cdrom.prepareControllerDmaRead(true))
+                {
+                    transferredWords = 0;
+                    goto dma_transfer_complete;
+                }
+            }
         }
 
         const Address base = channel.baseAddress & 0x1FFFFC;
@@ -171,7 +204,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 value = m_gpu.readData();
                 break;
             case DmaPort::Cdrom:
-                value = m_cdrom.readDma();
+                value = forceDmaStart ? m_cdrom.readControllerDma(true) : m_cdrom.readDma();
                 m_diagCdromLateBufferTracker.noteCdromDmaWord(value);
                 break;
             case DmaPort::Spu:

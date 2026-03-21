@@ -1,0 +1,118 @@
+{
+  "name": "rev2-queue-producer",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_queue_ctrl",
+      "kind": "ram_write",
+      "range": "0x80185540-0x8018554B",
+      "action": "log"
+    },
+    {
+      "name": "rev2_queue_callbacks",
+      "kind": "ram_write",
+      "range": "0x80165058-0x80165060",
+      "action": "log"
+    },
+    {
+      "name": "rev2_queue_descriptor_ptr",
+      "kind": "ram_write",
+      "range": "0x80187968-0x80187970",
+      "action": "log"
+    },
+    {
+      "name": "rev2_slot0_desc",
+      "kind": "ram_write",
+      "range": "0x80070000-0x8007001F",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_queue_status_15b3c0",
+      "pc_range": "0x15B3C0-0x15B658",
+      "registers": ["sp", "a0", "a1", "a2", "a3", "s2", "s3", "s4", "s7", "v0", "v1", "ra"],
+      "memory_samples": [
+        {
+          "name": "status_out",
+          "base": "s3",
+          "offset": "0x0",
+          "width": 1,
+          "count": 8
+        },
+        {
+          "name": "status_src",
+          "base": "s2",
+          "offset": "0x0",
+          "width": 1,
+          "count": 3
+        },
+        {
+          "name": "status_prev",
+          "base": "s4",
+          "offset": "0x0",
+          "width": 1,
+          "count": 2
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 48
+    },
+    {
+      "name": "rev2_queue_cb1_15b560",
+      "pc_range": "0x15B548-0x15B568",
+      "registers": ["a0", "a1", "s0", "s6", "v0", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 16
+    },
+    {
+      "name": "rev2_queue_cb2_15b590",
+      "pc_range": "0x15B578-0x15B59C",
+      "registers": ["a0", "a1", "s0", "s2", "v0", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 16
+    },
+    {
+      "name": "rev2_queue_gate_15a170",
+      "pc_range": "0x15A170-0x15A218",
+      "registers": ["sp", "a0", "a1", "a2", "a3", "t0", "v0", "v1", "ra"],
+      "memory_samples": [
+        {
+          "name": "status_48",
+          "base": "sp",
+          "offset": "0x30",
+          "width": 1,
+          "count": 8
+        },
+        {
+          "name": "status_40",
+          "base": "sp",
+          "offset": "0x28",
+          "width": 1,
+          "count": 8
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 40
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": []
+}
