@@ -23,6 +23,23 @@ constexpr std::array<const char*, Registers::NUM_REGISTERS> kRegisterNameTable =
 
 std::string registerValueToExpr(Register reg)
 {
+    if (reg == Registers::ZERO)
+    {
+        return "0u";
+    }
+    if (reg < kRegisterNameTable.size())
+    {
+        return "context.regs[Registers::" + std::string(kRegisterNameTable[reg]) + "]";
+    }
+    return "context.regs[" + std::to_string(reg) + "]";
+}
+
+std::optional<std::string> registerValueToWriteExpr(Register reg)
+{
+    if (reg == Registers::ZERO)
+    {
+        return std::nullopt;
+    }
     if (reg < kRegisterNameTable.size())
     {
         return "context.regs[Registers::" + std::string(kRegisterNameTable[reg]) + "]";
@@ -63,6 +80,58 @@ std::string valueToExpr(const ir::Value& value, LoweringContext& context)
         return "/* invalid */ 0";
     }
     return "0";
+}
+
+std::optional<std::string> valueToWriteExpr(const ir::Value& value, LoweringContext& context)
+{
+    switch (value.kind)
+    {
+    case ir::ValueKind::REGISTER:
+        return registerValueToWriteExpr(value.reg);
+    case ir::ValueKind::TEMPORARY:
+    {
+        auto it = context.temporaries.find(value.temporaryId);
+        if (it != context.temporaries.end())
+        {
+            return it->second;
+        }
+        std::string name = "temp" + std::to_string(value.temporaryId);
+        context.temporaries[value.temporaryId] = name;
+        return name;
+    }
+    case ir::ValueKind::SPECIAL:
+        return value.specialReg == ir::SpecialRegister::HI ? "context.hi" : "context.lo";
+    default:
+        return std::nullopt;
+    }
+}
+
+std::optional<Register> valueToLoadDelayRegister(const ir::Value& value)
+{
+    if (value.kind == ir::ValueKind::REGISTER && value.reg != Registers::ZERO)
+    {
+        return value.reg;
+    }
+    return std::nullopt;
+}
+
+void emitLoadResultWrite(const ir::Value& output, const std::string& resultExpr,
+                         LoweringContext& context, CppEmitter& emitter)
+{
+    if (const std::optional<Register> reg = valueToLoadDelayRegister(output); reg.has_value())
+    {
+        emitter.writeLine("stagePendingLoad(context, static_cast<Register>(" +
+                          std::to_string(*reg) + "), " + resultExpr + ");");
+        return;
+    }
+
+    if (const std::optional<std::string> dest = valueToWriteExpr(output, context); dest.has_value())
+    {
+        emitter.writeLine(*dest + " = " + resultExpr + ";");
+        return;
+    }
+
+    emitter.writeLine("(void)(" + resultExpr + ");");
 }
 
 std::string opcodeToComment(ir::Opcode opcode)
@@ -286,7 +355,12 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
         {
             throwLoweringError(instruction, "Malformed phi node");
         }
-        std::string dest = valueToExpr(instruction.outputs.front(), context);
+        const std::optional<std::string> dest =
+            valueToWriteExpr(instruction.outputs.front(), context);
+        if (!dest.has_value())
+        {
+            continue;
+        }
         for (size_t index = 0; index < predecessors.size(); ++index)
         {
             std::string condition =
@@ -299,13 +373,14 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
             {
                 emitter.openBlock("else if (" + condition + ")");
             }
-            emitter.writeLine(dest + " = " + valueToExpr(instruction.inputs[index], context) + ";");
+            emitter.writeLine(*dest + " = " + valueToExpr(instruction.inputs[index], context) +
+                              ";");
             emitter.closeBlock();
         }
         if (!predecessors.empty())
         {
             emitter.openBlock("else");
-            emitter.writeLine(dest + " = " + valueToExpr(instruction.inputs.front(), context) +
+            emitter.writeLine(*dest + " = " + valueToExpr(instruction.inputs.front(), context) +
                               ";");
             emitter.closeBlock();
         }

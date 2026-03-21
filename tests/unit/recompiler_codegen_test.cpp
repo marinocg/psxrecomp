@@ -146,6 +146,18 @@ int main()
     assert(source.find("context.regs = interruptSavedRegs;") != std::string::npos);
     assert(source.find("context.hi = interruptSavedHi;") != std::string::npos);
     assert(source.find("context.lo = interruptSavedLo;") != std::string::npos);
+    assert(source.find("bool pendingLoadValid = false;") != std::string::npos);
+    assert(source.find("Register pendingLoadRegister = Registers::ZERO;") != std::string::npos);
+    assert(source.find("bool stagedLoadValid = false;") != std::string::npos);
+    assert(
+        source.find(
+            "inline void stagePendingLoad(RecompilerContext& context, Register reg, u32 value)") !=
+        std::string::npos);
+    assert(source.find("inline void commitPendingLoad(RecompilerContext& context)") !=
+           std::string::npos);
+    assert(source.find("inline void finishLoadDelayCycle(RecompilerContext& context, u32 "
+                       "completedGprWriteMask)") != std::string::npos);
+    assert(source.find("finishLoadDelayCycle(context, 0x") != std::string::npos);
     assert(source.find("main_func(context, 0x10004);") == std::string::npos);
     assert(source.find("main_func(context, 0x10007);") == std::string::npos);
     assert(source.find("main_func(context, 0x10006);") == std::string::npos);
@@ -160,6 +172,11 @@ int main()
     assert(source.find("PSXRECOMP_AUTO_FRAME_PROGRESS") == std::string::npos);
     assert(source.find("setAutoFrameProgress") == std::string::npos);
     assert(source.find("triggerTrap") != std::string::npos);
+    assert(source.find("ExceptionCode::Breakpoint") != std::string::npos);
+    assert(source.find("BREAK exception code=0x") != std::string::npos);
+    assert(source.find("readMemory16s(RecompilerContext& context, Address address,") !=
+           std::string::npos);
+    assert(source.find("Address pc, bool inDelaySlot") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
     assert(buildFile.find("add_executable") != std::string::npos);
     assert(buildFile.find("_runner.cpp") != std::string::npos);
@@ -326,6 +343,38 @@ int main()
     assert(divSource.find("== 0xFFFFFFFFu)") != std::string::npos);
     assert(divSource.find("= 0x80000000u;") != std::string::npos);
     assert(divSource.find("= 0u;") != std::string::npos);
+
+    Program zeroProgram;
+    Builder zeroBuilder(zeroProgram);
+    auto& zeroFunction = zeroBuilder.createFunction("zero_func", 0x80017000);
+    auto& zeroBlock = zeroBuilder.createBlock(zeroFunction, "entry");
+    zeroBlock.instructions.push_back(
+        zeroBuilder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(7)},
+                                    {Value::makeRegister(psxrecomp::Registers::ZERO)}, 0x80017000));
+    zeroBlock.instructions.push_back(
+        zeroBuilder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x80010010)},
+                                    {Value::makeRegister(psxrecomp::Registers::ZERO)}, 0x80017004));
+    zeroBlock.instructions.push_back(zeroBuilder.makeInstruction(
+        Opcode::SHR_LOGICAL,
+        {Value::makeRegister(psxrecomp::Registers::T0), Value::makeImmediate(1)},
+        {Value::makeRegister(psxrecomp::Registers::T1)}, 0x80017008));
+    zeroBlock.instructions.push_back(zeroBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+    const std::string zeroSource = generator.generateSource(zeroProgram, "zero_module");
+    assert(zeroSource.find("context.regs[Registers::ZERO] = 7;") == std::string::npos);
+    assert(zeroSource.find("(void)(loadResult);") != std::string::npos);
+    assert(zeroSource.find("static_cast<u32>(context.regs[Registers::T0]) >> (1 & 0x1F)") !=
+           std::string::npos);
+
+    Program jumpProgram;
+    Builder jumpBuilder(jumpProgram);
+    auto& jumpFunction = jumpBuilder.createFunction("jump_func", 0x80017100);
+    auto& jumpBlock = jumpBuilder.createBlock(jumpFunction, "entry");
+    jumpBlock.instructions.push_back(jumpBuilder.makeInstruction(
+        Opcode::JUMP, {Value::makeAddress(0x80017120)}, {}, 0x80017100));
+    jumpBlock.successors = {"block_external"};
+    const std::string jumpSource = generator.generateSource(jumpProgram, "jump_module");
+    assert(jumpSource.find("callRecompiledFunction(context, 0x80017120)") == std::string::npos);
+    assert(jumpSource.find("failUnsupportedJump(0x80017120, 0x80017100);") != std::string::npos);
 
     runCodegenOverlapTest(generator);
 

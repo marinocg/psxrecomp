@@ -55,6 +55,20 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
         resumableAddresses.reserve(function.blocks.size());
         std::unordered_set<Address> seenBlockStarts;
         std::unordered_set<Address> seenResumableAddresses;
+        auto instructionGprWriteMask = [](const ir::Instruction& instruction) -> u32
+        {
+            u32 mask = 0;
+            for (const auto& output : instruction.outputs)
+            {
+                if (output.kind != ir::ValueKind::REGISTER || output.reg == Registers::ZERO ||
+                    output.reg >= Registers::NUM_REGISTERS)
+                {
+                    continue;
+                }
+                mask |= 1u << static_cast<u32>(output.reg);
+            }
+            return mask;
+        };
         auto parseBlockStartAddress = [](const std::string& blockName) -> std::optional<Address>
         {
             static constexpr const char* kPrefix = "block_0x";
@@ -300,6 +314,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             // source address.
             bool inResumeGuard = false;
             std::optional<Address> currentGuardAddress;
+            u32 currentGuardWriteMask = 0;
             for (const auto& instruction : block.instructions)
             {
                 if (instruction.opcode == ir::Opcode::PHI)
@@ -319,6 +334,10 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                     {
                         if (inResumeGuard)
                         {
+                            std::ostringstream maskLiteral;
+                            maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
+                            emitter.writeLine("finishLoadDelayCycle(context, " + maskLiteral.str() +
+                                              ");");
                             emitter.closeBlock();
                         }
                         std::ostringstream addrLiteral;
@@ -334,7 +353,9 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         emitter.writeLine(pcLine.str());
                         currentGuardAddress = physical;
                         inResumeGuard = true;
+                        currentGuardWriteMask = 0;
                     }
+                    currentGuardWriteMask |= instructionGprWriteMask(instruction);
                     emitInstruction(instruction, block, blockNames, context, emitter);
                     continue;
                 }
@@ -342,10 +363,14 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 // preceding MIPS instruction group.  They stay inside the
                 // current resume guard so they are correctly skipped when
                 // execution is resumed past their owning source address.
+                currentGuardWriteMask |= instructionGprWriteMask(instruction);
                 emitInstruction(instruction, block, blockNames, context, emitter);
             }
             if (inResumeGuard)
             {
+                std::ostringstream maskLiteral;
+                maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
+                emitter.writeLine("finishLoadDelayCycle(context, " + maskLiteral.str() + ");");
                 emitter.closeBlock();
             }
             if (block.instructions.empty() ||
@@ -356,15 +381,6 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                     std::string resolvedSuccessor =
                         resolveBlockId(block.successors.front(), blockNames);
                     std::string currentBlockId = "BlockId::" + blockIds[blockIndex];
-
-                    // Detect self-loop: if the resolved successor is the current
-                    // block but a continuation block exists (next in sequence),
-                    // redirect to the continuation to prevent infinite self-loops.
-                    if (resolvedSuccessor == currentBlockId &&
-                        blockIndex + 1 < function.blocks.size())
-                    {
-                        resolvedSuccessor = "BlockId::" + blockIds[blockIndex + 1];
-                    }
 
                     emitter.writeLine("previousBlock = block;");
                     emitter.writeLine("block = " + resolvedSuccessor + ";");

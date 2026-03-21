@@ -32,10 +32,11 @@ bool emitGteInstruction(
         if (!instruction.outputs.empty() && !instruction.inputs.empty() &&
             instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
         {
-            const std::string dest = valueToExpr(instruction.outputs.front(), context);
             const std::string rd = valueToExpr(instruction.inputs[0], context);
             writeGteGuardPrefix();
-            emitter.writeLine(dest + " = context.system.gte().mfc2(static_cast<u8>(" + rd + "));");
+            emitter.writeLine("const u32 loadResult = context.system.gte().mfc2(static_cast<u8>(" +
+                              rd + "));");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         break;
     case ir::Opcode::GTE_MTC2:
@@ -53,10 +54,11 @@ bool emitGteInstruction(
         if (!instruction.outputs.empty() && !instruction.inputs.empty() &&
             instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
         {
-            const std::string dest = valueToExpr(instruction.outputs.front(), context);
             const std::string rd = valueToExpr(instruction.inputs[0], context);
             writeGteGuardPrefix();
-            emitter.writeLine(dest + " = context.system.gte().cfc2(static_cast<u8>(" + rd + "));");
+            emitter.writeLine("const u32 loadResult = context.system.gte().cfc2(static_cast<u8>(" +
+                              rd + "));");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         break;
     case ir::Opcode::GTE_CTC2:

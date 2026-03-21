@@ -4,6 +4,7 @@
 #include "psxrecomp/ir/ir.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <string_view>
@@ -23,6 +24,10 @@ struct LoweringContext
 };
 
 std::string valueToExpr(const ir::Value& value, LoweringContext& context);
+std::optional<std::string> valueToWriteExpr(const ir::Value& value, LoweringContext& context);
+std::optional<Register> valueToLoadDelayRegister(const ir::Value& value);
+void emitLoadResultWrite(const ir::Value& output, const std::string& resultExpr,
+                         LoweringContext& context, CppEmitter& emitter);
 std::string opcodeToComment(ir::Opcode opcode);
 std::set<u32> collectTemporaries(const ir::Function& function);
 std::string resolveBlockId(std::string_view name,

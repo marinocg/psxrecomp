@@ -92,6 +92,55 @@ int main()
     assert(hasInstruction(psxrecomp::ir::Opcode::CALL, psxrecomp::ir::Value::makeRegister(T1),
                           psxrecomp::ir::Value::invalid()));
 
+    auto jalrLinkIt = std::find_if(result.instructions.begin(), result.instructions.end(),
+                                   [&](const auto& instruction)
+                                   {
+                                       return instruction.opcode == psxrecomp::ir::Opcode::MOVE &&
+                                              !instruction.outputs.empty() &&
+                                              instruction.outputs.front() ==
+                                                  psxrecomp::ir::Value::makeRegister(S0);
+                                   });
+    auto jalrDelayIt =
+        std::find_if(result.instructions.begin(), result.instructions.end(),
+                     [&](const auto& instruction)
+                     {
+                         return instruction.opcode == psxrecomp::ir::Opcode::NOP &&
+                                instruction.sourceAsmAddress.value_or(0) == 0x80010014;
+                     });
+    assert(jalrLinkIt != result.instructions.end());
+    assert(jalrDelayIt != result.instructions.end());
+    assert(jalrLinkIt < jalrDelayIt);
+
+    Instruction bgezal{};
+    bgezal.address = 0x80010100;
+    bgezal.opcode = Opcode::BGEZAL;
+    bgezal.type = InstructionType::I_TYPE;
+    bgezal.rs = A0;
+    bgezal.rt = RA;
+    bgezal.immediate = 1;
+
+    auto linkBranchResult =
+        psxrecomp::ir::buildIrFromMips({bgezal, makeDelayNop(0x80010104, 0x80010100)});
+    assert(linkBranchResult.errors.empty());
+    auto branchLinkIt = std::find_if(
+        linkBranchResult.instructions.begin(), linkBranchResult.instructions.end(),
+        [&](const auto& instruction)
+        {
+            return instruction.opcode == psxrecomp::ir::Opcode::MOVE &&
+                   !instruction.outputs.empty() &&
+                   instruction.outputs.front() == psxrecomp::ir::Value::makeRegister(RA);
+        });
+    auto branchDelayIt =
+        std::find_if(linkBranchResult.instructions.begin(), linkBranchResult.instructions.end(),
+                     [&](const auto& instruction)
+                     {
+                         return instruction.opcode == psxrecomp::ir::Opcode::NOP &&
+                                instruction.sourceAsmAddress.value_or(0) == 0x80010104;
+                     });
+    assert(branchLinkIt != linkBranchResult.instructions.end());
+    assert(branchDelayIt != linkBranchResult.instructions.end());
+    assert(branchLinkIt < branchDelayIt);
+
     // Regression: if a JR delay-slot instruction is also a branch target,
     // keep both contexts:
     // 1) delay-context copy attached to the JR block

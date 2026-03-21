@@ -5,6 +5,22 @@
 #include <string>
 #include <vector>
 
+namespace
+{
+bool hasOpcode(const std::vector<psxrecomp::ir::Instruction>& instructions,
+               psxrecomp::ir::Opcode opcode)
+{
+    for (const auto& instruction : instructions)
+    {
+        if (instruction.opcode == opcode)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+} // namespace
+
 int main()
 {
     using psxrecomp::disasm::Instruction;
@@ -56,6 +72,13 @@ int main()
 
     assert(result.warnings[1].find("BREAK lowered to TRAP") != std::string::npos);
     assert(result.warnings[1].find("@ 0x80014044") != std::string::npos);
+    assert(hasOpcode(result.instructions, psxrecomp::ir::Opcode::NOP));
+
+    MipsIrBuildOptions strictOptions;
+    auto strictResult = psxrecomp::ir::buildIrFromMips({unsupported}, strictOptions);
+    assert(strictResult.errors.empty());
+    assert(strictResult.warnings.size() == 1);
+    assert(!hasOpcode(strictResult.instructions, psxrecomp::ir::Opcode::NOP));
 
     return 0;
 }

@@ -149,6 +149,12 @@ std::string CodeGenerator::generateSource(const ir::Program& program, const std:
     emitter.writeLine("std::array<u32, Registers::NUM_REGISTERS> regs{};");
     emitter.writeLine("u32 hi = 0;");
     emitter.writeLine("u32 lo = 0;");
+    emitter.writeLine("bool pendingLoadValid = false;");
+    emitter.writeLine("Register pendingLoadRegister = Registers::ZERO;");
+    emitter.writeLine("u32 pendingLoadValue = 0;");
+    emitter.writeLine("bool stagedLoadValid = false;");
+    emitter.writeLine("Register stagedLoadRegister = Registers::ZERO;");
+    emitter.writeLine("u32 stagedLoadValue = 0;");
     emitter.writeLine("u32 pendingCycles = 0;");
     emitter.writeLine("Address cachedRangeStart = 0;");
     emitter.writeLine("Address cachedRangeEndExclusive = 0;");

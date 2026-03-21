@@ -9,6 +9,58 @@ namespace recompiler
 
 void emitRuntimeExecutionHelpers(CppEmitter& emitter)
 {
+    emitter.writeLine("inline u32 gprWriteMask(Register reg)");
+    emitter.openBlock("");
+    emitter.openBlock("if (reg == Registers::ZERO)");
+    emitter.writeLine("return 0;");
+    emitter.closeBlock();
+    emitter.writeLine("return 1u << static_cast<u32>(reg);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void stagePendingLoad(RecompilerContext& context, Register reg, u32 value)");
+    emitter.openBlock("");
+    emitter.openBlock("if (reg == Registers::ZERO)");
+    emitter.writeLine("return;");
+    emitter.closeBlock();
+    emitter.writeLine("context.stagedLoadValid = true;");
+    emitter.writeLine("context.stagedLoadRegister = reg;");
+    emitter.writeLine("context.stagedLoadValue = value;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline void commitPendingLoad(RecompilerContext& context)");
+    emitter.openBlock("");
+    emitter.openBlock("if (!context.pendingLoadValid)");
+    emitter.writeLine("return;");
+    emitter.closeBlock();
+    emitter.writeLine("context.regs[context.pendingLoadRegister] = context.pendingLoadValue;");
+    emitter.writeLine("context.pendingLoadValid = false;");
+    emitter.writeLine("context.pendingLoadRegister = Registers::ZERO;");
+    emitter.writeLine("context.pendingLoadValue = 0;");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void finishLoadDelayCycle(RecompilerContext& context, u32 completedGprWriteMask)");
+    emitter.openBlock("");
+    emitter.openBlock("if (context.pendingLoadValid)");
+    emitter.openBlock(
+        "if ((completedGprWriteMask & gprWriteMask(context.pendingLoadRegister)) == 0)");
+    emitter.writeLine("context.regs[context.pendingLoadRegister] = context.pendingLoadValue;");
+    emitter.closeBlock();
+    emitter.writeLine("context.pendingLoadValid = false;");
+    emitter.writeLine("context.pendingLoadRegister = Registers::ZERO;");
+    emitter.writeLine("context.pendingLoadValue = 0;");
+    emitter.closeBlock();
+    emitter.openBlock("if (context.stagedLoadValid)");
+    emitter.writeLine("context.pendingLoadValid = true;");
+    emitter.writeLine("context.pendingLoadRegister = context.stagedLoadRegister;");
+    emitter.writeLine("context.pendingLoadValue = context.stagedLoadValue;");
+    emitter.writeLine("context.stagedLoadValid = false;");
+    emitter.writeLine("context.stagedLoadRegister = Registers::ZERO;");
+    emitter.writeLine("context.stagedLoadValue = 0;");
+    emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
     emitter.writeLine("inline const char* cpuExceptionCodeToString(u32 code)");
     emitter.openBlock("");
     emitter.openBlock("switch (code)");
@@ -18,6 +70,8 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeLine("return \"CoprocessorUnusable\";");
     emitter.writeLine("case static_cast<u32>(runtime::Cop0::ExceptionCode::Syscall):");
     emitter.writeLine("return \"Syscall\";");
+    emitter.writeLine("case static_cast<u32>(runtime::Cop0::ExceptionCode::Breakpoint):");
+    emitter.writeLine("return \"Breakpoint\";");
     emitter.writeLine("case static_cast<u32>(runtime::Cop0::ExceptionCode::ArithmeticOverflow):");
     emitter.writeLine("return \"ArithmeticOverflow\";");
     emitter.writeLine("default:");
@@ -28,6 +82,7 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeLine("[[noreturn]] inline void raiseCpuException(RecompilerContext& context, u32 "
                       "code, Address pc, bool inDelaySlot)");
     emitter.openBlock("");
+    emitter.writeLine("commitPendingLoad(context);");
     emitter.writeLine("context.system.cop0().exceptionEnter(");
     emitter.writeLine("    static_cast<runtime::Cop0::ExceptionCode>(code), pc, inDelaySlot);");
     emitter.writeLine("std::ostringstream stream;");
@@ -43,6 +98,7 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeBlank();
     emitter.writeLine("inline void callSyscall(RecompilerContext& context, u32 code, Address pc)");
     emitter.openBlock("");
+    emitter.writeLine("commitPendingLoad(context);");
     emitter.openBlock("if (code == 0)");
     emitter.writeLine(
         "context.system.callBiosSyscall(code, context.regs.data(), context.regs.size());");
@@ -81,6 +137,14 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeLine("const auto interruptSavedRegs = context.regs;");
     emitter.writeLine("const u32 interruptSavedHi = context.hi;");
     emitter.writeLine("const u32 interruptSavedLo = context.lo;");
+    emitter.writeLine("const bool interruptSavedPendingLoadValid = context.pendingLoadValid;");
+    emitter.writeLine(
+        "const Register interruptSavedPendingLoadRegister = context.pendingLoadRegister;");
+    emitter.writeLine("const u32 interruptSavedPendingLoadValue = context.pendingLoadValue;");
+    emitter.writeLine("const bool interruptSavedStagedLoadValid = context.stagedLoadValid;");
+    emitter.writeLine(
+        "const Register interruptSavedStagedLoadRegister = context.stagedLoadRegister;");
+    emitter.writeLine("const u32 interruptSavedStagedLoadValue = context.stagedLoadValue;");
     emitter.writeLine("const u32 interruptCallbackCommitGeneration =");
     emitter.writeLine("    context.system.callbackContextCommitGeneration();");
     emitter.writeLine("context.system.serviceInterrupts();");
@@ -90,6 +154,12 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeLine("context.regs = interruptSavedRegs;");
     emitter.writeLine("context.hi = interruptSavedHi;");
     emitter.writeLine("context.lo = interruptSavedLo;");
+    emitter.writeLine("context.pendingLoadValid = interruptSavedPendingLoadValid;");
+    emitter.writeLine("context.pendingLoadRegister = interruptSavedPendingLoadRegister;");
+    emitter.writeLine("context.pendingLoadValue = interruptSavedPendingLoadValue;");
+    emitter.writeLine("context.stagedLoadValid = interruptSavedStagedLoadValid;");
+    emitter.writeLine("context.stagedLoadRegister = interruptSavedStagedLoadRegister;");
+    emitter.writeLine("context.stagedLoadValue = interruptSavedStagedLoadValue;");
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.closeBlock();
@@ -259,14 +329,22 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("inline void triggerTrap(u32 code, Address pc)");
+    emitter.writeLine(
+        "[[noreturn]] inline void triggerTrap(RecompilerContext& context, u32 code, Address pc,");
+    emitter.writeLine("                                 bool inDelaySlot)");
     emitter.openBlock("");
-    emitter.writeLine("if (PSXRECOMP_ENABLE_LOGGING)");
+    emitter.writeLine("commitPendingLoad(context);");
+    emitter.writeLine(
+        "context.system.cop0().exceptionEnter(runtime::Cop0::ExceptionCode::Breakpoint,");
+    emitter.writeLine("                                   pc, inDelaySlot);");
+    emitter.writeLine("std::ostringstream stream;");
+    emitter.writeLine("stream << \"BREAK exception code=0x\" << std::hex << code");
+    emitter.writeLine("       << \" at PC 0x\" << pc;");
+    emitter.writeLine("if (inDelaySlot)");
     emitter.openBlock("");
-    emitter.writeLine("std::cerr << \"[trap] BREAK code=0x\" << std::hex << code");
-    emitter.writeLine("          << \" at PC 0x\" << pc << \" -- continuing\\n\";");
+    emitter.writeLine("stream << \" (delay slot)\";");
     emitter.closeBlock();
-    emitter.writeLine("(void)code; (void)pc;");
+    emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline void logWarning(const char* message)");

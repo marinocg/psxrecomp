@@ -11,6 +11,11 @@
 #include <stdexcept>
 #include <string>
 
+void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& generator,
+                                    const std::filesystem::path& outputDir,
+                                    const std::filesystem::path& repoRoot,
+                                    const std::string& compiler);
+
 void runCodegenOverlapTest(psxrecomp::recompiler::CodeGenerator& generator)
 {
     using psxrecomp::ir::Builder;
@@ -106,6 +111,7 @@ void runCodegenCompileHarnessTest(psxrecomp::recompiler::CodeGenerator& generato
     runtimeHeader << "      AddressErrorLoad = 4,\n";
     runtimeHeader << "      AddressErrorStore = 5,\n";
     runtimeHeader << "      Syscall = 8,\n";
+    runtimeHeader << "      Breakpoint = 9,\n";
     runtimeHeader << "      ReservedInstruction = 10,\n";
     runtimeHeader << "      CoprocessorUnusable = 11,\n";
     runtimeHeader << "      ArithmeticOverflow = 12\n";
@@ -393,6 +399,7 @@ void runCodegenCompileHarnessTest(psxrecomp::recompiler::CodeGenerator& generato
     assert(strictRunStatus == 0);
 
     runCodegenCop2GuardTest(generator, outputDir, repoRoot, compiler);
+    runCodegenLoadDelayHarnessTest(generator, outputDir, repoRoot, compiler);
 }
 
 void runCodegenCop2GuardTest(psxrecomp::recompiler::CodeGenerator& generator,
@@ -505,4 +512,105 @@ void runCodegenCop2GuardTest(psxrecomp::recompiler::CodeGenerator& generator,
         std::cerr << "COP2 run failed with status: " << cop2RunStatus << "\n";
     }
     assert(cop2RunStatus == 0);
+}
+
+void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& generator,
+                                    const std::filesystem::path& outputDir,
+                                    const std::filesystem::path& repoRoot,
+                                    const std::string& compiler)
+{
+    using psxrecomp::ir::Builder;
+    using psxrecomp::ir::Opcode;
+    using psxrecomp::ir::Program;
+    using psxrecomp::ir::Value;
+    auto quote = [](const std::filesystem::path& path)
+    { return std::string("\"") + path.string() + "\""; };
+
+    Program program;
+    Builder builder(program);
+    auto& function = builder.createFunction("load_delay_func", 0x80030000);
+    auto& entry = builder.createBlock(function, "entry");
+
+    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(5)},
+                                                         {Value::makeRegister(2)}, 0x80030000));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x100)},
+                                                         {Value::makeRegister(2)}, 0x80030004));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(1)},
+                                {Value::makeRegister(3)}, 0x80030008));
+    entry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x104), Value::makeRegister(3)}, {}, 0x8003000C));
+    entry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x108), Value::makeRegister(2)}, {}, 0x80030010));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x10C)},
+                                                         {Value::makeRegister(2)}, 0x80030014));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(7)},
+                                                         {Value::makeRegister(2)}, 0x80030018));
+    entry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x110), Value::makeRegister(2)}, {}, 0x8003001C));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030020));
+
+    const std::string header = generator.generateHeader(program, "load_delay_module");
+    const std::string source = generator.generateSource(program, "load_delay_module");
+
+    const auto headerPath = outputDir / "load_delay_module.h";
+    const auto sourcePath = outputDir / "load_delay_module.cpp";
+    const auto harnessPath = outputDir / "load_delay_harness.cpp";
+    const auto exePath = outputDir / "load_delay_test";
+
+    std::ofstream headerFile(headerPath);
+    headerFile << header;
+    headerFile.close();
+
+    std::ofstream sourceFile(sourcePath);
+    sourceFile << source;
+    sourceFile.close();
+
+    std::ofstream harnessFile(harnessPath);
+    harnessFile << "#include \"load_delay_module.h\"\n";
+    harnessFile << "#include <array>\n";
+    harnessFile << "#include <cstring>\n";
+    harnessFile << "int main() {\n";
+    harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
+    harnessFile << "  const psxrecomp::u32 firstLoadValue = 42u;\n";
+    harnessFile << "  const psxrecomp::u32 secondLoadValue = 99u;\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x100, &firstLoadValue, sizeof(firstLoadValue));\n";
+    harnessFile
+        << "  std::memcpy(ram.data() + 0x10C, &secondLoadValue, sizeof(secondLoadValue));\n";
+    harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
+    harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
+    harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
+    harnessFile << "  psxrecomp::u32 delaySlotValue = 0;\n";
+    harnessFile << "  psxrecomp::u32 committedLoadValue = 0;\n";
+    harnessFile << "  psxrecomp::u32 canceledLoadValue = 0;\n";
+    harnessFile << "  std::memcpy(&delaySlotValue, ram.data() + 0x104, sizeof(delaySlotValue));\n";
+    harnessFile
+        << "  std::memcpy(&committedLoadValue, ram.data() + 0x108, sizeof(committedLoadValue));\n";
+    harnessFile
+        << "  std::memcpy(&canceledLoadValue, ram.data() + 0x110, sizeof(canceledLoadValue));\n";
+    harnessFile << "  if (delaySlotValue != 6u) { return 1; }\n";
+    harnessFile << "  if (committedLoadValue != 42u) { return 2; }\n";
+    harnessFile << "  if (canceledLoadValue != 7u) { return 3; }\n";
+    harnessFile << "  return 0;\n";
+    harnessFile << "}\n";
+    harnessFile.close();
+
+    const std::string compileCommand =
+        quote(compiler) + " -std=c++17 -I" + quote(outputDir / "include") + " -I" +
+        quote(repoRoot / "include") + " -I" + quote(outputDir) + " " + quote(sourcePath) + " " +
+        quote(harnessPath) + " -o " + quote(exePath);
+    int compileStatus = std::system(compileCommand.c_str());
+    if (compileStatus != 0)
+    {
+        std::cerr << "Load-delay compile failed with status: " << compileStatus << "\n";
+    }
+    assert(compileStatus == 0);
+
+    const std::string runCommand = quote(exePath);
+    int runStatus = std::system(runCommand.c_str());
+    if (runStatus != 0)
+    {
+        std::cerr << "Load-delay run failed with status: " << runStatus << "\n";
+    }
+    assert(runStatus == 0);
 }

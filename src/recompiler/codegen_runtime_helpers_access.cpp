@@ -9,6 +9,7 @@ namespace recompiler
 
 void emitRuntimeAccessHelpers(CppEmitter& emitter)
 {
+    emitter.writeLine("inline void commitPendingLoad(RecompilerContext& context);");
     emitter.writeLine("inline void flushCycles(RecompilerContext& context);");
     emitter.writeBlank();
     emitter.writeLine("inline bool strictAddrErrorsEnabled()");
@@ -28,13 +29,15 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
     emitter.writeLine("#endif");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("[[noreturn]] inline void raiseAddressError(runtime::PsxSystem& system,");
+    emitter.writeLine("[[noreturn]] inline void raiseAddressError(RecompilerContext& context,");
     emitter.writeLine(
         "                                               runtime::Cop0::ExceptionCode code,");
     emitter.writeLine(
-        "                                               Address pc, Address badVaddr)");
+        "                                               Address pc, Address badVaddr,");
+    emitter.writeLine("                                               bool inDelaySlot)");
     emitter.openBlock("");
-    emitter.writeLine("system.cop0().exceptionEnter(code, pc, false, badVaddr);");
+    emitter.writeLine("commitPendingLoad(context);");
+    emitter.writeLine("context.system.cop0().exceptionEnter(code, pc, inDelaySlot, badVaddr);");
     emitter.writeLine("std::ostringstream stream;");
     emitter.writeLine(
         "stream << \"Address error exception code=\" << std::dec << static_cast<u32>(code)");
@@ -67,29 +70,42 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
     emitter.closeBlock();
     emitter.writeBlank();
 
-    emitter.writeLine("inline u32 readMemory32(RecompilerContext& context, Address address)");
+    emitter.writeLine("inline u32 readMemory32(RecompilerContext& context, Address address,");
+    emitter.writeLine("                        Address pc, bool inDelaySlot)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x3u) != 0)");
-    emitter.writeLine(
-        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
-    emitter.writeLine(
-        "                  context.system.debugOverlay().lastProgramCounter(), address);");
+    emitter.writeLine("raiseAddressError(context, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
+    emitter.writeLine("                  pc, address, inDelaySlot);");
     emitter.closeBlock();
     emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
     emitter.writeLine("return context.system.read<u32>(address);");
     emitter.closeBlock();
     emitter.writeBlank();
+    emitter.writeLine("inline u32 readMemory32(RecompilerContext& context, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return readMemory32(context, address,");
     emitter.writeLine(
-        "inline void writeMemory32(RecompilerContext& context, Address address, u32 value)");
+        "                    context.system.debugOverlay().lastProgramCounter(), false);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void writeMemory32(RecompilerContext& context, Address address, u32 value,");
+    emitter.writeLine("                          Address pc, bool inDelaySlot)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x3u) != 0)");
     emitter.writeLine(
-        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
-    emitter.writeLine(
-        "                  context.system.debugOverlay().lastProgramCounter(), address);");
+        "raiseAddressError(context, runtime::Cop0::ExceptionCode::AddressErrorStore,");
+    emitter.writeLine("                  pc, address, inDelaySlot);");
     emitter.closeBlock();
     emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
     emitter.writeLine("context.system.write<u32>(address, value);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void writeMemory32(RecompilerContext& context, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("writeMemory32(context, address, value,");
+    emitter.writeLine("              context.system.debugOverlay().lastProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline u32 readMemory8(RecompilerContext& context, Address address)");
@@ -106,24 +122,42 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
         "static_cast<u32>(static_cast<s32>(static_cast<s8>(context.system.read<u8>(address))));");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("inline u32 readMemory16(RecompilerContext& context, Address address)");
+    emitter.writeLine("inline u32 readMemory16(RecompilerContext& context, Address address,");
+    emitter.writeLine("                        Address pc, bool inDelaySlot)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x1u) != 0)");
-    emitter.writeLine(
-        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
-    emitter.writeLine(
-        "                  context.system.debugOverlay().lastProgramCounter(), address);");
+    emitter.writeLine("raiseAddressError(context, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
+    emitter.writeLine("                  pc, address, inDelaySlot);");
     emitter.closeBlock();
     emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
     emitter.writeLine("return static_cast<u32>(context.system.read<u16>(address));");
     emitter.closeBlock();
     emitter.writeBlank();
-    emitter.writeLine("inline u32 readMemory16s(RecompilerContext& context, Address address)");
+    emitter.writeLine("inline u32 readMemory16(RecompilerContext& context, Address address)");
     emitter.openBlock("");
+    emitter.writeLine("return readMemory16(context, address,");
+    emitter.writeLine(
+        "                    context.system.debugOverlay().lastProgramCounter(), false);");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline u32 readMemory16s(RecompilerContext& context, Address address,");
+    emitter.writeLine("                         Address pc, bool inDelaySlot)");
+    emitter.openBlock("");
+    emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x1u) != 0)");
+    emitter.writeLine("raiseAddressError(context, runtime::Cop0::ExceptionCode::AddressErrorLoad,");
+    emitter.writeLine("                  pc, address, inDelaySlot);");
+    emitter.closeBlock();
     emitter.writeLine("accountCpuDataAccessCycles(context, address, false);");
     emitter.writeLine(
         "return "
         "static_cast<u32>(static_cast<s32>(static_cast<s16>(context.system.read<u16>(address))));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline u32 readMemory16s(RecompilerContext& context, Address address)");
+    emitter.openBlock("");
+    emitter.writeLine("return readMemory16s(context, address,");
+    emitter.writeLine(
+        "                     context.system.debugOverlay().lastProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
@@ -148,16 +182,23 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
-        "inline void writeMemory16(RecompilerContext& context, Address address, u32 value)");
+        "inline void writeMemory16(RecompilerContext& context, Address address, u32 value,");
+    emitter.writeLine("                          Address pc, bool inDelaySlot)");
     emitter.openBlock("");
     emitter.openBlock("if (strictAddrErrorsEnabled() && (address & 0x1u) != 0)");
     emitter.writeLine(
-        "raiseAddressError(context.system, runtime::Cop0::ExceptionCode::AddressErrorStore,");
-    emitter.writeLine(
-        "                  context.system.debugOverlay().lastProgramCounter(), address);");
+        "raiseAddressError(context, runtime::Cop0::ExceptionCode::AddressErrorStore,");
+    emitter.writeLine("                  pc, address, inDelaySlot);");
     emitter.closeBlock();
     emitter.writeLine("accountCpuDataAccessCycles(context, address, true);");
     emitter.writeLine("context.system.write<u16>(address, static_cast<u16>(value & 0xFFFF));");
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine(
+        "inline void writeMemory16(RecompilerContext& context, Address address, u32 value)");
+    emitter.openBlock("");
+    emitter.writeLine("writeMemory16(context, address, value,");
+    emitter.writeLine("              context.system.debugOverlay().lastProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(

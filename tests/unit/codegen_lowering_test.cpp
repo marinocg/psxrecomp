@@ -168,11 +168,10 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 4: Self-loop prevention
+    // Test 4: Self-loop is preserved
     //
-    // When a block's sole successor is itself AND a next block exists
-    // in the function, the lowering should redirect to the next block
-    // instead of creating an infinite self-loop.
+    // Self-loops are real control flow and must not be rewritten to the
+    // next block.
     // ---------------------------------------------------------------
     {
         Program program;
@@ -192,18 +191,13 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "self_loop_module");
 
-        // The generated code should NOT assign block = BlockId::self_loop
-        // when the current block is already self_loop. Instead it should
-        // redirect to after_loop.
-        // Find the case label for self_loop
+        // The generated code should continue targeting the self-loop block.
         auto selfLoopCase = source.find("case BlockId::self_loop:");
         assert(selfLoopCase != std::string::npos);
-
-        // In the self_loop case body, look for the redirection
-        [[maybe_unused]] auto afterSelfLoop = source.find("after_loop", selfLoopCase);
-        assert(afterSelfLoop != std::string::npos);
-
-        std::cerr << "[PASS] self-loop prevention redirects to next block\n";
+        [[maybe_unused]] auto selfLoopRef =
+            source.find("block = BlockId::self_loop;", selfLoopCase);
+        assert(selfLoopRef != std::string::npos);
+        std::cerr << "[PASS] self-loop successor preserved\n";
     }
 
     // ---------------------------------------------------------------
@@ -270,13 +264,10 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 7: BRANCH unconditional self-loop spin-wait detection
+    // Test 7: BRANCH unconditional self-loop stays a branch
     //
-    // When a block's BRANCH instruction has BOTH successors pointing to
-    // itself (unconditional self-loop / spin-wait), the generated code
-    // should call advanceFrame() instead of looping forever.
-    // Conditional self-loops (only one successor pointing to self) are
-    // regular loops handled by the while(true)/switch structure.
+    // Unconditional self-loops are still real control flow. Lowering must
+    // not rewrite them into advanceFrame().
     // ---------------------------------------------------------------
     {
         Program program;
@@ -309,10 +300,10 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "spin_wait_module");
 
-        // The generated code should call advanceFrame() in the spin block
-        assert(source.find("advanceFrame()") != std::string::npos);
+        assert(source.find("advanceFrame()") == std::string::npos);
+        assert(source.find("block = BlockId::spin_block;") != std::string::npos);
 
-        std::cerr << "[PASS] BRANCH unconditional self-loop spin-wait detection\n";
+        std::cerr << "[PASS] BRANCH unconditional self-loop preserved\n";
     }
 
     // ---------------------------------------------------------------
@@ -363,8 +354,37 @@ int main()
         assert(loopRef != std::string::npos);
         [[maybe_unused]] auto exitRef = source.find("BlockId::exit_block", loopCase);
         assert(exitRef != std::string::npos);
+        assert(source.find("advanceFrame()") == std::string::npos);
 
         std::cerr << "[PASS] conditional self-loop is normal branch (not advanceFrame)\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10: Address-valued JUMP to external block remains a jump
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_jump_external", 0x800A0000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::JUMP, {Value::makeAddress(0x800A0100)}, {}, 0x800A0000));
+        entry.successors = {"block_external"};
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "jump_external_module");
+
+        assert(
+            source.find("if (!jumpRecompiledFunction(context, 0x800a0100))") != std::string::npos ||
+            source.find("if (!jumpRecompiledFunction(context, 0x800A0100))") != std::string::npos);
+        assert(source.find("callRecompiledFunction(context, 0x800a0100)") == std::string::npos);
+        assert(source.find("callRecompiledFunction(context, 0x800A0100)") == std::string::npos);
+        assert(source.find("failUnsupportedJump(0x800a0100, 0x800a0000);") != std::string::npos ||
+               source.find("failUnsupportedJump(0x800A0100, 0x800A0000);") != std::string::npos);
+
+        std::cerr << "[PASS] address jump external path uses jump semantics\n";
     }
 
     // ---------------------------------------------------------------

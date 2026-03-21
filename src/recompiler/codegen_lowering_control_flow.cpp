@@ -80,49 +80,23 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 emitter.writeLine("return false;");
             };
 
-            // Detect self-loop spin-waits: on PSX, BEQ $zero,$zero,self is an
-            // IRQ-breakable spin-wait. The IRQ handler modifies the return
-            // address so execution resumes at the next instruction. In the
-            // recompiled code there is no real interrupt mechanism, so we
-            // replace the self-loop with an advanceFrame() call and fall
-            // through to the next sequential block.
-            auto isSelfLoop = [&](const std::string& successorName) -> bool
-            { return successorName == block.name; };
-
             if (block.successors.size() >= 2)
             {
-                bool takenIsSelf = isSelfLoop(block.successors[0]);
-                bool fallthroughIsSelf = isSelfLoop(block.successors[1]);
-
-                if (takenIsSelf && fallthroughIsSelf)
-                {
-                    emitter.writeLine("context.system.advanceFrame();");
-                }
-                else
-                {
-                    emitter.openBlock("if (" + cond + ")");
-                    emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
-                    emitter.closeBlock();
-                    emitter.openBlock("else");
-                    emitSuccessorTransfer(block.successors[1], std::nullopt);
-                    emitter.closeBlock();
-                }
+                emitter.openBlock("if (" + cond + ")");
+                emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
+                emitter.closeBlock();
+                emitter.openBlock("else");
+                emitSuccessorTransfer(block.successors[1], std::nullopt);
+                emitter.closeBlock();
             }
             else if (block.successors.size() == 1)
             {
-                if (isSelfLoop(block.successors[0]))
-                {
-                    emitter.writeLine("context.system.advanceFrame();");
-                }
-                else
-                {
-                    emitter.openBlock("if (" + cond + ")");
-                    emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
-                    emitter.closeBlock();
-                    emitter.openBlock("else");
-                    emitter.writeLine("return true;");
-                    emitter.closeBlock();
-                }
+                emitter.openBlock("if (" + cond + ")");
+                emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
+                emitter.closeBlock();
+                emitter.openBlock("else");
+                emitter.writeLine("return true;");
+                emitter.closeBlock();
             }
         }
         return true;
@@ -192,18 +166,12 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                     sourcePc = sourceStream.str();
                 }
-                const std::string traceCallPrefix =
-                    "traceInterestingCallsite(context, " + target + ", " + sourcePc;
-                emitter.writeLine(traceCallPrefix + ", false);");
                 emitter.openBlock("if (!callIntrinsic(context.system, " + target +
                                   ", context.regs))");
-                emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
-                const std::string unsupportedCallLine =
-                    "failUnsupportedCall(context, " + target + ", " + sourcePc + ");";
-                emitter.writeLine(unsupportedCallLine);
+                emitter.openBlock("if (!jumpRecompiledFunction(context, " + target + "))");
+                emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
                 emitter.closeBlock();
                 emitter.closeBlock();
-                emitter.writeLine(traceCallPrefix + ", true);");
                 emitter.writeLine("return true;");
             }
             else

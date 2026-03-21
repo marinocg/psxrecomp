@@ -9,6 +9,28 @@ namespace psxrecomp
 namespace recompiler
 {
 
+namespace
+{
+
+std::string memorySourcePcExpr(const ir::Instruction& instruction)
+{
+    std::string sourcePc = "0";
+    if (instruction.sourceAddress.has_value())
+    {
+        std::ostringstream sourceStream;
+        sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
+        sourcePc = sourceStream.str();
+    }
+    return sourcePc;
+}
+
+std::string memoryDelaySlotExpr(const ir::Instruction& instruction)
+{
+    return instructionIsInDelaySlot(instruction) ? "true" : "false";
+}
+
+} // namespace
+
 bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
                                     const std::unordered_map<std::string, std::string>& blockNames,
                                     LoweringContext& context, CppEmitter& emitter)
@@ -21,85 +43,74 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
     case ir::Opcode::LOAD:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            std::string sourcePc = "0";
-            if (instruction.sourceAddress.has_value())
-            {
-                std::ostringstream sourceStream;
-                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-                sourcePc = sourceStream.str();
-            }
-            emitter.writeLine(dest + " = readMemory32(context, " + address + ");");
-            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
+            const std::string sourcePc = memorySourcePcExpr(instruction);
+            emitter.writeLine("const u32 loadResult = readMemory32(context, " + address + ", " +
+                              sourcePc + ", " + memoryDelaySlotExpr(instruction) + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
+            emitter.writeLine("traceInterestingLoad(context, " + address + ", loadResult, " +
                               sourcePc + ");");
         }
         return true;
     case ir::Opcode::LOAD8:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory8s(context, " + address + ");");
+            emitter.writeLine("const u32 loadResult = readMemory8s(context, " + address + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         return true;
     case ir::Opcode::LOAD8U:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory8(context, " + address + ");");
+            emitter.writeLine("const u32 loadResult = readMemory8(context, " + address + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         return true;
     case ir::Opcode::LOAD16:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory16s(context, " + address + ");");
+            const std::string sourcePc = memorySourcePcExpr(instruction);
+            emitter.writeLine("const u32 loadResult = readMemory16s(context, " + address + ", " +
+                              sourcePc + ", " + memoryDelaySlotExpr(instruction) + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         return true;
     case ir::Opcode::LOAD16U:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory16(context, " + address + ");");
+            const std::string sourcePc = memorySourcePcExpr(instruction);
+            emitter.writeLine("const u32 loadResult = readMemory16(context, " + address + ", " +
+                              sourcePc + ", " + memoryDelaySlotExpr(instruction) + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         return true;
     case ir::Opcode::LOAD_LEFT:
         if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs[0], context);
             std::string value = valueToExpr(instruction.inputs[1], context);
-            std::string sourcePc = "0";
-            if (instruction.sourceAddress.has_value())
-            {
-                std::ostringstream sourceStream;
-                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-                sourcePc = sourceStream.str();
-            }
-            emitter.writeLine(dest + " = readMemoryLwl(context, " + address + ", " + value + ");");
-            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
+            const std::string sourcePc = memorySourcePcExpr(instruction);
+            emitter.writeLine("const u32 loadResult = readMemoryLwl(context, " + address + ", " +
+                              value + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
+            emitter.writeLine("traceInterestingLoad(context, " + address + ", loadResult, " +
                               sourcePc + ");");
         }
         return true;
     case ir::Opcode::LOAD_RIGHT:
         if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs[0], context);
             std::string value = valueToExpr(instruction.inputs[1], context);
-            std::string sourcePc = "0";
-            if (instruction.sourceAddress.has_value())
-            {
-                std::ostringstream sourceStream;
-                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-                sourcePc = sourceStream.str();
-            }
-            emitter.writeLine(dest + " = readMemoryLwr(context, " + address + ", " + value + ");");
-            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
+            const std::string sourcePc = memorySourcePcExpr(instruction);
+            emitter.writeLine("const u32 loadResult = readMemoryLwr(context, " + address + ", " +
+                              value + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
+            emitter.writeLine("traceInterestingLoad(context, " + address + ", loadResult, " +
                               sourcePc + ");");
         }
         return true;
@@ -108,7 +119,9 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
         {
             std::string address = valueToExpr(instruction.inputs[0], context);
             std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMemory32(context, " + address + ", " + value + ");");
+            emitter.writeLine("writeMemory32(context, " + address + ", " + value + ", " +
+                              memorySourcePcExpr(instruction) + ", " +
+                              memoryDelaySlotExpr(instruction) + ");");
         }
         return true;
     case ir::Opcode::STORE8:
@@ -124,7 +137,9 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
         {
             std::string address = valueToExpr(instruction.inputs[0], context);
             std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMemory16(context, " + address + ", " + value + ");");
+            emitter.writeLine("writeMemory16(context, " + address + ", " + value + ", " +
+                              memorySourcePcExpr(instruction) + ", " +
+                              memoryDelaySlotExpr(instruction) + ");");
         }
         return true;
     case ir::Opcode::STORE_LEFT:
@@ -146,9 +161,9 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
     case ir::Opcode::MMIO_LOAD8:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMmio8s(context, " + address + ");");
+            emitter.writeLine("const u32 loadResult = readMmio8s(context, " + address + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         else
         {
@@ -158,9 +173,9 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
     case ir::Opcode::MMIO_LOAD8U:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMmio8(context, " + address + ");");
+            emitter.writeLine("const u32 loadResult = readMmio8(context, " + address + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         else
         {
@@ -170,9 +185,9 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
     case ir::Opcode::MMIO_LOAD16:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMmio16s(context, " + address + ");");
+            emitter.writeLine("const u32 loadResult = readMmio16s(context, " + address + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         else
         {
@@ -182,9 +197,9 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
     case ir::Opcode::MMIO_LOAD16U:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMmio16(context, " + address + ");");
+            emitter.writeLine("const u32 loadResult = readMmio16(context, " + address + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         else
         {
@@ -194,9 +209,9 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
     case ir::Opcode::MMIO_LOAD:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
             std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMmio32(context, " + address + ");");
+            emitter.writeLine("const u32 loadResult = readMmio32(context, " + address + ");");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         else
         {
@@ -243,9 +258,10 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
         if (!instruction.outputs.empty() && !instruction.inputs.empty() &&
             instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
         {
-            const std::string dest = valueToExpr(instruction.outputs.front(), context);
             const std::string rd = valueToExpr(instruction.inputs[0], context);
-            emitter.writeLine(dest + " = context.system.cop0().mfc0(static_cast<u8>(" + rd + "));");
+            emitter.writeLine("const u32 loadResult = context.system.cop0().mfc0(static_cast<u8>(" +
+                              rd + "));");
+            emitLoadResultWrite(instruction.outputs.front(), "loadResult", context, emitter);
         }
         return true;
     case ir::Opcode::COP0_MTC:
@@ -306,7 +322,8 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
             sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
             sourcePc = sourceStream.str();
         }
-        emitter.writeLine("triggerTrap(" + code + ", " + sourcePc + ");");
+        emitter.writeLine("triggerTrap(context, " + code + ", " + sourcePc + ", " +
+                          memoryDelaySlotExpr(instruction) + ");");
         return true;
     }
     case ir::Opcode::RETURN:
