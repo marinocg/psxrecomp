@@ -1,0 +1,75 @@
+{
+  "name": "rev2-hotloop-branches",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [],
+  "tracepoints": [
+    {
+      "name": "rev2_hotloop_branch_154720",
+      "pc_range": "0x154720-0x154720",
+      "registers": ["t1", "zero", "t0", "v0", "v1", "a0", "ra"],
+      "log_branches": true,
+      "branch_taken_pc": "0x154768",
+      "branch_not_taken_pc": "0x154728",
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 6
+    },
+    {
+      "name": "rev2_hotloop_branch_154734",
+      "pc_range": "0x154734-0x154734",
+      "registers": ["at", "zero", "v0", "v1", "a0", "ra"],
+      "log_branches": true,
+      "branch_taken_pc": "0x15474C",
+      "branch_not_taken_pc": "0x15473C",
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 6
+    },
+    {
+      "name": "rev2_hotloop_branch_154778",
+      "pc_range": "0x154778-0x154778",
+      "registers": ["at", "zero", "v0", "v1", "a0", "ra"],
+      "log_branches": true,
+      "branch_taken_pc": "0x154790",
+      "branch_not_taken_pc": "0x154780",
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 6
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    },
+    {
+      "kind": "cdrom_bank_summary"
+    },
+    {
+      "kind": "cdrom_cpu_payload_summary"
+    },
+    {
+      "kind": "cdrom_irq_lifecycle_summary"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": []
+}

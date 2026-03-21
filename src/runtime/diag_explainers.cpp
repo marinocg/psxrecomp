@@ -1,5 +1,7 @@
 #include "psxrecomp/runtime/diag_explainers.h"
 
+#include "psxrecomp/runtime/cdrom.h"
+
 #include <sstream>
 
 namespace psxrecomp
@@ -135,6 +137,43 @@ std::string DiagExplainerEngine::explainDmaChannel(u8 port, u32 control)
 size_t DiagExplainerEngine::explainerCount() const
 {
     return m_configs.size();
+}
+
+std::string DiagExplainerEngine::explainCdromBankSummary(const DiagCdromBankTracer& tracer)
+{
+    return tracer.formatSummary();
+}
+
+std::string DiagExplainerEngine::explainCdromXaClassification(const Cdrom& cdrom)
+{
+    return cdrom.formatXaClassificationSummary();
+}
+
+std::string DiagExplainerEngine::explainCdromPostStreamValidator(const Cdrom& cdrom)
+{
+    return cdrom.formatPostStreamSummary();
+}
+
+std::string DiagExplainerEngine::explainCdromCpuPayloadSummary(const Cdrom& cdrom)
+{
+    return cdrom.formatCpuPayloadSummary();
+}
+
+std::string DiagExplainerEngine::explainCdromIrqLifecycleSummary(const Cdrom& cdrom)
+{
+    return cdrom.formatIrqLifecycleSummary();
+}
+
+std::string
+DiagExplainerEngine::explainCdromLateBufferSummary(const DiagCdromLateBufferTracker& tracker)
+{
+    return tracker.formatSummary();
+}
+
+std::string
+DiagExplainerEngine::explainRev2DecoderHandoffSummary(const DiagRev2DecoderHandoffTracker& tracker)
+{
+    return tracker.formatSummary();
 }
 
 } // namespace runtime

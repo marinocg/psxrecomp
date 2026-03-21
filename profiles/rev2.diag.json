@@ -6,6 +6,30 @@
   },
   "watchpoints": [
     {
+      "name": "rev2_cd_status",
+      "kind": "ram_write",
+      "range": "0x8016549a-0x8016549b",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_callback_ptr",
+      "kind": "ram_write",
+      "range": "0x80166cec-0x80166cef",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_total_sectors",
+      "kind": "ram_write",
+      "range": "0x80166cf4-0x80166cfb",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cd_state_ptr",
+      "kind": "ram_write",
+      "range": "0x80166d38-0x80166d3f",
+      "action": "log"
+    },
+    {
       "name": "rev2_dispatch_b_slot",
       "kind": "ram_write",
       "range": "0x80166cc8-0x80166ccb",
@@ -36,6 +60,12 @@
       "action": "log"
     },
     {
+      "name": "rev2_hook_entry_int_descriptor",
+      "kind": "ram_write",
+      "range": "0x80165520-0x8016552f",
+      "action": "log"
+    },
+    {
       "name": "rev2_callback_counter_block",
       "kind": "ram_write",
       "range": "0x80166590-0x801665b4",
@@ -46,6 +76,30 @@
       "kind": "ram_read",
       "range": "0x801665b0-0x801665b3",
       "action": "summarize"
+    },
+    {
+      "name": "rev2_ringbuf_descriptor_state",
+      "kind": "ram_write",
+      "range": "0x80070000-0x80070001",
+      "action": "log"
+    },
+    {
+      "name": "rev2_ringbuf_base_ptr",
+      "kind": "ram_write",
+      "range": "0x80185550-0x80185557",
+      "action": "log"
+    },
+    {
+      "name": "rev2_ringbuf_index",
+      "kind": "ram_write",
+      "range": "0x80185538-0x8018553f",
+      "action": "log"
+    },
+    {
+      "name": "rev2_staging_buf_fields",
+      "kind": "ram_write",
+      "range": "0x80185540-0x8018554f",
+      "action": "log"
     },
     {
       "name": "rev2_consumer_pointer_slot_reads",
@@ -132,6 +186,16 @@
       "mmio_reads": [],
       "capture_context": true,
       "repeat_threshold": 32
+    },
+    {
+      "name": "rev2_post_stream_dispatch",
+      "pc_range": "0x154700-0x154780",
+      "registers": ["v0", "a0", "a1", "ra"],
+      "log_branches": false,
+      "mmio_reads": ["0x1f801040"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 16
     }
   ],
   "validators": [],
@@ -150,10 +214,22 @@
     },
     {
       "kind": "irq_controller"
+    },
+    {
+      "kind": "rev2_decoder_handoff_summary"
     }
   ],
   "metadata_watches": [],
   "suspect_functions": [
+    {
+      "name": "rev2_post_stream_dispatch",
+      "pc_range": "0x154700-0x154780",
+      "watched_cells": [
+        "0x80165520",
+        "0x80165524",
+        "0x801665b0"
+      ]
+    },
     {
       "name": "rev2_wait_loop",
       "pc_range": "0x160840-0x16088c",

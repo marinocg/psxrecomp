@@ -1,0 +1,147 @@
+{
+  "name": "rev2-movie-bank-aware",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "mdec_command_write",
+      "kind": "mmio_write",
+      "range": "0x1F801820-0x1F801823",
+      "action": "log"
+    },
+    {
+      "name": "mdec_control_write",
+      "kind": "mmio_write",
+      "range": "0x1F801824-0x1F801827",
+      "action": "log"
+    },
+    {
+      "name": "mdec_status_read",
+      "kind": "mmio_read",
+      "range": "0x1F801824-0x1F801827",
+      "action": "summarize"
+    },
+    {
+      "name": "cdrom_bank_select",
+      "kind": "mmio_write",
+      "range": "0x1F801800-0x1F801800",
+      "action": "log"
+    },
+    {
+      "name": "cdrom_status_read",
+      "kind": "mmio_read",
+      "range": "0x1F801800-0x1F801800",
+      "action": "summarize"
+    },
+    {
+      "name": "cdrom_command_or_soundmap",
+      "kind": "mmio_write",
+      "range": "0x1F801801-0x1F801801",
+      "action": "log"
+    },
+    {
+      "name": "cdrom_hintsts_or_resultfifo_read",
+      "kind": "mmio_read",
+      "range": "0x1F801801-0x1F801801",
+      "action": "log"
+    },
+    {
+      "name": "cdrom_param_hintmsk_audvol_write",
+      "kind": "mmio_write",
+      "range": "0x1F801802-0x1F801802",
+      "action": "log"
+    },
+    {
+      "name": "cdrom_hintmsk_read",
+      "kind": "mmio_read",
+      "range": "0x1F801802-0x1F801802",
+      "action": "log"
+    },
+    {
+      "name": "cdrom_request_hclrctl_audvol_write",
+      "kind": "mmio_write",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    },
+    {
+      "name": "cdrom_hintsts_hintmsk_read",
+      "kind": "mmio_read",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    },
+    {
+      "name": "dma3_cdrom_channel",
+      "kind": "mmio_write",
+      "range": "0x1F8010B8-0x1F8010BF",
+      "action": "log"
+    },
+    {
+      "name": "dma0_mdecin_channel",
+      "kind": "mmio_write",
+      "range": "0x1F801088-0x1F80108F",
+      "action": "log"
+    },
+    {
+      "name": "dma1_mdecout_channel",
+      "kind": "mmio_write",
+      "range": "0x1F801098-0x1F80109F",
+      "action": "log"
+    },
+    {
+      "name": "gpu_gp0_write",
+      "kind": "mmio_write",
+      "range": "0x1F801810-0x1F801813",
+      "action": "summarize"
+    },
+    {
+      "name": "gpu_gp1_write",
+      "kind": "mmio_write",
+      "range": "0x1F801814-0x1F801817",
+      "action": "summarize"
+    }
+  ],
+  "tracepoints": [],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    },
+    {
+      "kind": "gpustat"
+    },
+    {
+      "kind": "cdrom_bank_summary"
+    },
+    {
+      "kind": "cdrom_phase_summary"
+    },
+    {
+      "kind": "cdrom_xa_classification"
+    },
+    {
+      "kind": "cdrom_post_stream_validator"
+    },
+    {
+      "kind": "cdrom_cpu_payload_summary"
+    },
+    {
+      "kind": "cdrom_irq_lifecycle_summary"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": []
+}

@@ -104,6 +104,22 @@ ExplainerKind parseExplainerKind(const std::string& text)
         return ExplainerKind::IrqController;
     if (text == "dma_channel")
         return ExplainerKind::DmaChannel;
+    if (text == "cdrom_bank_summary")
+        return ExplainerKind::CdromBankSummary;
+    if (text == "cdrom_phase_summary")
+        return ExplainerKind::CdromPhaseSummary;
+    if (text == "cdrom_xa_classification")
+        return ExplainerKind::CdromXaClassification;
+    if (text == "cdrom_post_stream_validator")
+        return ExplainerKind::CdromPostStreamValidator;
+    if (text == "cdrom_cpu_payload_summary")
+        return ExplainerKind::CdromCpuPayloadSummary;
+    if (text == "cdrom_irq_lifecycle_summary")
+        return ExplainerKind::CdromIrqLifecycleSummary;
+    if (text == "cdrom_late_buffer_summary")
+        return ExplainerKind::CdromLateBufferSummary;
+    if (text == "rev2_decoder_handoff_summary")
+        return ExplainerKind::Rev2DecoderHandoffSummary;
     return ExplainerKind::Gpustat;
 }
 
@@ -133,15 +149,32 @@ TracepointConfig parseTracepoint(const JsonValue& obj)
     tp.name = obj.getString("name");
     parseAddressRange(obj.getString("pc_range"), tp.pcRangeStart, tp.pcRangeEnd);
     tp.logBranches = obj.getBool("log_branches");
+    tp.branchTakenPc = parseHexAddress(obj.getString("branch_taken_pc", "0x0"));
+    tp.branchNotTakenPc = parseHexAddress(obj.getString("branch_not_taken_pc", "0x0"));
     tp.captureContext = obj.getBool("capture_context");
     tp.callerHistogram = obj.getBool("caller_histogram");
     tp.repeatThreshold = static_cast<u32>(obj.getNumber("repeat_threshold"));
+    tp.maxLogEvents = static_cast<u32>(obj.getNumber("max_log_events"));
     for (const auto& reg : obj.getArray("registers"))
     {
         if (reg.isString())
         {
             tp.registers.push_back(reg.strVal);
         }
+    }
+    for (const auto& sample : obj.getArray("memory_samples"))
+    {
+        if (!sample.isObject())
+        {
+            continue;
+        }
+        TracepointMemorySampleConfig cfg;
+        cfg.name = sample.getString("name");
+        cfg.baseRegister = sample.getString("base");
+        cfg.offset = parseHexAddress(sample.getString("offset", "0x0"));
+        cfg.width = static_cast<u32>(sample.getNumber("width", 1));
+        cfg.count = static_cast<u32>(sample.getNumber("count", 1));
+        tp.memorySamples.push_back(std::move(cfg));
     }
     for (const auto& addr : obj.getArray("mmio_reads"))
     {

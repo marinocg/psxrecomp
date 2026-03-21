@@ -59,10 +59,26 @@ u32 normalTransferWordCount(const DmaChannel& channel, u32 syncMode)
     return static_cast<u32>(totalWords);
 }
 
+struct ScopedDmaTransferFlag
+{
+    bool& flag;
+
+    explicit ScopedDmaTransferFlag(bool& value) : flag(value)
+    {
+        flag = true;
+    }
+
+    ~ScopedDmaTransferFlag()
+    {
+        flag = false;
+    }
+};
+
 } // namespace
 
 void PsxSystem::handleDmaTransfer(DmaPort port)
 {
+    ScopedDmaTransferFlag dmaTransferFlag(m_inDmaTransfer);
     const auto& channel = m_dma.channel(port);
     const bool fromRam = (channel.channelControl & DMA_DIRECTION_FROM_RAM) != 0;
 
@@ -118,9 +134,63 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             m_dma.clearTrigger(port);
             return;
         }
+        if (port == DmaPort::Spu && !m_spu.canTransferDma(false))
+        {
+            transferredWords = 0;
+            goto dma_transfer_complete;
+        }
+        // PSX-SPX CHCR bit 28 "Start/Force": DMA3 may be triggered without
+        // waiting for DRQSTS (BFRD=1).  When the force bit is clear, the normal
+        // gate applies — DMA3 only transfers when the data FIFO is ready.
+        constexpr u32 CHCR_FORCE_START = 0x10000000u;
+        const bool forceDmaStart = (channel.channelControl & CHCR_FORCE_START) != 0;
+        if (port == DmaPort::Cdrom)
+        {
+            if (!forceDmaStart)
+            {
+                // Gate DMA3 (CD-ROM→RAM) on DRQSTS (STATUS_DATA_READY, bit 6 of HSTS).
+                // Per PSX-SPX, DMA3 only transfers when BFRD=1 and the data FIFO has
+                // bytes to serve.
+                //
+                // When DRQSTS=0 the hardware stalls (CHCR busy stays set) and waits for
+                // DRQSTS to rise before moving data.  In psxrecomp's synchronous DMA
+                // model we cannot stall indefinitely, so we clear the trigger to free
+                // the channel (CHCR busy cleared) but deliberately skip
+                // notifyTransferComplete.  Raising a DICR completion event with zero
+                // bytes transferred would allow the game's ring-buffer state-machine to
+                // advance to "decode-ready" before any sector data has been copied,
+                // causing the decoder to run against an empty buffer.  By withholding
+                // the completion event the game can re-arm DMA3 once BFRD=1 has filled
+                // the FIFO, and the interrupt will fire only after a real transfer.
+                if ((m_cdrom.readStatus() & 0x40u) == 0u)
+                {
+                    m_dma.clearTrigger(port);
+                    m_debugOverlay.incrementDmaTransfers();
+                    return; // no data moved; no DICR
+                }
+            }
+            else
+            {
+                // Force-start: bypass the DRQSTS gate.  Accept the published sector
+                // into the FIFO now if the request-enable bit was not set by the game.
+                // If no sector is available at all, skip quietly.
+                if (!m_cdrom.prepareControllerDmaRead(true))
+                {
+                    transferredWords = 0;
+                    goto dma_transfer_complete;
+                }
+            }
+        }
 
         const Address base = channel.baseAddress & 0x1FFFFC;
         const bool decrementAddress = (channel.channelControl & DMA_ADDRESS_DECREMENT) != 0;
+        if (port == DmaPort::Cdrom)
+        {
+            m_cdrom.beginInt1DmaTransfer(0x80000000u | base);
+            m_diagCdromLateBufferTracker.beginCdromDma(m_cdrom.currentDrainingInt1Generation(),
+                                                       m_cdrom.currentDrainingLba(),
+                                                       0x80000000u | base, wordCount * sizeof(u32));
+        }
         Address current = base;
         for (u32 i = 0; i < wordCount; ++i)
         {
@@ -134,7 +204,11 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 value = m_gpu.readData();
                 break;
             case DmaPort::Cdrom:
-                value = m_cdrom.readDma();
+                value = forceDmaStart ? m_cdrom.readControllerDma(true) : m_cdrom.readDma();
+                m_diagCdromLateBufferTracker.noteCdromDmaWord(value);
+                break;
+            case DmaPort::Spu:
+                value = m_spu.readDma();
                 break;
             default:
                 m_dma.clearTrigger(port);
@@ -232,6 +306,11 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 m_dma.clearTrigger(port);
                 return;
             }
+            if (port == DmaPort::Spu && !m_spu.canTransferDma(true))
+            {
+                transferredWords = 0;
+                goto dma_transfer_complete;
+            }
 
             const Address base = channel.baseAddress & 0x1FFFFC;
             const bool decrementAddress = (channel.channelControl & DMA_ADDRESS_DECREMENT) != 0;
@@ -271,16 +350,27 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
         }
     }
 
+dma_transfer_complete:
+    if (!fromRam && port == DmaPort::Cdrom)
+    {
+        m_diagCdromLateBufferTracker.endCdromDma(transferredWords * sizeof(u32));
+        m_cdrom.endInt1DmaTransfer();
+    }
     m_dma.clearTrigger(port);
     m_dma.notifyTransferComplete(port);
     m_debugOverlay.incrementDmaTransfers();
 
     if (port == DmaPort::Spu)
     {
-        // libsnd-style callers wait on the SPU completion event after arming
-        // DMA4, so complete it asynchronously on the hardware tick path.
-        m_pendingSpuDmaCompletion = true;
-        m_pendingSpuDmaCompletionCycles = 2048;
+        m_spu.noteDmaTransfer(fromRam, transferredWords);
+        if (transferredWords > 0)
+        {
+            // libsnd-style callers wait on the SPU completion event after a
+            // real DMA4 transfer completes, so synthesize the completion edge
+            // asynchronously on the hardware tick path.
+            m_pendingSpuDmaCompletion = true;
+            m_pendingSpuDmaCompletionCycles = 2048;
+        }
     }
 
     std::ostringstream message;

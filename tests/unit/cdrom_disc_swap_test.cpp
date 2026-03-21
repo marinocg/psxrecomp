@@ -120,6 +120,7 @@ int main()
         cdrom.writeCommand(0x06); // ReadN start
         assert(irqType(cdrom) == 0x03);
         (void)cdrom.readResponse();
+        (void)cdrom.readResponse(); // ReadN INT3 returns two stat bytes
         ack(cdrom);
 
         cdrom.tick(kCdromReadCycles);

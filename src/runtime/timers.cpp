@@ -7,38 +7,62 @@ namespace runtime
 
 namespace
 {
-constexpr u16 MODE_CLOCK_SOURCE_MASK = 0x3u << 8;
+constexpr u16 MODE_SYNC_ENABLE = 1u << 0;
+constexpr u16 MODE_SYNC_MODE_MASK = 0x3u << 1;
 constexpr u16 MODE_RESET_ON_TARGET = 1u << 3;
 constexpr u16 MODE_IRQ_ON_TARGET = 1u << 4;
 constexpr u16 MODE_IRQ_ON_OVERFLOW = 1u << 5;
+constexpr u16 MODE_IRQ_REPEAT = 1u << 6;
+constexpr u16 MODE_IRQ_TOGGLE = 1u << 7;
+constexpr u16 MODE_CLOCK_SOURCE_MASK = 0x3u << 8;
+constexpr u16 MODE_IRQ_REQUEST_BIT = 1u << 10;
 constexpr u16 MODE_TARGET_REACHED_FLAG = 1u << 11;
 constexpr u16 MODE_OVERFLOW_REACHED_FLAG = 1u << 12;
 
-bool didCounterHitTarget(u16 counter, u16 target, u32 steps)
+u16 syncMode(u16 mode)
 {
-    if (steps == 0)
-    {
-        return false;
-    }
-
-    u32 distance = (static_cast<u32>(target) - static_cast<u32>(counter)) & 0xFFFFu;
-    if (distance == 0)
-    {
-        distance = 0x10000u;
-    }
-    return steps >= distance;
-}
-
-void raiseTimerInterrupt(const TimerController::InterruptCallback& onInterrupt, InterruptLine line,
-                         bool enabled)
-{
-    if (enabled && onInterrupt)
-    {
-        onInterrupt(line);
-    }
+    return (mode & MODE_SYNC_MODE_MASK) >> 1;
 }
 
 } // namespace
+
+void TimerController::processIrqRequest(Channel& channel, const InterruptCallback& onInterrupt,
+                                        InterruptLine line)
+{
+    const bool repeat = (channel.mode & MODE_IRQ_REPEAT) != 0;
+    const bool toggle = (channel.mode & MODE_IRQ_TOGGLE) != 0;
+
+    // One-shot: skip if already fired since last mode write.
+    if (!repeat && channel.oneShotFired)
+    {
+        return;
+    }
+
+    if (toggle)
+    {
+        // Toggle mode: flip bit 10.
+        channel.irqRequest = !channel.irqRequest;
+    }
+    else
+    {
+        // Pulse mode: bit 10 goes LOW briefly (IRQ requested).
+        channel.irqRequest = false;
+    }
+
+    channel.oneShotFired = true;
+
+    // IRQ fires when bit 10 transitions to 0 (active LOW).
+    if (!channel.irqRequest && onInterrupt)
+    {
+        onInterrupt(line);
+    }
+
+    // In pulse mode, bit 10 returns to 1 after the short pulse.
+    if (!toggle)
+    {
+        channel.irqRequest = true;
+    }
+}
 
 void TimerController::advanceChannel(Channel& channel, size_t index, u32 steps,
                                      const InterruptCallback& onInterrupt)
@@ -80,12 +104,11 @@ void TimerController::advanceChannel(Channel& channel, size_t index, u32 steps,
         }
 
         const u32 remainingAfterFirstEvent = steps - firstEventSteps;
-        const u32 targetEvents = 1 + (remainingAfterFirstEvent / period);
         channel.counter = static_cast<u16>(remainingAfterFirstEvent % period);
-        if (targetEvents > 0)
+        channel.targetReached = true;
+        if (irqOnTarget)
         {
-            channel.targetReached = true;
-            raiseTimerInterrupt(onInterrupt, line, irqOnTarget);
+            processIrqRequest(channel, onInterrupt, line);
         }
         return;
     }
@@ -94,18 +117,27 @@ void TimerController::advanceChannel(Channel& channel, size_t index, u32 steps,
     const u16 newCounter = static_cast<u16>(total & 0xFFFF);
     const u32 overflowEvents = total >> 16;
 
-    const bool targetReached = didCounterHitTarget(channel.counter, channel.target, steps);
+    // Check if target was crossed during this step.
+    const u32 distance =
+        (static_cast<u32>(channel.target) - static_cast<u32>(channel.counter)) & 0xFFFFu;
+    const bool targetReached = (distance == 0) ? (steps >= 0x10000u) : (steps >= distance);
 
     if (targetReached)
     {
         channel.targetReached = true;
-        raiseTimerInterrupt(onInterrupt, line, irqOnTarget);
+        if (irqOnTarget)
+        {
+            processIrqRequest(channel, onInterrupt, line);
+        }
     }
 
     if (overflowEvents > 0)
     {
         channel.overflowReached = true;
-        raiseTimerInterrupt(onInterrupt, line, irqOnOverflow);
+        if (irqOnOverflow)
+        {
+            processIrqRequest(channel, onInterrupt, line);
+        }
     }
 
     channel.counter = newCounter;
@@ -147,6 +179,18 @@ u16 TimerController::readMode(size_t index)
 
     Channel& channel = m_channels[index];
     u16 value = channel.mode;
+
+    // Bit 10: interrupt request (active LOW). Reflects current state.
+    if (channel.irqRequest)
+    {
+        value |= MODE_IRQ_REQUEST_BIT;
+    }
+    else
+    {
+        value &= ~MODE_IRQ_REQUEST_BIT;
+    }
+
+    // Bits 11-12: reached flags, set by hardware, cleared on read.
     if (channel.targetReached)
     {
         value |= MODE_TARGET_REACHED_FLAG;
@@ -156,6 +200,7 @@ u16 TimerController::readMode(size_t index)
         value |= MODE_OVERFLOW_REACHED_FLAG;
     }
 
+    // PSX-SPX: reading mode clears bits 11 and 12.
     channel.targetReached = false;
     channel.overflowReached = false;
     return value;
@@ -191,6 +236,9 @@ void TimerController::writeMode(size_t index, u16 value)
     channel.cycleCarry = 0;
     channel.targetReached = false;
     channel.overflowReached = false;
+    // PSX-SPX: writing mode sets bit 10 (IRQ request = no IRQ pending).
+    channel.irqRequest = true;
+    channel.oneShotFired = false;
 }
 
 void TimerController::writeTarget(size_t index, u16 value)
@@ -207,6 +255,10 @@ void TimerController::tick(u32 cpuCycles, const InterruptCallback& onInterrupt)
     for (size_t index = 0; index < m_channels.size(); ++index)
     {
         if (usesDisplayLineClock(index, m_channels[index]))
+        {
+            continue;
+        }
+        if (isStopped(index, m_channels[index]))
         {
             continue;
         }
@@ -236,7 +288,8 @@ u32 TimerController::dividerForChannel(size_t index, const Channel& channel)
     if (index == 2)
     {
         const u16 clockSelect = static_cast<u16>((channel.mode >> 8) & 0x3);
-        if (clockSelect == 0x2)
+        // PSX-SPX: Timer2 clock source 2 or 3 = system clock / 8.
+        if (clockSelect == 0x2 || clockSelect == 0x3)
         {
             return 8;
         }
@@ -253,6 +306,32 @@ bool TimerController::usesDisplayLineClock(size_t index, const Channel& channel)
 
     const u16 clockSelect = static_cast<u16>((channel.mode & MODE_CLOCK_SOURCE_MASK) >> 8);
     return clockSelect == 0x1u || clockSelect == 0x3u;
+}
+
+bool TimerController::isStopped(size_t index, const Channel& channel)
+{
+    // PSX-SPX sync mode semantics.
+    // Only applies when sync enable (bit 0) is set.
+    if ((channel.mode & MODE_SYNC_ENABLE) == 0)
+    {
+        return false; // Free-run.
+    }
+
+    const u16 sm = syncMode(channel.mode);
+
+    if (index == 2)
+    {
+        // Timer2 sync modes:
+        //   0, 3 = stop counter
+        //   1, 2 = free-run (same as sync disabled)
+        return sm == 0 || sm == 3;
+    }
+
+    // Timer0/Timer1 sync modes are blank/HBlank or VBlank related.
+    // Modes 0 and 3 pause during the sync signal (we approximate as stopped
+    // since we don't model the exact blank timing in the cycle counter).
+    // Modes 1 and 2 reset on signal edges — we approximate as free-run.
+    return sm == 0 || sm == 3;
 }
 
 InterruptLine TimerController::interruptLineForTimer(size_t index)

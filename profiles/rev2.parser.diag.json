@@ -1,0 +1,205 @@
+{
+  "name": "rev2-parser-loop",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_cdrom_bank_select",
+      "kind": "mmio_write",
+      "range": "0x1F801800-0x1F801800",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cdrom_status_read",
+      "kind": "mmio_read",
+      "range": "0x1F801800-0x1F801800",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_cdrom_result_read",
+      "kind": "mmio_read",
+      "range": "0x1F801801-0x1F801801",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cdrom_hintsts_read",
+      "kind": "mmio_read",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cdrom_hclrctl_write",
+      "kind": "mmio_write",
+      "range": "0x1F801803-0x1F801803",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cdrom_hintmsk_write",
+      "kind": "mmio_write",
+      "range": "0x1F801802-0x1F801802",
+      "action": "log"
+    },
+    {
+      "name": "rev2_cdrom_dma3",
+      "kind": "mmio_write",
+      "range": "0x1F8010B8-0x1F8010BF",
+      "action": "log"
+    },
+    {
+      "name": "rev2_parser_owner_state",
+      "kind": "ram_write",
+      "range": "0x801709A8-0x801709C0",
+      "action": "log"
+    },
+    {
+      "name": "rev2_parser_owner_reads",
+      "kind": "ram_read",
+      "range": "0x801709A8-0x801709C0",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_parser_stream_slot",
+      "kind": "ram_write",
+      "range": "0x80177810-0x80177818",
+      "action": "log"
+    },
+    {
+      "name": "rev2_parser_stream_reads",
+      "kind": "ram_read",
+      "range": "0x80177810-0x80177818",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_parser_decode_cursor",
+      "kind": "ram_write",
+      "range": "0x80163DE8-0x80163DEB",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_parser_callsite",
+      "pc_range": "0x152BFC-0x152C58",
+      "registers": ["a0", "a1", "a2", "v0", "s0", "s2", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_parser_loop",
+      "pc_range": "0x15470C-0x154780",
+      "registers": ["a0", "a1", "a2", "a3", "v0", "v1", "t0", "t1", "t3", "ra"],
+      "log_branches": false,
+      "mmio_reads": [],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 16
+    },
+    {
+      "name": "rev2_cd_result_poll",
+      "pc_range": "0x15ABF8-0x15ACF0",
+      "registers": ["a0", "v0", "v1", "s0", "s1", "sp", "ra"],
+      "log_branches": false,
+      "mmio_reads": ["0x1F801801", "0x1F801803"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    },
+    {
+      "name": "rev2_cd_poll_wrapper",
+      "pc_range": "0x15C0A8-0x15C138",
+      "registers": ["v0", "s0", "s1", "s2", "s3", "ra"],
+      "log_branches": false,
+      "mmio_reads": ["0x1F801800"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 8
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "cdrom_irq"
+    },
+    {
+      "kind": "dma_channel"
+    },
+    {
+      "kind": "irq_controller"
+    },
+    {
+      "kind": "cdrom_bank_summary"
+    },
+    {
+      "kind": "cdrom_phase_summary"
+    },
+    {
+      "kind": "cdrom_xa_classification"
+    },
+    {
+      "kind": "cdrom_cpu_payload_summary"
+    },
+    {
+      "kind": "cdrom_irq_lifecycle_summary"
+    }
+  ],
+  "metadata_watches": [],
+  "suspect_functions": [
+    {
+      "name": "rev2_parser_callsite",
+      "pc_range": "0x152BFC-0x152C58",
+      "watched_cells": [
+        "0x801709A8",
+        "0x801709B0",
+        "0x801709B4",
+        "0x80177810",
+        "0x80177814",
+        "0x80177818"
+      ]
+    },
+    {
+      "name": "rev2_parser_loop",
+      "pc_range": "0x15470C-0x154780",
+      "watched_cells": [
+        "0x80163DE8",
+        "0x801709B0",
+        "0x801709B4",
+        "0x80177810",
+        "0x80177814",
+        "0x80177818"
+      ]
+    },
+    {
+      "name": "rev2_cd_result_poll",
+      "pc_range": "0x15ABF8-0x15ACF0",
+      "watched_cells": [
+        "0x8016531C",
+        "0x80165320",
+        "0x80165328",
+        "0x8016532C",
+        "0x80165335"
+      ]
+    },
+    {
+      "name": "rev2_cd_poll_wrapper",
+      "pc_range": "0x15C0A8-0x15C138",
+      "watched_cells": [
+        "0x80165058",
+        "0x8016505C",
+        "0x8016531C",
+        "0x80165320",
+        "0x80165335"
+      ]
+    }
+  ]
+}

@@ -16,6 +16,7 @@ std::string CodeGenerator::generateHeader(const ir::Program& program, const std:
     CppEmitter emitter;
     emitter.writeLine("#pragma once");
     emitter.writeBlank();
+    emitter.writeLine("#include \"psxrecomp/runtime/memory_map.h\"");
     emitter.writeLine("#include \"psxrecomp/runtime/psx_system.h\"");
     emitter.writeLine("#include \"psxrecomp/types.h\"");
     emitter.writeBlank();

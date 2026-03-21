@@ -17,10 +17,12 @@ namespace cdrom_detail
 inline constexpr u8 INT1 = 0x1u;
 inline constexpr u8 INT2 = 0x2u;
 inline constexpr u8 INT3 = 0x3u;
+inline constexpr u8 INT4 = 0x4u;
 inline constexpr u8 INT5 = 0x5u;
 
 inline constexpr u8 STATUS_RESPONSE_READY = 1u << 5;
 inline constexpr u8 STATUS_DATA_READY = 1u << 6;
+inline constexpr u8 STATUS_ADPBUSY = 1u << 2;
 inline constexpr u8 STATUS_PARAM_FIFO_EMPTY = 1u << 3;
 inline constexpr u8 STATUS_PARAM_FIFO_WRITE_READY = 1u << 4;
 inline constexpr u8 STATUS_COMMAND_BUSY = 1u << 7;
@@ -49,6 +51,7 @@ inline constexpr size_t MAX_FILTER_SCAN_SECTORS = 32;
 inline constexpr u8 SETMODE_XA_FILTER_ENABLE = 0x08;
 inline constexpr u8 SETMODE_SECTOR_SIZE_2340 = 0x20;
 inline constexpr u8 SETMODE_XA_STREAM_ENABLE = 0x40;
+inline constexpr u8 SETMODE_DOUBLE_SPEED = 0x80;
 
 inline constexpr u8 XA_SUBMODE_AUDIO = 0x04;
 inline constexpr u8 XA_SUBMODE_FORM2 = 0x20;
@@ -62,7 +65,7 @@ inline constexpr u8 ERR_NO_DISC = 0x40;
 inline constexpr u8 ERR_READ_FAIL = 0x80;
 
 inline constexpr u32 CDROM_STATE_MAGIC = 0x4D524443u; // "CDRM"
-inline constexpr u32 CDROM_STATE_VERSION = 4u;
+inline constexpr u32 CDROM_STATE_VERSION = 8u;
 inline constexpr size_t MAX_SERIALIZED_SECTOR_BYTES = 4096;
 
 struct XaSubheader

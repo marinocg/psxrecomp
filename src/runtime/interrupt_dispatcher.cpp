@@ -235,9 +235,18 @@ u32 InterruptDispatcher::dispatchLine(InterruptLine line, InterruptController& i
         callbacks.insert(callbacks.end(), counterCallbacks.begin(), counterCallbacks.end());
     }
 
-    // Acknowledge the hardware IRQ line now that events have been delivered.
-    // I_STAT clears bits written as 0, so clear this line by writing all-ones
-    // except the target bit.
+    if (callbacks.empty())
+    {
+        // No kernel events registered for this line.  On real hardware this
+        // means no SysEnqIntRP chain handler claimed the IRQ, so I_STAT
+        // stays pending for HookEntryInt to process.
+        return 0;
+    }
+
+    // Acknowledge the hardware IRQ line — equivalent to the chain handler
+    // that claimed this IRQ.  Only lines with registered kernel events are
+    // acknowledged; unclaimed lines remain visible in I_STAT for
+    // HookEntryInt.
     interrupts.writeStatus(~static_cast<u32>(line));
 
     if (traceIrqFlowEnabled() && logger)
@@ -246,11 +255,6 @@ u32 InterruptDispatcher::dispatchLine(InterruptLine line, InterruptController& i
         msg << "event=irq_dispatch_ack line=0x" << std::hex << static_cast<u16>(line)
             << " status_after=0x" << interrupts.readStatus();
         logger->log(LogLevel::Info, "irq_trace", msg.str());
-    }
-
-    if (callbacks.empty())
-    {
-        return 0;
     }
 
     if (logger)

@@ -51,6 +51,11 @@ bool PsxSystem::callBiosVectorC0(u32 functionId, u32* regs)
             write<u32>(a1 + 0x00, previousHead);
             m_irqChainHeads[a0] = a1;
             regs[2] = 1;
+
+            // Snapshot the data region around the chain struct so that
+            // MMIO pointers (0x1F80xxxx) used by the handlers can be
+            // restored if a buffer overrun zeroes them later.
+            saveIrqChainSnapshot(a0, a1);
         }
         else
         {
@@ -111,9 +116,25 @@ bool PsxSystem::callBiosVectorC0(u32 functionId, u32* regs)
         return true;
     case 0x0A: // ChangeClearRCnt
     {
-        // Changes automatic acknowledge behavior for timer interrupts.
-        // Our dispatcher handles ack, so this is a no-op.
-        m_logger.log(LogLevel::Debug, "bios", "ChangeClearRCnt (stub)");
+        // PSX-SPX: C(0Ah) ChangeClearRCnt(t, flag)
+        // t: 0=Timer0, 1=Timer1, 2=Timer2, 3=VBlank
+        // flag: 0=normal handler, 1=auto-ack and immediately return from exception
+        // Returns old flag value in v0.
+        if (a0 < m_changeClearRCntPolicy.size())
+        {
+            const bool oldFlag = m_changeClearRCntPolicy[a0];
+            m_changeClearRCntPolicy[a0] = (a1 != 0);
+            regs[2] = oldFlag ? 1u : 0u;
+
+            std::ostringstream msg;
+            msg << "ChangeClearRCnt t=" << std::dec << a0 << " flag=" << a1
+                << " old=" << (oldFlag ? 1 : 0);
+            m_logger.log(LogLevel::Debug, "bios", msg.str());
+        }
+        else
+        {
+            regs[2] = 0;
+        }
         return true;
     }
     case 0x0C: // InitDefInt

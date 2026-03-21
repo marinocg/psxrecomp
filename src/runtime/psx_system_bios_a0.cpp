@@ -157,14 +157,28 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         regs[2] = a0;
         return true;
     }
-    case 0x33: // malloc - simple bump allocator stub
+    case 0x33: // malloc
     {
-        static u32 heapTop = 0x801F0000u;
-        u32 size = (a0 + 7) & ~7u; // 8-byte align
-        if (size > 0 && heapTop >= (0x80010000u + size))
+        u32 size = (a0 + 3) & ~3u; // 4-byte align
+        if (m_biosHeapBase != 0 && size > 0 &&
+            m_biosHeapCursor + size <= m_biosHeapBase + m_biosHeapSize)
         {
-            heapTop -= size;
-            regs[2] = heapTop;
+            regs[2] = m_biosHeapCursor;
+            m_biosHeapCursor += size;
+        }
+        else if (size > 0)
+        {
+            // Fallback bump allocator for games that skip InitHeap.
+            static u32 fallbackTop = 0x801F0000u;
+            if (fallbackTop >= (0x80010000u + size))
+            {
+                fallbackTop -= size;
+                regs[2] = fallbackTop;
+            }
+            else
+            {
+                regs[2] = 0;
+            }
         }
         else
         {
@@ -176,7 +190,14 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
         return true;
     case 0x39: // InitHeap
     {
-        m_logger.log(LogLevel::Debug, "bios", "InitHeap acknowledged");
+        m_biosHeapBase = a0;
+        m_biosHeapSize = a1;
+        m_biosHeapCursor = a0;
+        {
+            std::ostringstream msg;
+            msg << "InitHeap base=0x" << std::hex << a0 << " size=0x" << a1;
+            m_logger.log(LogLevel::Debug, "bios", msg.str());
+        }
         return true;
     }
     case 0x3C: // putchar
@@ -327,14 +348,24 @@ bool PsxSystem::callBiosVectorA0(u32 functionId, u32* regs)
     case 0x4B: // send_gpu_linked_list (GPU ordering table DMA)
     {
         // PSX-SPX sequence:
-        //   GP1(04h)=2 (DMA CPU->GP0), DICR=0, DPCR|=0x800, CHCR setup/start.
-        // This path intentionally models register side-effects instead of a
-        // direct software push of OT words.
+        //   GP1(04h)=2 (DMA CPU->GP0), ack GPU flag in DICR, DPCR|=0x800,
+        //   CHCR setup/start.
+        // Some BIOS revisions destructively zero DICR here, which clobbers
+        // channel enables that other subsystems (CDROM, SPU) have already
+        // configured.  We only acknowledge the GPU channel flag (bit 26)
+        // to match corrected BIOS behaviour and avoid breaking DMA IRQs.
         constexpr Address gpuDmaBase =
             DmaController::ChannelBase +
             static_cast<Address>(DmaPort::Gpu) * DmaController::ChannelStride;
         writeMmio32(Mmio::GPU_GP1, 0x04000002u);
-        writeMmio32(DmaController::InterruptReg, 0u);
+        {
+            // Preserve control bits (0-23), acknowledge GPU channel flag only.
+            // Must NOT feed back existing flags (24-30) because those bits use
+            // write-1-to-clear semantics and would accidentally ack other channels.
+            const u32 curDicr = readMmio32(DmaController::InterruptReg);
+            constexpr u32 gpuChannelFlag = 1u << 26;
+            writeMmio32(DmaController::InterruptReg, (curDicr & 0x00FFFFFFu) | gpuChannelFlag);
+        }
         const u32 dpcr = readMmio32(DmaController::ControlReg);
         writeMmio32(DmaController::ControlReg, dpcr | 0x00000800u);
         writeMmio32(gpuDmaBase + 0x0, a0 & 0x1FFFFCu);

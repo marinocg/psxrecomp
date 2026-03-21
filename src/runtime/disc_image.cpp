@@ -1,9 +1,12 @@
 #include "psxrecomp/runtime/disc_image.h"
 
+#include "psxrecomp/runtime/bios_file_table.h"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <ios>
+#include <string>
 
 namespace psxrecomp
 {
@@ -15,6 +18,9 @@ namespace
 constexpr u64 USER_SECTOR_SIZE = 2048;
 constexpr u64 RAW_SECTOR_SIZE = 2352;
 constexpr u64 RAW_USER_OFFSET = 24;
+constexpr std::array<u8, 12> RAW_SYNC_BYTES = {0x00u, 0xFFu, 0xFFu, 0xFFu, 0xFFu, 0xFFu,
+                                               0xFFu, 0xFFu, 0xFFu, 0xFFu, 0xFFu, 0x00u};
+constexpr std::array<u8, 4> MODE2_FORM1_SUBHEADER = {0x00u, 0x00u, 0x08u, 0x00u};
 
 std::string toLowerExt(const std::filesystem::path& path)
 {
@@ -46,6 +52,101 @@ DiscImage::Layout detectLayout(const std::filesystem::path& path, u64 bytes)
         return DiscImage::Layout::User2048;
     }
     return DiscImage::Layout::Auto;
+}
+
+u8 intToBcd(u32 value)
+{
+    return static_cast<u8>(((value / 10u) << 4) | (value % 10u));
+}
+
+void fillSynthesizedMode2Form1Header(u32 lba, std::span<u8, 2352> out)
+{
+    std::fill(out.begin(), out.end(), 0);
+    std::copy(RAW_SYNC_BYTES.begin(), RAW_SYNC_BYTES.end(), out.begin());
+
+    const u32 absoluteFrames = static_cast<u32>(lba) + 150u;
+    const u32 totalSeconds = absoluteFrames / 75u;
+    out[12] = intToBcd(totalSeconds / 60u);
+    out[13] = intToBcd(totalSeconds % 60u);
+    out[14] = intToBcd(absoluteFrames % 75u);
+    out[15] = 0x02u;
+
+    std::copy(MODE2_FORM1_SUBHEADER.begin(), MODE2_FORM1_SUBHEADER.end(), out.begin() + 16);
+    std::copy(MODE2_FORM1_SUBHEADER.begin(), MODE2_FORM1_SUBHEADER.end(), out.begin() + 20);
+}
+
+Disc::Region mapBootCodeToRegion(const std::string& bootCode)
+{
+    if (bootCode.rfind("SCPS", 0) == 0 || bootCode.rfind("SLPS", 0) == 0 ||
+        bootCode.rfind("SLPM", 0) == 0 || bootCode.rfind("PAPX", 0) == 0 ||
+        bootCode.rfind("PCPX", 0) == 0)
+    {
+        return Disc::Region::Japan;
+    }
+    if (bootCode.rfind("SCUS", 0) == 0 || bootCode.rfind("SLUS", 0) == 0)
+    {
+        return Disc::Region::NorthAmerica;
+    }
+    if (bootCode.rfind("SCES", 0) == 0 || bootCode.rfind("SLES", 0) == 0)
+    {
+        return Disc::Region::Europe;
+    }
+    return Disc::Region::Unknown;
+}
+
+Disc::Region detectRegionFromSystemCnf(Disc& disc)
+{
+    BiosFileTable files;
+    files.setDisc(&disc);
+    const int fd = files.fileOpen("cdrom:\\SYSTEM.CNF;1");
+    if (fd < 0)
+    {
+        return Disc::Region::Unknown;
+    }
+
+    std::vector<u8> data;
+    const int bytesRead = files.fileRead(fd, data, 4096u);
+    files.fileClose(fd);
+    if (bytesRead <= 0)
+    {
+        return Disc::Region::Unknown;
+    }
+
+    std::string text(data.begin(), data.end());
+    std::transform(text.begin(), text.end(), text.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::toupper(ch)); });
+
+    const size_t bootPos = text.find("BOOT");
+    if (bootPos == std::string::npos)
+    {
+        return Disc::Region::Unknown;
+    }
+    const size_t equalsPos = text.find('=', bootPos);
+    if (equalsPos == std::string::npos)
+    {
+        return Disc::Region::Unknown;
+    }
+
+    const size_t pathStart = text.find_first_not_of(" \t", equalsPos + 1u);
+    if (pathStart == std::string::npos)
+    {
+        return Disc::Region::Unknown;
+    }
+
+    size_t pathEnd = text.find_first_of("\r\n", pathStart);
+    if (pathEnd == std::string::npos)
+    {
+        pathEnd = text.size();
+    }
+    const std::string bootPath = text.substr(pathStart, pathEnd - pathStart);
+    const size_t slashPos = bootPath.find_last_of("\\/:");
+    const size_t codeStart = (slashPos == std::string::npos) ? 0u : (slashPos + 1u);
+    if (codeStart + 4u > bootPath.size())
+    {
+        return Disc::Region::Unknown;
+    }
+
+    return mapBootCodeToRegion(bootPath.substr(codeStart, 4u));
 }
 } // namespace
 
@@ -84,6 +185,7 @@ bool DiscImage::open(const std::filesystem::path& path, Layout layout)
 
     m_layout = resolved;
     m_sectorCount = bytes / stride;
+    m_region = detectRegionFromSystemCnf(*this);
     return true;
 }
 
@@ -95,6 +197,7 @@ void DiscImage::close()
     }
     m_layout = Layout::Auto;
     m_sectorCount = 0;
+    m_region = Region::Unknown;
 }
 
 bool DiscImage::isOpen() const
@@ -168,10 +271,15 @@ bool DiscImage::readRawSector2352(u32 lba, std::span<u8, 2352> out)
     {
         return false;
     }
-    std::fill(out.begin(), out.end(), 0);
+    fillSynthesizedMode2Form1Header(lba, out);
     std::copy(userBytes.begin(), userBytes.end(),
               out.begin() + static_cast<std::ptrdiff_t>(RAW_USER_OFFSET));
     return true;
+}
+
+Disc::Region DiscImage::region() const
+{
+    return m_region;
 }
 
 } // namespace runtime

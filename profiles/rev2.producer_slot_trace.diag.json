@@ -1,0 +1,135 @@
+{
+  "name": "rev2-producer-slot-trace",
+  "memory_map": {
+    "ram_base": "0x80000000",
+    "ram_end": "0x80200000"
+  },
+  "watchpoints": [
+    {
+      "name": "rev2_slot0_desc",
+      "kind": "ram_write",
+      "range": "0x80070000-0x80070013",
+      "action": "log"
+    },
+    {
+      "name": "rev2_slot0_payload",
+      "kind": "ram_write",
+      "range": "0x80070400-0x8007043F",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_payload_any",
+      "kind": "ram_write",
+      "range": "0x80070400-0x800783FF",
+      "action": "summarize"
+    },
+    {
+      "name": "rev2_queue_globals",
+      "kind": "ram_write",
+      "range": "0x8018553C-0x80185558",
+      "action": "log"
+    },
+    {
+      "name": "rev2_producer_globals",
+      "kind": "ram_write",
+      "range": "0x80166CC4-0x80166D10",
+      "action": "log"
+    }
+  ],
+  "tracepoints": [
+    {
+      "name": "rev2_slot_publish_159d9c",
+      "pc_range": "0x159D9C-0x159E24",
+      "registers": ["a0", "a2", "v0", "v1", "ra"],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 32
+    },
+    {
+      "name": "rev2_producer_cb_161da8",
+      "pc_range": "0x161DA8-0x161F30",
+      "registers": ["a0", "a1", "v0", "v1", "s0", "ra"],
+      "memory_samples": [
+        {
+          "name": "producer_struct",
+          "base": "a0",
+          "offset": "0x3c",
+          "width": 4,
+          "count": 2
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 64
+    },
+    {
+      "name": "rev2_producer_fill_16226c",
+      "pc_range": "0x16226C-0x162358",
+      "registers": ["a0", "a1", "v0", "v1", "s0", "s1", "s3", "ra"],
+      "memory_samples": [
+        {
+          "name": "fill_struct",
+          "base": "s0",
+          "offset": "0x3c",
+          "width": 4,
+          "count": 2
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 96
+    },
+    {
+      "name": "rev2_selector_15a00c",
+      "pc_range": "0x15A00C-0x15A0BC",
+      "registers": ["a0", "a1", "a2", "a3", "t0", "v0", "v1", "ra"],
+      "memory_samples": [
+        {
+          "name": "selector_desc",
+          "base": "a2",
+          "offset": "0x0",
+          "width": 2,
+          "count": 10
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 24
+    },
+    {
+      "name": "rev2_decoder_entry_15452c",
+      "pc_range": "0x15452C-0x15452C",
+      "registers": ["a0", "a1", "a2", "a3", "t1", "ra"],
+      "memory_samples": [
+        {
+          "name": "input_bytes",
+          "base": "a0",
+          "offset": "0x0",
+          "width": 1,
+          "count": 8
+        }
+      ],
+      "capture_context": true,
+      "caller_histogram": true,
+      "repeat_threshold": 2,
+      "max_log_events": 8
+    }
+  ],
+  "validators": [],
+  "boundaries": [
+    {
+      "kind": "stall_detected",
+      "run": []
+    }
+  ],
+  "explainers": [
+    {
+      "kind": "rev2_decoder_handoff_summary"
+    }
+  ],
+  "metadata_watches": []
+}

@@ -69,6 +69,14 @@ namespace runtime
 class Disc
 {
   public:
+    enum class Region
+    {
+        Unknown,
+        Japan,
+        NorthAmerica,
+        Europe,
+    };
+
     virtual ~Disc() = default;
 
     virtual bool readUserSector(u32 lba, std::span<u8, 2048> out) = 0;
@@ -83,6 +91,11 @@ class Disc
         (void)lba;
         (void)out;
         return false;
+    }
+
+    virtual Region region() const
+    {
+        return Region::Unknown;
     }
 };
 

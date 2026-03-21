@@ -6,9 +6,12 @@
 #include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/debug_overlay.h"
 #include "psxrecomp/runtime/diag_boundaries.h"
+#include "psxrecomp/runtime/diag_cdrom_bank_tracer.h"
+#include "psxrecomp/runtime/diag_cdrom_late_buffer_tracker.h"
 #include "psxrecomp/runtime/diag_explainers.h"
 #include "psxrecomp/runtime/diag_metadata_watch.h"
 #include "psxrecomp/runtime/diag_profile.h"
+#include "psxrecomp/runtime/diag_rev2_decoder_handoff_tracker.h"
 #include "psxrecomp/runtime/diag_tracepoints.h"
 #include "psxrecomp/runtime/diag_validators.h"
 #include "psxrecomp/runtime/diag_watchpoints.h"
@@ -126,9 +129,9 @@ class PsxSystem
     template <typename T> T read(Address address)
     {
         Address physical = normalizeAddress(address);
-        if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
+        if (isMainRamAddress(physical, static_cast<Address>(sizeof(T))))
         {
-            const Address offset = physical - MemoryMap::RAM_BASE;
+            const Address offset = foldMainRamAddress(physical);
             const u8 readSize = static_cast<u8>(sizeof(T));
             const T value = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
             if (m_diagWatchpoints.shouldWatchRamRead(physical, readSize))
@@ -136,6 +139,11 @@ class PsxSystem
                 m_diagWatchpoints.recordRamRead(m_debugOverlay.lastProgramCounter(), physical,
                                                 readSize, static_cast<u32>(value), &m_logger,
                                                 m_lastResumeAddress);
+            }
+            if (m_diagCdromLateBufferTracker.isEnabled() && !m_inDmaTransfer)
+            {
+                m_diagCdromLateBufferTracker.noteCpuRead(m_debugOverlay.lastProgramCounter(),
+                                                         0x80000000u | offset, readSize);
             }
             return value;
         }
@@ -164,9 +172,9 @@ class PsxSystem
     template <typename T> void write(Address address, T value)
     {
         Address physical = normalizeAddress(address);
-        if (isInRange(physical, MemoryMap::RAM_BASE, MemoryMap::RAM_SIZE))
+        if (isMainRamAddress(physical, static_cast<Address>(sizeof(T))))
         {
-            const Address offset = physical - MemoryMap::RAM_BASE;
+            const Address offset = foldMainRamAddress(physical);
             const u8 writeSize = static_cast<u8>(sizeof(T));
             const bool callbackTraceActive = m_callbackTrace.hasActiveInvocation();
             const bool shouldTraceWrite =
@@ -176,6 +184,15 @@ class PsxSystem
             {
                 const T oldValue = readFromRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE);
                 writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
+                if (m_diagRev2DecoderHandoffTracker.isEnabled())
+                {
+                    const auto writeKind = m_inDmaTransfer
+                                               ? DiagRev2DecoderHandoffTracker::WriteKind::Dma
+                                               : DiagRev2DecoderHandoffTracker::WriteKind::CpuStore;
+                    m_diagRev2DecoderHandoffTracker.noteScalarWrite(
+                        *this, m_debugOverlay.lastProgramCounter(), 0x80000000u | physical,
+                        writeSize, static_cast<u32>(value), writeKind);
+                }
                 if (callbackTraceActive)
                 {
                     m_callbackTrace.recordRamWrite(0x80000000u | physical, writeSize,
@@ -199,6 +216,15 @@ class PsxSystem
             else
             {
                 writeToRegion<T>(m_ram.data(), offset, MemoryMap::RAM_SIZE, value);
+                if (m_diagRev2DecoderHandoffTracker.isEnabled())
+                {
+                    const auto writeKind = m_inDmaTransfer
+                                               ? DiagRev2DecoderHandoffTracker::WriteKind::Dma
+                                               : DiagRev2DecoderHandoffTracker::WriteKind::CpuStore;
+                    m_diagRev2DecoderHandoffTracker.noteScalarWrite(
+                        *this, m_debugOverlay.lastProgramCounter(), 0x80000000u | physical,
+                        writeSize, static_cast<u32>(value), writeKind);
+                }
             }
             return;
         }
@@ -265,6 +291,15 @@ class PsxSystem
     /// Access the diagnostic metadata watch engine.
     DiagMetadataWatchEngine& diagMetadataWatch();
 
+    /// Access the CDROM bank-aware register tracer.
+    DiagCdromBankTracer& diagCdromBankTracer();
+
+    /// Access the late CD DMA destination tracker.
+    DiagCdromLateBufferTracker& diagCdromLateBufferTracker();
+
+    /// Access the focused Reversi decoder-handoff tracker.
+    DiagRev2DecoderHandoffTracker& diagRev2DecoderHandoffTracker();
+
     /// Set the most recent resume address for diagnostic context.
     /// Called by generated code when a function is entered via mid-block resume.
     void setLastResumeAddress(Address address);
@@ -273,7 +308,7 @@ class PsxSystem
     Address lastResumeAddress() const;
 
     /// Record the current recompiled program counter and run targeted diagnostics.
-    void observeProgramCounter(Address pc);
+    void observeProgramCounter(Address pc, const u32* regs = nullptr, size_t regCount = 0);
 
     /// Validate the allocator heap at a risky runtime boundary when enabled.
     void validateAllocatorHeapBoundary(const std::string& source, Address relatedAddress = 0);
@@ -435,6 +470,7 @@ class PsxSystem
     u32 m_frameCount = 0;
     u32 m_pendingSpuDmaCompletionCycles = 0;
     bool m_pendingSpuDmaCompletion = false;
+    bool m_inDmaTransfer = false;
     u32 m_criticalSectionDepth = 0;    ///< Tracks nested Enter/ExitCriticalSection syscalls
     CallbackInvoker m_callbackInvoker; ///< Bridge for direct BIOS callback invocation
     struct HookEntryIntState
@@ -446,10 +482,18 @@ class PsxSystem
         bool initialized = false;
         u32 handleStorageAddress = 0;
         std::array<u32, 5> eventHandles{};
-        u32 asyncResultPtr = 0;   ///< Destination for CdAsyncGetStatus result.
-        u32 asyncReadBuffer = 0;  ///< Destination buffer for sector reads.
-        u32 asyncReadCount = 0;   ///< Sectors remaining to read.
-        u32 asyncSectorsRead = 0; ///< Sectors copied so far.
+        bool asyncReadActive = false; ///< BIOS-owned CdAsyncReadSector still owns IRQ ack/drain.
+        bool asyncCommandDoneOnAck =
+            false;                    ///< BIOS helper completion is translated from INT3 to 0x0020.
+        u32 asyncResultPtr = 0;       ///< Destination for CdAsyncGetStatus result.
+        u32 asyncReadBuffer = 0;      ///< Destination buffer for sector reads.
+        u32 asyncReadCount = 0;       ///< Sectors remaining to read.
+        u32 asyncSectorsRead = 0;     ///< Sectors copied so far.
+        u32 asyncReadMode = 0;        ///< Full mode word passed to CdAsyncReadSector (bit8=ReadS).
+        u32 asyncReadSectorBytes = 0; ///< Effective bytes per sector for the active read.
+        u8 lastDeliveredIrqType =
+            0; ///< Last raw CD subtype delivered to software events/callbacks.
+        u32 lastDeliveredIrqGeneration = 0; ///< Publish generation for the last delivered subtype.
     };
     struct GpuPortTraceEntry
     {
@@ -468,9 +512,34 @@ class PsxSystem
     std::array<u32, 32> m_pendingCallbackRegisters{};
     std::array<bool, 32> m_pendingCallbackRegisterMask{};
 
+    /// PSX-SPX: ChangeClearRCnt(t, flag) auto-clear policy.
+    /// When flag=1, the kernel timer/VBlank handler acknowledges the IRQ and
+    /// immediately returns from exception without calling chain handlers.
+    /// Index 0=Timer0, 1=Timer1, 2=Timer2, 3=VBlank.
+    std::array<bool, 4> m_changeClearRCntPolicy{};
+
     /// BIOS IRQ priority chains (C0:02 SysEnqIntRP / C0:03 SysDeqIntRP).
     /// Each head is a PSX pointer to a 16-byte structure in RAM.
     std::array<u32, 4> m_irqChainHeads{};
+
+    /// Snapshot of MMIO-valued words near each chain struct, captured at
+    /// SysEnqIntRP time. Used to restore EXE-initialized I/O register
+    /// pointers that may be corrupted by buffer overruns before the chain
+    /// handler reads them. Key = RAM address, Value = original word.
+    static constexpr u32 IRQ_CHAIN_DATA_SNAPSHOT_WORDS = 16;
+    struct IrqChainSnapshot
+    {
+        u32 baseAddress = 0;
+        std::array<u32, IRQ_CHAIN_DATA_SNAPSHOT_WORDS> words{};
+    };
+    std::array<IrqChainSnapshot, 4> m_irqChainSnapshots{};
+    void saveIrqChainSnapshot(u32 priority, u32 structAddress);
+    void restoreIrqChainSnapshot(u32 priority);
+
+    /// BIOS heap state (A0:39 InitHeap / A0:33 malloc / A0:34 free).
+    u32 m_biosHeapBase = 0;
+    u32 m_biosHeapSize = 0;
+    u32 m_biosHeapCursor = 0;
 
     /// Profile-driven diagnostic engines.
     DiagProfile m_diagProfile;
@@ -480,6 +549,9 @@ class PsxSystem
     DiagValidatorEngine m_diagValidators;
     DiagBoundaryDispatcher m_diagBoundaries;
     DiagMetadataWatchEngine m_diagMetadataWatch;
+    DiagCdromBankTracer m_diagCdromBankTracer;
+    DiagCdromLateBufferTracker m_diagCdromLateBufferTracker;
+    DiagRev2DecoderHandoffTracker m_diagRev2DecoderHandoffTracker;
 
     /// Last resume address set by generated code (0 = not a resumed entry).
     Address m_lastResumeAddress = 0;
@@ -489,6 +561,15 @@ class PsxSystem
      * @return true if a handler executed ReturnFromException (abort lower-priority processing).
      */
     bool dispatchIrqChains();
+
+    /**
+     * @brief Inner IRQ service work: chains, CD-ROM, HookEntryInt, kernel events.
+     *
+     * Only called from the fresh exception entry path inside serviceInterrupts().
+     * The caller is responsible for exception entry/exit (exceptionEnter/rfe via
+     * IrqExceptionExitGuard).
+     */
+    void serviceIrqWork(u32 pendingMasked);
 
     /**
      * @brief Prime periodic VBlank/display events.

@@ -60,17 +60,30 @@ struct WatchpointConfig
 };
 
 /// A single PC-range tracepoint definition from a profile.
+struct TracepointMemorySampleConfig
+{
+    std::string name;
+    std::string baseRegister;
+    Address offset = 0;
+    u32 width = 1;
+    u32 count = 1;
+};
+
 struct TracepointConfig
 {
     std::string name;
     Address pcRangeStart = 0;
     Address pcRangeEnd = 0;
     std::vector<std::string> registers;
+    std::vector<TracepointMemorySampleConfig> memorySamples;
     bool logBranches = false;
+    Address branchTakenPc = 0;
+    Address branchNotTakenPc = 0;
     std::vector<Address> mmioReads;
     bool captureContext = false;
     bool callerHistogram = false;
     u32 repeatThreshold = 0;
+    u32 maxLogEvents = 0;
 };
 
 /// Validator type enumeration.
@@ -138,7 +151,24 @@ enum class ExplainerKind : u8
     Gpustat,
     CdromIrq,
     IrqController,
-    DmaChannel
+    DmaChannel,
+    /// End-of-run bank-aware CDROM host-interface summary.
+    CdromBankSummary,
+    /// End-of-run rolling sector-phase transition trace (PR-RV21c).
+    CdromPhaseSummary,
+    /// End-of-run XA sector classification and delivery summary (PR-RV23).
+    CdromXaClassification,
+    /// Post-ReadS/ReadN XA stream summary scoped to the most recent XA-enabled stream (PR-RV27).
+    CdromPostStreamValidator,
+    /// Per-sector CPU payload breakdown for the rolling last 32 accepted/read ReadS/ReadN sectors
+    /// (PR-RV28/37).
+    CdromCpuPayloadSummary,
+    /// Raw CD-ROM IRQ lifecycle summary with INT4 publish/ack/redispatch/deassert diagnostics.
+    CdromIrqLifecycleSummary,
+    /// Late CD DMA destination summary for recent sector-sized transfers.
+    CdromLateBufferSummary,
+    /// Focused Reversi decoder-handoff provenance and output-span summary.
+    Rev2DecoderHandoffSummary
 };
 
 /// A single device/register explainer from a profile.

@@ -157,6 +157,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - The generated callback bridge now commits `HookEntryInt` longjmp-style resumes for the resumed callback itself, while generated `serviceInterrupts()` guards restore the interrupted CPU register snapshot after IRQ delivery so HookEntryInt callback registers do not leak back into mainline execution after `ReturnFromException`.
 - Boot now seeds minimal COP0 Status defaults for BIOS-style IRQ flow (`IEc=1`, `IM2=1`, `KUc=0`) before entering recompiled code.
 - DMA interactions, interrupt signaling, and scheduler hooks wired through runtime flow.
+- C0 IRQ chain handling now models `SysEnqIntRP` / `SysDeqIntRP` list updates and dispatch order, with the BIOS-owned CD-ROM IRQ service attached to the priority-0 chain so it runs before lower-priority handlers and `HookEntryInt`.
 - Structured runtime logging with per-category events and configurable verbosity.
 - Debug overlay counters for frame timing, DMA transfers, and interrupt activity.
 - Debug overlay text now includes FPS derived from the last frame cycle count.
@@ -167,7 +168,7 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - GPU BIOS helpers (GPU_cw, GPU_cwp, GPU_init, GPU_sync) forwarding GP0/GP1 commands.
 - Functional kernel event handling (`OpenEvent`, `CloseEvent`, `WaitEvent`, `TestEvent`, `EnableEvent`, `DisableEvent`, `DeliverEvent`, `UnDeliverEvent`) with blocking `WaitEvent` support for `NoCallback` events.
 - Pad/controller initialization stubs (InitPad, StartPad, InitCard, StartCard).
-- System initialization stubs for C0 vector (EnqueueTimerAndVblankIrqs, SysEnqIntRP, InstallExceptionHandlers, etc.).
+- Mixed C0 coverage: `EnqueueTimerAndVblankIrqs`, `SysEnqIntRP`, `SysDeqIntRP`, `ChangeClearRCnt`, and `InstallExceptionHandlers` are now wired, while the remaining setup calls are still stubs.
 - Read-only BIOS file/device layer backed by mounted-disc ISO 9660 traversal (`FileOpen`, `FileSeek`, `FileRead`, `FileClose`, `firstfile`, `nextfile`).
 - BIOS-facing CD-ROM helper coverage for `CdInit`, `CdRemove`, `CdAsyncSeekL`, `CdAsyncGetStatus`, `CdAsyncReadSector`, `CdAsyncSetMode`, and `CdInitSubFunc`.
 - BIOS trace support via `PSXRECOMP_TRACE_BIOS` environment variable.
@@ -236,9 +237,15 @@ what is present vs. missing. Percentages are coarse estimates intended for plann
 - Command/parameter/response FIFOs are wired through MMIO with interrupt flag handling.
 - CD-ROM MMIO now routes through index-selected register banking (`1F801800h` index selector + banked `+1..+3` ports), matching PSX register layout.
 - CD-ROM IRQs now use queued delivery: current IRQ type stays visible until ACK, then next queued IRQ promotes.
+- BIOS-owned CD-ROM IRQ servicing now runs in the priority-0 IRQ chain before lower-priority handlers and `HookEntryInt`, matching the PSX-SPX BIOS exception-handler ordering used by games such as Reversi 2.
 - CD-ROM boot-critical command set now includes `Getstat`, `Setloc`, `SeekL`, `ReadN/ReadS`, `Pause/Stop`, `Setmode`, `GetlocL/GetlocP`, `GetTN/GetTD`, and `GetID` with command-specific response byte shapes.
-- CD-ROM read pipeline now uses Setloc MSF->LBA (with 00:02:00 pregap handling), sector cadence timing, disc-backed sequential reads, and RDDATA overread padding behavior for 0x800/0x924 sector modes.
-- CD-ROM->DMA handshake path now refills read sectors during DMA underflow in active reads, reducing channel-3 stalls in DMA-only polling loops while preserving sector word boundaries.
+- CD-ROM read pipeline now uses Setloc MSF->LBA (with 00:02:00 pregap handling), sector cadence timing, disc-backed sequential reads, bounded sector buffering, and RDDATA overread padding behavior for 0x800/0x924 sector modes.
+- Host-visible `INT1` publication is now bounded by the buffered sector window instead of building an unbounded software queue, matching PSX-SPX overrun notes where older sectors can be skipped if the CPU falls behind.
+- `HCLRCTL` now follows PSX-SPX more closely: acknowledging an IRQ drains unread result bytes, and buffered read `INT1`s are promoted only after a short post-ACK delay rather than inside the same host write.
+- Finite `ReadN/ReadS` sessions now transition out of `readActive` and emit a real `INT4/DataEnd` completion once the controller reaches end-of-stream, instead of polling forever with no terminal IRQ.
+- The controller now keeps separate state for the next buffered sector, the current INT1-published sector, and the sector currently draining through `RDDATA`/DMA, matching the PSX-SPX `INT1 -> BFRD -> DRQSTS -> RDDATA` flow instead of rebinding drain ownership on every new publish.
+- CD-ROM DMA3 now distinguishes host-visible `BFRD/DRQSTS` gating from SyncMode 0 forced-start transfers (`CHCR.bit28`), so queue/descriptor fill code can DMA from the currently published sector without falsely requiring a prior `BFRD` write.
+- BIOS/kernel CD event routing now distinguishes raw IRQ subtype events from BIOS helper completions: raw delivery uses `INT3->0x0010`, `INT2->0x0020`, `INT1->0x0040`, while BIOS-owned `CdAsyncGetStatus`/`CdAsyncSetMode` still complete on `0x0020` as documented by PSX-SPX.
 - DMA-readable data FIFO path now supports CD-ROM->RAM transfer semantics for streamed sectors.
 - Save-state now preserves CD-ROM internal runtime state (command/response/data FIFOs, active/pending IRQ state, LBA/mode execution fields, and partially-consumed sector buffering) to avoid post-load desync.
 - XA streaming now validates Mode2/Form2 subheaders, exposes XA payload bytes from raw sectors, and applies Setfilter file/channel matching for XA ADPCM-shaped sectors.

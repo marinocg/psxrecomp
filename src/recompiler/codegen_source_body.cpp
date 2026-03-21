@@ -110,10 +110,9 @@ void emitGeneratedSourceBody(CppEmitter& emitter, const ModuleMetadata& metadata
         emitter.writeLine("context.cachedRangeFn = nullptr;");
         emitter.closeBlock();
         emitter.closeBlock();
-        emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
+        emitter.writeLine("if (psxrecomp::runtime::isMainRamAddress(physical, sizeof(u32)))");
         emitter.openBlock("");
-        emitter.writeLine(
-            "const Address indirect = readMemory32(context.system, address) & 0x1FFFFFFF;");
+        emitter.writeLine("const Address indirect = readMemory32(context, address) & 0x1FFFFFFF;");
         emitter.writeLine("if (indirect != physical)");
         emitter.openBlock("");
         emitter.writeLine("return " + recurseHelper + "(context, indirect);");

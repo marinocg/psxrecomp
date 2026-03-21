@@ -395,11 +395,65 @@ void testNestedOpenAndDirectoryEnumeration()
     std::cerr << "[PASS] B0 firstfile/nextfile enumerate ISO directories\n";
 }
 
+void testFileWriteToStdoutAndIsoFdRejection()
+{
+    PsxSystem system;
+    auto disc = std::make_shared<IsoTestDisc>();
+    initWithDisc(system, disc);
+
+    constexpr u32 pathAddr = 0x1000;
+    constexpr u32 writeAddr = 0x2000;
+    u8* ram = system.getRam();
+    writeCString(ram, pathAddr, "cdrom:\\hello.bin");
+    std::memcpy(ram + writeAddr, "REV2 boot trace\n", sizeof("REV2 boot trace\n") - 1u);
+
+    bool sawStdoutWrite = false;
+    system.logger().setMinLevel(psxrecomp::runtime::LogLevel::Info);
+    system.logger().setCallback(
+        [&sawStdoutWrite](const psxrecomp::runtime::LogEvent& event)
+        {
+            if (event.level == psxrecomp::runtime::LogLevel::Info && event.category == "bios" &&
+                event.message.find("REV2 boot trace") != std::string::npos)
+            {
+                sawStdoutWrite = true;
+            }
+        });
+
+    u32 regs[32] = {};
+    regs[4] = 1u;
+    regs[5] = writeAddr;
+    regs[6] = sizeof("REV2 boot trace\n") - 1u;
+    callB0(system, 0x35, regs);
+    assert(regs[2] == sizeof("REV2 boot trace\n") - 1u);
+    assert(sawStdoutWrite);
+
+    std::fill(std::begin(regs), std::end(regs), 0u);
+    regs[4] = pathAddr;
+    callB0(system, 0x32, regs);
+    const int fd = static_cast<int>(regs[2]);
+    assert(fd >= 2);
+
+    std::fill(std::begin(regs), std::end(regs), 0u);
+    regs[4] = static_cast<u32>(fd);
+    regs[5] = writeAddr;
+    regs[6] = 4u;
+    callB0(system, 0x35, regs);
+    assert(regs[2] == 0xFFFFFFFFu);
+
+    std::fill(std::begin(regs), std::end(regs), 0u);
+    regs[4] = static_cast<u32>(fd);
+    callB0(system, 0x36, regs);
+    assert(regs[2] == static_cast<u32>(fd));
+
+    std::cerr << "[PASS] B0 FileWrite logs stdout and rejects ISO writes\n";
+}
+
 } // namespace
 
 int main()
 {
     testFileOpenReadSeekClose();
     testNestedOpenAndDirectoryEnumeration();
+    testFileWriteToStdoutAndIsoFdRejection();
     return 0;
 }

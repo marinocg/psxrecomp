@@ -155,6 +155,16 @@ bool PsxSystem::loadDiagProfile(const std::string& path)
     m_diagValidators.configure(data.validators);
     m_diagBoundaries.configure(data.boundaries, &m_diagValidators, &m_diagExplainers);
     m_diagMetadataWatch.configure(data.metadataWatches);
+
+    // Enable bank-aware CDROM tracer whenever the cdrom_bank_summary explainer is present.
+    if (m_diagExplainers.isEnabled(ExplainerKind::CdromBankSummary))
+    {
+        m_diagCdromBankTracer.enable();
+    }
+    m_diagCdromLateBufferTracker.setEnabled(
+        m_diagExplainers.isEnabled(ExplainerKind::CdromLateBufferSummary));
+    m_diagRev2DecoderHandoffTracker.setEnabled(
+        m_diagExplainers.isEnabled(ExplainerKind::Rev2DecoderHandoffSummary));
     return true;
 }
 
@@ -196,6 +206,21 @@ DiagExplainerEngine& PsxSystem::diagExplainers()
 DiagMetadataWatchEngine& PsxSystem::diagMetadataWatch()
 {
     return m_diagMetadataWatch;
+}
+
+DiagCdromBankTracer& PsxSystem::diagCdromBankTracer()
+{
+    return m_diagCdromBankTracer;
+}
+
+DiagCdromLateBufferTracker& PsxSystem::diagCdromLateBufferTracker()
+{
+    return m_diagCdromLateBufferTracker;
+}
+
+DiagRev2DecoderHandoffTracker& PsxSystem::diagRev2DecoderHandoffTracker()
+{
+    return m_diagRev2DecoderHandoffTracker;
 }
 
 void PsxSystem::setLastResumeAddress(Address address)

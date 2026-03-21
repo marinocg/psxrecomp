@@ -28,11 +28,13 @@ class DiscImage final : public Disc
 
     bool readUserSector(u32 lba, std::span<u8, 2048> out) override;
     bool readRawSector2352(u32 lba, std::span<u8, 2352> out) override;
+    Region region() const override;
 
   private:
     std::ifstream m_stream;
     Layout m_layout = Layout::Auto;
     u64 m_sectorCount = 0;
+    Region m_region = Region::Unknown;
 };
 
 } // namespace runtime

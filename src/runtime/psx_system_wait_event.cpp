@@ -52,6 +52,7 @@ bool PsxSystem::waitForEvent(u32 handle)
     // If the event is already delivered, return immediately.
     if (m_events.isEventDelivered(handle))
     {
+        (void)m_events.consumeDeliveredEvent(handle);
         m_logger.log(LogLevel::Debug, "bios", "WaitEvent: already delivered");
         return true;
     }
@@ -87,6 +88,7 @@ bool PsxSystem::waitForEvent(u32 handle)
         // Check if delivery happened.
         if (m_events.isEventDelivered(handle))
         {
+            (void)m_events.consumeDeliveredEvent(handle);
             {
                 std::ostringstream msg;
                 msg << "WaitEvent: delivered after " << std::dec << (iteration + 1) << " ticks";

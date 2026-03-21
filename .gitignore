@@ -56,6 +56,7 @@ _deps/
 Testing/
 test_output/
 *.test
+resources/
 
 # Coverage reports
 *.gcov
@@ -81,7 +82,7 @@ core
 *.iso
 *.cue
 *.img
-test_roms/commercial/
+tests/test_roms/commercial/
 examples/demos/toolchains/linux/psn00bsdk/
 
 # Generated code
@@ -103,3 +104,5 @@ docs/latex/
 __pycache__/
 docker-results/
 
+.claude/
+output/

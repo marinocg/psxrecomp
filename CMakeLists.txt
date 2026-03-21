@@ -16,7 +16,7 @@ option(BUILD_CLI "Build psxrecomp CLI" ON)
 option(ENABLE_WARNINGS "Enable compiler warnings" ON)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy during builds" OFF)
 
-# Shared build options (target-scoped)
+#Shared build options(target - scoped)
 add_library(psxrecomp_build_options INTERFACE)
 target_compile_definitions(psxrecomp_build_options INTERFACE
     PSXRECOMP_PROJECT_VERSION="${PROJECT_VERSION}"
@@ -113,6 +113,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_analysis_helpers.cpp
     src/recompiler/pipeline_harvest_internal.cpp
     src/recompiler/pipeline_harvest_helpers.cpp
+    src/recompiler/pipeline_harvest_return_pointer_helpers.cpp
     src/recompiler/pipeline_indirect_call_helpers.cpp
     src/recompiler/pipeline_memory_reference_helpers.cpp
     src/recompiler/pipeline_helpers.cpp
@@ -136,8 +137,13 @@ set(RUNTIME_SOURCES
     src/runtime/cdrom_shared.cpp
     src/runtime/cdrom_core.cpp
     src/runtime/cdrom_commands.cpp
+    src/runtime/cdrom_irq.cpp
+    src/runtime/cdrom_irq_lifecycle.cpp
+    src/runtime/cdrom_sector_loader.cpp
     src/runtime/cdrom_data.cpp
     src/runtime/cdrom_state.cpp
+    src/runtime/cdrom_stream_validator.cpp
+    src/runtime/cdrom_cpu_payload_tracer.cpp
     src/runtime/disc_image.cpp
     src/runtime/cop0.cpp
     src/runtime/callback_trace.cpp
@@ -171,6 +177,7 @@ set(RUNTIME_SOURCES
     src/runtime/psx_system_gpu_wait_trace.cpp
     src/runtime/psx_system_hook_entry_int.cpp
     src/runtime/psx_system_interrupts.cpp
+    src/runtime/psx_system_cdrom_irq.cpp
     src/runtime/psx_system_irq_chains.cpp
     src/runtime/psx_system_bios.cpp
     src/runtime/psx_system_bios_a0.cpp
@@ -186,6 +193,8 @@ set(RUNTIME_SOURCES
     src/runtime/scheduler.cpp
     src/runtime/sio0.cpp
     src/runtime/spu.cpp
+    src/runtime/spu_registers.cpp
+    src/runtime/spu_transfer.cpp
     src/runtime/spu_audio.cpp
     src/runtime/stall_classifier.cpp
     src/runtime/stall_heap_debug.cpp
@@ -197,6 +206,10 @@ set(RUNTIME_SOURCES
     src/runtime/diag_validators.cpp
     src/runtime/diag_boundaries.cpp
     src/runtime/diag_metadata_watch.cpp
+    src/runtime/diag_cdrom_bank_tracer.cpp
+    src/runtime/diag_cdrom_late_buffer_tracker.cpp
+    src/runtime/diag_rev2_decoder_handoff_tracker.cpp
+    src/runtime/diag_rev2_decoder_handoff_tracker_summary.cpp
     src/runtime/json_helpers.cpp
     src/runtime/semantic_audit.cpp
     src/runtime/timers.cpp
@@ -367,10 +380,35 @@ if(BUILD_TESTS)
     )
     target_link_libraries(runtime_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(runtime_ram_mirror_test
+        tests/unit/runtime_ram_mirror_test.cpp
+    )
+    target_link_libraries(runtime_ram_mirror_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mips_unaligned_access_test
+        tests/unit/mips_unaligned_access_test.cpp
+    )
+    target_link_libraries(mips_unaligned_access_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(reversi_1598f0_consumer_test
+        tests/unit/reversi_1598f0_consumer_test.cpp
+    )
+    target_link_libraries(reversi_1598f0_consumer_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(diag_watchpoints_test
         tests/unit/diag_watchpoints_test.cpp
     )
     target_link_libraries(diag_watchpoints_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_tracepoint_registers_test
+        tests/unit/diag_tracepoint_registers_test.cpp
+    )
+    target_link_libraries(diag_tracepoint_registers_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_tracepoint_branch_test
+        tests/unit/diag_tracepoint_branch_test.cpp
+    )
+    target_link_libraries(diag_tracepoint_branch_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(callback_bridge_test
         tests/unit/callback_bridge_test.cpp
@@ -392,6 +430,11 @@ if(BUILD_TESTS)
     )
     target_link_libraries(interrupt_service_context_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(irq_service_split_test
+        tests/unit/irq_service_split_test.cpp
+    )
+    target_link_libraries(irq_service_split_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(cop0_test
         tests/unit/cop0_test.cpp
     )
@@ -406,6 +449,36 @@ if(BUILD_TESTS)
         tests/unit/spu_test.cpp
     )
     target_link_libraries(spu_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_status_test
+        tests/unit/spu_status_test.cpp
+    )
+    target_link_libraries(spu_status_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_transfer_test
+        tests/unit/spu_transfer_test.cpp
+    )
+    target_link_libraries(spu_transfer_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_adpcm_flags_test
+        tests/unit/spu_adpcm_flags_test.cpp
+    )
+    target_link_libraries(spu_adpcm_flags_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_irq_test
+        tests/unit/spu_irq_test.cpp
+    )
+    target_link_libraries(spu_irq_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_init_regs_test
+        tests/unit/spu_init_regs_test.cpp
+    )
+    target_link_libraries(spu_init_regs_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(spu_regression_test
+        tests/unit/spu_regression_test.cpp
+    )
+    target_link_libraries(spu_regression_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(disc_image_test
         tests/unit/disc_image_test.cpp
@@ -437,6 +510,96 @@ if(BUILD_TESTS)
     )
     target_link_libraries(cdrom_state_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(cdrom_bank_irq_test
+        tests/unit/cdrom_bank_irq_test.cpp
+    )
+    target_link_libraries(cdrom_bank_irq_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_bank_trace_test
+        tests/unit/cdrom_bank_trace_test.cpp
+    )
+    target_link_libraries(cdrom_bank_trace_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_host_protocol_test
+        tests/unit/cdrom_host_protocol_test.cpp
+    )
+    target_link_libraries(cdrom_host_protocol_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_drqsts_gate_test
+        tests/unit/cdrom_drqsts_gate_test.cpp
+    )
+    target_link_libraries(cdrom_drqsts_gate_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_dma_force_start_test
+        tests/unit/cdrom_dma_force_start_test.cpp
+    )
+    target_link_libraries(cdrom_dma_force_start_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_sector_advance_test
+        tests/unit/cdrom_sector_advance_test.cpp
+    )
+    target_link_libraries(cdrom_sector_advance_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_sector_phase_test
+        tests/unit/cdrom_sector_phase_test.cpp
+    )
+    target_link_libraries(cdrom_sector_phase_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_accept_source_test
+        tests/unit/cdrom_accept_source_test.cpp
+    )
+    target_link_libraries(cdrom_accept_source_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_xa_classification_test
+        tests/unit/cdrom_xa_classification_test.cpp
+    )
+    target_link_libraries(cdrom_xa_classification_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_xa_mixed_stream_test
+        tests/unit/cdrom_xa_mixed_stream_test.cpp
+    )
+    target_link_libraries(cdrom_xa_mixed_stream_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_xa_sink_test
+        tests/unit/cdrom_xa_sink_test.cpp
+    )
+    target_link_libraries(cdrom_xa_sink_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_adpbusy_test
+        tests/unit/cdrom_adpbusy_test.cpp
+    )
+    target_link_libraries(cdrom_adpbusy_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_cpu_payload_test
+        tests/unit/cdrom_cpu_payload_test.cpp
+    )
+    target_link_libraries(cdrom_cpu_payload_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_cpu_payload_window_test
+        tests/unit/cdrom_cpu_payload_window_test.cpp
+    )
+    target_link_libraries(cdrom_cpu_payload_window_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_eof_completion_test
+        tests/unit/cdrom_eof_completion_test.cpp
+    )
+    target_link_libraries(cdrom_eof_completion_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_irq_lifecycle_test
+        tests/unit/cdrom_irq_lifecycle_test.cpp
+    )
+    target_link_libraries(cdrom_irq_lifecycle_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_int1_eof_boundary_test
+        tests/unit/cdrom_int1_eof_boundary_test.cpp
+    )
+    target_link_libraries(cdrom_int1_eof_boundary_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_mixed_xa_test
+        tests/unit/cdrom_mixed_xa_test.cpp
+    )
+    target_link_libraries(cdrom_mixed_xa_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(sio0_test
         tests/unit/sio0_test.cpp
         tests/unit/sio0_irq_bus_test_sections.cpp
@@ -448,6 +611,16 @@ if(BUILD_TESTS)
     )
     target_link_libraries(stall_classifier_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(diag_cdrom_late_buffer_tracker_test
+        tests/unit/diag_cdrom_late_buffer_tracker_test.cpp
+    )
+    target_link_libraries(diag_cdrom_late_buffer_tracker_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(diag_rev2_decoder_handoff_tracker_test
+        tests/unit/diag_rev2_decoder_handoff_tracker_test.cpp
+    )
+    target_link_libraries(diag_rev2_decoder_handoff_tracker_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(wait_event_test
         tests/unit/wait_event_test.cpp
     )
@@ -458,12 +631,36 @@ if(BUILD_TESTS)
     )
     target_link_libraries(bios_cd_test PRIVATE psxrecomp_runtime)
 
+    add_psxrecomp_unit_test(bios_cd_int1_test
+        tests/unit/bios_cd_int1_test.cpp
+    )
+    target_link_libraries(bios_cd_int1_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_int_promotion_test
+        tests/unit/cdrom_int_promotion_test.cpp
+    )
+    target_link_libraries(cdrom_int_promotion_test PRIVATE psxrecomp_runtime)
+
     add_psxrecomp_unit_test(pipeline_test
         tests/unit/pipeline_test.cpp
         tests/unit/pipeline_test_builders.cpp
         tests/unit/pipeline_test_gap_builders.cpp
     )
     target_link_libraries(pipeline_test
+        PRIVATE
+            psxrecomp_iso
+            psxrecomp_disasm
+            psxrecomp_ir
+            psxrecomp_recompiler
+            psxrecomp_runtime
+    )
+
+    add_psxrecomp_unit_test(pipeline_harvest_regression_test
+        tests/unit/pipeline_harvest_regression_test.cpp
+        tests/unit/pipeline_test_builders.cpp
+        tests/unit/pipeline_test_gap_builders.cpp
+    )
+    target_link_libraries(pipeline_harvest_regression_test
         PRIVATE
             psxrecomp_iso
             psxrecomp_disasm
@@ -527,6 +724,36 @@ if(BUILD_TESTS)
         tests/unit/codegen_debug_test.cpp
     )
     target_link_libraries(codegen_debug_test PRIVATE psxrecomp_recompiler)
+
+    add_psxrecomp_unit_test(change_clear_rcnt_test
+        tests/unit/change_clear_rcnt_test.cpp
+    )
+    target_link_libraries(change_clear_rcnt_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(timer_mode_test
+        tests/unit/timer_mode_test.cpp
+    )
+    target_link_libraries(timer_mode_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(irq_flow_test
+        tests/unit/irq_flow_test.cpp
+    )
+    target_link_libraries(irq_flow_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mdec_test
+        tests/unit/mdec_test.cpp
+    )
+    target_link_libraries(mdec_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mdec_dma_test
+        tests/unit/mdec_dma_test.cpp
+    )
+    target_link_libraries(mdec_dma_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(mdec_lifecycle_test
+        tests/unit/mdec_lifecycle_test.cpp
+    )
+    target_link_libraries(mdec_lifecycle_test PRIVATE psxrecomp_runtime)
 endif()
 
 # Examples

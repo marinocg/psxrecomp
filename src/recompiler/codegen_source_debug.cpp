@@ -154,7 +154,7 @@ void emitGeneratedSourceDebugSupport(CppEmitter& emitter, const ModuleMetadata& 
     emitter.openBlock("");
     emitter.writeLine("return false;");
     emitter.closeBlock();
-    emitter.writeLine("if (physical <= psxrecomp::MemoryMap::RAM_SIZE - sizeof(u32))");
+    emitter.writeLine("if (psxrecomp::runtime::isMainRamAddress(physical, sizeof(u32)))");
     emitter.openBlock("");
     emitter.writeLine("return true;");
     emitter.closeBlock();

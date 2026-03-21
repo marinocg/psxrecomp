@@ -1,5 +1,8 @@
 #pragma once
 
+#include "psxrecomp/runtime/diag_cdrom_bank_tracer.h"
+#include "psxrecomp/runtime/diag_cdrom_late_buffer_tracker.h"
+#include "psxrecomp/runtime/diag_rev2_decoder_handoff_tracker.h"
 #include "psxrecomp/runtime/diag_types.h"
 
 #include <string>
@@ -9,6 +12,8 @@ namespace psxrecomp
 {
 namespace runtime
 {
+
+class Cdrom;
 
 /// Generic device/register explainer that decodes hardware state.
 class DiagExplainerEngine
@@ -33,6 +38,33 @@ class DiagExplainerEngine
 
     /// Decode a DMA channel's control register.
     static std::string explainDmaChannel(u8 port, u32 control);
+
+    /// Return an end-of-run bank-aware CDROM host-interface summary.
+    /// Delegates to the provided tracer's formatSummary().
+    static std::string explainCdromBankSummary(const DiagCdromBankTracer& tracer);
+
+    /// Return an end-of-run XA sector classification and delivery summary.
+    /// Delegates to Cdrom::formatXaClassificationSummary().
+    static std::string explainCdromXaClassification(const Cdrom& cdrom);
+
+    /// Return a post-ReadS XA stream summary scoped to the most recent XA-enabled stream.
+    /// Delegates to Cdrom::formatPostStreamSummary().
+    static std::string explainCdromPostStreamValidator(const Cdrom& cdrom);
+
+    /// Return a per-sector CPU payload breakdown for the rolling last 32 accepted/read ReadS/ReadN
+    /// sectors. Delegates to Cdrom::formatCpuPayloadSummary().
+    static std::string explainCdromCpuPayloadSummary(const Cdrom& cdrom);
+
+    /// Return a raw CD-ROM IRQ lifecycle summary with INT4 publish/ack/redispatch diagnostics.
+    /// Delegates to Cdrom::formatIrqLifecycleSummary().
+    static std::string explainCdromIrqLifecycleSummary(const Cdrom& cdrom);
+
+    /// Return a summary of recent sector-sized CD DMA destinations and later CPU reads.
+    static std::string explainCdromLateBufferSummary(const DiagCdromLateBufferTracker& tracker);
+
+    /// Return the focused Reversi decoder-handoff provenance summary.
+    static std::string
+    explainRev2DecoderHandoffSummary(const DiagRev2DecoderHandoffTracker& tracker);
 
     /// Number of configured explainers.
     size_t explainerCount() const;

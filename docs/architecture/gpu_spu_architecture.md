@@ -154,6 +154,33 @@ flowchart LR
 
 - Parses register writes into structured state changes.
 - Handles voice parameters (volume, pitch, ADSR settings).
+- Preserves SPU MMIO width rules from PSX-SPX: 32-bit accesses are split into
+  two ordered 16-bit register operations, and byte writes only take effect on
+  even register addresses.
+- Models the `SPUCNT`/`SPUSTAT` control handshake: low control bits apply after
+  a delay, `SPUSTAT` reflects applied mode bits plus DMA/busy status, and CPU
+  writes to `SPUSTAT` are ignored.
+- Separates the visible transfer-address register from the internal transfer
+  cursor so `DA6` remains stable while manual and DMA transfers advance through
+  SPU RAM using the PSX-SPX 8-byte address units.
+- Models `DA4` as the SPU IRQ address register and latches the SPU IRQ flag
+  when manual transfer, DMA transfer, or voice ADPCM fetch hits that RAM byte
+  address.
+- Latches `PMON`, `NON`, and `EON` into per-voice state so init code can set up
+  pitch modulation, noise, and reverb masks before deeper SPU features are in
+  use.
+- Treats `ENDX` as computed voice state, not passive register storage: `KON`
+  clears the keyed bits, and ADPCM loop-end completion sets them.
+- Latches ADPCM loop flags per decoded block using the PSX-SPX meanings
+  (`loop-end`, `loop-repeat`, `loop-start`) so repeat-address capture and
+  one-shot versus looping behavior diverge at block end rather than at header
+  fetch time.
+- Exposes the latched SPU IRQ as a level interrupt source in the system layer,
+  with `SPUCNT.bit6` acting as the enable/acknowledge path for
+  `SPUSTAT.bit6`.
+- Uses live runtime state for current ADSR/main-volume readback, and routes CD
+  audio through the delayed `SPUCNT` routing bits so those init-facing controls
+  are no longer inert.
 
 ### 2) SPU State & RAM
 

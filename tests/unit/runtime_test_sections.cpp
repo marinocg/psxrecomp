@@ -344,6 +344,17 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     system.events().closeEvent(irqGateEventHandle);
     system.setCallbackInvoker(psxrecomp::runtime::CallbackInvoker{});
 
+    // Configure SPU for DMA write mode (simulates post-BIOS state):
+    // TransferControl = 0x0004 (normal), Control bits 5:4 = 0b10 (DMA write).
+    const Address spuTransferCtrlAddr =
+        psxrecomp::runtime::Mmio::SPU_BASE +
+        (psxrecomp::runtime::Spu::RegisterMap::TransferControl & 0x1FFu);
+    const Address spuControlAddr = psxrecomp::runtime::Mmio::SPU_BASE +
+                                   (psxrecomp::runtime::Spu::RegisterMap::Control & 0x1FFu);
+    system.writeMmioExplicit<psxrecomp::u16>(spuTransferCtrlAddr, 0x0004u);
+    system.writeMmioExplicit<psxrecomp::u16>(spuControlAddr, 0x8060u);
+    system.tickCpuCycles(0x300u); // wait for control-apply delay
+
     Address spuBase = DmaController::ChannelBase +
                       DmaController::ChannelStride * static_cast<Address>(DmaPort::Spu);
     system.write<psxrecomp::u32>(0x00011000, 0xABCDEF01);
@@ -450,21 +461,22 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     system.writeMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3, 0x07);
     [[maybe_unused]] const psxrecomp::u8 clearedHintStatus =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 3);
-    // ACK clears the current IRQ, but the queued INT2 is not presented until
-    // software drains the preserved response byte from the prior phase.
-    assert((clearedHintStatus & 0x07u) == 0x00u);
+    // ACK clears the current IRQ and immediately promotes the queued INT2.
+    // Any unread response bytes from the prior interrupt are discarded on ACK;
+    // the next interrupt does not wait for them to be manually drained.
+    assert((clearedHintStatus & 0x07u) == 0x02u);
     assert((clearedHintStatus & 0xE0u) == 0xE0u);
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
                                              ~static_cast<psxrecomp::u32>(InterruptLine::Cdrom));
-    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) ==
+    // INT2 is active so syncLevelInterruptSources immediately re-asserts the CDROM bit.
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Cdrom)) !=
            0u);
-
-    setCdromIndex(0);
     [[maybe_unused]] const psxrecomp::u8 statusAfterAckBeforeRead =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
+    // INT2 is now active, so its response byte is in the response FIFO.
     assert((statusAfterAckBeforeRead & (1u << 5)) != 0u);
 
-    // Draining the preserved response exposes the queued INT2.
+    // Drain INT2's response byte; INT2 stays active until acknowledged.
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
     setCdromIndex(1);
     [[maybe_unused]] const psxrecomp::u8 promotedHintStatus =
@@ -479,8 +491,8 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     setCdromIndex(0);
     [[maybe_unused]] const psxrecomp::u8 statusAfterQueuePromote =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);
-    // The promoted INT2 response is still pending at this point.
-    assert((statusAfterQueuePromote & (1u << 5)) != 0u);
+    // INT2's response was already drained above; the response FIFO is now empty.
+    assert((statusAfterQueuePromote & (1u << 5)) == 0u);
     (void)system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 1);
     [[maybe_unused]] const psxrecomp::u8 statusAfterReadingPromotedResponse =
         system.readMmioExplicit<psxrecomp::u8>(psxrecomp::runtime::Mmio::CDROM_BASE + 0);

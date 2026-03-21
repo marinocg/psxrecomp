@@ -11,9 +11,23 @@ namespace psxrecomp
 {
 namespace runtime
 {
-
 namespace
 {
+std::array<u8, 4> getIdRegionString(Disc::Region region)
+{
+    switch (region)
+    {
+    case Disc::Region::Japan:
+        return {'S', 'C', 'E', 'I'};
+    case Disc::Region::Europe:
+        return {'S', 'C', 'E', 'E'};
+    case Disc::Region::NorthAmerica:
+    case Disc::Region::Unknown:
+        return {'S', 'C', 'E', 'A'};
+    }
+    return {'S', 'C', 'E', 'A'};
+}
+
 bool traceCdromEnabled()
 {
     static const bool enabled = []()
@@ -42,13 +56,11 @@ void traceCdrom(const char* fmt, ...)
     std::fputc('\n', stderr);
 }
 } // namespace
-
 bool Cdrom::canExecutePendingCommand() const
 {
     return m_pendingCommand.valid && (m_interruptFlags & 0x07u) == 0u && m_responseFifo.empty() &&
            m_execution.pendingResponseIrqs.empty();
 }
-
 void Cdrom::enqueueCommand(u8 value)
 {
     m_pendingCommand.value = value;
@@ -57,7 +69,6 @@ void Cdrom::enqueueCommand(u8 value)
     m_commandFifo.clear();
     m_execution.currentCommand = value;
 }
-
 void Cdrom::writeCommand(u8 value)
 {
     traceCdrom("writeCommand cmd=0x%02X idx=%u params=%zu irq=0x%02X pending=%zu", value, m_index,
@@ -136,12 +147,45 @@ void Cdrom::executePendingCommand()
         }
         m_execution.motorOn = true;
         m_execution.currentLba = m_execution.nextReadLba;
-        m_execution.readActive = true;
-        m_execution.cyclesUntilSector = CDROM_READ_CYCLES;
+        m_execution.readActive = false;
+        m_execution.seekActive = true;
+        m_execution.cyclesUntilSector = currentReadCycles();
+        m_execution.bufferedInt1Pending = false;
+        m_execution.cyclesUntilBufferedInt1 = 0u;
+        m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
+        finalizeCpuPayloadRecord(false);
+        // PSX-SPX: issuing ReadN/ReadS resets the drive's internal read
+        // pipeline (seek to new Setloc position, discard un-published buffered
+        // sectors) but does NOT invalidate the CPU-visible sector buffer
+        // (m_activeSector) that was published with the most recent INT1.  On
+        // real hardware the game can still accept that data via BFRD=1 / DMA3
+        // after re-issuing ReadN; the buffer is replaced only when the next
+        // INT1 fires with fresh sector data.  Clearing m_activeSector here
+        // breaks games that write BFRD=1 *after* issuing ReadN (a common
+        // pattern where the game issues SetLoc+ReadN to cue the next sector
+        // while draining the current one).
         m_dataFifo.clear();
-        m_activeSector.clear();
-        m_activeSectorOffset = 0;
-        m_dataPadValid = false;
+        m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
+        m_publishedCpuRecord = {};
+        m_publishedCpuRecordValid = false;
+        m_xaPlaybackBusy = false; // PR-RV30: fresh stream; ADPBUSY rises only when XA arrives.
+        m_cpuPayloadCaptureActive = true;
+        if (m_execution.xaStreamingEnabled) // Snapshot counters (PR-RV27).
+        {
+            m_streamStarted = true;
+            m_streamStartXaCount = m_xaDeliveryCount;
+            m_streamStartCpuCount = m_cpuDeliveryCount;
+            m_dataFifoConsumedBytes = 0;
+        }
+        // PSX-SPX: ReadN/ReadS INT3 acknowledgment contains a single stat byte.
         queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
         break;
     case 0x08: // Stop
@@ -149,13 +193,36 @@ void Cdrom::executePendingCommand()
         const u8 firstStat = static_cast<u8>(currentStat() & ~cdrom_detail::STAT_READ_ACTIVE);
         m_execution.readActive = false;
         m_execution.seekActive = false;
+        if (m_xaPlaybackBusy)
+        {
+            m_xaPlaybackBusy = false;
+            m_xaPlaybackBusyFellLba = m_activeLba;
+        }
         m_execution.xaPrevLeft1 = 0;
         m_execution.xaPrevLeft2 = 0;
         m_execution.xaPrevRight1 = 0;
         m_execution.xaPrevRight2 = 0;
+        m_execution.bufferedInt1Pending = false;
+        m_execution.cyclesUntilBufferedInt1 = 0u;
+        m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
+        m_cpuPayloadCaptureActive = false;
+        finalizeCpuPayloadRecord(false);
         m_dataFifo.clear();
+        m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
+        m_drainingSector.clear();
+        m_drainingLba = 0;
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
+        m_publishedCpuRecord = {};
+        m_publishedCpuRecordValid = false;
         m_dataPadValid = false;
         queueInterruptEvent(cdrom_detail::INT3, {firstStat});
         m_execution.motorOn = false;
@@ -166,13 +233,37 @@ void Cdrom::executePendingCommand()
     {
         const u8 firstStat = currentStat();
         m_execution.readActive = false;
+        m_execution.seekActive = false;
+        if (m_xaPlaybackBusy)
+        {
+            m_xaPlaybackBusy = false;
+            m_xaPlaybackBusyFellLba = m_activeLba;
+        }
         m_execution.xaPrevLeft1 = 0;
         m_execution.xaPrevLeft2 = 0;
         m_execution.xaPrevRight1 = 0;
         m_execution.xaPrevRight2 = 0;
+        m_execution.bufferedInt1Pending = false;
+        m_execution.cyclesUntilBufferedInt1 = 0u;
+        m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
+        m_cpuPayloadCaptureActive = false;
+        finalizeCpuPayloadRecord(false);
         m_dataFifo.clear();
+        m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
+        m_drainingSector.clear();
+        m_drainingLba = 0;
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
+        m_publishedCpuRecord = {};
+        m_publishedCpuRecordValid = false;
         m_dataPadValid = false;
         queueInterruptEvent(cdrom_detail::INT3, {firstStat});
         queueInterruptEvent(cdrom_detail::INT2, {currentStat()});
@@ -183,6 +274,8 @@ void Cdrom::executePendingCommand()
         m_execution.motorOn = true;
         m_execution.readActive = false;
         m_execution.seekActive = false;
+        m_xaPlaybackBusy = false;
+        m_cpuPayloadCaptureActive = false;
         m_execution.xaStreamingEnabled = false;
         m_execution.xaFilterEnabled = false;
         m_execution.xaFilterFile = 0;
@@ -193,9 +286,26 @@ void Cdrom::executePendingCommand()
         m_execution.xaPrevLeft2 = 0;
         m_execution.xaPrevRight1 = 0;
         m_execution.xaPrevRight2 = 0;
+        m_execution.bufferedInt1Pending = false;
+        m_execution.cyclesUntilBufferedInt1 = 0u;
+        m_execution.dataEndPending = false;
+        m_eofBoundaryInt1PublishGatePending = false;
+        m_liveInt1AcceptedByBiosAuto = false;
+        finalizeCpuPayloadRecord(false);
         m_dataFifo.clear();
+        m_bufferedReadSectors.clear();
+        m_bufferedInt1Records.clear();
         m_activeSector.clear();
         m_activeSectorOffset = 0;
+        m_drainingSector.clear();
+        m_drainingLba = 0;
+        m_liveInt1RecordValid = false;
+        m_publishedInt1RecordValid = false;
+        m_drainingInt1RecordValid = false;
+        m_loadedInt1Record = {};
+        m_loadedInt1RecordValid = false;
+        m_publishedCpuRecord = {};
+        m_publishedCpuRecordValid = false;
         m_dataPadValid = false;
         queueInterruptEvent(cdrom_detail::INT3, {currentStat()});
         queueInterruptEvent(cdrom_detail::INT2, {currentStat()});
@@ -285,7 +395,10 @@ void Cdrom::executePendingCommand()
         if (discPresent)
         {
             const u8 stat = static_cast<u8>(currentStat() & ~cdrom_detail::STAT_ID_ERROR);
-            queueInterruptEvent(cdrom_detail::INT2, {stat, 0x00, 0x20, 0x00, 'S', 'C', 'E', 'A'});
+            const auto region = (m_disc != nullptr) ? getIdRegionString(m_disc->region())
+                                                    : getIdRegionString(Disc::Region::Unknown);
+            queueInterruptEvent(cdrom_detail::INT2, {stat, 0x00, 0x20, 0x00, region[0], region[1],
+                                                     region[2], region[3]});
         }
         else
         {
@@ -329,13 +442,55 @@ void Cdrom::writeInterruptFlags(u8 value)
                m_execution.pendingResponseIrqs.size());
     const u8 ackMask = static_cast<u8>(value & 0x1Fu);
     const u8 currentType = static_cast<u8>(m_interruptFlags & 0x07u);
+    const bool topLevelIrqBeforeAck = hasIrqRequest();
     if (ackMask != 0 && currentType >= 1u && currentType <= 5u)
     {
         const u8 currentTypeBit = static_cast<u8>(1u << (currentType - 1u));
         if ((ackMask & currentTypeBit) != 0u)
         {
+            IrqLifecycleRecord& lifecycle = m_irqLifecycle[currentType - 1u];
+            ++lifecycle.ackedCount;
             m_interruptFlags = static_cast<u8>(m_interruptFlags & 0xF8u);
+            ++lifecycle.deassertedCount;
+            recordPhaseTrace(m_activeLba, SectorPhaseReason::HclrctlAck);
+            // PSX-SPX: HCLRCTL drains unread result bytes for the acknowledged IRQ.
+            m_responseFifo.clear();
             m_ackResponseFifo.clear();
+            if (currentType == cdrom_detail::INT4)
+            {
+                ++m_int4HclrctlClearCount;
+                if (topLevelIrqBeforeAck && !hasIrqRequest())
+                {
+                    m_int4TopLevelDeassertAfterAck = true;
+                }
+            }
+            else if (currentType == cdrom_detail::INT1)
+            {
+                const bool topLevelCdLineDeasserted = topLevelIrqBeforeAck && !hasIrqRequest();
+                noteAckedInt1Generation(topLevelCdLineDeasserted);
+                m_liveInt1AcceptedByBiosAuto = false;
+            }
+            if (currentType == cdrom_detail::INT1 && shouldGateBufferedInt1AfterAck())
+            {
+                m_eofBoundaryInt1PublishGatePending = true;
+                m_execution.bufferedInt1Pending = false;
+                m_execution.cyclesUntilBufferedInt1 = 0u;
+                m_activeSector.clear();
+                m_activeSectorOffset = 0;
+                m_liveInt1RecordValid = false;
+                m_publishedInt1RecordValid = false;
+                m_drainingInt1RecordValid = false;
+                m_loadedInt1Record = {};
+                m_loadedInt1RecordValid = false;
+            }
+            else if (currentType == cdrom_detail::INT1 && !m_bufferedReadSectors.empty())
+            {
+                scheduleBufferedInt1Promotion();
+            }
+            else if (currentType == cdrom_detail::INT1)
+            {
+                maybeQueueReadEndInterrupt();
+            }
             publishNextInterruptEvent();
             if (canExecutePendingCommand())
             {
@@ -354,18 +509,67 @@ void Cdrom::writeInterruptFlags(u8 value)
 
 void Cdrom::writeRequestControl(u8 value)
 {
+    const u8 oldReq = m_requestControl;
     m_requestControl = static_cast<u8>(value & 0xE0u);
-    traceCdrom("writeRequestControl value=0x%02X req=0x%02X data=%zu active=%zu", value,
-               m_requestControl, m_dataFifo.size(), m_activeSector.size());
-    if ((m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0)
+    traceCdrom("writeRequestControl value=0x%02X req=0x%02X data=%zu published=%zu draining=%zu",
+               value, m_requestControl, m_dataFifo.size(), m_activeSector.size(),
+               m_drainingSector.size());
+
+    const bool bfrdRising = (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+                            (oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0;
+
+    if (bfrdRising)
     {
-        pumpSectorToDataFifo();
+        noteInt1BfrdRiseAfterPublish();
+        if (m_eofBoundaryInt1PublishGatePending)
+        {
+            releaseEofBoundaryInt1PublishGate();
+            return;
+        }
+        // PSX-SPX: setting BFRD arms the current host-visible data phase.
+        // Only the sector published with the most recent INT1 (held in
+        // m_activeSector) is loaded into the data FIFO on the 0→1 edge.
+        // If no INT1 has been published yet m_activeSector is empty and the
+        // FIFO stays empty; the game must wait for the next INT1 before BFRD
+        // can expose any data.  The next buffered sector (m_bufferedReadSectors)
+        // is deliberately NOT touched here — it requires its own INT1 promotion
+        // followed by a fresh BFRD 0→1 write before it becomes readable.
+        acceptPublishedSector(true);
+        // m_activeSector empty → FIFO stays empty; no auto-accept.
+        recordPhaseTrace(!m_drainingSector.empty() ? m_drainingLba : m_activeLba,
+                         SectorPhaseReason::AcceptBfrd);
+        if (!m_dataFifo.empty())
+        {
+            recordPhaseTrace(m_drainingLba, SectorPhaseReason::DrqstsOn);
+        }
     }
+    else if ((oldReq & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) != 0 &&
+             (m_requestControl & cdrom_detail::REQUEST_ENABLE_BUFFER_READ) == 0)
+    {
+        // BFRD cleared (1→0): PSX-SPX specifies that clearing the request bit
+        // discards the data FIFO contents.
+        traceCdrom("writeRequestControl bfrd_clear draining_lba=%u unread=%zu", m_drainingLba,
+                   m_dataFifo.size());
+        finalizeCpuPayloadRecord(false);
+        m_dataFifo.clear();
+        m_drainingSector.clear();
+        m_drainingLba = 0;
+        m_dataPadValid = false;
+        m_phaseFirstCpuReadFired = false;
+        m_phaseFirstDmaFired = false;
+        m_phaseDrainFired = false;
+        m_dataFifoConsumedBytes = 0;
+    }
+    // BFRD 1→1 (re-write while already set): no-op.  The accepted sector is
+    // not re-loaded; FIFO state is unchanged.  If BFRD is held across sectors,
+    // INT1 delivery (publishNextInterruptEvent) reloads the FIFO automatically.
 }
 
 void Cdrom::writeInterruptEnable(u8 value)
 {
     m_interruptEnable = static_cast<u8>(value & 0x1Fu);
+    // DIAG: trace IE changes
+    traceCdrom("writeInterruptEnable value=0x%02X ie=0x%02X", value, m_interruptEnable);
 }
 
 bool Cdrom::hasIrqRequest() const
@@ -377,11 +581,6 @@ bool Cdrom::hasIrqRequest() const
     }
     const u8 currentTypeBit = static_cast<u8>(1u << (currentType - 1u));
     return (m_interruptEnable & currentTypeBit) != 0u;
-}
-
-void Cdrom::pushResponse(u8 value)
-{
-    m_responseFifo.push(value, RESPONSE_CAPACITY);
 }
 
 u8 Cdrom::currentStat() const
@@ -411,9 +610,32 @@ void Cdrom::queueErrorInterrupt(u8 reasonCode)
     traceCdrom("queueErrorInterrupt reason=0x%02X", reasonCode);
     m_execution.readActive = false;
     m_execution.seekActive = false;
+    m_execution.bufferedInt1Pending = false;
+    m_execution.cyclesUntilBufferedInt1 = 0u;
+    m_execution.dataEndPending = false;
+    m_eofBoundaryInt1PublishGatePending = false;
+    m_liveInt1AcceptedByBiosAuto = false;
+    m_cpuPayloadCaptureActive = false;
+    if (m_xaPlaybackBusy)
+    {
+        m_xaPlaybackBusy = false;
+        m_xaPlaybackBusyFellLba = m_execution.currentLba;
+    }
+    finalizeCpuPayloadRecord(false);
     m_dataFifo.clear();
+    m_bufferedReadSectors.clear();
+    m_bufferedInt1Records.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
+    m_drainingSector.clear();
+    m_drainingLba = 0;
+    m_liveInt1RecordValid = false;
+    m_publishedInt1RecordValid = false;
+    m_drainingInt1RecordValid = false;
+    m_loadedInt1Record = {};
+    m_loadedInt1RecordValid = false;
+    m_publishedCpuRecord = {};
+    m_publishedCpuRecordValid = false;
     m_dataPadValid = false;
     const u8 stat = static_cast<u8>(currentStat() | cdrom_detail::STAT_ID_ERROR);
     queueInterruptEvent(cdrom_detail::INT5, {stat, reasonCode, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00});
@@ -426,61 +648,29 @@ void Cdrom::beginDoorOpenTransition(bool closeAfterTransition)
     m_doorCloseCycles = closeAfterTransition ? cdrom_detail::DOOR_CLOSE_TRANSITION_CYCLES : 0;
     m_execution.readActive = false;
     m_execution.seekActive = false;
+    m_execution.bufferedInt1Pending = false;
+    m_execution.cyclesUntilBufferedInt1 = 0u;
+    m_execution.dataEndPending = false;
+    m_eofBoundaryInt1PublishGatePending = false;
+    m_liveInt1AcceptedByBiosAuto = false;
+    m_cpuPayloadCaptureActive = false;
+    m_xaPlaybackBusy = false;
+    finalizeCpuPayloadRecord(false);
     m_dataFifo.clear();
+    m_bufferedReadSectors.clear();
+    m_bufferedInt1Records.clear();
     m_activeSector.clear();
     m_activeSectorOffset = 0;
+    m_drainingSector.clear();
+    m_drainingLba = 0;
+    m_liveInt1RecordValid = false;
+    m_publishedInt1RecordValid = false;
+    m_drainingInt1RecordValid = false;
+    m_loadedInt1Record = {};
+    m_loadedInt1RecordValid = false;
+    m_publishedCpuRecord = {};
+    m_publishedCpuRecordValid = false;
     m_dataPadValid = false;
-}
-
-void Cdrom::queueInterruptEvent(u8 type, std::initializer_list<u8> responses)
-{
-    const u8 irqType = static_cast<u8>(type & 0x07u);
-    if (irqType == 0)
-    {
-        return;
-    }
-
-    if (m_execution.pendingResponseIrqs.size() >= MAX_QUEUED_IRQ_EVENTS)
-    {
-        m_execution.pendingResponseIrqs.pop_front();
-    }
-
-    IrqEvent event;
-    event.type = irqType;
-    event.responses.assign(responses.begin(), responses.end());
-    m_execution.pendingResponseIrqs.push_back(std::move(event));
-    traceCdrom("queueInterruptEvent type=%u responses=%zu pending=%zu", irqType, responses.size(),
-               m_execution.pendingResponseIrqs.size());
-    publishNextInterruptEvent();
-}
-
-void Cdrom::publishNextInterruptEvent()
-{
-    if ((m_interruptFlags & 0x07u) != 0 || !m_responseFifo.empty() ||
-        m_execution.pendingResponseIrqs.empty())
-    {
-        return;
-    }
-
-    IrqEvent event = std::move(m_execution.pendingResponseIrqs.front());
-    m_execution.pendingResponseIrqs.pop_front();
-    m_interruptFlags = static_cast<u8>((m_interruptFlags & 0xF8u) | (event.type & 0x07u));
-    m_responseFifo.clear();
-    for (u8 byte : event.responses)
-    {
-        pushResponse(byte);
-    }
-    if (!event.responses.empty())
-    {
-        traceCdrom("publishNextInterruptEvent type=%u resp=%zu first=0x%02X pending=%zu",
-                   event.type, m_responseFifo.values.size(), event.responses.front(),
-                   m_execution.pendingResponseIrqs.size());
-    }
-    else
-    {
-        traceCdrom("publishNextInterruptEvent type=%u resp=%zu pending=%zu", event.type,
-                   m_responseFifo.values.size(), m_execution.pendingResponseIrqs.size());
-    }
 }
 
 } // namespace runtime

@@ -159,6 +159,31 @@ void KernelEventTable::undeliverEvent(u32 handle)
     }
 }
 
+bool KernelEventTable::hasDeliveredEventForClassSpec(u32 classId, u16 spec) const
+{
+    for (const auto& event : m_events)
+    {
+        if (event.status == EventStatus::Delivered && event.classId == classId &&
+            event.spec == spec)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void KernelEventTable::undeliverByClassSpec(u32 classId, u16 spec)
+{
+    for (auto& event : m_events)
+    {
+        if (event.status == EventStatus::Delivered && event.classId == classId &&
+            event.spec == spec)
+        {
+            event.status = EventStatus::Enabled;
+        }
+    }
+}
+
 const KernelEvent* KernelEventTable::getEvent(u32 handle) const
 {
     const size_t index = handleToIndex(handle);
@@ -177,6 +202,24 @@ bool KernelEventTable::isEventDelivered(u32 handle) const
         return false;
     }
     return m_events[index].status == EventStatus::Delivered;
+}
+
+bool KernelEventTable::consumeDeliveredEvent(u32 handle)
+{
+    const size_t index = handleToIndex(handle);
+    if (index >= MAX_EVENTS)
+    {
+        return false;
+    }
+
+    auto& event = m_events[index];
+    if (event.mode != EventMode::NoCallback || event.status != EventStatus::Delivered)
+    {
+        return false;
+    }
+
+    event.status = EventStatus::Enabled;
+    return true;
 }
 
 u32 KernelEventTable::interruptLineToEventClass(InterruptLine line)

@@ -1,6 +1,7 @@
 #include "psxrecomp/runtime/callback_trace.h"
 
 #include "callback_trace_internal.h"
+#include "psxrecomp/runtime/interrupt_controller.h"
 
 #include <algorithm>
 #include <sstream>
@@ -16,6 +17,8 @@ namespace
 constexpr size_t MAX_RECENT_CALLBACK_ENTRIES = 24;
 constexpr size_t MAX_REGISTER_SUMMARY = 8;
 constexpr size_t MAX_SIGNATURE_SUMMARY = callback_trace_internal::MAX_SIGNATURE_SUMMARY;
+constexpr u8 CDROM_HINT_LOW_MASK = 0x1Fu;
+constexpr u8 CDROM_RAW_IRQ_MASK = 0x07u;
 
 void appendRecentEntry(std::vector<CallbackTraceEntry>& entries, const CallbackTraceEntry& entry)
 {
@@ -62,6 +65,30 @@ std::string joinRegisterNames(const std::vector<std::string>& names)
         os << ",...";
     }
     return os.str();
+}
+
+bool topLevelCdLineActive(u32 irqStatus)
+{
+    return (irqStatus & static_cast<u32>(InterruptLine::Cdrom)) != 0u;
+}
+
+const char* rawCdIrqName(u8 hintStatus)
+{
+    switch (hintStatus & CDROM_RAW_IRQ_MASK)
+    {
+    case 1u:
+        return "INT1";
+    case 2u:
+        return "INT2";
+    case 3u:
+        return "INT3";
+    case 4u:
+        return "INT4";
+    case 5u:
+        return "INT5";
+    default:
+        return "none";
+    }
 }
 
 } // namespace
@@ -111,6 +138,7 @@ void CallbackTraceEngine::reset()
 void CallbackTraceEngine::beginInvocation(Address entryPc, Address descriptorAddress,
                                           Address returnSite, u32 callbackGenerationBefore,
                                           u32 irqStatusBefore, u32 irqMaskBefore,
+                                          u8 cdHintStatusBefore, u8 cdHintMaskBefore,
                                           bool cop0InterruptEligibleBefore)
 {
     ActiveInvocation invocation;
@@ -120,6 +148,8 @@ void CallbackTraceEngine::beginInvocation(Address entryPc, Address descriptorAdd
     invocation.callbackGenerationBefore = callbackGenerationBefore;
     invocation.irqStatusBefore = irqStatusBefore;
     invocation.irqMaskBefore = irqMaskBefore;
+    invocation.cdHintStatusBefore = static_cast<u8>(cdHintStatusBefore & CDROM_HINT_LOW_MASK);
+    invocation.cdHintMaskBefore = static_cast<u8>(cdHintMaskBefore & CDROM_HINT_LOW_MASK);
     invocation.cop0InterruptEligibleBefore = cop0InterruptEligibleBefore;
     m_activeInvocations.push_back(invocation);
 }
@@ -200,7 +230,8 @@ void CallbackTraceEngine::recordCommittedRegisterDelta(const std::array<u32, 32>
 
 void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromException,
                                            u32 callbackGenerationAfter, u32 irqStatusAfter,
-                                           u32 irqMaskAfter, bool cop0InterruptEligibleAfter,
+                                           u32 irqMaskAfter, u8 cdHintStatusAfter,
+                                           u8 cdHintMaskAfter, bool cop0InterruptEligibleAfter,
                                            RuntimeLogger* logger, bool emitLogs)
 {
     if (m_activeInvocations.empty())
@@ -223,6 +254,10 @@ void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromE
     entry.irqMaskBefore = invocation.irqMaskBefore;
     entry.irqStatusAfter = irqStatusAfter;
     entry.irqMaskAfter = irqMaskAfter;
+    entry.cdHintStatusBefore = invocation.cdHintStatusBefore;
+    entry.cdHintMaskBefore = invocation.cdHintMaskBefore;
+    entry.cdHintStatusAfter = static_cast<u8>(cdHintStatusAfter & CDROM_HINT_LOW_MASK);
+    entry.cdHintMaskAfter = static_cast<u8>(cdHintMaskAfter & CDROM_HINT_LOW_MASK);
     entry.cop0InterruptEligibleBefore = invocation.cop0InterruptEligibleBefore;
     entry.cop0InterruptEligibleAfter = cop0InterruptEligibleAfter;
     entry.totalRamWrites = invocation.totalRamWrites;
@@ -297,9 +332,17 @@ void CallbackTraceEngine::finishInvocation(Address exitPc, bool threwReturnFromE
         << " descriptor=0x" << entry.descriptorAddress << " return_site=0x" << entry.returnSite
         << " rfe=" << std::dec << (entry.threwReturnFromException ? 1 : 0)
         << " gen_before=" << entry.callbackGenerationBefore
-        << " gen_after=" << entry.callbackGenerationAfter << std::hex << " irq_before=0x"
-        << entry.irqStatusBefore << "/0x" << entry.irqMaskBefore << " irq_after=0x"
-        << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter << " writes=" << std::dec
+        << " gen_after=" << entry.callbackGenerationAfter << std::hex << " top_level_irq=0x"
+        << entry.irqStatusBefore << "/0x" << entry.irqMaskBefore << " -> 0x" << entry.irqStatusAfter
+        << "/0x" << entry.irqMaskAfter
+        << " top_level_cd_line=" << (topLevelCdLineActive(entry.irqStatusBefore) ? "on" : "off")
+        << "->" << (topLevelCdLineActive(entry.irqStatusAfter) ? "on" : "off")
+        << " raw_cd_irq=" << rawCdIrqName(entry.cdHintStatusBefore) << "->"
+        << rawCdIrqName(entry.cdHintStatusAfter) << " cd_hint=sts=0x"
+        << static_cast<unsigned>(entry.cdHintStatusBefore) << "/msk=0x"
+        << static_cast<unsigned>(entry.cdHintMaskBefore) << " -> sts=0x"
+        << static_cast<unsigned>(entry.cdHintStatusAfter) << "/msk=0x"
+        << static_cast<unsigned>(entry.cdHintMaskAfter) << " writes=" << std::dec
         << entry.totalRamWrites << " persistent_writes=" << entry.persistentRamWrites
         << " stack_writes=" << entry.stackRamWrites << " top_persistent_writes="
         << callback_trace_internal::formatWriteSummary(entry.topPersistentWriteAddresses)
@@ -330,8 +373,16 @@ std::string CallbackTraceEngine::formatRecentCallbacks() const
            << " descriptor=0x" << entry.descriptorAddress << " return_site=0x" << entry.returnSite
            << " rfe=" << std::dec << (entry.threwReturnFromException ? 1 : 0)
            << " gen=" << entry.callbackGenerationBefore << "->" << entry.callbackGenerationAfter
-           << std::hex << " irq=0x" << entry.irqStatusBefore << "/0x" << entry.irqMaskBefore
-           << " -> 0x" << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter << std::dec
+           << std::hex << " top_level_irq=0x" << entry.irqStatusBefore << "/0x"
+           << entry.irqMaskBefore << " -> 0x" << entry.irqStatusAfter << "/0x" << entry.irqMaskAfter
+           << " top_level_cd_line=" << (topLevelCdLineActive(entry.irqStatusBefore) ? "on" : "off")
+           << "->" << (topLevelCdLineActive(entry.irqStatusAfter) ? "on" : "off")
+           << " raw_cd_irq=" << rawCdIrqName(entry.cdHintStatusBefore) << "->"
+           << rawCdIrqName(entry.cdHintStatusAfter) << " cd_hint=sts=0x"
+           << static_cast<unsigned>(entry.cdHintStatusBefore) << "/msk=0x"
+           << static_cast<unsigned>(entry.cdHintMaskBefore) << " -> sts=0x"
+           << static_cast<unsigned>(entry.cdHintStatusAfter) << "/msk=0x"
+           << static_cast<unsigned>(entry.cdHintMaskAfter) << std::dec
            << " cop0=" << (entry.cop0InterruptEligibleBefore ? 1 : 0) << "->"
            << (entry.cop0InterruptEligibleAfter ? 1 : 0) << " writes=" << entry.totalRamWrites
            << " persistent_writes=" << entry.persistentRamWrites
