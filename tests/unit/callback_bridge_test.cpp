@@ -138,6 +138,7 @@ void installHookEntryIntDescriptor(psxrecomp::runtime::PsxSystem& system,
 void triggerVblank(psxrecomp::runtime::PsxSystem& system)
 {
     using psxrecomp::runtime::InterruptLine;
+    system.observeProgramCounter(0x80014000u);
     system.interrupts().writeMask(static_cast<psxrecomp::u32>(InterruptLine::VBlank));
     system.cop0().mtc0(psxrecomp::runtime::Cop0::RegisterIndex::Status, 0x040Bu);
     system.interrupts().raise(InterruptLine::VBlank);

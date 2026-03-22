@@ -19,6 +19,8 @@ namespace EventClass = psxrecomp::runtime::EventClass;
 namespace EventSpec = psxrecomp::runtime::EventSpec;
 
 constexpr u32 kReadCycles = 451584u;
+constexpr u32 kBiosA0BasePc = 0x80017600u;
+constexpr u32 kCdromPumpPc = 0x80017700u;
 
 class FiniteDisc final : public psxrecomp::runtime::Disc
 {
@@ -124,6 +126,7 @@ void testFiniteReadProducesInt4AndStops(u8 command)
 
 void callA0(PsxSystem& system, u32 funcId, u32* regs)
 {
+    system.observeProgramCounter(kBiosA0BasePc + (funcId << 2));
     regs[9] = funcId;
     system.callBiosVector(0xA0, regs, 32);
 }
@@ -133,6 +136,7 @@ bool pumpUntilCdromIrq(PsxSystem& system, u32 maxTicks = 5000)
     for (u32 i = 0; i < maxTicks; ++i)
     {
         system.tickCpuCycles(2048);
+        system.observeProgramCounter(kCdromPumpPc + (i << 2));
         if (system.cdrom().hasIrqRequest())
         {
             system.serviceInterrupts();
@@ -184,11 +188,13 @@ void testPsxSystemDeliversDataEndEvent()
     system.cdrom().writeParam(0x00);
     system.cdrom().writeCommand(0x02);
     assert(system.cdrom().hasIrqRequest());
+    system.observeProgramCounter(0x80017800u);
     system.serviceInterrupts();
     ackSystemCdromIrq(system);
 
     system.cdrom().writeCommand(0x06);
     assert(system.cdrom().hasIrqRequest());
+    system.observeProgramCounter(0x80017804u);
     system.serviceInterrupts();
     ackSystemCdromIrq(system);
 
@@ -205,6 +211,7 @@ void testPsxSystemDeliversDataEndEvent()
     ackSystemCdromIrq(system);
 
     system.tickCpuCycles(kReadCycles * 2u);
+    system.observeProgramCounter(0x80017808u);
     system.serviceInterrupts();
     assert(!system.events().isEventDelivered(dataReadyEvent));
     assert(!system.cdrom().hasIrqRequest());

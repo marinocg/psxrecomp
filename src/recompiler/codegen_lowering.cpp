@@ -348,7 +348,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 }
                 if (instruction.sourceAddress.has_value())
                 {
-                    const Address physical = (*instruction.sourceAddress) & 0x1FFFFFFFu;
+                    const Address architectural = *instruction.sourceAddress;
+                    const Address physical = architectural & 0x1FFFFFFFu;
                     // Open a new guard only when the source address changes
                     // (or no guard is open yet).  This coalesces all IR
                     // instructions from the same MIPS instruction into one
@@ -377,7 +378,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         emitter.writeLine("context.system.setLastResumeAddress(0);");
                         emitter.closeBlock();
                         std::ostringstream pcLine;
-                        pcLine << "setProgramCounter(context, 0x" << std::hex << physical << ");";
+                        pcLine << "setProgramCounter(context, 0x" << std::hex << architectural
+                               << ", 0x" << physical << ");";
                         emitter.writeLine(pcLine.str());
                         emitter.writeLine("instructionGroupWriteMask = 0;");
                         currentGuardAddress = physical;

@@ -49,12 +49,17 @@ CpuBootState makeDefaultCpuBootState()
     constexpr u32 statusIM2Bit = 1u << 10;
 
     CpuBootState state;
+    state.badVaddr = 0u;
     state.status = statusIEcBit | statusIM2Bit;
     state.status &= ~statusKUcBit;
+    state.cause = 0u;
+    state.epc = 0u;
     state.interruptMask =
         static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
         static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2) |
         static_cast<u32>(InterruptLine::Dma);
+    state.architecturalPc = 0u;
+    state.interruptDispatchArmed = false;
     return state;
 }
 
@@ -242,8 +247,7 @@ void PsxSystem::bindGteRuntimeHooks()
 
 void PsxSystem::boot()
 {
-    setCpuExecutionPhase(CpuExecutionPhase::Bootstrapping);
-    applyCpuBootState(makeDefaultCpuBootState());
+    setCpuExecutionPhase(CpuExecutionPhase::BootInitializing);
 
     // PSX-SPX: the kernel initialises DPCR to 0x07654321 which enables all
     // seven DMA channels with ascending priority.  DICR is initialised with
@@ -273,7 +277,7 @@ void PsxSystem::boot()
 
     initializeBiosCdromState(0u);
 
-    setCpuExecutionPhase(CpuExecutionPhase::AwaitingExecutableEntry);
+    applyCpuBootState(makeDefaultCpuBootState());
 
     m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
 
@@ -416,6 +420,8 @@ void PsxSystem::applyCpuBootState(const CpuBootState& state)
     m_interrupts.writeMask(state.interruptMask);
     m_debugOverlay.setLastArchitecturalProgramCounter(state.architecturalPc);
     syncCop0InterruptPending();
+    setCpuExecutionPhase(state.interruptDispatchArmed ? CpuExecutionPhase::Running
+                                                      : CpuExecutionPhase::AwaitingExecutableEntry);
 }
 
 void PsxSystem::noteExecutableEntry(Address pc)
@@ -424,7 +430,8 @@ void PsxSystem::noteExecutableEntry(Address pc)
     {
         m_debugOverlay.setLastArchitecturalProgramCounter(pc);
     }
-    if (m_cpuExecutionPhase == CpuExecutionPhase::AwaitingExecutableEntry)
+    if (m_cpuExecutionPhase == CpuExecutionPhase::AwaitingExecutableEntry &&
+        m_debugOverlay.lastArchitecturalProgramCounter() != 0)
     {
         setCpuExecutionPhase(CpuExecutionPhase::Running);
     }

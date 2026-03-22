@@ -18,6 +18,7 @@ struct CpuBootState
     u32 epc = 0;
     u32 interruptMask = 0;
     u32 architecturalPc = 0;
+    bool interruptDispatchArmed = false;
 };
 
 class Cop0

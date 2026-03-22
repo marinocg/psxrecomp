@@ -23,8 +23,8 @@ const char* cpuExecutionPhaseName(PsxSystem::CpuExecutionPhase phase)
     {
     case PsxSystem::CpuExecutionPhase::Reset:
         return "reset";
-    case PsxSystem::CpuExecutionPhase::Bootstrapping:
-        return "bootstrapping";
+    case PsxSystem::CpuExecutionPhase::BootInitializing:
+        return "boot_initializing";
     case PsxSystem::CpuExecutionPhase::AwaitingExecutableEntry:
         return "awaiting_entry";
     case PsxSystem::CpuExecutionPhase::Running:

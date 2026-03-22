@@ -183,9 +183,11 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeLine("~CycleScope() { try { flushCycles(context); } catch (...) {} }");
     emitter.closeBlock(";");
     emitter.writeBlank();
-    emitter.writeLine("inline void setProgramCounter(RecompilerContext& context, Address pc)");
+    emitter.writeLine("inline void setProgramCounter(RecompilerContext& context,");
+    emitter.writeLine("                              Address architecturalPc, Address observedPc)");
     emitter.openBlock("");
-    emitter.writeLine("context.system.observeProgramCounter(pc, context.regs.data(),");
+    emitter.writeLine(
+        "context.system.observeProgramCounter(architecturalPc, observedPc, context.regs.data(),");
     emitter.writeLine("                                  context.regs.size());");
     emitter.writeBlank();
     emitter.writeLine("static uint64_t stepCount = 0;");
@@ -203,7 +205,12 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.writeLine("std::ostringstream stream;");
     emitter.writeLine(
         "stream << \"Step budget exhausted after \" << stepCount << \" steps at PC 0x\";");
-    emitter.writeLine("stream << std::hex << pc << \"\\n\";");
+    emitter.writeLine("stream << std::hex << architecturalPc;");
+    emitter.writeLine("if (architecturalPc != observedPc)");
+    emitter.openBlock("");
+    emitter.writeLine("stream << \" (observed 0x\" << observedPc << \")\";");
+    emitter.closeBlock();
+    emitter.writeLine("stream << \"\\n\";");
     emitter.writeLine("stream << context.system.stallClassifier().classify();");
     emitter.writeLine("stream << context.system.diagTracepoints().formatRecentTraces();");
     emitter.writeLine("if (context.system.diagWatchpoints().eventCount() > 0)");
@@ -291,10 +298,10 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.closeBlock();
     emitter.writeLine("return 0;");
     emitter.closeBlock("();");
-    emitter.writeLine("if (breakPc != 0 && pc == breakPc)");
+    emitter.writeLine("if (breakPc != 0 && architecturalPc == breakPc)");
     emitter.openBlock("");
     emitter.writeLine("std::ostringstream stream;");
-    emitter.writeLine("stream << \"Breakpoint hit at PC 0x\" << std::hex << pc;");
+    emitter.writeLine("stream << \"Breakpoint hit at PC 0x\" << std::hex << architecturalPc;");
     emitter.writeLine("throw std::runtime_error(stream.str());");
     emitter.closeBlock();
     emitter.writeBlank();
@@ -304,6 +311,18 @@ void emitRuntimeExecutionHelpers(CppEmitter& emitter)
     emitter.openBlock("");
     emitter.writeLine("flushCycles(context);");
     emitter.closeBlock();
+    emitter.closeBlock();
+    emitter.writeBlank();
+    emitter.writeLine("inline bool jumpIntrinsic(runtime::PsxSystem& system, Address address, "
+                      "std::array<u32, Registers::NUM_REGISTERS>& regs)");
+    emitter.openBlock("");
+    emitter.writeLine("Address physical = address & 0x1FFFFFFF;");
+    emitter.writeLine("if (physical == 0xA0 || physical == 0xB0 || physical == 0xC0)");
+    emitter.openBlock("");
+    emitter.writeLine("system.callBiosVector(physical, regs.data(), regs.size());");
+    emitter.writeLine("return true;");
+    emitter.closeBlock();
+    emitter.writeLine("return false;");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline bool callIntrinsic(runtime::PsxSystem& system, Address address, "

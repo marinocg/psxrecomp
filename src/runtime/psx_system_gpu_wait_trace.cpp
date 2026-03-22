@@ -7,13 +7,20 @@ namespace runtime
 
 void PsxSystem::observeProgramCounter(Address pc, const u32* regs, size_t regCount)
 {
-    m_debugOverlay.setLastObservedProgramCounter(pc);
-    noteExecutableEntry(pc);
-    m_stallClassifier.recordPc(pc);
-    m_diagRev2DecoderHandoffTracker.observePc(pc, regs, regCount, *this, &m_logger);
-    m_diagTracepoints.observePc(pc, m_lastResumeAddress, callbackContextCommitGeneration(),
-                                m_interrupts.readStatus(), m_interrupts.readMask(), regs, regCount,
-                                this, &m_logger);
+    observeProgramCounter(pc, pc, regs, regCount);
+}
+
+void PsxSystem::observeProgramCounter(Address architecturalPc, Address observedPc, const u32* regs,
+                                      size_t regCount)
+{
+    m_debugOverlay.setLastArchitecturalProgramCounter(architecturalPc);
+    m_debugOverlay.setLastObservedProgramCounter(observedPc);
+    noteExecutableEntry(architecturalPc);
+    m_stallClassifier.recordPc(observedPc);
+    m_diagRev2DecoderHandoffTracker.observePc(architecturalPc, regs, regCount, *this, &m_logger);
+    m_diagTracepoints.observePc(architecturalPc, m_lastResumeAddress,
+                                callbackContextCommitGeneration(), m_interrupts.readStatus(),
+                                m_interrupts.readMask(), regs, regCount, this, &m_logger);
 }
 
 } // namespace runtime

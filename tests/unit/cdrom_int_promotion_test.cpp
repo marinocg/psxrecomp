@@ -49,11 +49,13 @@ class TestDisc : public psxrecomp::runtime::Disc
 void callA0(PsxSystem& system, u32 funcId, u32* regs)
 {
     regs[9] = funcId;
+    system.observeProgramCounter(0x80017400u + (funcId << 2));
     system.callBiosVector(0xA0, regs, 32);
 }
 
 bool pumpUntilCdromIrq(PsxSystem& system, u32 maxTicks = 50000)
 {
+    system.observeProgramCounter(0x80017500u);
     for (u32 i = 0; i < maxTicks; ++i)
     {
         system.tickCpuCycles(2048);

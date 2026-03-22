@@ -131,6 +131,7 @@ void serviceInterruptsLikeGenerated(psxrecomp::runtime::PsxSystem& system, Callb
     const psxrecomp::u32 interruptCallbackCommitGeneration =
         system.callbackContextCommitGeneration();
 
+    system.observeProgramCounter(0x80014100u);
     system.serviceInterrupts();
 
     if (system.callbackContextCommitGeneration() != interruptCallbackCommitGeneration)
@@ -146,6 +147,7 @@ void triggerVblank(psxrecomp::runtime::PsxSystem& system)
     using psxrecomp::runtime::Cop0;
     using psxrecomp::runtime::InterruptLine;
 
+    system.observeProgramCounter(0x80014104u);
     system.interrupts().writeMask(static_cast<psxrecomp::u32>(InterruptLine::VBlank));
     system.cop0().mtc0(Cop0::RegisterIndex::Status, 0x040Bu);
     system.interrupts().raise(InterruptLine::VBlank);

@@ -177,6 +177,7 @@ void runBiosVectorOutputTests()
         system.interrupts().writeMask(system.interrupts().readMask() |
                                       static_cast<u32>(InterruptLine::Cdrom));
         system.cdrom().writeCommand(0x01); // Getstat -> raw INT3 / CommandAck
+        system.observeProgramCounter(0x80018000u);
         system.serviceInterrupts();
 
         assert(callbackInvoked);

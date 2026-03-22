@@ -58,7 +58,7 @@ class PsxSystem
     enum class CpuExecutionPhase
     {
         Reset,
-        Bootstrapping,
+        BootInitializing,
         AwaitingExecutableEntry,
         Running,
     };
@@ -317,6 +317,8 @@ class PsxSystem
 
     /// Record the current recompiled program counter and run targeted diagnostics.
     void observeProgramCounter(Address pc, const u32* regs = nullptr, size_t regCount = 0);
+    void observeProgramCounter(Address architecturalPc, Address observedPc, const u32* regs,
+                               size_t regCount);
     Address architecturalProgramCounter() const;
     CpuExecutionPhase cpuExecutionPhase() const;
 

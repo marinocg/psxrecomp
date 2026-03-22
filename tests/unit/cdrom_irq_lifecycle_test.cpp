@@ -25,6 +25,8 @@ namespace EventSpec = psxrecomp::runtime::EventSpec;
 constexpr u32 kReadCycles = 451584u;
 constexpr u32 kDataEndCallback = 0x80012000u;
 constexpr u32 kDmaToRam = 0x01000200u;
+constexpr u32 kBiosA0BasePc = 0x80017900u;
+constexpr u32 kCdromPumpPc = 0x80017A00u;
 
 Address dmaBase(DmaPort port)
 {
@@ -191,6 +193,7 @@ void assertContains(const std::string& text, const std::string& needle)
 
 void callA0(PsxSystem& system, u32 funcId, u32* regs)
 {
+    system.observeProgramCounter(kBiosA0BasePc + (funcId << 2));
     regs[9] = funcId;
     system.callBiosVector(0xA0, regs, 32);
 }
@@ -200,6 +203,7 @@ bool pumpUntilCdromIrq(PsxSystem& system, u32 maxTicks = 5000)
     for (u32 i = 0; i < maxTicks; ++i)
     {
         system.tickCpuCycles(2048);
+        system.observeProgramCounter(kCdromPumpPc + (i << 2));
         if (system.cdrom().hasIrqRequest())
         {
             system.serviceInterrupts();
@@ -357,7 +361,9 @@ void testStuckUnackedInt4ReportsRedispatch()
     assert(irqType(system.cdrom()) == 0x04);
     assert(callbackCount == 1u);
 
+    system.observeProgramCounter(0x80017B00u);
     system.serviceInterrupts();
+    system.observeProgramCounter(0x80017B04u);
     system.serviceInterrupts();
     assert(callbackCount == 1u);
 
@@ -407,6 +413,7 @@ void testPublishAckRepublishDeliversOncePerGeneration()
     assert(pumpUntilCdromIrq(system, 5000));
     assert(irqType(system.cdrom()) == 0x04);
     assert(callbackCount == 1u);
+    system.observeProgramCounter(0x80017B10u);
     system.serviceInterrupts();
     assert(callbackCount == 1u);
     ackCdrom(system.cdrom());
@@ -425,6 +432,7 @@ void testPublishAckRepublishDeliversOncePerGeneration()
     assert(pumpUntilCdromIrq(system, 5000));
     assert(irqType(system.cdrom()) == 0x04);
     assert(callbackCount == 2u);
+    system.observeProgramCounter(0x80017B14u);
     system.serviceInterrupts();
     assert(callbackCount == 2u);
     ackCdrom(system.cdrom());

@@ -239,10 +239,10 @@ int main()
             throw std::runtime_error("failed to initialize architectural pc test system");
         }
 
-        architecturalPcSystem.observeProgramCounter(0x80020000u);
-        architecturalPcSystem.debugOverlay().setLastProgramCounter(0xDEADBEEFu);
+        architecturalPcSystem.observeProgramCounter(0x80020000u, 0x00020000u, nullptr, 0);
         assert(architecturalPcSystem.architecturalProgramCounter() == 0x80020000u);
-        assert(architecturalPcSystem.debugOverlay().lastProgramCounter() == 0xDEADBEEFu);
+        assert(architecturalPcSystem.debugOverlay().lastProgramCounter() == 0x00020000u);
+        assert(architecturalPcSystem.debugOverlay().lastObservedProgramCounter() == 0x00020000u);
         assert(architecturalPcSystem.debugOverlay().lastArchitecturalProgramCounter() ==
                0x80020000u);
 

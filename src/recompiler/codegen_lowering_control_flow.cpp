@@ -35,6 +35,28 @@ std::optional<std::string> controlFlowTakenTargetLiteral(const ir::Instruction& 
     return std::nullopt;
 }
 
+void emitExternalJumpTransfer(const std::string& targetExpr, const std::string& sourcePc,
+                              CppEmitter& emitter)
+{
+    emitter.openBlock("if (jumpIntrinsic(context.system, " + targetExpr + ", context.regs))");
+    emitter.writeLine("return true;");
+    emitter.closeBlock();
+    emitter.openBlock("if (!jumpRecompiledFunction(context, " + targetExpr + "))");
+    emitter.writeLine("failUnsupportedJump(" + targetExpr + ", " + sourcePc + ");");
+    emitter.closeBlock();
+    emitter.writeLine("return true;");
+}
+
+void emitExternalCallTransfer(const std::string& targetExpr, const std::string& sourcePc,
+                              CppEmitter& emitter)
+{
+    emitter.openBlock("if (!callIntrinsic(context.system, " + targetExpr + ", context.regs))");
+    emitter.openBlock("if (!callRecompiledFunction(context, " + targetExpr + "))");
+    emitter.writeLine("failUnsupportedCall(context, " + targetExpr + ", " + sourcePc + ");");
+    emitter.closeBlock();
+    emitter.closeBlock();
+}
+
 void emitBranchSuccessorTransfer(const std::string& successorName,
                                  const std::optional<std::string>& externalTarget,
                                  const std::string& sourcePc,
@@ -52,10 +74,7 @@ void emitBranchSuccessorTransfer(const std::string& successorName,
 
     if (successorName == "block_external" && externalTarget.has_value())
     {
-        emitter.openBlock("if (!jumpRecompiledFunction(context, " + *externalTarget + "))");
-        emitter.writeLine("failUnsupportedJump(" + *externalTarget + ", " + sourcePc + ");");
-        emitter.closeBlock();
-        emitter.writeLine("return true;");
+        emitExternalJumpTransfer(*externalTarget, sourcePc, emitter);
         return;
     }
 
@@ -66,10 +85,7 @@ void emitBranchSuccessorTransfer(const std::string& successorName,
         std::ostringstream targetStream;
         targetStream << "0x" << std::hex << targetAddress;
         const std::string targetLiteral = targetStream.str();
-        emitter.openBlock("if (!jumpRecompiledFunction(context, " + targetLiteral + "))");
-        emitter.writeLine("failUnsupportedJump(" + targetLiteral + ", " + sourcePc + ");");
-        emitter.closeBlock();
-        emitter.writeLine("return true;");
+        emitExternalJumpTransfer(targetLiteral, sourcePc, emitter);
         return;
     }
 
@@ -112,14 +128,7 @@ void emitRegisterJumpTransfer(const DeferredControlTransfer& transfer,
     emitter.closeBlock();
     emitter.closeBlock();
 
-    emitter.openBlock("if (!callIntrinsic(context.system, " + transfer.targetExpr +
-                      ", context.regs))");
-    emitter.openBlock("if (!jumpRecompiledFunction(context, " + transfer.targetExpr + "))");
-    emitter.writeLine("failUnsupportedJump(" + transfer.targetExpr + ", " + transfer.sourcePcExpr +
-                      ");");
-    emitter.closeBlock();
-    emitter.closeBlock();
-    emitter.writeLine("return true;");
+    emitExternalJumpTransfer(transfer.targetExpr, transfer.sourcePcExpr, emitter);
 }
 
 void emitAddressJumpTransfer(const DeferredControlTransfer& transfer,
@@ -131,14 +140,7 @@ void emitAddressJumpTransfer(const DeferredControlTransfer& transfer,
         const std::string successor = resolveBlockId(transfer.successors.front(), blockNames);
         if (successor.find("block_external") != std::string::npos)
         {
-            emitter.openBlock("if (!callIntrinsic(context.system, " + transfer.targetExpr +
-                              ", context.regs))");
-            emitter.openBlock("if (!jumpRecompiledFunction(context, " + transfer.targetExpr + "))");
-            emitter.writeLine("failUnsupportedJump(" + transfer.targetExpr + ", " +
-                              transfer.sourcePcExpr + ");");
-            emitter.closeBlock();
-            emitter.closeBlock();
-            emitter.writeLine("return true;");
+            emitExternalJumpTransfer(transfer.targetExpr, transfer.sourcePcExpr, emitter);
             return;
         }
 
@@ -155,13 +157,7 @@ void emitCallTransfer(const DeferredControlTransfer& transfer, CppEmitter& emitt
 {
     emitter.writeLine("traceInterestingCallsite(context, " + transfer.targetExpr + ", " +
                       transfer.sourcePcExpr + ", false);");
-    emitter.openBlock("if (!callIntrinsic(context.system, " + transfer.targetExpr +
-                      ", context.regs))");
-    emitter.openBlock("if (!callRecompiledFunction(context, " + transfer.targetExpr + "))");
-    emitter.writeLine("failUnsupportedCall(context, " + transfer.targetExpr + ", " +
-                      transfer.sourcePcExpr + ");");
-    emitter.closeBlock();
-    emitter.closeBlock();
+    emitExternalCallTransfer(transfer.targetExpr, transfer.sourcePcExpr, emitter);
     emitter.writeLine("traceInterestingCallsite(context, " + transfer.targetExpr + ", " +
                       transfer.sourcePcExpr + ", true);");
 }
@@ -415,12 +411,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             emitter.closeBlock();
 
             emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
-            emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
-            emitter.openBlock("if (!jumpRecompiledFunction(context, " + target + "))");
-            emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
-            emitter.closeBlock();
-            emitter.closeBlock();
-            emitter.writeLine("return true;");
+            emitExternalJumpTransfer(target, sourcePc, emitter);
         }
         else if (!block.successors.empty())
         {
@@ -432,13 +423,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 std::string target = valueToExpr(instruction.inputs.front(), context);
                 std::string sourcePc = controlFlowSourcePcExpr(instruction);
                 emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
-                emitter.openBlock("if (!callIntrinsic(context.system, " + target +
-                                  ", context.regs))");
-                emitter.openBlock("if (!jumpRecompiledFunction(context, " + target + "))");
-                emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
-                emitter.closeBlock();
-                emitter.closeBlock();
-                emitter.writeLine("return true;");
+                emitExternalJumpTransfer(target, sourcePc, emitter);
             }
             else
             {
@@ -457,11 +442,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             emitter.writeLine("traceInterestingCallsite(context, " + target + ", " + sourcePc +
                               ", false);");
             emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
-            emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
-            emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
-            emitter.writeLine("failUnsupportedCall(context, " + target + ", " + sourcePc + ");");
-            emitter.closeBlock();
-            emitter.closeBlock();
+            emitExternalCallTransfer(target, sourcePc, emitter);
             emitter.writeLine("traceInterestingCallsite(context, " + target + ", " + sourcePc +
                               ", true);");
         }

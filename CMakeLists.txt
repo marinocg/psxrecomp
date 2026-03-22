@@ -342,6 +342,16 @@ if(BUILD_TESTS)
                 PSXRECOMP_TEST_CXX="${CMAKE_CXX_COMPILER}"
     )
 
+    add_psxrecomp_unit_test(strict_addr_errors_codegen_test
+        tests/unit/strict_addr_errors_codegen_test.cpp
+    )
+    target_link_libraries(strict_addr_errors_codegen_test PRIVATE psxrecomp_recompiler)
+
+    add_psxrecomp_unit_test(control_flow_jump_semantics_test
+        tests/unit/control_flow_jump_semantics_test.cpp
+    )
+    target_link_libraries(control_flow_jump_semantics_test PRIVATE psxrecomp_recompiler)
+
     add_psxrecomp_unit_test(mips_ir_builder_test
         tests/unit/mips_ir_builder_test.cpp
     )

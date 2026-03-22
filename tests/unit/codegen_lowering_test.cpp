@@ -457,19 +457,18 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "jump_reg_fallback_module");
 
-        const std::string intrinsicProbe =
-            "if (!callIntrinsic(context.system, context.regs[Registers::T1], "
-            "context.regs))";
         const std::string recompiledProbe =
             "if (!jumpRecompiledFunction(context, context.regs[Registers::T1]))";
         const std::string failProbe =
             "failUnsupportedJump(context.regs[Registers::T1], 0x80090000);";
         const std::string retireProbe = "finishLoadDelayCycle(context, instructionGroupWriteMask);";
 
-        assert(source.find(intrinsicProbe) != std::string::npos);
         assert(source.find(recompiledProbe) != std::string::npos);
         assert(source.find(failProbe) != std::string::npos);
-        assert(source.find(retireProbe) < source.find(intrinsicProbe));
+        assert(source.find(
+                   "callIntrinsic(context.system, context.regs[Registers::T1], context.regs)") ==
+               std::string::npos);
+        assert(source.find(retireProbe) < source.find(recompiledProbe));
 
         std::cerr << "[PASS] register JUMP fallback to jump dispatch\n";
     }
@@ -507,6 +506,29 @@ int main()
         assert(source.find(retireProbe, source.find(traceProbe)) < source.find(intrinsicProbe));
 
         std::cerr << "[PASS] CALL retires pending load before dispatch\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10b: PC observation preserves architectural and observed addresses
+    // separately when source addresses live in a cached segment.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_program_counter_provenance", 0x80010000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(Opcode::NOP, {}, {}, 0x80010000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010004));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "pc_provenance_module");
+
+        assert(source.find("setProgramCounter(context, 0x80010000, 0x10000);") !=
+               std::string::npos);
+
+        std::cerr << "[PASS] setProgramCounter keeps architectural and observed PCs separate\n";
     }
 
     // ---------------------------------------------------------------

@@ -274,6 +274,11 @@ void runCodegenCompileHarnessTest(psxrecomp::recompiler::CodeGenerator& generato
            "m_overlay.setLastArchitecturalProgramCounter(pc); "
            "m_overlay.setLastObservedProgramCounter(pc); m_stallClassifier.recordPc(pc); }\n";
     runtimeHeader
+        << "    void observeProgramCounter(Address architecturalPc, Address observedPc, const "
+           "u32* = nullptr, std::size_t = 0) { m_overlay.setLastArchitecturalProgramCounter("
+           "architecturalPc); m_overlay.setLastObservedProgramCounter(observedPc); "
+           "m_stallClassifier.recordPc(observedPc); }\n";
+    runtimeHeader
         << "    void setLastResumeAddress(Address address) { m_lastResumeAddress = address; }\n";
     runtimeHeader << "    Address lastResumeAddress() const { return m_lastResumeAddress; }\n";
     runtimeHeader << "    std::string describeBiosCdromState() const { return {}; }\n";
@@ -337,6 +342,9 @@ void runCodegenCompileHarnessTest(psxrecomp::recompiler::CodeGenerator& generato
     harnessFile << "#include \"module.h\"\n";
     harnessFile << "#include <array>\n";
     harnessFile << "#include <stdexcept>\n";
+    harnessFile << "#ifndef PSXRECOMP_STRICT_ADDR_ERRORS\n";
+    harnessFile << "#define PSXRECOMP_STRICT_ADDR_ERRORS 1\n";
+    harnessFile << "#endif\n";
     harnessFile << "int main() {\n";
     harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
     harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
@@ -377,15 +385,15 @@ void runCodegenCompileHarnessTest(psxrecomp::recompiler::CodeGenerator& generato
     }
     assert(compileStatus == 0);
 
-    const auto strictExePath = outputDir / "harness_strict.out";
-    std::string strictCommand =
-        baseCompileCommand + " -DPSXRECOMP_STRICT_ADDR_ERRORS=1 -o " + quote(strictExePath);
-    int strictCompileStatus = std::system(strictCommand.c_str());
-    if (strictCompileStatus != 0)
+    const auto relaxedExePath = outputDir / "harness_relaxed.out";
+    std::string relaxedCommand =
+        baseCompileCommand + " -DPSXRECOMP_STRICT_ADDR_ERRORS=0 -o " + quote(relaxedExePath);
+    int relaxedCompileStatus = std::system(relaxedCommand.c_str());
+    if (relaxedCompileStatus != 0)
     {
-        std::cerr << "Strict compile failed with status: " << strictCompileStatus << "\n";
+        std::cerr << "Relaxed compile failed with status: " << relaxedCompileStatus << "\n";
     }
-    assert(strictCompileStatus == 0);
+    assert(relaxedCompileStatus == 0);
 
     std::string runCommand = quote(exePath);
     int runStatus = std::system(runCommand.c_str());
@@ -395,13 +403,13 @@ void runCodegenCompileHarnessTest(psxrecomp::recompiler::CodeGenerator& generato
     }
     assert(runStatus == 0);
 
-    std::string strictRunCommand = quote(strictExePath);
-    int strictRunStatus = std::system(strictRunCommand.c_str());
-    if (strictRunStatus != 0)
+    std::string relaxedRunCommand = quote(relaxedExePath);
+    int relaxedRunStatus = std::system(relaxedRunCommand.c_str());
+    if (relaxedRunStatus != 0)
     {
-        std::cerr << "Strict run failed with status: " << strictRunStatus << "\n";
+        std::cerr << "Relaxed run failed with status: " << relaxedRunStatus << "\n";
     }
-    assert(strictRunStatus == 0);
+    assert(relaxedRunStatus == 0);
 
     runCodegenCop2GuardTest(generator, outputDir, repoRoot, compiler);
     runCodegenLoadDelayHarnessTest(generator, outputDir, repoRoot, compiler);
