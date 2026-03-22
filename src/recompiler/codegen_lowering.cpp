@@ -384,8 +384,6 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         emitter.writeLine("instructionGroupWriteMask = 0;");
                         currentGuardAddress = physical;
                         inResumeGuard = true;
-                        currentGuardWriteMask = 0;
-                        currentGuardRetired = false;
                     }
 
                     size_t groupEnd = instructionIndex + 1;
@@ -435,7 +433,6 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                                 continue;
                             }
                             branchWriteMask |= instructionGprWriteMask(groupInstruction);
-                            currentGuardWriteMask = branchWriteMask;
                             emitMaskLiteral(branchWriteMask);
                             emitInstruction(groupInstruction, block, blockNames, context, emitter);
                         }
@@ -464,7 +461,6 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                                 continue;
                             }
                             delaySlotWriteMask |= instructionGprWriteMask(groupInstruction);
-                            currentGuardWriteMask = delaySlotWriteMask;
                             emitMaskLiteral(delaySlotWriteMask);
                             emitInstruction(groupInstruction, block, blockNames, context, emitter);
                         }
@@ -479,7 +475,6 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         emitDeferredControlTransfer(*context.deferredTransfer, block, blockNames,
                                                     emitter);
                         context.deferredTransfer.reset();
-                        currentGuardWriteMask = 0;
                         currentGuardRetired = true;
                         instructionIndex = groupEnd;
                         continue;
@@ -487,6 +482,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
 
                     context.deferControlTransfers = false;
                     context.deferredTransfer.reset();
+                    u32 groupWriteMask = 0;
                     for (size_t groupIndex = instructionIndex; groupIndex < groupEnd; ++groupIndex)
                     {
                         const auto& groupInstruction = block.instructions[groupIndex];
@@ -494,10 +490,11 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         {
                             continue;
                         }
-                        currentGuardWriteMask |= instructionGprWriteMask(groupInstruction);
-                        emitMaskLiteral(currentGuardWriteMask);
+                        groupWriteMask |= instructionGprWriteMask(groupInstruction);
+                        emitMaskLiteral(groupWriteMask);
                         emitInstruction(groupInstruction, block, blockNames, context, emitter);
                     }
+                    currentGuardWriteMask = groupWriteMask;
                     currentGuardRetired = false;
                     instructionIndex = groupEnd;
                     continue;
