@@ -376,6 +376,13 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "jump_external_module");
 
+        const std::string retireProbe =
+            "finishLoadDelayCycle(context, instructionGroupWriteMask);";
+        const std::string intrinsicLower =
+            "if (!callIntrinsic(context.system, 0x800a0100, context.regs))";
+        const std::string intrinsicUpper =
+            "if (!callIntrinsic(context.system, 0x800A0100, context.regs))";
+
         assert(
             source.find("if (!jumpRecompiledFunction(context, 0x800a0100))") != std::string::npos ||
             source.find("if (!jumpRecompiledFunction(context, 0x800A0100))") != std::string::npos);
@@ -383,6 +390,14 @@ int main()
         assert(source.find("callRecompiledFunction(context, 0x800A0100)") == std::string::npos);
         assert(source.find("failUnsupportedJump(0x800a0100, 0x800a0000);") != std::string::npos ||
                source.find("failUnsupportedJump(0x800A0100, 0x800A0000);") != std::string::npos);
+        if (source.find(intrinsicLower) != std::string::npos)
+        {
+            assert(source.find(retireProbe) < source.find(intrinsicLower));
+        }
+        if (source.find(intrinsicUpper) != std::string::npos)
+        {
+            assert(source.find(retireProbe) < source.find(intrinsicUpper));
+        }
 
         std::cerr << "[PASS] address jump external path uses jump semantics\n";
     }
@@ -450,12 +465,50 @@ int main()
             "if (!jumpRecompiledFunction(context, context.regs[Registers::T1]))";
         const std::string failProbe =
             "failUnsupportedJump(context.regs[Registers::T1], 0x80090000);";
+        const std::string retireProbe =
+            "finishLoadDelayCycle(context, instructionGroupWriteMask);";
 
         assert(source.find(intrinsicProbe) != std::string::npos);
         assert(source.find(recompiledProbe) != std::string::npos);
         assert(source.find(failProbe) != std::string::npos);
+        assert(source.find(retireProbe) < source.find(intrinsicProbe));
 
         std::cerr << "[PASS] register JUMP fallback to jump dispatch\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10b: CALL retires pending loads before entering callees.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_call_retire_before_dispatch", 0x80092000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(
+            builder.makeInstruction(Opcode::CALL, {Value::makeRegister(4)}, {}, 0x80092000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80092004));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "call_retire_before_dispatch_module");
+
+        const std::string traceProbe =
+            "traceInterestingCallsite(context, context.regs[Registers::A0], 0x80092000, false);";
+        const std::string retireProbe =
+            "finishLoadDelayCycle(context, instructionGroupWriteMask);";
+        const std::string intrinsicProbe =
+            "if (!callIntrinsic(context.system, context.regs[Registers::A0], context.regs))";
+        const std::string recompiledProbe =
+            "if (!callRecompiledFunction(context, context.regs[Registers::A0]))";
+
+        assert(source.find(traceProbe) != std::string::npos);
+        assert(source.find(retireProbe, source.find(traceProbe)) != std::string::npos);
+        assert(source.find(intrinsicProbe) != std::string::npos);
+        assert(source.find(recompiledProbe) != std::string::npos);
+        assert(source.find(retireProbe, source.find(traceProbe)) < source.find(intrinsicProbe));
+
+        std::cerr << "[PASS] CALL retires pending load before dispatch\n";
     }
 
     // ---------------------------------------------------------------

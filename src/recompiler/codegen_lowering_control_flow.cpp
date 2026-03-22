@@ -151,12 +151,12 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             emitter.closeBlock();
             emitter.closeBlock();
 
+            emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.openBlock("if (!jumpRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.closeBlock();
-            emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
             emitter.writeLine("return true;");
         }
         else if (!block.successors.empty())
@@ -174,13 +174,13 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
                     sourcePc = sourceStream.str();
                 }
+                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.openBlock("if (!callIntrinsic(context.system, " + target +
                                   ", context.regs))");
                 emitter.openBlock("if (!jumpRecompiledFunction(context, " + target + "))");
                 emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
                 emitter.closeBlock();
                 emitter.closeBlock();
-                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.writeLine("return true;");
             }
             else
@@ -205,6 +205,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             }
             emitter.writeLine("traceInterestingCallsite(context, " + target + ", " + sourcePc +
                               ", false);");
+            emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
             emitter.openBlock("if (!callIntrinsic(context.system, " + target + ", context.regs))");
             emitter.openBlock("if (!callRecompiledFunction(context, " + target + "))");
             emitter.writeLine("failUnsupportedCall(context, " + target + ", " + sourcePc + ");");
