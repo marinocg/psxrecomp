@@ -294,6 +294,13 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         return;
     }
     case disasm::Opcode::JR:
+    {
+        Value jumpTarget = Value::makeRegister(instr.rs);
+        if (!instr.isReturn())
+        {
+            jumpTarget = m_builder.createTemporary();
+            emit(Opcode::MOVE, {Value::makeRegister(instr.rs)}, {jumpTarget});
+        }
         if (delaySlot != nullptr)
         {
             translateNoDelay(*delaySlot, instr.address);
@@ -304,17 +311,22 @@ void MipsIrTranslator::translateWithDelay(const disasm::Instruction& instr,
         }
         else
         {
-            emit(Opcode::JUMP, {Value::makeRegister(instr.rs)}, {});
+            emit(Opcode::JUMP, {jumpTarget}, {});
         }
         return;
+    }
     case disasm::Opcode::JALR:
+    {
+        Value callTarget = m_builder.createTemporary();
+        emit(Opcode::MOVE, {Value::makeRegister(instr.rs)}, {callTarget});
         emitLinkRegister(instr.rd == Registers::ZERO ? Registers::RA : instr.rd);
         if (delaySlot != nullptr)
         {
             translateNoDelay(*delaySlot, instr.address);
         }
-        emit(Opcode::CALL, {Value::makeRegister(instr.rs)}, {});
+        emit(Opcode::CALL, {callTarget}, {});
         return;
+    }
     default:
         translateNoDelay(instr);
         return;

@@ -1,12 +1,14 @@
 #include "psxrecomp/recompiler/codegen.h"
 
 #include "codegen_helpers.h"
+#include "codegen_lowering_detail.h"
 #include "codegen_lowering_helpers.h"
 
 #include <algorithm>
 #include <cctype>
 #include <optional>
 #include <sstream>
+#include <stdexcept>
 #include <unordered_set>
 
 namespace psxrecomp
@@ -315,11 +317,33 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             bool inResumeGuard = false;
             std::optional<Address> currentGuardAddress;
             u32 currentGuardWriteMask = 0;
+            bool currentGuardRetired = false;
             emitter.writeLine("u32 instructionGroupWriteMask = 0;");
-            for (const auto& instruction : block.instructions)
+            auto emitMaskLiteral = [&](u32 mask)
             {
+                std::ostringstream maskLiteral;
+                maskLiteral << "0x" << std::hex << mask << "u";
+                emitter.writeLine("instructionGroupWriteMask = " + maskLiteral.str() + ";");
+            };
+            auto isControlTransferInstruction = [](const ir::Instruction& instruction)
+            {
+                switch (instruction.opcode)
+                {
+                case ir::Opcode::BRANCH:
+                case ir::Opcode::JUMP:
+                case ir::Opcode::CALL:
+                case ir::Opcode::RETURN:
+                    return true;
+                default:
+                    return false;
+                }
+            };
+            for (size_t instructionIndex = 0; instructionIndex < block.instructions.size();)
+            {
+                const auto& instruction = block.instructions[instructionIndex];
                 if (instruction.opcode == ir::Opcode::PHI)
                 {
+                    ++instructionIndex;
                     continue;
                 }
                 if (instruction.sourceAddress.has_value())
@@ -335,10 +359,13 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                     {
                         if (inResumeGuard)
                         {
-                            std::ostringstream maskLiteral;
-                            maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
-                            emitter.writeLine("finishLoadDelayCycle(context, " + maskLiteral.str() +
-                                              ");");
+                            if (!currentGuardRetired)
+                            {
+                                std::ostringstream maskLiteral;
+                                maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
+                                emitter.writeLine("finishLoadDelayCycle(context, " +
+                                                  maskLiteral.str() + ");");
+                            }
                             emitter.closeBlock();
                         }
                         std::ostringstream addrLiteral;
@@ -356,15 +383,119 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         currentGuardAddress = physical;
                         inResumeGuard = true;
                         currentGuardWriteMask = 0;
+                        currentGuardRetired = false;
                     }
-                    currentGuardWriteMask |= instructionGprWriteMask(instruction);
+
+                    size_t groupEnd = instructionIndex + 1;
+                    while (groupEnd < block.instructions.size())
                     {
-                        std::ostringstream maskLiteral;
-                        maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
-                        emitter.writeLine("instructionGroupWriteMask = " + maskLiteral.str() +
-                                          ";");
+                        const auto& candidate = block.instructions[groupEnd];
+                        if (candidate.opcode == ir::Opcode::PHI)
+                        {
+                            ++groupEnd;
+                            continue;
+                        }
+                        if (candidate.sourceAddress.has_value() &&
+                            (((*candidate.sourceAddress) & 0x1FFFFFFFu) != physical))
+                        {
+                            break;
+                        }
+                        ++groupEnd;
                     }
-                    emitInstruction(instruction, block, blockNames, context, emitter);
+
+                    bool hasDelaySlot = false;
+                    bool hasControlTransfer = false;
+                    for (size_t groupIndex = instructionIndex; groupIndex < groupEnd; ++groupIndex)
+                    {
+                        const auto& groupInstruction = block.instructions[groupIndex];
+                        if (groupInstruction.opcode == ir::Opcode::PHI)
+                        {
+                            continue;
+                        }
+                        hasDelaySlot |= instructionIsInDelaySlot(groupInstruction);
+                        hasControlTransfer |= isControlTransferInstruction(groupInstruction);
+                    }
+
+                    if (hasDelaySlot && hasControlTransfer)
+                    {
+                        u32 branchWriteMask = 0;
+                        u32 delaySlotWriteMask = 0;
+                        context.deferControlTransfers = true;
+                        context.deferredTransfer.reset();
+
+                        for (size_t groupIndex = instructionIndex; groupIndex < groupEnd; ++groupIndex)
+                        {
+                            const auto& groupInstruction = block.instructions[groupIndex];
+                            if (groupInstruction.opcode == ir::Opcode::PHI ||
+                                instructionIsInDelaySlot(groupInstruction))
+                            {
+                                continue;
+                            }
+                            branchWriteMask |= instructionGprWriteMask(groupInstruction);
+                            currentGuardWriteMask = branchWriteMask;
+                            emitMaskLiteral(branchWriteMask);
+                            emitInstruction(groupInstruction, block, blockNames, context, emitter);
+                        }
+
+                        if (!context.deferredTransfer.has_value())
+                        {
+                            throw std::runtime_error(
+                                "Delayed control-transfer group lowered without a transfer");
+                        }
+
+                        {
+                            std::ostringstream maskLiteral;
+                            maskLiteral << "0x" << std::hex << branchWriteMask << "u";
+                            emitter.writeLine("finishLoadDelayCycle(context, " + maskLiteral.str() +
+                                              ");");
+                        }
+
+                        context.deferControlTransfers = false;
+                        for (size_t groupIndex = instructionIndex; groupIndex < groupEnd; ++groupIndex)
+                        {
+                            const auto& groupInstruction = block.instructions[groupIndex];
+                            if (groupInstruction.opcode == ir::Opcode::PHI ||
+                                !instructionIsInDelaySlot(groupInstruction))
+                            {
+                                continue;
+                            }
+                            delaySlotWriteMask |= instructionGprWriteMask(groupInstruction);
+                            currentGuardWriteMask = delaySlotWriteMask;
+                            emitMaskLiteral(delaySlotWriteMask);
+                            emitInstruction(groupInstruction, block, blockNames, context, emitter);
+                        }
+
+                        {
+                            std::ostringstream maskLiteral;
+                            maskLiteral << "0x" << std::hex << delaySlotWriteMask << "u";
+                            emitter.writeLine("finishLoadDelayCycle(context, " + maskLiteral.str() +
+                                              ");");
+                        }
+
+                        emitDeferredControlTransfer(*context.deferredTransfer, block, blockNames,
+                                                    emitter);
+                        context.deferredTransfer.reset();
+                        currentGuardWriteMask = 0;
+                        currentGuardRetired = true;
+                        instructionIndex = groupEnd;
+                        continue;
+                    }
+
+                    context.deferControlTransfers = false;
+                    context.deferredTransfer.reset();
+                    for (size_t groupIndex = instructionIndex; groupIndex < groupEnd; ++groupIndex)
+                    {
+                        const auto& groupInstruction = block.instructions[groupIndex];
+                        if (groupInstruction.opcode == ir::Opcode::PHI)
+                        {
+                            continue;
+                        }
+                        currentGuardWriteMask |= instructionGprWriteMask(groupInstruction);
+                        emitMaskLiteral(currentGuardWriteMask);
+                        emitInstruction(groupInstruction, block, blockNames, context, emitter);
+                    }
+                    currentGuardRetired = false;
+                    instructionIndex = groupEnd;
                     continue;
                 }
                 // Instructions without a source address belong to the
@@ -372,16 +503,17 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 // current resume guard so they are correctly skipped when
                 // execution is resumed past their owning source address.
                 currentGuardWriteMask |= instructionGprWriteMask(instruction);
-                {
-                    std::ostringstream maskLiteral;
-                    maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
-                    emitter.writeLine("instructionGroupWriteMask = " + maskLiteral.str() + ";");
-                }
+                emitMaskLiteral(currentGuardWriteMask);
                 emitInstruction(instruction, block, blockNames, context, emitter);
+                currentGuardRetired = false;
+                ++instructionIndex;
             }
             if (inResumeGuard)
             {
-                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
+                if (!currentGuardRetired)
+                {
+                    emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
+                }
                 emitter.closeBlock();
             }
             if (block.instructions.empty() ||

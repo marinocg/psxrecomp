@@ -512,6 +512,63 @@ int main()
     }
 
     // ---------------------------------------------------------------
+    // Test 10c: Delayed control transfers retire once before the slot and
+    // once after the slot before dispatching the transfer.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_delay_slot_retirement_split", 0x800103f4);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::LOAD, {Value::makeAddress(0x1f800100)}, {Value::makeRegister(2)},
+            0x800103f4, std::string("lw $v0, 92($sp)"), 0x800103f4));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::MOVE, {Value::makeImmediate(0x80010400)}, {Value::makeRegister(31)},
+            0x800103f8, std::string("jal 0x80011338"), 0x800103f8));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(19960)},
+            {Value::makeRegister(5)}, 0x800103f8, std::string("addiu $a1, $v0, 19960"),
+            0x800103fc));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::CALL, {Value::makeAddress(0x80011338)}, {}, 0x800103f8,
+            std::string("jal 0x80011338"), 0x800103f8));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010400));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "delay_slot_split_module");
+
+        const auto guardPos =
+            source.find("if (resumeAddress == 0 || resumeAddress == 0x103f8)");
+        const auto raWritePos =
+            source.find("context.regs[Registers::RA] = -2147417088;", guardPos);
+        const auto slotPos =
+            source.find("context.regs[Registers::A1] = context.regs[Registers::V0] + 19960;",
+                        guardPos);
+        const auto callTracePos =
+            source.find("traceInterestingCallsite(context, 0x80011338, 0x800103f8, false);",
+                        guardPos);
+        const std::string retirePrefix = "finishLoadDelayCycle(context, ";
+        const auto firstRetirePos = source.find(retirePrefix, guardPos);
+        const auto secondRetirePos = source.find(retirePrefix, firstRetirePos + 1);
+
+        assert(guardPos != std::string::npos);
+        assert(raWritePos != std::string::npos);
+        assert(slotPos != std::string::npos);
+        assert(callTracePos != std::string::npos);
+        assert(firstRetirePos != std::string::npos);
+        assert(secondRetirePos != std::string::npos);
+        assert(raWritePos < firstRetirePos);
+        assert(firstRetirePos < slotPos);
+        assert(slotPos < secondRetirePos);
+        assert(secondRetirePos < callTracePos);
+
+        std::cerr << "[PASS] delayed control transfer retires before and after delay slot\n";
+    }
+
+    // ---------------------------------------------------------------
     // Test 10: Unaligned merge ops lower to dedicated helpers.
     {
         Program program;

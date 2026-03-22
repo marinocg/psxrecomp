@@ -16,11 +16,32 @@ namespace psxrecomp
 namespace recompiler
 {
 
+enum class DeferredControlTransferKind
+{
+    Branch,
+    RegisterJump,
+    AddressJump,
+    Call,
+    Return
+};
+
+struct DeferredControlTransfer
+{
+    DeferredControlTransferKind kind;
+    std::string conditionExpr;
+    std::string targetExpr;
+    std::string sourcePcExpr;
+    std::optional<std::string> takenTargetLiteral;
+    std::vector<std::string> successors;
+};
+
 struct LoweringContext
 {
     std::map<u32, std::string> temporaries;
     bool generateComments = true;
     bool enableOptimizations = true;
+    bool deferControlTransfers = false;
+    std::optional<DeferredControlTransfer> deferredTransfer;
 };
 
 std::string valueToExpr(const ir::Value& value, LoweringContext& context);
@@ -43,6 +64,14 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
 bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
                                 const std::unordered_map<std::string, std::string>& blockNames,
                                 LoweringContext& context, CppEmitter& emitter);
+std::optional<DeferredControlTransfer>
+buildDeferredControlTransfer(const ir::Instruction& instruction, const ir::BasicBlock& block,
+                             const std::unordered_map<std::string, std::string>& blockNames,
+                             LoweringContext& context);
+void emitDeferredControlTransfer(const DeferredControlTransfer& transfer,
+                                 const ir::BasicBlock& block,
+                                 const std::unordered_map<std::string, std::string>& blockNames,
+                                 CppEmitter& emitter);
 bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir::BasicBlock& block,
                                     const std::unordered_map<std::string, std::string>& blockNames,
                                     LoweringContext& context, CppEmitter& emitter);

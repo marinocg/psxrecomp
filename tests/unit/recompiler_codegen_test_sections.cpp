@@ -525,44 +525,218 @@ void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& genera
     using psxrecomp::ir::Value;
     auto quote = [](const std::filesystem::path& path)
     { return std::string("\"") + path.string() + "\""; };
+    auto emitAsmInstruction = [&](Builder& irBuilder, Opcode opcode, std::vector<Value> inputs,
+                                  std::vector<Value> outputs, psxrecomp::Address sourceAddress,
+                                  psxrecomp::Address sourceAsmAddress, const char* sourceAsm)
+    {
+        return irBuilder.makeInstruction(opcode, std::move(inputs), std::move(outputs),
+                                         sourceAddress, std::string(sourceAsm),
+                                         sourceAsmAddress);
+    };
 
     Program program;
     Builder builder(program);
-    auto& function = builder.createFunction("load_delay_func", 0x80030000);
-    auto& entry = builder.createBlock(function, "entry");
+    auto& driver = builder.createFunction("load_delay_driver", 0x8002F000);
+    auto& driverEntry = builder.createBlock(driver, "entry");
 
-    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(5)},
-                                                         {Value::makeRegister(2)}, 0x80030000));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x100)},
-                                                         {Value::makeRegister(2)}, 0x80030004));
-    entry.instructions.push_back(
-        builder.makeInstruction(Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(1)},
-                                {Value::makeRegister(3)}, 0x80030008));
-    entry.instructions.push_back(builder.makeInstruction(
-        Opcode::STORE, {Value::makeAddress(0x104), Value::makeRegister(3)}, {}, 0x8003000C));
-    entry.instructions.push_back(builder.makeInstruction(
-        Opcode::STORE, {Value::makeAddress(0x108), Value::makeRegister(2)}, {}, 0x80030010));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x10C)},
-                                                         {Value::makeRegister(2)}, 0x80030014));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(7)},
-                                                         {Value::makeRegister(2)}, 0x80030018));
-    entry.instructions.push_back(builder.makeInstruction(
-        Opcode::STORE, {Value::makeAddress(0x110), Value::makeRegister(2)}, {}, 0x8003001C));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(0)},
-                                                         {Value::makeRegister(4)}, 0x80030020));
-    entry.instructions.push_back(
-        builder.makeInstruction(Opcode::LOAD_LEFT,
-                                {Value::makeAddress(0x123), Value::makeRegister(4)},
-                                {Value::makeRegister(4)}, 0x80030024));
-    entry.instructions.push_back(
-        builder.makeInstruction(Opcode::LOAD_RIGHT,
-                                {Value::makeAddress(0x120), Value::makeRegister(4)},
-                                {Value::makeRegister(4)}, 0x80030028));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(1)},
-                                                         {Value::makeRegister(5)}, 0x8003002C));
-    entry.instructions.push_back(builder.makeInstruction(
-        Opcode::STORE, {Value::makeAddress(0x124), Value::makeRegister(4)}, {}, 0x80030030));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030034));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030000)}, {}, 0x8002F000));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030100)}, {}, 0x8002F004));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030300)}, {}, 0x8002F008));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030400)}, {}, 0x8002F00C));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030500)}, {}, 0x8002F010));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030600)}, {}, 0x8002F014));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030800)}, {}, 0x8002F018));
+    driverEntry.instructions.push_back(
+        builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80030900)}, {}, 0x8002F01C));
+    driverEntry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x8002F020));
+
+    auto& immediateFunction = builder.createFunction("load_delay_func", 0x80030000);
+    auto& immediateEntry = builder.createBlock(immediateFunction, "entry");
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(5)}, {Value::makeRegister(2)}, 0x80030000));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD, {Value::makeAddress(0x100)}, {Value::makeRegister(2)}, 0x80030004));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(1)}, {Value::makeRegister(3)},
+        0x80030008));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x200), Value::makeRegister(3)}, {}, 0x8003000C));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x204), Value::makeRegister(2)}, {}, 0x80030010));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD, {Value::makeAddress(0x120)}, {Value::makeRegister(2)}, 0x80030014));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(7)}, {Value::makeRegister(2)}, 0x80030018));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x208), Value::makeRegister(2)}, {}, 0x8003001C));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(0)}, {Value::makeRegister(4)}, 0x80030020));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD_LEFT, {Value::makeAddress(0x143), Value::makeRegister(4)},
+        {Value::makeRegister(4)}, 0x80030024));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD_RIGHT, {Value::makeAddress(0x140), Value::makeRegister(4)},
+        {Value::makeRegister(4)}, 0x80030028));
+    immediateEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x20C), Value::makeRegister(4)}, {}, 0x8003002C));
+    immediateEntry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030030));
+
+    auto& callTarget = builder.createFunction("call_target", 0x80030200);
+    auto& callTargetEntry = builder.createBlock(callTarget, "entry");
+    callTargetEntry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030200));
+
+    auto& callDelayFunction = builder.createFunction("call_delay_func", 0x80030100);
+    auto& callDelayEntry = builder.createBlock(callDelayFunction, "entry");
+    callDelayEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD, {Value::makeAddress(0x108)}, {Value::makeRegister(2)}, 0x80030100));
+    callDelayEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::MOVE, {Value::makeImmediate(0x8003010C)}, {Value::makeRegister(31)},
+        0x80030104, 0x80030104, "jal 0x80030200"));
+    callDelayEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(16)},
+        {Value::makeRegister(5)}, 0x80030104, 0x80030108, "addiu $a1, $v0, 16"));
+    callDelayEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::CALL, {Value::makeAddress(0x80030200)}, {}, 0x80030104, 0x80030104,
+        "jal 0x80030200"));
+    callDelayEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x210), Value::makeRegister(5)}, {}, 0x8003010C));
+    callDelayEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x214), Value::makeRegister(31)}, {}, 0x80030110));
+    callDelayEntry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030114));
+
+    auto& branchTakenFunction = builder.createFunction("branch_taken_delay_func", 0x80030300);
+    auto& branchTakenEntry = builder.createBlock(branchTakenFunction, "entry");
+    auto& branchTakenBlock = builder.createBlock(branchTakenFunction, "taken");
+    auto& branchTakenElse = builder.createBlock(branchTakenFunction, "fallthrough");
+    Value branchTakenCond = builder.createTemporary();
+    branchTakenEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD, {Value::makeAddress(0x10C)}, {Value::makeRegister(2)}, 0x80030300));
+    branchTakenEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(1)}, {branchTakenCond}, 0x80030304));
+    branchTakenEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(2)},
+        {Value::makeRegister(5)}, 0x80030308, 0x8003030C, "addiu $a1, $v0, 2"));
+    branchTakenEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::BRANCH, {branchTakenCond, Value::makeAddress(0x80030320)}, {},
+        0x80030308, 0x80030308, "beq $at, $zero, 0x80030320"));
+    branchTakenEntry.successors = {"taken", "fallthrough"};
+    branchTakenBlock.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x218), Value::makeRegister(5)}, {}, 0x80030320));
+    branchTakenBlock.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030324));
+    branchTakenElse.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x218), Value::makeImmediate(0xDEADu)}, {},
+        0x80030328));
+    branchTakenElse.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x8003032C));
+
+    auto& branchNotTakenFunction =
+        builder.createFunction("branch_not_taken_delay_func", 0x80030400);
+    auto& branchNotTakenEntry = builder.createBlock(branchNotTakenFunction, "entry");
+    auto& branchNotTakenTaken = builder.createBlock(branchNotTakenFunction, "taken");
+    auto& branchNotTakenElse = builder.createBlock(branchNotTakenFunction, "fallthrough");
+    Value branchNotTakenCond = builder.createTemporary();
+    branchNotTakenEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD, {Value::makeAddress(0x110)}, {Value::makeRegister(2)}, 0x80030400));
+    branchNotTakenEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(0)}, {branchNotTakenCond}, 0x80030404));
+    branchNotTakenEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(3)},
+        {Value::makeRegister(6)}, 0x80030408, 0x8003040C, "addiu $a2, $v0, 3"));
+    branchNotTakenEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::BRANCH, {branchNotTakenCond, Value::makeAddress(0x80030420)}, {},
+        0x80030408, 0x80030408, "beq $zero, $at, 0x80030420"));
+    branchNotTakenEntry.successors = {"taken", "fallthrough"};
+    branchNotTakenTaken.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x21C), Value::makeImmediate(0xBEEFu)}, {},
+        0x80030420));
+    branchNotTakenTaken.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030424));
+    branchNotTakenElse.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x21C), Value::makeRegister(6)}, {}, 0x80030428));
+    branchNotTakenElse.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x8003042C));
+
+    auto& jumpRegFunction = builder.createFunction("jump_reg_delay_func", 0x80030500);
+    auto& jumpRegEntry = builder.createBlock(jumpRegFunction, "entry");
+    auto& jumpRegTarget = builder.createBlock(jumpRegFunction, "block_0x80030520");
+    jumpRegEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD, {Value::makeAddress(0x114)}, {Value::makeRegister(2)}, 0x80030500));
+    jumpRegEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(0x80030520)}, {Value::makeRegister(8)}, 0x80030504));
+    jumpRegEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(5)},
+        {Value::makeRegister(9)}, 0x80030508, 0x8003050C, "addiu $t1, $v0, 5"));
+    jumpRegEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::JUMP, {Value::makeRegister(8)}, {}, 0x80030508, 0x80030508,
+        "jr $t0"));
+    jumpRegTarget.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x220), Value::makeRegister(9)}, {}, 0x80030520));
+    jumpRegTarget.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030524));
+
+    auto& callRegTarget = builder.createFunction("call_reg_target", 0x80030700);
+    auto& callRegTargetEntry = builder.createBlock(callRegTarget, "entry");
+    callRegTargetEntry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030700));
+
+    auto& callRegFunction = builder.createFunction("call_reg_delay_func", 0x80030600);
+    auto& callRegEntry = builder.createBlock(callRegFunction, "entry");
+    callRegEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::LOAD, {Value::makeAddress(0x118)}, {Value::makeRegister(2)}, 0x80030600));
+    callRegEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(0x80030700)}, {Value::makeRegister(8)}, 0x80030604));
+    callRegEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::MOVE, {Value::makeImmediate(0x80030610)}, {Value::makeRegister(31)},
+        0x80030608, 0x80030608, "jalr $t0"));
+    callRegEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(6)},
+        {Value::makeRegister(16)}, 0x80030608, 0x8003060C, "addiu $s0, $v0, 6"));
+    callRegEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::CALL, {Value::makeRegister(8)}, {}, 0x80030608, 0x80030608,
+        "jalr $t0"));
+    callRegEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x224), Value::makeRegister(16)}, {}, 0x80030610));
+    callRegEntry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030614));
+
+    auto& slotLoadFunction = builder.createFunction("delay_slot_load_func", 0x80030800);
+    auto& slotLoadEntry = builder.createBlock(slotLoadFunction, "entry");
+    auto& slotLoadTarget = builder.createBlock(slotLoadFunction, "target");
+    Value slotLoadCond = builder.createTemporary();
+    slotLoadEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(7)}, {Value::makeRegister(2)}, 0x80030800));
+    slotLoadEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(1)}, {slotLoadCond}, 0x80030804));
+    slotLoadEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::LOAD, {Value::makeAddress(0x130)}, {Value::makeRegister(2)},
+        0x80030808, 0x8003080C, "lw $v0, 0x130($zero)"));
+    slotLoadEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::BRANCH, {slotLoadCond, Value::makeAddress(0x80030820)}, {},
+        0x80030808, 0x80030808, "beq $at, $zero, 0x80030820"));
+    slotLoadEntry.successors = {"target", "target"};
+    slotLoadTarget.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x228), Value::makeRegister(2)}, {}, 0x80030820));
+    slotLoadTarget.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x22C), Value::makeRegister(2)}, {}, 0x80030824));
+    slotLoadTarget.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030828));
+
+    auto& cop0DelayFunction = builder.createFunction("cop0_delay_func", 0x80030900);
+    auto& cop0DelayEntry = builder.createBlock(cop0DelayFunction, "entry");
+    cop0DelayEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::COP0_MFC, {Value::makeImmediate(12)}, {Value::makeRegister(2)}, 0x80030900));
+    cop0DelayEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::MOVE, {Value::makeImmediate(0x8003090C)}, {Value::makeRegister(31)},
+        0x80030904, 0x80030904, "jal 0x80030200"));
+    cop0DelayEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(4)},
+        {Value::makeRegister(7)}, 0x80030904, 0x80030908, "addiu $a3, $v0, 4"));
+    cop0DelayEntry.instructions.push_back(emitAsmInstruction(
+        builder, Opcode::CALL, {Value::makeAddress(0x80030200)}, {}, 0x80030904, 0x80030904,
+        "jal 0x80030200"));
+    cop0DelayEntry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x230), Value::makeRegister(7)}, {}, 0x8003090C));
+    cop0DelayEntry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030910));
 
     const std::string header = generator.generateHeader(program, "load_delay_module");
     const std::string source = generator.generateSource(program, "load_delay_module");
@@ -619,27 +793,64 @@ void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& genera
     harnessFile << "  const psxrecomp::u32 firstLoadValue = 42u;\n";
     harnessFile << "  const psxrecomp::u32 secondLoadValue = 99u;\n";
     harnessFile << "  const psxrecomp::u32 mergeValue = 0x11223344u;\n";
+    harnessFile << "  const psxrecomp::u32 callLoadValue = 0x1000u;\n";
+    harnessFile << "  const psxrecomp::u32 branchTakenValue = 0x2000u;\n";
+    harnessFile << "  const psxrecomp::u32 branchNotTakenValue = 0x3000u;\n";
+    harnessFile << "  const psxrecomp::u32 jumpRegValue = 0x4000u;\n";
+    harnessFile << "  const psxrecomp::u32 callRegValue = 0x5000u;\n";
+    harnessFile << "  const psxrecomp::u32 delaySlotLoadValue = 55u;\n";
+    harnessFile << "  const psxrecomp::u32 cop0Value = 0x6000u;\n";
     harnessFile << "  std::memcpy(ram.data() + 0x100, &firstLoadValue, sizeof(firstLoadValue));\n";
-    harnessFile
-        << "  std::memcpy(ram.data() + 0x10C, &secondLoadValue, sizeof(secondLoadValue));\n";
-    harnessFile << "  std::memcpy(ram.data() + 0x120, &mergeValue, sizeof(mergeValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x108, &callLoadValue, sizeof(callLoadValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x10C, &branchTakenValue, sizeof(branchTakenValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x110, &branchNotTakenValue, sizeof(branchNotTakenValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x114, &jumpRegValue, sizeof(jumpRegValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x118, &callRegValue, sizeof(callRegValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x120, &secondLoadValue, sizeof(secondLoadValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x140, &mergeValue, sizeof(mergeValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x130, &delaySlotLoadValue, sizeof(delaySlotLoadValue));\n";
     harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
+    harnessFile << "  system.cop0().mtc0(12, cop0Value);\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
     harnessFile << "  psxrecomp::u32 delaySlotValue = 0;\n";
     harnessFile << "  psxrecomp::u32 committedLoadValue = 0;\n";
     harnessFile << "  psxrecomp::u32 canceledLoadValue = 0;\n";
     harnessFile << "  psxrecomp::u32 mergedLoadValue = 0;\n";
-    harnessFile << "  std::memcpy(&delaySlotValue, ram.data() + 0x104, sizeof(delaySlotValue));\n";
-    harnessFile
-        << "  std::memcpy(&committedLoadValue, ram.data() + 0x108, sizeof(committedLoadValue));\n";
-    harnessFile
-        << "  std::memcpy(&canceledLoadValue, ram.data() + 0x110, sizeof(canceledLoadValue));\n";
-    harnessFile << "  std::memcpy(&mergedLoadValue, ram.data() + 0x124, sizeof(mergedLoadValue));\n";
+    harnessFile << "  psxrecomp::u32 callDelayValue = 0;\n";
+    harnessFile << "  psxrecomp::u32 callLinkValue = 0;\n";
+    harnessFile << "  psxrecomp::u32 branchTakenResult = 0;\n";
+    harnessFile << "  psxrecomp::u32 branchNotTakenResult = 0;\n";
+    harnessFile << "  psxrecomp::u32 jumpRegResult = 0;\n";
+    harnessFile << "  psxrecomp::u32 callRegResult = 0;\n";
+    harnessFile << "  psxrecomp::u32 slotLoadFirstResult = 0;\n";
+    harnessFile << "  psxrecomp::u32 slotLoadSecondResult = 0;\n";
+    harnessFile << "  psxrecomp::u32 cop0DelayResult = 0;\n";
+    harnessFile << "  std::memcpy(&delaySlotValue, ram.data() + 0x200, sizeof(delaySlotValue));\n";
+    harnessFile << "  std::memcpy(&committedLoadValue, ram.data() + 0x204, sizeof(committedLoadValue));\n";
+    harnessFile << "  std::memcpy(&canceledLoadValue, ram.data() + 0x208, sizeof(canceledLoadValue));\n";
+    harnessFile << "  std::memcpy(&mergedLoadValue, ram.data() + 0x20C, sizeof(mergedLoadValue));\n";
+    harnessFile << "  std::memcpy(&callDelayValue, ram.data() + 0x210, sizeof(callDelayValue));\n";
+    harnessFile << "  std::memcpy(&callLinkValue, ram.data() + 0x214, sizeof(callLinkValue));\n";
+    harnessFile << "  std::memcpy(&branchTakenResult, ram.data() + 0x218, sizeof(branchTakenResult));\n";
+    harnessFile << "  std::memcpy(&branchNotTakenResult, ram.data() + 0x21C, sizeof(branchNotTakenResult));\n";
+    harnessFile << "  std::memcpy(&jumpRegResult, ram.data() + 0x220, sizeof(jumpRegResult));\n";
+    harnessFile << "  std::memcpy(&callRegResult, ram.data() + 0x224, sizeof(callRegResult));\n";
+    harnessFile << "  std::memcpy(&slotLoadFirstResult, ram.data() + 0x228, sizeof(slotLoadFirstResult));\n";
+    harnessFile << "  std::memcpy(&slotLoadSecondResult, ram.data() + 0x22C, sizeof(slotLoadSecondResult));\n";
+    harnessFile << "  std::memcpy(&cop0DelayResult, ram.data() + 0x230, sizeof(cop0DelayResult));\n";
     harnessFile << "  if (delaySlotValue != 6u) { return 1; }\n";
     harnessFile << "  if (committedLoadValue != 42u) { return 2; }\n";
     harnessFile << "  if (canceledLoadValue != 7u) { return 3; }\n";
-    harnessFile << "  if (mergedLoadValue != 0x11223344u) { return 4; }\n";
+    harnessFile << "  if (callDelayValue != 0x1010u) { return 4; }\n";
+    harnessFile << "  if (callLinkValue != 0x8003010Cu) { return 5; }\n";
+    harnessFile << "  if (branchTakenResult != 0x2002u) { return 6; }\n";
+    harnessFile << "  if (branchNotTakenResult != 0x3003u) { return 7; }\n";
+    harnessFile << "  if (jumpRegResult != 0x4005u) { return 8; }\n";
+    harnessFile << "  if (callRegResult != 0x5006u) { return 9; }\n";
+    harnessFile << "  if (slotLoadFirstResult != 7u) { return 10; }\n";
+    harnessFile << "  if (slotLoadSecondResult != 55u) { return 11; }\n";
+    harnessFile << "  if (cop0DelayResult != 0x6004u) { return 12; }\n";
     harnessFile << "  return 0;\n";
     harnessFile << "}\n";
     harnessFile.close();

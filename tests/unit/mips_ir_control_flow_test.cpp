@@ -84,13 +84,43 @@ int main()
     assert(hasInstruction(psxrecomp::ir::Opcode::MOVE,
                           psxrecomp::ir::Value::makeImmediate(0x80010008),
                           psxrecomp::ir::Value::makeRegister(RA)));
-    assert(hasInstruction(psxrecomp::ir::Opcode::JUMP, psxrecomp::ir::Value::makeRegister(T0),
-                          psxrecomp::ir::Value::invalid()));
     assert(hasInstruction(psxrecomp::ir::Opcode::MOVE,
                           psxrecomp::ir::Value::makeImmediate(0x80010018),
                           psxrecomp::ir::Value::makeRegister(S0)));
-    assert(hasInstruction(psxrecomp::ir::Opcode::CALL, psxrecomp::ir::Value::makeRegister(T1),
-                          psxrecomp::ir::Value::invalid()));
+
+    auto jrCaptureIt = std::find_if(result.instructions.begin(), result.instructions.end(),
+                                    [&](const auto& instruction)
+                                    {
+                                        return instruction.opcode == psxrecomp::ir::Opcode::MOVE &&
+                                               instruction.inputs.size() == 1 &&
+                                               instruction.inputs.front() ==
+                                                   psxrecomp::ir::Value::makeRegister(T0) &&
+                                               instruction.outputs.size() == 1 &&
+                                               instruction.outputs.front().kind ==
+                                                   psxrecomp::ir::ValueKind::TEMPORARY;
+                                    });
+    auto jrDelayIt = std::find_if(result.instructions.begin(), result.instructions.end(),
+                                  [&](const auto& instruction)
+                                  {
+                                      return instruction.opcode == psxrecomp::ir::Opcode::NOP &&
+                                             instruction.sourceAsmAddress.value_or(0) ==
+                                                 0x8001000C;
+                                  });
+    auto jrJumpIt = std::find_if(result.instructions.begin(), result.instructions.end(),
+                                 [&](const auto& instruction)
+                                 {
+                                     return instruction.opcode == psxrecomp::ir::Opcode::JUMP &&
+                                            instruction.inputs.size() == 1 &&
+                                            jrCaptureIt != result.instructions.end() &&
+                                            instruction.inputs.front() ==
+                                                jrCaptureIt->outputs.front();
+                                 });
+
+    assert(jrCaptureIt != result.instructions.end());
+    assert(jrDelayIt != result.instructions.end());
+    assert(jrJumpIt != result.instructions.end());
+    assert(jrCaptureIt < jrDelayIt);
+    assert(jrDelayIt < jrJumpIt);
 
     auto jalrLinkIt = std::find_if(result.instructions.begin(), result.instructions.end(),
                                    [&](const auto& instruction)
@@ -107,9 +137,94 @@ int main()
                          return instruction.opcode == psxrecomp::ir::Opcode::NOP &&
                                 instruction.sourceAsmAddress.value_or(0) == 0x80010014;
                      });
+    auto jalrCaptureIt = std::find_if(result.instructions.begin(), result.instructions.end(),
+                                      [&](const auto& instruction)
+                                      {
+                                          return instruction.opcode ==
+                                                     psxrecomp::ir::Opcode::MOVE &&
+                                                 instruction.inputs.size() == 1 &&
+                                                 instruction.inputs.front() ==
+                                                     psxrecomp::ir::Value::makeRegister(T1) &&
+                                                 instruction.outputs.size() == 1 &&
+                                                 instruction.outputs.front().kind ==
+                                                     psxrecomp::ir::ValueKind::TEMPORARY;
+                                      });
+    auto jalrCallIt = std::find_if(result.instructions.begin(), result.instructions.end(),
+                                   [&](const auto& instruction)
+                                   {
+                                       return instruction.opcode == psxrecomp::ir::Opcode::CALL &&
+                                              instruction.inputs.size() == 1 &&
+                                              jalrCaptureIt != result.instructions.end() &&
+                                              instruction.inputs.front() ==
+                                                  jalrCaptureIt->outputs.front();
+                                   });
     assert(jalrLinkIt != result.instructions.end());
     assert(jalrDelayIt != result.instructions.end());
+    assert(jalrCaptureIt != result.instructions.end());
+    assert(jalrCallIt != result.instructions.end());
+    assert(jalrCaptureIt < jalrLinkIt);
     assert(jalrLinkIt < jalrDelayIt);
+    assert(jalrDelayIt < jalrCallIt);
+
+    Instruction jalrSelf{};
+    jalrSelf.address = 0x80010120;
+    jalrSelf.opcode = Opcode::JALR;
+    jalrSelf.type = InstructionType::R_TYPE;
+    jalrSelf.rs = RA;
+    jalrSelf.rd = RA;
+
+    auto jalrSelfResult =
+        psxrecomp::ir::buildIrFromMips({jalrSelf, makeDelayNop(0x80010124, 0x80010120)});
+    assert(jalrSelfResult.errors.empty());
+
+    auto jalrSelfCaptureIt =
+        std::find_if(jalrSelfResult.instructions.begin(), jalrSelfResult.instructions.end(),
+                     [&](const auto& instruction)
+                     {
+                         return instruction.opcode == psxrecomp::ir::Opcode::MOVE &&
+                                instruction.inputs.size() == 1 &&
+                                instruction.inputs.front() ==
+                                    psxrecomp::ir::Value::makeRegister(RA) &&
+                                instruction.outputs.size() == 1 &&
+                                instruction.outputs.front().kind ==
+                                    psxrecomp::ir::ValueKind::TEMPORARY;
+                     });
+    auto jalrSelfLinkIt =
+        std::find_if(jalrSelfResult.instructions.begin(), jalrSelfResult.instructions.end(),
+                     [&](const auto& instruction)
+                     {
+                         return instruction.opcode == psxrecomp::ir::Opcode::MOVE &&
+                                instruction.inputs.size() == 1 &&
+                                instruction.inputs.front() ==
+                                    psxrecomp::ir::Value::makeImmediate(0x80010128) &&
+                                instruction.outputs.size() == 1 &&
+                                instruction.outputs.front() ==
+                                    psxrecomp::ir::Value::makeRegister(RA);
+                     });
+    auto jalrSelfDelayIt =
+        std::find_if(jalrSelfResult.instructions.begin(), jalrSelfResult.instructions.end(),
+                     [&](const auto& instruction)
+                     {
+                         return instruction.opcode == psxrecomp::ir::Opcode::NOP &&
+                                instruction.sourceAsmAddress.value_or(0) == 0x80010124;
+                     });
+    auto jalrSelfCallIt =
+        std::find_if(jalrSelfResult.instructions.begin(), jalrSelfResult.instructions.end(),
+                     [&](const auto& instruction)
+                     {
+                         return instruction.opcode == psxrecomp::ir::Opcode::CALL &&
+                                instruction.inputs.size() == 1 &&
+                                jalrSelfCaptureIt != jalrSelfResult.instructions.end() &&
+                                instruction.inputs.front() ==
+                                    jalrSelfCaptureIt->outputs.front();
+                     });
+    assert(jalrSelfCaptureIt != jalrSelfResult.instructions.end());
+    assert(jalrSelfLinkIt != jalrSelfResult.instructions.end());
+    assert(jalrSelfDelayIt != jalrSelfResult.instructions.end());
+    assert(jalrSelfCallIt != jalrSelfResult.instructions.end());
+    assert(jalrSelfCaptureIt < jalrSelfLinkIt);
+    assert(jalrSelfLinkIt < jalrSelfDelayIt);
+    assert(jalrSelfDelayIt < jalrSelfCallIt);
 
     Instruction bgezal{};
     bgezal.address = 0x80010100;
