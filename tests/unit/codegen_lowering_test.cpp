@@ -376,8 +376,7 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "jump_external_module");
 
-        const std::string retireProbe =
-            "finishLoadDelayCycle(context, instructionGroupWriteMask);";
+        const std::string retireProbe = "finishLoadDelayCycle(context, instructionGroupWriteMask);";
         const std::string intrinsicLower =
             "if (!callIntrinsic(context.system, 0x800a0100, context.regs))";
         const std::string intrinsicUpper =
@@ -465,8 +464,7 @@ int main()
             "if (!jumpRecompiledFunction(context, context.regs[Registers::T1]))";
         const std::string failProbe =
             "failUnsupportedJump(context.regs[Registers::T1], 0x80090000);";
-        const std::string retireProbe =
-            "finishLoadDelayCycle(context, instructionGroupWriteMask);";
+        const std::string retireProbe = "finishLoadDelayCycle(context, instructionGroupWriteMask);";
 
         assert(source.find(intrinsicProbe) != std::string::npos);
         assert(source.find(recompiledProbe) != std::string::npos);
@@ -491,12 +489,12 @@ int main()
         entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80092004));
 
         CodeGenerator generator;
-        std::string source = generator.generateSource(program, "call_retire_before_dispatch_module");
+        std::string source =
+            generator.generateSource(program, "call_retire_before_dispatch_module");
 
         const std::string traceProbe =
             "traceInterestingCallsite(context, context.regs[Registers::A0], 0x80092000, false);";
-        const std::string retireProbe =
-            "finishLoadDelayCycle(context, instructionGroupWriteMask);";
+        const std::string retireProbe = "finishLoadDelayCycle(context, instructionGroupWriteMask);";
         const std::string intrinsicProbe =
             "if (!callIntrinsic(context.system, context.regs[Registers::A0], context.regs))";
         const std::string recompiledProbe =
@@ -523,33 +521,29 @@ int main()
         auto& entry = builder.createBlock(function, "entry");
 
         entry.instructions.push_back(builder.makeInstruction(
-            Opcode::LOAD, {Value::makeAddress(0x1f800100)}, {Value::makeRegister(2)},
-            0x800103f4, std::string("lw $v0, 92($sp)"), 0x800103f4));
+            Opcode::LOAD, {Value::makeAddress(0x1f800100)}, {Value::makeRegister(2)}, 0x800103f4,
+            std::string("lw $v0, 92($sp)"), 0x800103f4));
         entry.instructions.push_back(builder.makeInstruction(
-            Opcode::MOVE, {Value::makeImmediate(0x80010400)}, {Value::makeRegister(31)},
-            0x800103f8, std::string("jal 0x80011338"), 0x800103f8));
+            Opcode::MOVE, {Value::makeImmediate(0x80010400)}, {Value::makeRegister(31)}, 0x800103f8,
+            std::string("jal 0x80011338"), 0x800103f8));
         entry.instructions.push_back(builder.makeInstruction(
             Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(19960)},
             {Value::makeRegister(5)}, 0x800103f8, std::string("addiu $a1, $v0, 19960"),
             0x800103fc));
-        entry.instructions.push_back(builder.makeInstruction(
-            Opcode::CALL, {Value::makeAddress(0x80011338)}, {}, 0x800103f8,
-            std::string("jal 0x80011338"), 0x800103f8));
+        entry.instructions.push_back(
+            builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80011338)}, {}, 0x800103f8,
+                                    std::string("jal 0x80011338"), 0x800103f8));
         entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010400));
 
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "delay_slot_split_module");
 
-        const auto guardPos =
-            source.find("if (resumeAddress == 0 || resumeAddress == 0x103f8)");
-        const auto raWritePos =
-            source.find("context.regs[Registers::RA] = -2147417088;", guardPos);
-        const auto slotPos =
-            source.find("context.regs[Registers::A1] = context.regs[Registers::V0] + 19960;",
-                        guardPos);
-        const auto callTracePos =
-            source.find("traceInterestingCallsite(context, 0x80011338, 0x800103f8, false);",
-                        guardPos);
+        const auto guardPos = source.find("if (resumeAddress == 0 || resumeAddress == 0x103f8)");
+        const auto raWritePos = source.find("context.regs[Registers::RA] = -2147417088;", guardPos);
+        const auto slotPos = source.find(
+            "context.regs[Registers::A1] = context.regs[Registers::V0] + 19960;", guardPos);
+        const auto callTracePos = source.find(
+            "traceInterestingCallsite(context, 0x80011338, 0x800103f8, false);", guardPos);
         const std::string retirePrefix = "finishLoadDelayCycle(context, ";
         const auto firstRetirePos = source.find(retirePrefix, guardPos);
         const auto secondRetirePos = source.find(retirePrefix, firstRetirePos + 1);
@@ -594,14 +588,10 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "unaligned_lowering_module");
 
-         assert(source.find(
-                 "readMemoryLwl(context, 0x80011003, resolveLoadMergeValue(context, "
-                 "static_cast<Register>(2)))") !=
-               std::string::npos);
-         assert(source.find(
-                 "readMemoryLwr(context, 0x80011000, resolveLoadMergeValue(context, "
-                 "static_cast<Register>(2)))") !=
-               std::string::npos);
+        assert(source.find("readMemoryLwl(context, 0x80011003, resolveLoadMergeValue(context, "
+                           "static_cast<Register>(2)))") != std::string::npos);
+        assert(source.find("readMemoryLwr(context, 0x80011000, resolveLoadMergeValue(context, "
+                           "static_cast<Register>(2)))") != std::string::npos);
         assert(source.find("writeMemorySwl(context, 0x80011003, context.regs[Registers::V0]);") !=
                std::string::npos);
         assert(source.find("writeMemorySwr(context, 0x80011000, context.regs[Registers::V0]);") !=

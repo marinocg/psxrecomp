@@ -84,8 +84,8 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
     emitter.writeLine("inline u32 readMemory32(RecompilerContext& context, Address address)");
     emitter.openBlock("");
     emitter.writeLine("return readMemory32(context, address,");
-    emitter.writeLine(
-        "                    context.system.debugOverlay().lastProgramCounter(), false);");
+    emitter.writeLine("                    "
+                      "context.system.debugOverlay().lastArchitecturalProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
@@ -105,7 +105,8 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
         "inline void writeMemory32(RecompilerContext& context, Address address, u32 value)");
     emitter.openBlock("");
     emitter.writeLine("writeMemory32(context, address, value,");
-    emitter.writeLine("              context.system.debugOverlay().lastProgramCounter(), false);");
+    emitter.writeLine(
+        "              context.system.debugOverlay().lastArchitecturalProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline u32 readMemory8(RecompilerContext& context, Address address)");
@@ -136,8 +137,8 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
     emitter.writeLine("inline u32 readMemory16(RecompilerContext& context, Address address)");
     emitter.openBlock("");
     emitter.writeLine("return readMemory16(context, address,");
-    emitter.writeLine(
-        "                    context.system.debugOverlay().lastProgramCounter(), false);");
+    emitter.writeLine("                    "
+                      "context.system.debugOverlay().lastArchitecturalProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine("inline u32 readMemory16s(RecompilerContext& context, Address address,");
@@ -156,8 +157,8 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
     emitter.writeLine("inline u32 readMemory16s(RecompilerContext& context, Address address)");
     emitter.openBlock("");
     emitter.writeLine("return readMemory16s(context, address,");
-    emitter.writeLine(
-        "                     context.system.debugOverlay().lastProgramCounter(), false);");
+    emitter.writeLine("                     "
+                      "context.system.debugOverlay().lastArchitecturalProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(
@@ -198,7 +199,8 @@ void emitRuntimeAccessHelpers(CppEmitter& emitter)
         "inline void writeMemory16(RecompilerContext& context, Address address, u32 value)");
     emitter.openBlock("");
     emitter.writeLine("writeMemory16(context, address, value,");
-    emitter.writeLine("              context.system.debugOverlay().lastProgramCounter(), false);");
+    emitter.writeLine(
+        "              context.system.debugOverlay().lastArchitecturalProgramCounter(), false);");
     emitter.closeBlock();
     emitter.writeBlank();
     emitter.writeLine(

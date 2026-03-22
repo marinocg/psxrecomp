@@ -39,7 +39,7 @@ void runCodegenLoweringCopTests()
         assert(source.find("context.system.cop0().mtc0") != std::string::npos);
         assert(source.find("const u32 loadResult = context.system.cop0().mfc0") !=
                std::string::npos);
-          assert(source.find("stagePendingLoad(context, static_cast<Register>(3), loadResult);") !=
+        assert(source.find("stagePendingLoad(context, static_cast<Register>(3), loadResult);") !=
                std::string::npos);
         assert(source.find("context.system.cop0().rfe()") != std::string::npos);
 

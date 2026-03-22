@@ -11,6 +11,8 @@ namespace runtime
 
 void PsxSystem::invokeCallback(u32 address, u32 descriptorAddress)
 {
+    noteExecutableEntry();
+
     if (address == 0)
     {
         return;
@@ -87,6 +89,8 @@ void PsxSystem::invokeCallback(u32 address, u32 descriptorAddress)
 
 u32 PsxSystem::invokeCallbackRaw(u32 address, u32 descriptorAddress)
 {
+    noteExecutableEntry();
+
     if (address == 0)
     {
         return 0;

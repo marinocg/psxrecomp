@@ -423,7 +423,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         context.deferControlTransfers = true;
                         context.deferredTransfer.reset();
 
-                        for (size_t groupIndex = instructionIndex; groupIndex < groupEnd; ++groupIndex)
+                        for (size_t groupIndex = instructionIndex; groupIndex < groupEnd;
+                             ++groupIndex)
                         {
                             const auto& groupInstruction = block.instructions[groupIndex];
                             if (groupInstruction.opcode == ir::Opcode::PHI ||
@@ -451,7 +452,8 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         }
 
                         context.deferControlTransfers = false;
-                        for (size_t groupIndex = instructionIndex; groupIndex < groupEnd; ++groupIndex)
+                        for (size_t groupIndex = instructionIndex; groupIndex < groupEnd;
+                             ++groupIndex)
                         {
                             const auto& groupInstruction = block.instructions[groupIndex];
                             if (groupInstruction.opcode == ir::Opcode::PHI ||

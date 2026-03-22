@@ -28,6 +28,8 @@ bool traceBiosFlowEnabled()
 
 void PsxSystem::callBiosVector(u32 vector, u32* regs, size_t regCount)
 {
+    noteExecutableEntry();
+
     if (regs == nullptr || regCount < 32)
     {
         m_logger.log(LogLevel::Warn, "bios", "BIOS vector call with insufficient register file");

@@ -96,8 +96,7 @@ void emitRegisterJumpTransfer(const DeferredControlTransfer& transfer,
             continue;
         }
 
-        const Address blockAddress =
-            std::stoul(blockName.substr(6), nullptr, 16) & 0x1FFFFFFFu;
+        const Address blockAddress = std::stoul(blockName.substr(6), nullptr, 16) & 0x1FFFFFFFu;
         std::ostringstream caseLine;
         caseLine << "case 0x" << std::hex << blockAddress << ":";
         emitter.writeLine(caseLine.str());
@@ -116,8 +115,8 @@ void emitRegisterJumpTransfer(const DeferredControlTransfer& transfer,
     emitter.openBlock("if (!callIntrinsic(context.system, " + transfer.targetExpr +
                       ", context.regs))");
     emitter.openBlock("if (!jumpRecompiledFunction(context, " + transfer.targetExpr + "))");
-    emitter.writeLine("failUnsupportedJump(" + transfer.targetExpr + ", " +
-                      transfer.sourcePcExpr + ");");
+    emitter.writeLine("failUnsupportedJump(" + transfer.targetExpr + ", " + transfer.sourcePcExpr +
+                      ");");
     emitter.closeBlock();
     emitter.closeBlock();
     emitter.writeLine("return true;");
@@ -134,8 +133,7 @@ void emitAddressJumpTransfer(const DeferredControlTransfer& transfer,
         {
             emitter.openBlock("if (!callIntrinsic(context.system, " + transfer.targetExpr +
                               ", context.regs))");
-            emitter.openBlock("if (!jumpRecompiledFunction(context, " + transfer.targetExpr +
-                              "))");
+            emitter.openBlock("if (!jumpRecompiledFunction(context, " + transfer.targetExpr + "))");
             emitter.writeLine("failUnsupportedJump(" + transfer.targetExpr + ", " +
                               transfer.sourcePcExpr + ");");
             emitter.closeBlock();
@@ -222,12 +220,8 @@ buildDeferredControlTransfer(const ir::Instruction& instruction, const ir::Basic
                                        std::nullopt,
                                        {}};
     case ir::Opcode::RETURN:
-        return DeferredControlTransfer{DeferredControlTransferKind::Return,
-                                       "",
-                                       "",
-                                       controlFlowSourcePcExpr(instruction),
-                                       std::nullopt,
-                                       {}};
+        return DeferredControlTransfer{DeferredControlTransferKind::Return,  "",           "",
+                                       controlFlowSourcePcExpr(instruction), std::nullopt, {}};
     default:
         return std::nullopt;
     }
@@ -250,8 +244,8 @@ void emitDeferredControlTransfer(const DeferredControlTransfer& transfer,
                                         transfer.sourcePcExpr, blockNames, emitter);
             emitter.closeBlock();
             emitter.openBlock("else");
-            emitBranchSuccessorTransfer(transfer.successors[1], std::nullopt,
-                                        transfer.sourcePcExpr, blockNames, emitter);
+            emitBranchSuccessorTransfer(transfer.successors[1], std::nullopt, transfer.sourcePcExpr,
+                                        blockNames, emitter);
             emitter.closeBlock();
             return;
         }
@@ -330,8 +324,8 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 {
                     emitter.openBlock("if (!jumpRecompiledFunction(context, " + *externalTarget +
                                       "))");
-                    emitter.writeLine("failUnsupportedJump(" + *externalTarget + ", " +
-                                      sourcePc + ");");
+                    emitter.writeLine("failUnsupportedJump(" + *externalTarget + ", " + sourcePc +
+                                      ");");
                     emitter.closeBlock();
                     emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                     emitter.writeLine("return true;");

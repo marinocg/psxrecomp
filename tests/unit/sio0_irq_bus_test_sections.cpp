@@ -278,6 +278,7 @@ void runSio0IrqBusTests(psxrecomp::runtime::PsxSystem& system)
         system.tickCpuCycles(psxrecomp::runtime::Sio0::ACK_DELAY_CYCLES + 1);
 
         // Service interrupts — should dispatch Controller line and deliver event.
+        system.observeProgramCounter(0x80018000u);
         system.serviceInterrupts();
 
         // The NoCallback event should now be in Delivered state.
