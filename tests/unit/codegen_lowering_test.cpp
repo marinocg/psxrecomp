@@ -376,27 +376,17 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "jump_external_module");
 
-        const std::string retireProbe = "finishLoadDelayCycle(context, instructionGroupWriteMask);";
-        const std::string intrinsicLower =
-            "if (!callIntrinsic(context.system, 0x800a0100, context.regs))";
-        const std::string intrinsicUpper =
-            "if (!callIntrinsic(context.system, 0x800A0100, context.regs))";
-
         assert(
             source.find("if (!jumpRecompiledFunction(context, 0x800a0100))") != std::string::npos ||
             source.find("if (!jumpRecompiledFunction(context, 0x800A0100))") != std::string::npos);
+        assert(source.find("if (!callIntrinsic(context.system, 0x800a0100, context.regs))") ==
+               std::string::npos);
+        assert(source.find("if (!callIntrinsic(context.system, 0x800A0100, context.regs))") ==
+               std::string::npos);
         assert(source.find("callRecompiledFunction(context, 0x800a0100)") == std::string::npos);
         assert(source.find("callRecompiledFunction(context, 0x800A0100)") == std::string::npos);
         assert(source.find("failUnsupportedJump(0x800a0100, 0x800a0000);") != std::string::npos ||
                source.find("failUnsupportedJump(0x800A0100, 0x800A0000);") != std::string::npos);
-        if (source.find(intrinsicLower) != std::string::npos)
-        {
-            assert(source.find(retireProbe) < source.find(intrinsicLower));
-        }
-        if (source.find(intrinsicUpper) != std::string::npos)
-        {
-            assert(source.find(retireProbe) < source.find(intrinsicUpper));
-        }
 
         std::cerr << "[PASS] address jump external path uses jump semantics\n";
     }
