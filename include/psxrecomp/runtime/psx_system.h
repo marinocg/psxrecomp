@@ -1,6 +1,10 @@
 #pragma once
 
 #include "psxrecomp/runtime/bios_file_table.h"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 #include "psxrecomp/runtime/callback_trace.h"
 #include "psxrecomp/runtime/cdrom.h"
 #include "psxrecomp/runtime/cop0.h"
@@ -52,6 +56,10 @@ namespace runtime
  * Provides the runtime environment for recompiled PSX code,
  * including memory management and hardware emulation.
  */
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpadded"
+#endif
 class PsxSystem
 {
   public:
