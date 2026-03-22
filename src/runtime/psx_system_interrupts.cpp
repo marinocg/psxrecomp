@@ -127,7 +127,6 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
         // Chain handlers may have acknowledged interrupts; re-read the mask.
         syncCop0InterruptPending();
         pendingForHook = m_interrupts.readStatus() & m_interrupts.readMask();
-        pendingForKernelEvents = pendingForHook;
     }
 
     // PSX-SPX: the BIOS CD-ROM IRQ handlers live in the priority-0 chain, so

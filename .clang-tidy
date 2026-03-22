@@ -2,6 +2,7 @@
 Checks: >
   -*,
   clang-analyzer-*,
+  -clang-analyzer-optin.performance.Padding,
   modernize-use-nullptr,
   modernize-use-override,
   readability-identifier-naming
