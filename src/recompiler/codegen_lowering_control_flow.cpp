@@ -41,6 +41,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 const auto localIt = blockNames.find(successorName);
                 if (localIt != blockNames.end())
                 {
+                    emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                     emitter.writeLine("previousBlock = block;");
                     emitter.writeLine("block = BlockId::" + localIt->second + ";");
                     emitter.writeLine("continue;");
@@ -54,6 +55,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     emitter.writeLine("failUnsupportedJump(" + *externalTarget + ", " + sourcePc +
                                       ");");
                     emitter.closeBlock();
+                    emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                     emitter.writeLine("return true;");
                     return;
                 }
@@ -73,10 +75,12 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                     emitter.writeLine("failUnsupportedJump(" + targetLiteral + ", " + sourcePc +
                                       ");");
                     emitter.closeBlock();
+                    emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                     emitter.writeLine("return true;");
                     return;
                 }
 
+                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.writeLine("return false;");
             };
 
@@ -95,6 +99,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 emitSuccessorTransfer(block.successors[0], takenTargetLiteral);
                 emitter.closeBlock();
                 emitter.openBlock("else");
+                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.writeLine("return true;");
                 emitter.closeBlock();
             }
@@ -114,6 +119,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             }
             emitter.writeLine("const Address jumpTargetPhysical = " + target + " & 0x1FFFFFFF;");
             emitter.openBlock("if (jumpTargetPhysical == 0)");
+            emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
             emitter.writeLine("return true;");
             emitter.closeBlock();
 
@@ -133,6 +139,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 caseLine << "case 0x" << std::hex << blockAddress << ":";
                 emitter.writeLine(caseLine.str());
                 emitter.openBlock("");
+                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.writeLine("previousBlock = block;");
                 emitter.writeLine("block = BlockId::" + entry.second + ";");
                 emitter.writeLine("continue;");
@@ -149,6 +156,7 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
             emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
             emitter.closeBlock();
             emitter.closeBlock();
+            emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
             emitter.writeLine("return true;");
         }
         else if (!block.successors.empty())
@@ -172,10 +180,12 @@ bool emitControlFlowInstruction(const ir::Instruction& instruction, const ir::Ba
                 emitter.writeLine("failUnsupportedJump(" + target + ", " + sourcePc + ");");
                 emitter.closeBlock();
                 emitter.closeBlock();
+                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.writeLine("return true;");
             }
             else
             {
+                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.writeLine("previousBlock = block;");
                 emitter.writeLine("block = " + successor + ";");
                 emitter.writeLine("continue;");

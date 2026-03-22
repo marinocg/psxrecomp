@@ -484,9 +484,13 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "unaligned_lowering_module");
 
-        assert(source.find("readMemoryLwl(context, 0x80011003, context.regs[Registers::V0])") !=
+         assert(source.find(
+                 "readMemoryLwl(context, 0x80011003, resolveLoadMergeValue(context, "
+                 "static_cast<Register>(2)))") !=
                std::string::npos);
-        assert(source.find("readMemoryLwr(context, 0x80011000, context.regs[Registers::V0])") !=
+         assert(source.find(
+                 "readMemoryLwr(context, 0x80011000, resolveLoadMergeValue(context, "
+                 "static_cast<Register>(2)))") !=
                std::string::npos);
         assert(source.find("writeMemorySwl(context, 0x80011003, context.regs[Registers::V0]);") !=
                std::string::npos);

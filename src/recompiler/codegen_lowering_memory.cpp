@@ -92,7 +92,7 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
         if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
         {
             std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
+            std::string value = valueToLoadMergeExpr(instruction.inputs[1], context);
             const std::string sourcePc = memorySourcePcExpr(instruction);
             emitter.writeLine("const u32 loadResult = readMemoryLwl(context, " + address + ", " +
                               value + ");");
@@ -105,7 +105,7 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
         if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
         {
             std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
+            std::string value = valueToLoadMergeExpr(instruction.inputs[1], context);
             const std::string sourcePc = memorySourcePcExpr(instruction);
             emitter.writeLine("const u32 loadResult = readMemoryLwr(context, " + address + ", " +
                               value + ");");
@@ -327,6 +327,7 @@ bool emitMemoryAndSystemInstruction(const ir::Instruction& instruction, const ir
         return true;
     }
     case ir::Opcode::RETURN:
+        emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
         emitter.writeLine("return true;");
         return true;
     default:

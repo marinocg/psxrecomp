@@ -24,6 +24,7 @@ struct LoweringContext
 };
 
 std::string valueToExpr(const ir::Value& value, LoweringContext& context);
+std::string valueToLoadMergeExpr(const ir::Value& value, LoweringContext& context);
 std::optional<std::string> valueToWriteExpr(const ir::Value& value, LoweringContext& context);
 std::optional<Register> valueToLoadDelayRegister(const ir::Value& value);
 void emitLoadResultWrite(const ir::Value& output, const std::string& resultExpr,

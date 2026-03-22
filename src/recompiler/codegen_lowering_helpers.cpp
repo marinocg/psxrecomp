@@ -82,6 +82,16 @@ std::string valueToExpr(const ir::Value& value, LoweringContext& context)
     return "0";
 }
 
+std::string valueToLoadMergeExpr(const ir::Value& value, LoweringContext& context)
+{
+    if (value.kind == ir::ValueKind::REGISTER)
+    {
+        return "resolveLoadMergeValue(context, static_cast<Register>(" +
+               std::to_string(value.reg) + "))";
+    }
+    return valueToExpr(value, context);
+}
+
 std::optional<std::string> valueToWriteExpr(const ir::Value& value, LoweringContext& context)
 {
     switch (value.kind)

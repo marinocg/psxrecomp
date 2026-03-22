@@ -9,6 +9,18 @@ namespace recompiler
 
 void emitRuntimeExecutionHelpers(CppEmitter& emitter)
 {
+    emitter.writeLine(
+        "inline u32 resolveLoadMergeValue(const RecompilerContext& context, Register reg)");
+    emitter.openBlock("");
+    emitter.openBlock("if (reg == Registers::ZERO)");
+    emitter.writeLine("return 0;");
+    emitter.closeBlock();
+    emitter.openBlock("if (context.pendingLoadValid && context.pendingLoadRegister == reg)");
+    emitter.writeLine("return context.pendingLoadValue;");
+    emitter.closeBlock();
+    emitter.writeLine("return context.regs[reg];");
+    emitter.closeBlock();
+    emitter.writeBlank();
     emitter.writeLine("inline u32 gprWriteMask(Register reg)");
     emitter.openBlock("");
     emitter.openBlock("if (reg == Registers::ZERO)");

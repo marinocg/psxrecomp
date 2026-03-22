@@ -548,7 +548,21 @@ void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& genera
                                                          {Value::makeRegister(2)}, 0x80030018));
     entry.instructions.push_back(builder.makeInstruction(
         Opcode::STORE, {Value::makeAddress(0x110), Value::makeRegister(2)}, {}, 0x8003001C));
-    entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030020));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(0)},
+                                                         {Value::makeRegister(4)}, 0x80030020));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::LOAD_LEFT,
+                                {Value::makeAddress(0x123), Value::makeRegister(4)},
+                                {Value::makeRegister(4)}, 0x80030024));
+    entry.instructions.push_back(
+        builder.makeInstruction(Opcode::LOAD_RIGHT,
+                                {Value::makeAddress(0x120), Value::makeRegister(4)},
+                                {Value::makeRegister(4)}, 0x80030028));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(1)},
+                                                         {Value::makeRegister(5)}, 0x8003002C));
+    entry.instructions.push_back(builder.makeInstruction(
+        Opcode::STORE, {Value::makeAddress(0x124), Value::makeRegister(4)}, {}, 0x80030030));
+    entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80030034));
 
     const std::string header = generator.generateHeader(program, "load_delay_module");
     const std::string source = generator.generateSource(program, "load_delay_module");
@@ -556,6 +570,7 @@ void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& genera
     const auto headerPath = outputDir / "load_delay_module.h";
     const auto sourcePath = outputDir / "load_delay_module.cpp";
     const auto harnessPath = outputDir / "load_delay_harness.cpp";
+    const auto unalignedHeaderPath = outputDir / "include/psxrecomp/runtime/mips_unaligned_access.h";
     const auto exePath = outputDir / "load_delay_test";
 
     std::ofstream headerFile(headerPath);
@@ -566,6 +581,35 @@ void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& genera
     sourceFile << source;
     sourceFile.close();
 
+    std::ofstream unalignedHeader(unalignedHeaderPath);
+    unalignedHeader << "#pragma once\n";
+    unalignedHeader << "#include \"psxrecomp/runtime/psx_system.h\"\n";
+    unalignedHeader << "namespace psxrecomp { namespace runtime {\n";
+    unalignedHeader << "inline u32 loadWordLeft(PsxSystem& system, Address address, u32 value) {\n";
+    unalignedHeader << "  const Address aligned = address & ~3u;\n";
+    unalignedHeader << "  const u32 word = system.read<u32>(aligned);\n";
+    unalignedHeader << "  switch (address & 3u) {\n";
+    unalignedHeader << "    case 0: return (value & 0x00FFFFFFu) | (word << 24);\n";
+    unalignedHeader << "    case 1: return (value & 0x0000FFFFu) | (word << 16);\n";
+    unalignedHeader << "    case 2: return (value & 0x000000FFu) | (word << 8);\n";
+    unalignedHeader << "    default: return word;\n";
+    unalignedHeader << "  }\n";
+    unalignedHeader << "}\n";
+    unalignedHeader << "inline u32 loadWordRight(PsxSystem& system, Address address, u32 value) {\n";
+    unalignedHeader << "  const Address aligned = address & ~3u;\n";
+    unalignedHeader << "  const u32 word = system.read<u32>(aligned);\n";
+    unalignedHeader << "  switch (address & 3u) {\n";
+    unalignedHeader << "    case 0: return word;\n";
+    unalignedHeader << "    case 1: return (value & 0xFF000000u) | (word >> 8);\n";
+    unalignedHeader << "    case 2: return (value & 0xFFFF0000u) | (word >> 16);\n";
+    unalignedHeader << "    default: return (value & 0xFFFFFF00u) | (word >> 24);\n";
+    unalignedHeader << "  }\n";
+    unalignedHeader << "}\n";
+    unalignedHeader << "inline void storeWordLeft(PsxSystem&, Address, u32) {}\n";
+    unalignedHeader << "inline void storeWordRight(PsxSystem&, Address, u32) {}\n";
+    unalignedHeader << "} }\n";
+    unalignedHeader.close();
+
     std::ofstream harnessFile(harnessPath);
     harnessFile << "#include \"load_delay_module.h\"\n";
     harnessFile << "#include <array>\n";
@@ -574,23 +618,28 @@ void runCodegenLoadDelayHarnessTest(psxrecomp::recompiler::CodeGenerator& genera
     harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
     harnessFile << "  const psxrecomp::u32 firstLoadValue = 42u;\n";
     harnessFile << "  const psxrecomp::u32 secondLoadValue = 99u;\n";
+    harnessFile << "  const psxrecomp::u32 mergeValue = 0x11223344u;\n";
     harnessFile << "  std::memcpy(ram.data() + 0x100, &firstLoadValue, sizeof(firstLoadValue));\n";
     harnessFile
         << "  std::memcpy(ram.data() + 0x10C, &secondLoadValue, sizeof(secondLoadValue));\n";
+    harnessFile << "  std::memcpy(ram.data() + 0x120, &mergeValue, sizeof(mergeValue));\n";
     harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
     harnessFile << "  psxrecomp::recompiler::RecompiledModule::run(system);\n";
     harnessFile << "  psxrecomp::u32 delaySlotValue = 0;\n";
     harnessFile << "  psxrecomp::u32 committedLoadValue = 0;\n";
     harnessFile << "  psxrecomp::u32 canceledLoadValue = 0;\n";
+    harnessFile << "  psxrecomp::u32 mergedLoadValue = 0;\n";
     harnessFile << "  std::memcpy(&delaySlotValue, ram.data() + 0x104, sizeof(delaySlotValue));\n";
     harnessFile
         << "  std::memcpy(&committedLoadValue, ram.data() + 0x108, sizeof(committedLoadValue));\n";
     harnessFile
         << "  std::memcpy(&canceledLoadValue, ram.data() + 0x110, sizeof(canceledLoadValue));\n";
+    harnessFile << "  std::memcpy(&mergedLoadValue, ram.data() + 0x124, sizeof(mergedLoadValue));\n";
     harnessFile << "  if (delaySlotValue != 6u) { return 1; }\n";
     harnessFile << "  if (committedLoadValue != 42u) { return 2; }\n";
     harnessFile << "  if (canceledLoadValue != 7u) { return 3; }\n";
+    harnessFile << "  if (mergedLoadValue != 0x11223344u) { return 4; }\n";
     harnessFile << "  return 0;\n";
     harnessFile << "}\n";
     harnessFile.close();

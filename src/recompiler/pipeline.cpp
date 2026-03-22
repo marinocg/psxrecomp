@@ -167,6 +167,18 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
             return fail(stream.str());
         }
 
+        if (irBuild.instructions.empty())
+        {
+            PipelineDiagnostic entry;
+            entry.code = "FunctionSkipped";
+            entry.severity = "warning";
+            entry.message = "No IR instructions emitted for function boundary.";
+            entry.context.file = activeDiscPath;
+            diagnostics.push_back(entry);
+            warnings.push_back(entry.message + " @ " + functionName);
+            continue;
+        }
+
         auto flowResult = ir::buildControlFlowFunction(functionName, adjustedBoundary.start,
                                                        irBuild.instructions);
         if (!flowResult.errors.empty())

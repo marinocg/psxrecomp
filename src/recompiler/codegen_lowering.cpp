@@ -315,6 +315,7 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
             bool inResumeGuard = false;
             std::optional<Address> currentGuardAddress;
             u32 currentGuardWriteMask = 0;
+            emitter.writeLine("u32 instructionGroupWriteMask = 0;");
             for (const auto& instruction : block.instructions)
             {
                 if (instruction.opcode == ir::Opcode::PHI)
@@ -351,11 +352,18 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                         std::ostringstream pcLine;
                         pcLine << "setProgramCounter(context, 0x" << std::hex << physical << ");";
                         emitter.writeLine(pcLine.str());
+                        emitter.writeLine("instructionGroupWriteMask = 0;");
                         currentGuardAddress = physical;
                         inResumeGuard = true;
                         currentGuardWriteMask = 0;
                     }
                     currentGuardWriteMask |= instructionGprWriteMask(instruction);
+                    {
+                        std::ostringstream maskLiteral;
+                        maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
+                        emitter.writeLine("instructionGroupWriteMask = " + maskLiteral.str() +
+                                          ";");
+                    }
                     emitInstruction(instruction, block, blockNames, context, emitter);
                     continue;
                 }
@@ -364,13 +372,16 @@ std::string CodeGenerator::generateFunctionDefinitions(const ir::Program& progra
                 // current resume guard so they are correctly skipped when
                 // execution is resumed past their owning source address.
                 currentGuardWriteMask |= instructionGprWriteMask(instruction);
+                {
+                    std::ostringstream maskLiteral;
+                    maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
+                    emitter.writeLine("instructionGroupWriteMask = " + maskLiteral.str() + ";");
+                }
                 emitInstruction(instruction, block, blockNames, context, emitter);
             }
             if (inResumeGuard)
             {
-                std::ostringstream maskLiteral;
-                maskLiteral << "0x" << std::hex << currentGuardWriteMask << "u";
-                emitter.writeLine("finishLoadDelayCycle(context, " + maskLiteral.str() + ");");
+                emitter.writeLine("finishLoadDelayCycle(context, instructionGroupWriteMask);");
                 emitter.closeBlock();
             }
             if (block.instructions.empty() ||
