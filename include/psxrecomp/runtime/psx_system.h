@@ -1,6 +1,10 @@
 #pragma once
 
 #include "psxrecomp/runtime/bios_file_table.h"
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 #include "psxrecomp/runtime/callback_trace.h"
 #include "psxrecomp/runtime/cdrom.h"
 #include "psxrecomp/runtime/cop0.h"
@@ -52,9 +56,21 @@ namespace runtime
  * Provides the runtime environment for recompiled PSX code,
  * including memory management and hardware emulation.
  */
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpadded"
+#endif
 class PsxSystem
 {
   public:
+    enum class CpuExecutionPhase
+    {
+        Reset,
+        BootInitializing,
+        AwaitingExecutableEntry,
+        Running,
+    };
+
     enum class CallbackContextDisposition
     {
         RestoreSaved,
@@ -309,6 +325,10 @@ class PsxSystem
 
     /// Record the current recompiled program counter and run targeted diagnostics.
     void observeProgramCounter(Address pc, const u32* regs = nullptr, size_t regCount = 0);
+    void observeProgramCounter(Address architecturalPc, Address observedPc, const u32* regs,
+                               size_t regCount);
+    Address architecturalProgramCounter() const;
+    CpuExecutionPhase cpuExecutionPhase() const;
 
     /// Validate the allocator heap at a risky runtime boundary when enabled.
     void validateAllocatorHeapBoundary(const std::string& source, Address relatedAddress = 0);
@@ -436,6 +456,9 @@ class PsxSystem
     };
 
     void bindGteRuntimeHooks();
+    void applyCpuBootState(const CpuBootState& state);
+    void noteExecutableEntry(Address pc = 0);
+    void setCpuExecutionPhase(CpuExecutionPhase phase);
 
     std::vector<u8> m_ram;        // 2MB main RAM
     std::vector<u8> m_scratchpad; // 1KB scratchpad
@@ -458,6 +481,7 @@ class PsxSystem
     u32 m_videoLineScheduleCarry = 0;
     RuntimeLogger m_logger;
     RuntimeDebugOverlay m_debugOverlay;
+    CpuExecutionPhase m_cpuExecutionPhase = CpuExecutionPhase::Reset;
     TimerController m_timers;
     Cop0 m_cop0;
     Gte m_gte;

@@ -173,6 +173,33 @@ int main()
     assert(foundIndirectExternal);
     assert(foundIndirectJumpBlock);
 
+    std::vector<Instruction> externalBranchInstructions;
+    externalBranchInstructions.push_back(
+        makeInstruction(Opcode::COMPARE_EQ, {Value::makeRegister(r1), Value::makeImmediate(0)},
+                        {Value::makeTemporary(60)}, 0x9200));
+    externalBranchInstructions.push_back(makeInstruction(
+        Opcode::BRANCH, {Value::makeTemporary(60), Value::makeAddress(0x899195B0)}, {}, 0x9204));
+    externalBranchInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x9208));
+    externalBranchInstructions.push_back(makeInstruction(Opcode::RETURN, {}, {}, 0x920C));
+
+    ControlFlowBuildResult externalBranchCfg = psxrecomp::ir::buildControlFlowFunction(
+        "external_branch", 0x9200, externalBranchInstructions);
+    assert(externalBranchCfg.errors.empty());
+    auto externalBranchVerify = psxrecomp::ir::verifyFunction(externalBranchCfg.function);
+    assert(externalBranchVerify.success());
+    [[maybe_unused]] bool foundExternalBranchBlock = false;
+    for (const auto& block : externalBranchCfg.function.blocks)
+    {
+        if (block.name == "block_0x9200")
+        {
+            foundExternalBranchBlock = true;
+            assert(block.successors.size() == 2);
+            assert(block.successors[0] == "block_0x899195b0");
+            assert(block.successors[1] == "block_0x9208");
+        }
+    }
+    assert(foundExternalBranchBlock);
+
     using psxrecomp::ir::Function;
 
     Function phiMismatch{"phi_mismatch", 0x3000, {}};
@@ -241,6 +268,23 @@ int main()
         }
     }
     assert(foundFolded);
+
+    Function mmioLoadEffects{"mmio_load_effects", 0x6050, {}};
+    mmioLoadEffects.blocks.push_back(BasicBlock{"entry", {}, {}, {}});
+    mmioLoadEffects.blocks[0].instructions.push_back(Instruction{
+        Opcode::MMIO_LOAD8, {Value::makeAddress(0x1F801800)}, {Value::makeTemporary(20)}, 0x6050});
+    mmioLoadEffects.blocks[0].instructions.push_back(Instruction{Opcode::RETURN, {}, {}, 0x6054});
+
+    psxrecomp::ir::runOptimizations(mmioLoadEffects);
+    [[maybe_unused]] bool keptMmioLoad = false;
+    for (const auto& instruction : mmioLoadEffects.blocks[0].instructions)
+    {
+        if (instruction.opcode == Opcode::MMIO_LOAD8)
+        {
+            keptMmioLoad = true;
+        }
+    }
+    assert(keptMmioLoad);
 
     Function cop0Effects{"cop0_effects", 0x6100, {}};
     cop0Effects.blocks.push_back(BasicBlock{"entry", {}, {}, {}});

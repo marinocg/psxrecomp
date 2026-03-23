@@ -10,6 +10,17 @@ namespace psxrecomp
 namespace runtime
 {
 
+struct CpuBootState
+{
+    u32 badVaddr = 0;
+    u32 status = 0;
+    u32 cause = 0;
+    u32 epc = 0;
+    u32 interruptMask = 0;
+    u32 architecturalPc = 0;
+    bool interruptDispatchArmed = false;
+};
+
 class Cop0
 {
   public:
@@ -35,12 +46,13 @@ class Cop0
     };
 
     void reset();
+    void applyBootState(const CpuBootState& state);
 
     u32 mfc0(u8 rd) const;
     void mtc0(u8 rd, u32 value);
 
     bool cop2Enabled() const;
-    void setHardwareInterruptPending(bool pending);
+    void noteInterruptControllerPending(bool pending);
     bool irqEnableHw0() const;
     bool shouldTakeInterruptException() const;
     bool isInExceptionMode() const;

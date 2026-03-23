@@ -42,6 +42,27 @@ const char* interruptTraceKindName(InterruptController::TraceEvent::Kind kind)
     }
 }
 
+CpuBootState makeDefaultCpuBootState()
+{
+    constexpr u32 statusIEcBit = 1u << 0;
+    constexpr u32 statusKUcBit = 1u << 1;
+    constexpr u32 statusIM2Bit = 1u << 10;
+
+    CpuBootState state;
+    state.badVaddr = 0u;
+    state.status = statusIEcBit | statusIM2Bit;
+    state.status &= ~statusKUcBit;
+    state.cause = 0u;
+    state.epc = 0u;
+    state.interruptMask =
+        static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
+        static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2) |
+        static_cast<u32>(InterruptLine::Dma);
+    state.architecturalPc = 0u;
+    state.interruptDispatchArmed = false;
+    return state;
+}
+
 } // namespace
 
 PsxSystem::PsxSystem()
@@ -63,6 +84,8 @@ bool PsxSystem::initialize()
 
 void PsxSystem::reset()
 {
+    setCpuExecutionPhase(CpuExecutionPhase::Reset);
+
     if (!m_ram.empty())
     {
         std::memset(m_ram.data(), 0, MemoryMap::RAM_SIZE);
@@ -224,25 +247,7 @@ void PsxSystem::bindGteRuntimeHooks()
 
 void PsxSystem::boot()
 {
-    // Emulate BIOS-ready COP0 defaults: IEc=1 and IM2=1 (mask for
-    // Cause.IP2 / IRQ controller line), remaining in kernel mode.
-    constexpr u32 StatusIEcBit = 1u << 0;
-    constexpr u32 StatusKUcBit = 1u << 1;
-    constexpr u32 StatusIM2Bit = 1u << 10;
-    const u32 statusBefore = m_cop0.mfc0(Cop0::RegisterIndex::Status);
-    const u32 bootStatus = (statusBefore & ~StatusKUcBit) | StatusIEcBit | StatusIM2Bit;
-    m_cop0.mtc0(Cop0::RegisterIndex::Status, bootStatus);
-
-    // Emulate the real PSX BIOS boot sequence: the kernel enables VBlank,
-    // timer, and DMA interrupts in I_MASK before calling the game's entry
-    // point.  Without this, serviceInterrupts() will never see pending
-    // IRQs and VSync/timer/DMA callbacks will not fire.
-    const u32 bootMask =
-        static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
-        static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2) |
-        static_cast<u32>(InterruptLine::Dma);
-    m_interrupts.writeMask(bootMask);
-    syncCop0InterruptPending();
+    setCpuExecutionPhase(CpuExecutionPhase::BootInitializing);
 
     // PSX-SPX: the kernel initialises DPCR to 0x07654321 which enables all
     // seven DMA channels with ascending priority.  DICR is initialised with
@@ -271,6 +276,8 @@ void PsxSystem::boot()
     m_spu.primeBootState();
 
     initializeBiosCdromState(0u);
+
+    applyCpuBootState(makeDefaultCpuBootState());
 
     m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
 
@@ -404,12 +411,50 @@ void PsxSystem::syncCop0InterruptPending()
 {
     // PSX interrupt controller output is routed to CPU interrupt line IP2.
     // Mirror I_STAT&I_MASK aggregate state into Cause.IP2.
-    m_cop0.setHardwareInterruptPending(m_interrupts.isInterruptPending());
+    m_cop0.noteInterruptControllerPending(m_interrupts.isInterruptPending());
+}
+
+void PsxSystem::applyCpuBootState(const CpuBootState& state)
+{
+    m_cop0.applyBootState(state);
+    m_interrupts.writeMask(state.interruptMask);
+    m_debugOverlay.setLastArchitecturalProgramCounter(state.architecturalPc);
+    syncCop0InterruptPending();
+    setCpuExecutionPhase(state.interruptDispatchArmed ? CpuExecutionPhase::Running
+                                                      : CpuExecutionPhase::AwaitingExecutableEntry);
+}
+
+void PsxSystem::noteExecutableEntry(Address pc)
+{
+    if (pc != 0)
+    {
+        m_debugOverlay.setLastArchitecturalProgramCounter(pc);
+    }
+    if (m_cpuExecutionPhase == CpuExecutionPhase::AwaitingExecutableEntry &&
+        m_debugOverlay.lastArchitecturalProgramCounter() != 0)
+    {
+        setCpuExecutionPhase(CpuExecutionPhase::Running);
+    }
+}
+
+void PsxSystem::setCpuExecutionPhase(CpuExecutionPhase phase)
+{
+    m_cpuExecutionPhase = phase;
 }
 
 uint64_t PsxSystem::cpuCyclesElapsed() const
 {
     return m_cpuCycles;
+}
+
+Address PsxSystem::architecturalProgramCounter() const
+{
+    return m_debugOverlay.lastArchitecturalProgramCounter();
+}
+
+PsxSystem::CpuExecutionPhase PsxSystem::cpuExecutionPhase() const
+{
+    return m_cpuExecutionPhase;
 }
 
 void PsxSystem::primeVideoSchedule()

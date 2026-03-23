@@ -106,9 +106,12 @@ set(RECOMPILER_SOURCES
     src/recompiler/codegen_lowering.cpp
     src/recompiler/codegen_lowering_helpers.cpp
     src/recompiler/codegen_lowering_instructions.cpp
+    src/recompiler/codegen_lowering_memory.cpp
     src/recompiler/codegen_lowering_gte.cpp
     src/recompiler/codegen_lowering_control_flow.cpp
     src/recompiler/codegen_runtime_helpers.cpp
+    src/recompiler/codegen_runtime_helpers_access.cpp
+    src/recompiler/codegen_runtime_helpers_execution.cpp
     src/recompiler/cpp_emitter.cpp
     src/recompiler/pipeline_analysis_helpers.cpp
     src/recompiler/pipeline_harvest_internal.cpp
@@ -128,6 +131,7 @@ set(RECOMPILER_SOURCES
     src/recompiler/pipeline_helpers_output_support_embedded.cpp
     src/recompiler/pipeline_input_loader.cpp
     src/recompiler/pipeline_selection_helpers.cpp
+    src/recompiler/pipeline_validation.cpp
     src/recompiler/pipeline_workspace_helpers.cpp
     src/recompiler/pipeline_workspace_json.cpp
     src/recompiler/pipeline.cpp
@@ -338,10 +342,25 @@ if(BUILD_TESTS)
                 PSXRECOMP_TEST_CXX="${CMAKE_CXX_COMPILER}"
     )
 
+    add_psxrecomp_unit_test(strict_addr_errors_codegen_test
+        tests/unit/strict_addr_errors_codegen_test.cpp
+    )
+    target_link_libraries(strict_addr_errors_codegen_test PRIVATE psxrecomp_recompiler)
+
+    add_psxrecomp_unit_test(control_flow_jump_semantics_test
+        tests/unit/control_flow_jump_semantics_test.cpp
+    )
+    target_link_libraries(control_flow_jump_semantics_test PRIVATE psxrecomp_recompiler)
+
     add_psxrecomp_unit_test(mips_ir_builder_test
         tests/unit/mips_ir_builder_test.cpp
     )
     target_link_libraries(mips_ir_builder_test PRIVATE psxrecomp_ir)
+
+    add_psxrecomp_unit_test(pipeline_validation_test
+        tests/unit/pipeline_validation_test.cpp
+    )
+    target_link_libraries(pipeline_validation_test PRIVATE psxrecomp_ir psxrecomp_recompiler)
 
     add_psxrecomp_unit_test(mips_ir_translation_diagnostics_test
         tests/unit/mips_ir_translation_diagnostics_test.cpp

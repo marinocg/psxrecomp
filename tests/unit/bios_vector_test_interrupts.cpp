@@ -7,6 +7,15 @@
 #include <iostream>
 #include <vector>
 
+namespace
+{
+void serviceInterruptsFromTest(psxrecomp::runtime::PsxSystem& system, psxrecomp::u32 pc)
+{
+    system.observeProgramCounter(pc);
+    system.serviceInterrupts();
+}
+} // namespace
+
 void runBiosVectorInterruptChainTests()
 {
     using psxrecomp::u32;
@@ -84,7 +93,7 @@ void runBiosVectorInterruptChainTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017F00u);
 
         assert(order.size() == 3);
         assert(order[0] == func1);
@@ -131,7 +140,7 @@ void runBiosVectorInterruptChainTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017F04u);
 
         assert(order.size() == 2);
         assert(order[0] == func1);
@@ -185,7 +194,7 @@ void runBiosVectorInterruptChainTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017F08u);
 
         // Only the chain func1 runs; RFE aborts before events or func2.
         assert(order.size() == 1);
@@ -250,7 +259,7 @@ void runBiosVectorInterruptChainTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017F0Cu);
 
         assert(order.size() == 3);
         assert(order[0] == chainFunc);
@@ -300,7 +309,7 @@ void runBiosVectorInterruptChainTests()
         system.cdrom().writeCommand(0x01); // Getstat -> raw INT3 / CommandAck
         assert((system.cdrom().readInterruptFlags() & 0x07u) == 0x03u);
 
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017F10u);
 
         assert(callbackInvoked);
         assert((system.cdrom().readInterruptFlags() & 0x07u) == 0u);
@@ -352,7 +361,7 @@ void runBiosVectorInterruptChainTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017F14u);
 
         assert(order.size() == 2);
         assert(order[0] == eventCallback);

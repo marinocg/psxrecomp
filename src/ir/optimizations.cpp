@@ -20,6 +20,15 @@ bool hasSideEffects(Opcode opcode)
     case Opcode::STORE16:
     case Opcode::STORE_LEFT:
     case Opcode::STORE_RIGHT:
+    case Opcode::ADD_TRAP:
+    case Opcode::SUB_TRAP:
+    case Opcode::MMIO_LOAD8:
+    case Opcode::MMIO_LOAD8U:
+    case Opcode::MMIO_LOAD16:
+    case Opcode::MMIO_LOAD16U:
+    case Opcode::MMIO_LOAD:
+    case Opcode::MMIO_STORE8:
+    case Opcode::MMIO_STORE16:
     case Opcode::MMIO_STORE:
     case Opcode::CALL:
     case Opcode::COP0_MFC:

@@ -36,6 +36,7 @@ static void callWaitEvent(PsxSystem& system, u32 handle, u32* regs)
 {
     regs[9] = 0x0A; // $t1 = function id WaitEvent
     regs[4] = handle;
+    system.observeProgramCounter(0x80016000u);
     system.callBiosVector(0xB0, regs, 32);
 }
 
@@ -96,6 +97,7 @@ static void testDeliveredByIrq()
     // The system's interrupt dispatcher needs to know about VBlank→event
     // mapping. The boot() path and interrupt dispatcher already handle this.
     // We need the interrupt mask to include VBlank (boot() does this).
+    system.observeProgramCounter(0x80016000u);
 
     u32 regs[32] = {};
     callWaitEvent(system, handle, regs);

@@ -10,6 +10,11 @@ void Cop0::reset()
     m_registers.fill(0);
 }
 
+void Cop0::applyBootState(const CpuBootState& state)
+{
+    restoreState(state.badVaddr, state.status, state.cause, state.epc);
+}
+
 u32 Cop0::mfc0(u8 rd) const
 {
     switch (rd)
@@ -53,7 +58,7 @@ bool Cop0::cop2Enabled() const
     return (m_registers[RegisterIndex::Status] & StatusCop2EnableBit) != 0u;
 }
 
-void Cop0::setHardwareInterruptPending(bool pending)
+void Cop0::noteInterruptControllerPending(bool pending)
 {
     if (pending)
     {

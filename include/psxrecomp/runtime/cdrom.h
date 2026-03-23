@@ -18,6 +18,10 @@ namespace runtime
 
 class Disc;
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpadded"
+#endif
 class Cdrom
 {
   public:
@@ -525,6 +529,10 @@ class Cdrom
     const CpuSectorRecord* currentCpuPayloadRecord() const;
     u32 readDmaInternal(bool bypassRequestControl);
 };
+
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
 
 } // namespace runtime
 } // namespace psxrecomp

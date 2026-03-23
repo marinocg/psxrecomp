@@ -4,12 +4,18 @@
 
 #include <cassert>
 #include <chrono>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+
+#if !defined(PSXRECOMP_SOURCE_DIR)
+#define PSXRECOMP_SOURCE_DIR ""
+#endif
+
+#if !defined(PSXRECOMP_TEST_CXX)
+#define PSXRECOMP_TEST_CXX ""
+#endif
 
 int main()
 {
@@ -69,28 +75,26 @@ int main()
     auto& duplicateNameFunction = builder.createFunction("duplicate_block_names", 0x80012000);
     auto& duplicateEntry = builder.createBlock(duplicateNameFunction, "loop");
     auto& duplicateLoop = builder.createBlock(duplicateNameFunction, "loop");
-
     duplicateEntry.instructions.push_back(
         builder.makeInstruction(Opcode::JUMP, {}, {}, 0x80012000));
     duplicateEntry.successors = {"loop"};
-
     duplicateLoop.instructions.push_back(
         builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80012004));
 
     CodeGenerator generator;
-    std::string header = generator.generateHeader(program, "module");
-    std::string source = generator.generateSource(program, "module");
-    std::string buildFile = generator.generateBuildFile("module");
-    std::string runner = generator.generateRunnerSource("module");
-    [[maybe_unused]] auto countOccurrences = [](const std::string& haystack,
-                                                const std::string& needle) -> size_t
+    const std::string header = generator.generateHeader(program, "module");
+    const std::string source = generator.generateSource(program, "module");
+    const std::string buildFile = generator.generateBuildFile("module");
+    const std::string runner = generator.generateRunnerSource("module");
+    const auto countOccurrences = [](const std::string& haystack, const std::string& needle)
     {
         if (needle.empty())
         {
-            return 0;
+            return std::string::size_type{0};
         }
-        size_t count = 0;
-        size_t pos = 0;
+
+        std::string::size_type count = 0;
+        std::string::size_type pos = 0;
         while ((pos = haystack.find(needle, pos)) != std::string::npos)
         {
             ++count;
@@ -142,6 +146,18 @@ int main()
     assert(source.find("context.regs = interruptSavedRegs;") != std::string::npos);
     assert(source.find("context.hi = interruptSavedHi;") != std::string::npos);
     assert(source.find("context.lo = interruptSavedLo;") != std::string::npos);
+    assert(source.find("bool pendingLoadValid = false;") != std::string::npos);
+    assert(source.find("Register pendingLoadRegister = Registers::ZERO;") != std::string::npos);
+    assert(source.find("bool stagedLoadValid = false;") != std::string::npos);
+    assert(
+        source.find(
+            "inline void stagePendingLoad(RecompilerContext& context, Register reg, u32 value)") !=
+        std::string::npos);
+    assert(source.find("inline void commitPendingLoad(RecompilerContext& context)") !=
+           std::string::npos);
+    assert(source.find("inline void finishLoadDelayCycle(RecompilerContext& context, u32 "
+                       "completedGprWriteMask)") != std::string::npos);
+    assert(source.find("finishLoadDelayCycle(context, 0x") != std::string::npos);
     assert(source.find("main_func(context, 0x10004);") == std::string::npos);
     assert(source.find("main_func(context, 0x10007);") == std::string::npos);
     assert(source.find("main_func(context, 0x10006);") == std::string::npos);
@@ -150,13 +166,17 @@ int main()
     assert(source.find("kModuleEntryAddress") != std::string::npos);
     assert(source.find("callRecompiledFunction(context, kModuleEntryAddress)") !=
            std::string::npos);
-    // Runtime shim policy: emit only the callback invoker bridge in run().
     assert(countOccurrences(source, "setCallbackInvoker(") == 1);
     assert(source.find("VSync") == std::string::npos);
     assert(source.find("DrawSync") == std::string::npos);
     assert(source.find("PSXRECOMP_AUTO_FRAME_PROGRESS") == std::string::npos);
     assert(source.find("setAutoFrameProgress") == std::string::npos);
     assert(source.find("triggerTrap") != std::string::npos);
+    assert(source.find("ExceptionCode::Breakpoint") != std::string::npos);
+    assert(source.find("BREAK exception code=0x") != std::string::npos);
+    assert(source.find("readMemory16s(RecompilerContext& context, Address address,") !=
+           std::string::npos);
+    assert(source.find("Address pc, bool inDelaySlot") != std::string::npos);
     assert(buildFile.find("add_library") != std::string::npos);
     assert(buildFile.find("add_executable") != std::string::npos);
     assert(buildFile.find("_runner.cpp") != std::string::npos);
@@ -200,6 +220,162 @@ int main()
     assert(runner.find("const auto& exVramWords = system.gpu().vramWords();") != std::string::npos);
     assert(runner.find("exPixels[y * exWidth + x] = pixel;") != std::string::npos);
 
+    Program trapProgram;
+    Builder trapBuilder(trapProgram);
+    auto& trapFunction = trapBuilder.createFunction("trap_func", 0x80013000);
+    auto& trapBlock = trapBuilder.createBlock(trapFunction, "entry");
+    Value trapAddOut = trapBuilder.createTemporary();
+    Value trapSubOut = trapBuilder.createTemporary();
+    trapBlock.instructions.push_back(trapBuilder.makeInstruction(
+        Opcode::ADD_TRAP, {Value::makeRegister(8), Value::makeRegister(9)}, {trapAddOut},
+        0x80013000));
+    trapBlock.instructions.push_back(trapBuilder.makeInstruction(
+        Opcode::SUB_TRAP, {Value::makeRegister(10), Value::makeRegister(11)}, {trapSubOut},
+        0x80013004));
+    trapBlock.instructions.push_back(trapBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+    const std::string trapSource = generator.generateSource(trapProgram, "trap_module");
+    assert(trapSource.find("ExceptionCode::ArithmeticOverflow") != std::string::npos);
+    assert(trapSource.find("(~(lhsValue ^ rhsValue) & (lhsValue ^ resultValue))") !=
+           std::string::npos);
+    assert(trapSource.find("((lhsValue ^ rhsValue) & (lhsValue ^ resultValue))") !=
+           std::string::npos);
+
+    Program mmioProgram;
+    Builder mmioBuilder(mmioProgram);
+    auto& mmioFunction = mmioBuilder.createFunction("mmio_func", 0x80014000);
+    auto& mmioBlock = mmioBuilder.createBlock(mmioFunction, "entry");
+    Value mmio8sOut = mmioBuilder.createTemporary();
+    Value mmio8uOut = mmioBuilder.createTemporary();
+    Value mmio16sOut = mmioBuilder.createTemporary();
+    Value mmio16uOut = mmioBuilder.createTemporary();
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(
+        Opcode::MMIO_LOAD8, {Value::makeAddress(0x1F801040)}, {mmio8sOut}, 0x80014000));
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(
+        Opcode::MMIO_LOAD8U, {Value::makeAddress(0x1F801041)}, {mmio8uOut}, 0x80014004));
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(
+        Opcode::MMIO_LOAD16, {Value::makeAddress(0x1F801044)}, {mmio16sOut}, 0x80014008));
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(
+        Opcode::MMIO_LOAD16U, {Value::makeAddress(0x1F801046)}, {mmio16uOut}, 0x8001400C));
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(
+        Opcode::MMIO_STORE8, {Value::makeAddress(0x1F801048), Value::makeRegister(2)}, {},
+        0x80014010));
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(
+        Opcode::MMIO_STORE16, {Value::makeAddress(0x1F80104A), Value::makeRegister(3)}, {},
+        0x80014014));
+    mmioBlock.instructions.push_back(
+        mmioBuilder.makeInstruction(Opcode::MMIO_LOAD, {Value::makeAddress(0x1F80104C)},
+                                    {mmioBuilder.createTemporary()}, 0x80014018));
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(
+        Opcode::MMIO_STORE, {Value::makeAddress(0x1F801050), Value::makeRegister(4)}, {},
+        0x8001401C));
+    mmioBlock.instructions.push_back(mmioBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+    const std::string mmioSource = generator.generateSource(mmioProgram, "mmio_module");
+    assert(mmioSource.find("readMmio8s(context") != std::string::npos);
+    assert(mmioSource.find("readMmio8(context") != std::string::npos);
+    assert(mmioSource.find("readMmio16s(context") != std::string::npos);
+    assert(mmioSource.find("readMmio16(context") != std::string::npos);
+    assert(mmioSource.find("writeMmio8(context") != std::string::npos);
+    assert(mmioSource.find("writeMmio16(context") != std::string::npos);
+    assert(mmioSource.find("readMmio32(context") != std::string::npos);
+    assert(mmioSource.find("writeMmio32(context") != std::string::npos);
+
+    Program malformedCallProgram;
+    Builder malformedCallBuilder(malformedCallProgram);
+    auto& malformedCallFunction = malformedCallBuilder.createFunction("malformed_call", 0x80015000);
+    auto& malformedCallBlock = malformedCallBuilder.createBlock(malformedCallFunction, "entry");
+    malformedCallBlock.instructions.push_back(
+        malformedCallBuilder.makeInstruction(Opcode::CALL, {}, {}, 0x80015000));
+    malformedCallBlock.instructions.push_back(
+        malformedCallBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+    bool malformedCallDetected = false;
+    try
+    {
+        (void)generator.generateSource(malformedCallProgram, "malformed_call_module");
+    }
+    catch (const std::runtime_error& error)
+    {
+        malformedCallDetected =
+            std::string(error.what()).find("Call instruction is missing a target operand") !=
+            std::string::npos;
+    }
+    assert(malformedCallDetected);
+
+    Program divProgram;
+    Builder divBuilder(divProgram);
+    auto& divFunction = divBuilder.createFunction("div_func", 0x80016000);
+    auto& divBlock = divBuilder.createBlock(divFunction, "entry");
+    Value divZeroLhs = divBuilder.createTemporary();
+    Value divZeroRhs = divBuilder.createTemporary();
+    Value divZeroHi = divBuilder.createTemporary();
+    Value divZeroLo = divBuilder.createTemporary();
+    Value divOverflowLhs = divBuilder.createTemporary();
+    Value divOverflowRhs = divBuilder.createTemporary();
+    Value divOverflowHi = divBuilder.createTemporary();
+    Value divOverflowLo = divBuilder.createTemporary();
+    Value divuLhs = divBuilder.createTemporary();
+    Value divuRhs = divBuilder.createTemporary();
+    Value divuHi = divBuilder.createTemporary();
+    Value divuLo = divBuilder.createTemporary();
+    divBlock.instructions.push_back(divBuilder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(7)}, {divZeroLhs}, 0x80016000));
+    divBlock.instructions.push_back(divBuilder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(0)}, {divZeroRhs}, 0x80016004));
+    divBlock.instructions.push_back(divBuilder.makeInstruction(
+        Opcode::DIV, {divZeroLhs, divZeroRhs}, {divZeroHi, divZeroLo}, 0x80016008));
+    divBlock.instructions.push_back(divBuilder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(static_cast<psxrecomp::s32>(0x80000000u))},
+        {divOverflowLhs}, 0x8001600C));
+    divBlock.instructions.push_back(divBuilder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(-1)}, {divOverflowRhs}, 0x80016010));
+    divBlock.instructions.push_back(divBuilder.makeInstruction(
+        Opcode::DIV, {divOverflowLhs, divOverflowRhs}, {divOverflowHi, divOverflowLo}, 0x80016014));
+    divBlock.instructions.push_back(divBuilder.makeInstruction(
+        Opcode::MOVE, {Value::makeImmediate(11)}, {divuLhs}, 0x80016018));
+    divBlock.instructions.push_back(
+        divBuilder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(0)}, {divuRhs}, 0x8001601C));
+    divBlock.instructions.push_back(
+        divBuilder.makeInstruction(Opcode::DIVU, {divuLhs, divuRhs}, {divuHi, divuLo}, 0x80016020));
+    divBlock.instructions.push_back(divBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+    const std::string divSource = generator.generateSource(divProgram, "div_module");
+    assert(divSource.find("const s32 dividend = static_cast<s32>(") != std::string::npos);
+    assert(divSource.find("= (dividend >= 0) ? 0xFFFFFFFFu : 1u;") != std::string::npos);
+    assert(divSource.find("== 0x80000000u &&") != std::string::npos);
+    assert(divSource.find("== 0xFFFFFFFFu)") != std::string::npos);
+    assert(divSource.find("= 0x80000000u;") != std::string::npos);
+    assert(divSource.find("= 0u;") != std::string::npos);
+
+    Program zeroProgram;
+    Builder zeroBuilder(zeroProgram);
+    auto& zeroFunction = zeroBuilder.createFunction("zero_func", 0x80017000);
+    auto& zeroBlock = zeroBuilder.createBlock(zeroFunction, "entry");
+    zeroBlock.instructions.push_back(
+        zeroBuilder.makeInstruction(Opcode::MOVE, {Value::makeImmediate(7)},
+                                    {Value::makeRegister(psxrecomp::Registers::ZERO)}, 0x80017000));
+    zeroBlock.instructions.push_back(
+        zeroBuilder.makeInstruction(Opcode::LOAD, {Value::makeAddress(0x80010010)},
+                                    {Value::makeRegister(psxrecomp::Registers::ZERO)}, 0x80017004));
+    zeroBlock.instructions.push_back(zeroBuilder.makeInstruction(
+        Opcode::SHR_LOGICAL,
+        {Value::makeRegister(psxrecomp::Registers::T0), Value::makeImmediate(1)},
+        {Value::makeRegister(psxrecomp::Registers::T1)}, 0x80017008));
+    zeroBlock.instructions.push_back(zeroBuilder.makeInstruction(Opcode::RETURN, {}, {}));
+    const std::string zeroSource = generator.generateSource(zeroProgram, "zero_module");
+    assert(zeroSource.find("context.regs[Registers::ZERO] = 7;") == std::string::npos);
+    assert(zeroSource.find("(void)(loadResult);") != std::string::npos);
+    assert(zeroSource.find("static_cast<u32>(context.regs[Registers::T0]) >> (1 & 0x1F)") !=
+           std::string::npos);
+
+    Program jumpProgram;
+    Builder jumpBuilder(jumpProgram);
+    auto& jumpFunction = jumpBuilder.createFunction("jump_func", 0x80017100);
+    auto& jumpBlock = jumpBuilder.createBlock(jumpFunction, "entry");
+    jumpBlock.instructions.push_back(jumpBuilder.makeInstruction(
+        Opcode::JUMP, {Value::makeAddress(0x80017120)}, {}, 0x80017100));
+    jumpBlock.successors = {"block_external"};
+    const std::string jumpSource = generator.generateSource(jumpProgram, "jump_module");
+    assert(jumpSource.find("callRecompiledFunction(context, 0x80017120)") == std::string::npos);
+    assert(jumpSource.find("failUnsupportedJump(0x80017120, 0x80017100);") != std::string::npos);
+
     runCodegenOverlapTest(generator);
 
 #if defined(_MSC_VER)
@@ -207,23 +383,19 @@ int main()
     return 0;
 #endif
 
-#if !defined(PSXRECOMP_SOURCE_DIR)
-#define PSXRECOMP_SOURCE_DIR ""
-#endif
-#if !defined(PSXRECOMP_TEST_CXX)
-#define PSXRECOMP_TEST_CXX ""
-#endif
-    std::filesystem::path repoRoot = PSXRECOMP_SOURCE_DIR;
+    const std::filesystem::path repoRoot = PSXRECOMP_SOURCE_DIR;
     assert(!repoRoot.empty());
     assert(std::filesystem::exists(repoRoot / "include/psxrecomp/types.h"));
 
-    auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
-    std::filesystem::path outputDir =
+    const auto stamp = std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+    const std::filesystem::path outputDir =
         std::filesystem::temp_directory_path() / ("psxrecomp_codegen_test_" + stamp);
     std::filesystem::create_directories(outputDir);
+
     struct TempDirGuard
     {
         std::filesystem::path path;
+
         ~TempDirGuard()
         {
             std::filesystem::remove_all(path);
@@ -231,346 +403,12 @@ int main()
     };
     TempDirGuard tempDirGuard{outputDir};
 
-    std::filesystem::path includeDir = outputDir / "include/psxrecomp/runtime";
-    std::filesystem::create_directories(includeDir);
-
-    std::filesystem::path headerPath = outputDir / "module.h";
-    std::filesystem::path sourcePath = outputDir / "module.cpp";
-    std::filesystem::path harnessPath = outputDir / "harness.cpp";
-    std::filesystem::path runtimeHeaderPath = includeDir / "psx_system.h";
-    std::filesystem::path unalignedHeaderPath = includeDir / "mips_unaligned_access.h";
-    std::filesystem::path exePath = outputDir / "module_test";
-
-    std::ofstream headerFile(headerPath);
-    headerFile << header;
-    headerFile.close();
-    std::ofstream sourceFile(sourcePath);
-    sourceFile << source;
-    sourceFile.close();
-
-    std::ofstream runtimeHeader(runtimeHeaderPath);
-    runtimeHeader << "#pragma once\n";
-    runtimeHeader << "#include \"psxrecomp/types.h\"\n";
-    runtimeHeader << "#include <array>\n";
-    runtimeHeader << "#include <cstddef>\n";
-    runtimeHeader << "#include <cstring>\n";
-    runtimeHeader << "#include <functional>\n";
-    runtimeHeader << "#include <optional>\n";
-    runtimeHeader << "#include <cstddef>\n";
-    runtimeHeader << "#include <string>\n";
-    runtimeHeader << "#include <type_traits>\n";
-    runtimeHeader << "#include <vector>\n";
-    runtimeHeader << "namespace psxrecomp { namespace runtime {\n";
-    runtimeHeader << "class RuntimeDebugOverlay {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    void setLastProgramCounter(u32 pc) { m_pc = pc; }\n";
-    runtimeHeader << "    u32 lastProgramCounter() const { return m_pc; }\n";
-    runtimeHeader << "    std::string renderText() const { return {}; }\n";
-    runtimeHeader << "  private:\n";
-    runtimeHeader << "    u32 m_pc = 0;\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class Cop0 {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader
-        << "    enum RegisterIndex : u8 { BadVAddr = 8, Status = 12, Cause = 13, Epc = 14 };"
-        << "\n";
-    runtimeHeader << "    enum class ExceptionCode : u32 {\n";
-    runtimeHeader << "      AddressErrorLoad = 4,\n";
-    runtimeHeader << "      AddressErrorStore = 5,\n";
-    runtimeHeader << "      Syscall = 8,\n";
-    runtimeHeader << "      ReservedInstruction = 10,\n";
-    runtimeHeader << "      CoprocessorUnusable = 11\n";
-    runtimeHeader << "    };\n";
-    runtimeHeader << "    u32 mfc0(u8 rd) const { return m_regs[rd]; }\n";
-    runtimeHeader << "    void mtc0(u8 rd, u32 value) { m_regs[rd] = value; }\n";
-    runtimeHeader << "    void exceptionEnter(ExceptionCode code, u32 pc, bool inDelaySlot,\n";
-    runtimeHeader << "                        std::optional<u32> badVaddr = std::nullopt) {\n";
-    runtimeHeader << "      const u32 status = m_regs[Status];\n";
-    runtimeHeader
-        << "      m_regs[Status] = (status & ~0x3Fu) | (((status & 0x3Fu) << 2) & 0x3Fu);\n";
-    runtimeHeader << "      u32 cause = m_regs[Cause];\n";
-    runtimeHeader << "      cause &= ~(0x7Cu | 0x80000000u);\n";
-    runtimeHeader << "      cause |= (static_cast<u32>(code) & 0x1Fu) << 2;\n";
-    runtimeHeader << "      if (inDelaySlot) {\n";
-    runtimeHeader << "        cause |= 0x80000000u;\n";
-    runtimeHeader << "      }\n";
-    runtimeHeader << "      m_regs[Cause] = cause;\n";
-    runtimeHeader << "      m_regs[Epc] = inDelaySlot ? (pc - 4u) : pc;\n";
-    runtimeHeader << "      if (badVaddr.has_value()) {\n";
-    runtimeHeader << "        m_regs[BadVAddr] = *badVaddr;\n";
-    runtimeHeader << "      }\n";
-    runtimeHeader << "    }\n";
-    runtimeHeader
-        << "    bool cop2Enabled() const { return (m_regs[Status] & (1u << 30)) != 0u; }\n";
-    runtimeHeader << "    void rfe() {\n";
-    runtimeHeader << "      const u32 status = m_regs[Status];\n";
-    runtimeHeader << "      m_regs[Status] = (status & ~0x3Fu) | ((status & 0x3Fu) >> 2);\n";
-    runtimeHeader << "    }\n";
-    runtimeHeader << "  private:\n";
-    runtimeHeader << "    std::array<u32, 32> m_regs{};\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class Gte {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    u32 mfc2(u8 rd) const { return m_data[rd & 31u]; }\n";
-    runtimeHeader << "    void mtc2(u8 rd, u32 value) { m_data[rd & 31u] = value; }\n";
-    runtimeHeader << "    u32 cfc2(u8 rd) const { return m_ctrl[rd & 31u]; }\n";
-    runtimeHeader << "    void ctc2(u8 rd, u32 value) { m_ctrl[rd & 31u] = value; }\n";
-    runtimeHeader << "  private:\n";
-    runtimeHeader << "    std::array<u32, 32> m_data{};\n";
-    runtimeHeader << "    std::array<u32, 32> m_ctrl{};\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class StallClassifier {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    void recordPc(Address) {}\n";
-    runtimeHeader << "    std::string classify() const { return {}; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class DiagTracepointEngine {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    std::string formatRecentTraces() const { return {}; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class DiagWatchpointEngine {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    std::size_t eventCount() const { return 0; }\n";
-    runtimeHeader << "    std::string formatSummary() const { return {}; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class DiagCdromLateBufferTracker {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    bool isEnabled() const { return false; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "enum class ExplainerKind : unsigned char {\n";
-    runtimeHeader << "    Gpustat, CdromIrq, IrqController, DmaChannel,\n";
-    runtimeHeader << "    CdromBankSummary, CdromPhaseSummary, CdromXaClassification,\n";
-    runtimeHeader << "    CdromPostStreamValidator, CdromCpuPayloadSummary,\n";
-    runtimeHeader << "    CdromIrqLifecycleSummary, CdromLateBufferSummary,\n";
-    runtimeHeader << "    Rev2DecoderHandoffSummary\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class DiagRev2DecoderHandoffTracker {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    bool isEnabled() const { return false; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class Cdrom {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader
-        << "    std::string formatPhaseTraceSummary(std::size_t = 10) const { return {}; }\n";
-    runtimeHeader << "    std::string formatXaClassificationSummary() const { return {}; }\n";
-    runtimeHeader << "    std::string formatPostStreamSummary() const { return {}; }\n";
-    runtimeHeader << "    std::string formatCpuPayloadSummary() const { return {}; }\n";
-    runtimeHeader << "    std::string formatIrqLifecycleSummary() const { return {}; }\n";
-    runtimeHeader << "    std::string formatAdpbusyLifecycleSummary() const { return {}; }\n";
-    runtimeHeader << "    void noteIrqCallbackDispatch(unsigned char, bool) {}\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class DiagCdromBankTracer {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    bool isEnabled() const { return false; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class DiagExplainerEngine {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    bool isEnabled(ExplainerKind) const { return false; }\n";
-    runtimeHeader << "    static std::string explainCdromBankSummary(const DiagCdromBankTracer&)"
-                     " { return {}; }\n";
-    runtimeHeader
-        << "    static std::string explainCdromXaClassification(const Cdrom&) { return {}; }\n";
-    runtimeHeader
-        << "    static std::string explainCdromPostStreamValidator(const Cdrom&) { return {}; }\n";
-    runtimeHeader
-        << "    static std::string explainCdromCpuPayloadSummary(const Cdrom&) { return {}; }\n";
-    runtimeHeader
-        << "    static std::string explainCdromIrqLifecycleSummary(const Cdrom&) { return {}; }\n";
-    runtimeHeader << "    static std::string explainCdromLateBufferSummary("
-                     "const DiagCdromLateBufferTracker&) { return {}; }\n";
-    runtimeHeader
-        << "    static std::string explainRev2DecoderHandoffSummary("
-             "const DiagRev2DecoderHandoffTracker&) { return {}; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class CallbackTraceEngine {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    bool hasActiveInvocation() const { return false; }\n";
-    runtimeHeader << "    void setActiveInvocationStackPointer(Address) {}\n";
-    runtimeHeader << "    void recordRamWrite(Address, u8, u32, u32) {}\n";
-    runtimeHeader << "    void recordCommittedRegisterDelta(const std::array<u32, 32>&,\n";
-    runtimeHeader << "                                      const std::array<u32, 32>&,\n";
-    runtimeHeader << "                                      u32, u32, u32, u32, bool) {}\n";
-    runtimeHeader << "    std::string formatRecentCallbacks() const { return {}; }\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "class PsxSystem {\n";
-    runtimeHeader << "  public:\n";
-    runtimeHeader << "    struct DiscSwapInfo {\n";
-    runtimeHeader << "      struct DiscEntry {\n";
-    runtimeHeader << "        u32 index = 0;\n";
-    runtimeHeader << "        std::string label;\n";
-    runtimeHeader << "        std::string path;\n";
-    runtimeHeader << "      };\n";
-    runtimeHeader << "      std::string setName;\n";
-    runtimeHeader << "      u32 activeDiscIndex = 0;\n";
-    runtimeHeader << "      std::vector<DiscEntry> discs;\n";
-    runtimeHeader << "    };\n";
-    runtimeHeader << "    explicit PsxSystem(u8* ram) : m_ram(ram) {}\n";
-    runtimeHeader << "    u8* getRam() { return m_ram; }\n";
-    runtimeHeader << "    template <typename T> T read(Address address) {\n";
-    runtimeHeader << "      T value{};\n";
-    runtimeHeader << "      const std::size_t offset = static_cast<std::size_t>(address);\n";
-    runtimeHeader << "      if (offset + sizeof(T) <= psxrecomp::MemoryMap::RAM_SIZE) {\n";
-    runtimeHeader << "        std::memcpy(&value, m_ram + offset, sizeof(T));\n";
-    runtimeHeader << "      }\n";
-    runtimeHeader << "      return value;\n";
-    runtimeHeader << "    }\n";
-    runtimeHeader << "    template <typename T> void write(Address address, T value) {\n";
-    runtimeHeader << "      const std::size_t offset = static_cast<std::size_t>(address);\n";
-    runtimeHeader << "      if (offset + sizeof(T) <= psxrecomp::MemoryMap::RAM_SIZE) {\n";
-    runtimeHeader << "        std::memcpy(m_ram + offset, &value, sizeof(T));\n";
-    runtimeHeader << "      }\n";
-    runtimeHeader << "    }\n";
-    runtimeHeader << "    template <typename T> T readMmioExplicit(Address) { return {}; }\n";
-    runtimeHeader << "    template <typename T> void writeMmioExplicit(Address, T) {}\n";
-    runtimeHeader << "    void callBiosSyscall(u32, u32*, std::size_t) {}\n";
-    runtimeHeader << "    void callBiosVector(u32, u32*, std::size_t) {}\n";
-    runtimeHeader << "    void callGpuIntrinsic(Address) {}\n";
-    runtimeHeader << "    void callSpuIntrinsic(Address) {}\n";
-    runtimeHeader << "    void callCdromIntrinsic(Address) {}\n";
-    runtimeHeader << "    void setDiscSwapInfo(const DiscSwapInfo&) {}\n";
-    runtimeHeader << "    void tickCpuCycles(u32) {}\n";
-    runtimeHeader << "    u32 frameCount() const { return 0; }\n";
-    runtimeHeader << "    u32 advanceFrame() { return 0; }\n";
-    runtimeHeader << "    void observeProgramCounter(Address pc, const u32* = nullptr,"
-                     " std::size_t = 0) { "
-                     "m_overlay.setLastProgramCounter(pc); m_stallClassifier.recordPc(pc); }\n";
-    runtimeHeader
-        << "    void setLastResumeAddress(Address address) { m_lastResumeAddress = address; }\n";
-    runtimeHeader << "    Address lastResumeAddress() const { return m_lastResumeAddress; }\n";
-    runtimeHeader << "    std::string describeBiosCdromState() const { return {}; }\n";
-    runtimeHeader << "    void serviceInterrupts() {}\n";
-    runtimeHeader << "    void validateAllocatorHeapCallBoundary(Address) {}\n";
-    runtimeHeader << "    enum class CallbackContextDisposition { RestoreSaved, CommitMutated };\n";
-    runtimeHeader
-        << "    CallbackContextDisposition consumePendingCallbackRegisters(std::array<u32, 32>&)";
-    runtimeHeader << " { return CallbackContextDisposition::RestoreSaved; }\n";
-    runtimeHeader << "    u32 callbackContextCommitGeneration() const { return 0; }\n";
-    runtimeHeader << "    void setCallbackInvoker(std::function<u32(u32)>) {}\n";
-    runtimeHeader << "    RuntimeDebugOverlay& debugOverlay() { return m_overlay; }\n";
-    runtimeHeader << "    Cop0& cop0() { return m_cop0; }\n";
-    runtimeHeader << "    Gte& gte() { return m_gte; }\n";
-    runtimeHeader << "    StallClassifier& stallClassifier() { return m_stallClassifier; }\n";
-    runtimeHeader << "    DiagTracepointEngine& diagTracepoints() { return m_diagTracepoints; }\n";
-    runtimeHeader << "    DiagWatchpointEngine& diagWatchpoints() { return m_diagWatchpoints; }\n";
-    runtimeHeader
-        << "    DiagCdromBankTracer& diagCdromBankTracer() { return m_diagCdromBankTracer; }\n";
-    runtimeHeader << "    DiagCdromLateBufferTracker& diagCdromLateBufferTracker() { "
-                     "return m_diagCdromLateBufferTracker; }\n";
-    runtimeHeader << "    DiagRev2DecoderHandoffTracker& diagRev2DecoderHandoffTracker() { "
-                     "return m_diagRev2DecoderHandoffTracker; }\n";
-    runtimeHeader << "    DiagExplainerEngine& diagExplainers() { return m_diagExplainers; }\n";
-    runtimeHeader << "    Cdrom& cdrom() { return m_cdrom; }\n";
-    runtimeHeader << "    CallbackTraceEngine& callbackTrace() { return m_callbackTrace; }\n";
-    runtimeHeader << "    std::string formatHookEntryIntResumeTrace() const { return {}; }\n";
-    runtimeHeader << "  private:\n";
-    runtimeHeader << "    u8* m_ram;\n";
-    runtimeHeader << "    RuntimeDebugOverlay m_overlay;\n";
-    runtimeHeader << "    Cop0 m_cop0;\n";
-    runtimeHeader << "    Gte m_gte;\n";
-    runtimeHeader << "    StallClassifier m_stallClassifier;\n";
-    runtimeHeader << "    DiagTracepointEngine m_diagTracepoints;\n";
-    runtimeHeader << "    DiagWatchpointEngine m_diagWatchpoints;\n";
-    runtimeHeader << "    DiagCdromBankTracer m_diagCdromBankTracer;\n";
-    runtimeHeader << "    DiagCdromLateBufferTracker m_diagCdromLateBufferTracker;\n";
-    runtimeHeader << "    DiagRev2DecoderHandoffTracker m_diagRev2DecoderHandoffTracker;\n";
-    runtimeHeader << "    DiagExplainerEngine m_diagExplainers;\n";
-    runtimeHeader << "    Cdrom m_cdrom;\n";
-    runtimeHeader << "    CallbackTraceEngine m_callbackTrace;\n";
-    runtimeHeader << "    Address m_lastResumeAddress = 0;\n";
-    runtimeHeader << "};\n";
-    runtimeHeader << "} }\n";
-    runtimeHeader.close();
-
-    std::ofstream unalignedHeader(unalignedHeaderPath);
-    unalignedHeader << "#pragma once\n";
-    unalignedHeader << "#include \"psxrecomp/runtime/psx_system.h\"\n";
-    unalignedHeader << "namespace psxrecomp { namespace runtime {\n";
-    unalignedHeader
-        << "inline u32 loadWordLeft(PsxSystem&, Address, u32 value) { return value; }\n";
-    unalignedHeader
-        << "inline u32 loadWordRight(PsxSystem&, Address, u32 value) { return value; }\n";
-    unalignedHeader << "inline void storeWordLeft(PsxSystem&, Address, u32) {}\n";
-    unalignedHeader << "inline void storeWordRight(PsxSystem&, Address, u32) {}\n";
-    unalignedHeader << "} }\n";
-    unalignedHeader.close();
-
-    std::ofstream harnessFile(harnessPath);
-    harnessFile << "#include \"module.h\"\n";
-    harnessFile << "#include <array>\n";
-    harnessFile << "#include <stdexcept>\n";
-    harnessFile << "int main() {\n";
-    harnessFile << "  std::array<psxrecomp::u8, psxrecomp::MemoryMap::RAM_SIZE> ram{};\n";
-    harnessFile << "  psxrecomp::runtime::PsxSystem system(ram.data());\n";
-    harnessFile << "  psxrecomp::recompiler::RecompiledModule::initMemory(system);\n";
-    harnessFile << "  bool threw = false;\n";
-    harnessFile << "  try {\n";
-    harnessFile << "    psxrecomp::recompiler::RecompiledModule::run(system);\n";
-    harnessFile << "  } catch (const std::runtime_error&) {\n";
-    harnessFile << "    threw = true;\n";
-    harnessFile << "  }\n";
-    harnessFile << "#if PSXRECOMP_STRICT_ADDR_ERRORS\n";
-    harnessFile << "  if (!threw) { return 1; }\n";
-    harnessFile << "  const auto bad = system.cop0().mfc0(psxrecomp::runtime::Cop0::BadVAddr);\n";
-    harnessFile << "  const auto cause = system.cop0().mfc0(psxrecomp::runtime::Cop0::Cause);\n";
-    harnessFile << "  if (bad != 0x80010012u) { return 2; }\n";
-    harnessFile << "  if ((cause & 0x7Cu) !=\n";
-    harnessFile << "      (static_cast<psxrecomp::u32>(\n";
-    harnessFile << "           psxrecomp::runtime::Cop0::ExceptionCode::AddressErrorLoad)\n";
-    harnessFile << "       << 2)) {\n";
-    harnessFile << "    return 3;\n";
-    harnessFile << "  }\n";
-    harnessFile << "#else\n";
-    harnessFile << "  if (threw) { return 4; }\n";
-    harnessFile << "#endif\n";
-    harnessFile << "  return 0;\n";
-    harnessFile << "}\n";
-    harnessFile.close();
-
-    auto quote = [](const std::filesystem::path& path)
-    { return std::string("\"") + path.string() + "\""; };
     std::string compiler = PSXRECOMP_TEST_CXX;
     if (compiler.empty())
     {
         compiler = "c++";
     }
-    const std::string baseCompileCommand = quote(compiler) + " -std=c++17 -I" +
-                                           quote(outputDir / "include") + " -I" +
-                                           quote(repoRoot / "include") + " -I" + quote(outputDir) +
-                                           " " + quote(sourcePath) + " " + quote(harnessPath);
-    std::string command = baseCompileCommand + " -o " + quote(exePath);
-    int compileStatus = std::system(command.c_str());
-    if (compileStatus != 0)
-    {
-        std::cerr << "Compile failed with status: " << compileStatus << "\n";
-    }
-    assert(compileStatus == 0);
 
-    const auto strictExePath = outputDir / "harness_strict.out";
-    std::string strictCommand =
-        baseCompileCommand + " -DPSXRECOMP_STRICT_ADDR_ERRORS=1 -o " + quote(strictExePath);
-    int strictCompileStatus = std::system(strictCommand.c_str());
-    if (strictCompileStatus != 0)
-    {
-        std::cerr << "Strict compile failed with status: " << strictCompileStatus << "\n";
-    }
-    assert(strictCompileStatus == 0);
-
-    std::string runCommand = quote(exePath);
-    int runStatus = std::system(runCommand.c_str());
-    if (runStatus != 0)
-    {
-        std::cerr << "Run failed with status: " << runStatus << "\n";
-    }
-    assert(runStatus == 0);
-
-    std::string strictRunCommand = quote(strictExePath);
-    int strictRunStatus = std::system(strictRunCommand.c_str());
-    if (strictRunStatus != 0)
-    {
-        std::cerr << "Strict run failed with status: " << strictRunStatus << "\n";
-    }
-    assert(strictRunStatus == 0);
-
-    runCodegenCop2GuardTest(generator, outputDir, repoRoot, compiler);
+    runCodegenCompileHarnessTest(generator, header, source, outputDir, repoRoot, compiler);
     return 0;
 }

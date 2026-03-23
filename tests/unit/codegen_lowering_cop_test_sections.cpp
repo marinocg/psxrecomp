@@ -37,7 +37,10 @@ void runCodegenLoweringCopTests()
         std::string source = generator.generateSource(program, "cop0_lowering_module");
 
         assert(source.find("context.system.cop0().mtc0") != std::string::npos);
-        assert(source.find("context.system.cop0().mfc0") != std::string::npos);
+        assert(source.find("const u32 loadResult = context.system.cop0().mfc0") !=
+               std::string::npos);
+        assert(source.find("stagePendingLoad(context, static_cast<Register>(3), loadResult);") !=
+               std::string::npos);
         assert(source.find("context.system.cop0().rfe()") != std::string::npos);
 
         std::cerr << "[PASS] COP0 lowering emits runtime COP0 helpers\n";
@@ -79,9 +82,15 @@ void runCodegenLoweringCopTests()
         assert(source.find("runtime::Cop0::ExceptionCode::CoprocessorUnusable") !=
                std::string::npos);
         assert(source.find("context.system.gte().mtc2") != std::string::npos);
-        assert(source.find("context.system.gte().mfc2") != std::string::npos);
+        assert(source.find("const u32 loadResult = context.system.gte().mfc2") !=
+               std::string::npos);
+        assert(source.find("stagePendingLoad(context, static_cast<Register>(3), loadResult);") !=
+               std::string::npos);
         assert(source.find("context.system.gte().ctc2") != std::string::npos);
-        assert(source.find("context.system.gte().cfc2") != std::string::npos);
+        assert(source.find("const u32 loadResult = context.system.gte().cfc2") !=
+               std::string::npos);
+        assert(source.find("stagePendingLoad(context, static_cast<Register>(5), loadResult);") !=
+               std::string::npos);
         assert(source.find("readMemory32(context, 0x80011000)") != std::string::npos);
         assert(source.find("writeMemory32(context, 0x80011004, "
                            "context.system.gte().mfc2(static_cast<u8>(8)))") != std::string::npos);

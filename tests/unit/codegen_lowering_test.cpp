@@ -168,11 +168,10 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 4: Self-loop prevention
+    // Test 4: Self-loop is preserved
     //
-    // When a block's sole successor is itself AND a next block exists
-    // in the function, the lowering should redirect to the next block
-    // instead of creating an infinite self-loop.
+    // Self-loops are real control flow and must not be rewritten to the
+    // next block.
     // ---------------------------------------------------------------
     {
         Program program;
@@ -192,18 +191,13 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "self_loop_module");
 
-        // The generated code should NOT assign block = BlockId::self_loop
-        // when the current block is already self_loop. Instead it should
-        // redirect to after_loop.
-        // Find the case label for self_loop
+        // The generated code should continue targeting the self-loop block.
         auto selfLoopCase = source.find("case BlockId::self_loop:");
         assert(selfLoopCase != std::string::npos);
-
-        // In the self_loop case body, look for the redirection
-        [[maybe_unused]] auto afterSelfLoop = source.find("after_loop", selfLoopCase);
-        assert(afterSelfLoop != std::string::npos);
-
-        std::cerr << "[PASS] self-loop prevention redirects to next block\n";
+        [[maybe_unused]] auto selfLoopRef =
+            source.find("block = BlockId::self_loop;", selfLoopCase);
+        assert(selfLoopRef != std::string::npos);
+        std::cerr << "[PASS] self-loop successor preserved\n";
     }
 
     // ---------------------------------------------------------------
@@ -270,13 +264,10 @@ int main()
     }
 
     // ---------------------------------------------------------------
-    // Test 7: BRANCH unconditional self-loop spin-wait detection
+    // Test 7: BRANCH unconditional self-loop stays a branch
     //
-    // When a block's BRANCH instruction has BOTH successors pointing to
-    // itself (unconditional self-loop / spin-wait), the generated code
-    // should call advanceFrame() instead of looping forever.
-    // Conditional self-loops (only one successor pointing to self) are
-    // regular loops handled by the while(true)/switch structure.
+    // Unconditional self-loops are still real control flow. Lowering must
+    // not rewrite them into advanceFrame().
     // ---------------------------------------------------------------
     {
         Program program;
@@ -309,10 +300,10 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "spin_wait_module");
 
-        // The generated code should call advanceFrame() in the spin block
-        assert(source.find("advanceFrame()") != std::string::npos);
+        assert(source.find("advanceFrame()") == std::string::npos);
+        assert(source.find("block = BlockId::spin_block;") != std::string::npos);
 
-        std::cerr << "[PASS] BRANCH unconditional self-loop spin-wait detection\n";
+        std::cerr << "[PASS] BRANCH unconditional self-loop preserved\n";
     }
 
     // ---------------------------------------------------------------
@@ -363,8 +354,41 @@ int main()
         assert(loopRef != std::string::npos);
         [[maybe_unused]] auto exitRef = source.find("BlockId::exit_block", loopCase);
         assert(exitRef != std::string::npos);
+        assert(source.find("advanceFrame()") == std::string::npos);
 
         std::cerr << "[PASS] conditional self-loop is normal branch (not advanceFrame)\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10: Address-valued JUMP to external block remains a jump
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_jump_external", 0x800A0000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::JUMP, {Value::makeAddress(0x800A0100)}, {}, 0x800A0000));
+        entry.successors = {"block_external"};
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "jump_external_module");
+
+        assert(
+            source.find("if (!jumpRecompiledFunction(context, 0x800a0100))") != std::string::npos ||
+            source.find("if (!jumpRecompiledFunction(context, 0x800A0100))") != std::string::npos);
+        assert(source.find("if (!callIntrinsic(context.system, 0x800a0100, context.regs))") ==
+               std::string::npos);
+        assert(source.find("if (!callIntrinsic(context.system, 0x800A0100, context.regs))") ==
+               std::string::npos);
+        assert(source.find("callRecompiledFunction(context, 0x800a0100)") == std::string::npos);
+        assert(source.find("callRecompiledFunction(context, 0x800A0100)") == std::string::npos);
+        assert(source.find("failUnsupportedJump(0x800a0100, 0x800a0000);") != std::string::npos ||
+               source.find("failUnsupportedJump(0x800A0100, 0x800A0000);") != std::string::npos);
+
+        std::cerr << "[PASS] address jump external path uses jump semantics\n";
     }
 
     // ---------------------------------------------------------------
@@ -423,19 +447,131 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "jump_reg_fallback_module");
 
-        const std::string intrinsicProbe =
-            "if (!callIntrinsic(context.system, context.regs[Registers::T1], "
-            "context.regs))";
         const std::string recompiledProbe =
             "if (!jumpRecompiledFunction(context, context.regs[Registers::T1]))";
         const std::string failProbe =
             "failUnsupportedJump(context.regs[Registers::T1], 0x80090000);";
+        const std::string retireProbe = "finishLoadDelayCycle(context, instructionGroupWriteMask);";
 
-        assert(source.find(intrinsicProbe) != std::string::npos);
         assert(source.find(recompiledProbe) != std::string::npos);
         assert(source.find(failProbe) != std::string::npos);
+        assert(source.find(
+                   "callIntrinsic(context.system, context.regs[Registers::T1], context.regs)") ==
+               std::string::npos);
+        assert(source.find(retireProbe) < source.find(recompiledProbe));
 
         std::cerr << "[PASS] register JUMP fallback to jump dispatch\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10b: CALL retires pending loads before entering callees.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_call_retire_before_dispatch", 0x80092000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(
+            builder.makeInstruction(Opcode::CALL, {Value::makeRegister(4)}, {}, 0x80092000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80092004));
+
+        CodeGenerator generator;
+        std::string source =
+            generator.generateSource(program, "call_retire_before_dispatch_module");
+
+        const std::string traceProbe =
+            "traceInterestingCallsite(context, context.regs[Registers::A0], 0x80092000, false);";
+        const std::string retireProbe = "finishLoadDelayCycle(context, instructionGroupWriteMask);";
+        const std::string intrinsicProbe =
+            "if (!callIntrinsic(context.system, context.regs[Registers::A0], context.regs))";
+        const std::string recompiledProbe =
+            "if (!callRecompiledFunction(context, context.regs[Registers::A0]))";
+
+        assert(source.find(traceProbe) != std::string::npos);
+        assert(source.find(retireProbe, source.find(traceProbe)) != std::string::npos);
+        assert(source.find(intrinsicProbe) != std::string::npos);
+        assert(source.find(recompiledProbe) != std::string::npos);
+        assert(source.find(retireProbe, source.find(traceProbe)) < source.find(intrinsicProbe));
+
+        std::cerr << "[PASS] CALL retires pending load before dispatch\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10b: PC observation preserves architectural and observed addresses
+    // separately when source addresses live in a cached segment.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_program_counter_provenance", 0x80010000);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(Opcode::NOP, {}, {}, 0x80010000));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010004));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "pc_provenance_module");
+
+        assert(source.find("setProgramCounter(context, 0x80010000, 0x10000);") !=
+               std::string::npos);
+
+        std::cerr << "[PASS] setProgramCounter keeps architectural and observed PCs separate\n";
+    }
+
+    // ---------------------------------------------------------------
+    // Test 10c: Delayed control transfers retire once before the slot and
+    // once after the slot before dispatching the transfer.
+    // ---------------------------------------------------------------
+    {
+        Program program;
+        Builder builder(program);
+
+        auto& function = builder.createFunction("test_delay_slot_retirement_split", 0x800103f4);
+        auto& entry = builder.createBlock(function, "entry");
+
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::LOAD, {Value::makeAddress(0x1f800100)}, {Value::makeRegister(2)}, 0x800103f4,
+            std::string("lw $v0, 92($sp)"), 0x800103f4));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::MOVE, {Value::makeImmediate(0x80010400)}, {Value::makeRegister(31)}, 0x800103f8,
+            std::string("jal 0x80011338"), 0x800103f8));
+        entry.instructions.push_back(builder.makeInstruction(
+            Opcode::ADD, {Value::makeRegister(2), Value::makeImmediate(19960)},
+            {Value::makeRegister(5)}, 0x800103f8, std::string("addiu $a1, $v0, 19960"),
+            0x800103fc));
+        entry.instructions.push_back(
+            builder.makeInstruction(Opcode::CALL, {Value::makeAddress(0x80011338)}, {}, 0x800103f8,
+                                    std::string("jal 0x80011338"), 0x800103f8));
+        entry.instructions.push_back(builder.makeInstruction(Opcode::RETURN, {}, {}, 0x80010400));
+
+        CodeGenerator generator;
+        std::string source = generator.generateSource(program, "delay_slot_split_module");
+
+        const auto guardPos = source.find("if (resumeAddress == 0 || resumeAddress == 0x103f8)");
+        const auto raWritePos = source.find("context.regs[Registers::RA] = -2147417088;", guardPos);
+        const auto slotPos = source.find(
+            "context.regs[Registers::A1] = context.regs[Registers::V0] + 19960;", guardPos);
+        const auto callTracePos = source.find(
+            "traceInterestingCallsite(context, 0x80011338, 0x800103f8, false);", guardPos);
+        const std::string retirePrefix = "finishLoadDelayCycle(context, ";
+        const auto firstRetirePos = source.find(retirePrefix, guardPos);
+        const auto secondRetirePos = source.find(retirePrefix, firstRetirePos + 1);
+
+        assert(guardPos != std::string::npos);
+        assert(raWritePos != std::string::npos);
+        assert(slotPos != std::string::npos);
+        assert(callTracePos != std::string::npos);
+        assert(firstRetirePos != std::string::npos);
+        assert(secondRetirePos != std::string::npos);
+        assert(raWritePos < firstRetirePos);
+        assert(firstRetirePos < slotPos);
+        assert(slotPos < secondRetirePos);
+        assert(secondRetirePos < callTracePos);
+
+        std::cerr << "[PASS] delayed control transfer retires before and after delay slot\n";
     }
 
     // ---------------------------------------------------------------
@@ -464,10 +600,10 @@ int main()
         CodeGenerator generator;
         std::string source = generator.generateSource(program, "unaligned_lowering_module");
 
-        assert(source.find("readMemoryLwl(context, 0x80011003, context.regs[Registers::V0])") !=
-               std::string::npos);
-        assert(source.find("readMemoryLwr(context, 0x80011000, context.regs[Registers::V0])") !=
-               std::string::npos);
+        assert(source.find("readMemoryLwl(context, 0x80011003, resolveLoadMergeValue(context, "
+                           "static_cast<Register>(2)))") != std::string::npos);
+        assert(source.find("readMemoryLwr(context, 0x80011000, resolveLoadMergeValue(context, "
+                           "static_cast<Register>(2)))") != std::string::npos);
         assert(source.find("writeMemorySwl(context, 0x80011003, context.regs[Registers::V0]);") !=
                std::string::npos);
         assert(source.find("writeMemorySwr(context, 0x80011000, context.regs[Registers::V0]);") !=

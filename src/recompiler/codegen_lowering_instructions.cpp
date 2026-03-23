@@ -1,3 +1,4 @@
+#include "codegen_lowering_detail.h"
 #include "codegen_lowering_gte.h"
 #include "codegen_lowering_helpers.h"
 
@@ -58,10 +59,14 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     {
         if (instruction.outputs.empty() || instruction.inputs.size() < 2)
         {
-            emitter.writeLine("// TODO: malformed binary op");
+            throwLoweringError(instruction, "Malformed binary operation");
+        }
+        const std::optional<std::string> lhs =
+            valueToWriteExpr(instruction.outputs.front(), context);
+        if (!lhs.has_value())
+        {
             return;
         }
-        std::string lhs = valueToExpr(instruction.outputs.front(), context);
         std::string rhsA = valueToExpr(instruction.inputs[0], context);
         std::string rhsB = valueToExpr(instruction.inputs[1], context);
 
@@ -70,30 +75,34 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
         {
             if (optimization == ZeroOptimization::Elide)
             {
-                emitter.writeLine(lhs + " = " + rhsA + ";");
+                emitter.writeLine(*lhs + " = " + rhsA + ";");
                 return;
             }
             if (optimization == ZeroOptimization::ZeroResult)
             {
-                emitter.writeLine(lhs + " = 0;");
+                emitter.writeLine(*lhs + " = 0;");
                 return;
             }
             return;
         }
-        emitter.writeLine(lhs + " = " + rhsA + " " + op + " " + rhsB + ";");
+        emitter.writeLine(*lhs + " = " + rhsA + " " + op + " " + rhsB + ";");
     };
 
     auto writeCompareOp = [&](const char* op)
     {
         if (instruction.outputs.empty() || instruction.inputs.size() < 2)
         {
-            emitter.writeLine("// TODO: malformed compare op");
+            throwLoweringError(instruction, "Malformed compare operation");
+        }
+        const std::optional<std::string> lhs =
+            valueToWriteExpr(instruction.outputs.front(), context);
+        if (!lhs.has_value())
+        {
             return;
         }
-        std::string lhs = valueToExpr(instruction.outputs.front(), context);
         std::string rhsA = valueToExpr(instruction.inputs[0], context);
         std::string rhsB = valueToExpr(instruction.inputs[1], context);
-        emitter.writeLine(lhs + " = (static_cast<s32>(" + rhsA + ") " + op + " static_cast<s32>(" +
+        emitter.writeLine(*lhs + " = (static_cast<s32>(" + rhsA + ") " + op + " static_cast<s32>(" +
                           rhsB + "));");
     };
 
@@ -103,6 +112,11 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     }
 
     if (emitGteInstruction(instruction, block, blockNames, context, emitter))
+    {
+        return;
+    }
+
+    if (emitMemoryAndSystemInstruction(instruction, block, blockNames, context, emitter))
     {
         return;
     }
@@ -117,16 +131,73 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::MOVE:
         if (!instruction.outputs.empty() && !instruction.inputs.empty())
         {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
+            const std::optional<std::string> dest =
+                valueToWriteExpr(instruction.outputs.front(), context);
             std::string source = valueToExpr(instruction.inputs.front(), context);
-            if (!context.enableOptimizations || dest != source)
+            if (dest.has_value() && (!context.enableOptimizations || *dest != source))
             {
-                emitter.writeLine(dest + " = " + source + ";");
+                emitter.writeLine(*dest + " = " + source + ";");
             }
         }
         break;
+    case ir::Opcode::ADD_TRAP:
+        if (instruction.outputs.empty() || instruction.inputs.size() < 2)
+        {
+            throwLoweringError(instruction, "Malformed trapping add operation");
+        }
+        emitter.openBlock("");
+        emitter.writeLine("const u32 lhsValue = " + valueToExpr(instruction.inputs[0], context) +
+                          ";");
+        emitter.writeLine("const u32 rhsValue = " + valueToExpr(instruction.inputs[1], context) +
+                          ";");
+        emitter.writeLine("const u32 resultValue = lhsValue + rhsValue;");
+        emitter.openBlock(
+            "if (((~(lhsValue ^ rhsValue) & (lhsValue ^ resultValue)) & 0x80000000u) != 0)");
+        emitter.writeLine(
+            "raiseCpuException(context, "
+            "static_cast<u32>(runtime::Cop0::ExceptionCode::ArithmeticOverflow), " +
+            instructionSourcePcExpr(instruction) + ", " +
+            (instructionIsInDelaySlot(instruction) ? std::string("true") : std::string("false")) +
+            ");");
+        emitter.closeBlock();
+        if (const std::optional<std::string> dest =
+                valueToWriteExpr(instruction.outputs.front(), context);
+            dest.has_value())
+        {
+            emitter.writeLine(*dest + " = resultValue;");
+        }
+        emitter.closeBlock();
+        break;
     case ir::Opcode::ADD:
         writeBinaryOp("+", ZeroOptimization::Elide);
+        break;
+    case ir::Opcode::SUB_TRAP:
+        if (instruction.outputs.empty() || instruction.inputs.size() < 2)
+        {
+            throwLoweringError(instruction, "Malformed trapping subtract operation");
+        }
+        emitter.openBlock("");
+        emitter.writeLine("const u32 lhsValue = " + valueToExpr(instruction.inputs[0], context) +
+                          ";");
+        emitter.writeLine("const u32 rhsValue = " + valueToExpr(instruction.inputs[1], context) +
+                          ";");
+        emitter.writeLine("const u32 resultValue = lhsValue - rhsValue;");
+        emitter.openBlock(
+            "if ((((lhsValue ^ rhsValue) & (lhsValue ^ resultValue)) & 0x80000000u) != 0)");
+        emitter.writeLine(
+            "raiseCpuException(context, "
+            "static_cast<u32>(runtime::Cop0::ExceptionCode::ArithmeticOverflow), " +
+            instructionSourcePcExpr(instruction) + ", " +
+            (instructionIsInDelaySlot(instruction) ? std::string("true") : std::string("false")) +
+            ");");
+        emitter.closeBlock();
+        if (const std::optional<std::string> dest =
+                valueToWriteExpr(instruction.outputs.front(), context);
+            dest.has_value())
+        {
+            emitter.writeLine(*dest + " = resultValue;");
+        }
+        emitter.closeBlock();
         break;
     case ir::Opcode::SUB:
         writeBinaryOp("-", ZeroOptimization::Elide);
@@ -143,41 +214,52 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::SHL:
         if (instruction.outputs.empty() || instruction.inputs.size() < 2)
         {
-            emitter.writeLine("// TODO: malformed shift op");
-            break;
+            throwLoweringError(instruction, "Malformed shift operation");
         }
-        emitter.writeLine(valueToExpr(instruction.outputs.front(), context) + " = " +
-                          valueToExpr(instruction.inputs[0], context) + " << (" +
-                          valueToExpr(instruction.inputs[1], context) + " & 0x1F);");
+        if (const std::optional<std::string> dest =
+                valueToWriteExpr(instruction.outputs.front(), context);
+            dest.has_value())
+        {
+            emitter.writeLine(*dest + " = " + valueToExpr(instruction.inputs[0], context) +
+                              " << (" + valueToExpr(instruction.inputs[1], context) + " & 0x1F);");
+        }
         break;
     case ir::Opcode::SHR_LOGICAL:
         if (instruction.outputs.empty() || instruction.inputs.size() < 2)
         {
-            emitter.writeLine("// TODO: malformed shift op");
-            break;
+            throwLoweringError(instruction, "Malformed shift operation");
         }
-        emitter.writeLine(valueToExpr(instruction.outputs.front(), context) + " = " +
-                          valueToExpr(instruction.inputs[0], context) + " >> (" +
-                          valueToExpr(instruction.inputs[1], context) + " & 0x1F);");
+        if (const std::optional<std::string> dest =
+                valueToWriteExpr(instruction.outputs.front(), context);
+            dest.has_value())
+        {
+            emitter.writeLine(*dest + " = static_cast<u32>(" +
+                              valueToExpr(instruction.inputs[0], context) + ") >> (" +
+                              valueToExpr(instruction.inputs[1], context) + " & 0x1F);");
+        }
         break;
     case ir::Opcode::SHR_ARITH:
         if (instruction.outputs.empty() || instruction.inputs.size() < 2)
         {
-            emitter.writeLine("// TODO: malformed shift op");
-            break;
+            throwLoweringError(instruction, "Malformed shift operation");
         }
-        emitter.writeLine(valueToExpr(instruction.outputs.front(), context) +
-                          " = static_cast<u32>("
-                          "static_cast<s32>(" +
-                          valueToExpr(instruction.inputs[0], context) + ") >> (" +
-                          valueToExpr(instruction.inputs[1], context) + " & 0x1F));");
+        if (const std::optional<std::string> dest =
+                valueToWriteExpr(instruction.outputs.front(), context);
+            dest.has_value())
+        {
+            emitter.writeLine(*dest +
+                              " = static_cast<u32>("
+                              "static_cast<s32>(" +
+                              valueToExpr(instruction.inputs[0], context) + ") >> (" +
+                              valueToExpr(instruction.inputs[1], context) + " & 0x1F));");
+        }
         break;
     case ir::Opcode::MUL:
     case ir::Opcode::MULU:
         if (instruction.outputs.size() >= 2 && instruction.inputs.size() >= 2)
         {
-            std::string hi = valueToExpr(instruction.outputs[0], context);
-            std::string lo = valueToExpr(instruction.outputs[1], context);
+            const std::optional<std::string> hi = valueToWriteExpr(instruction.outputs[0], context);
+            const std::optional<std::string> lo = valueToWriteExpr(instruction.outputs[1], context);
             std::string lhs = valueToExpr(instruction.inputs[0], context);
             std::string rhs = valueToExpr(instruction.inputs[1], context);
             if (instruction.opcode == ir::Opcode::MUL)
@@ -186,16 +268,28 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
                                                 ")) * "
                                                 "static_cast<s64>(static_cast<s32>(" +
                                                 rhs + ")))";
-                emitter.writeLine(lo + " = static_cast<u32>(" + productExpr + ");");
-                emitter.writeLine(hi + " = static_cast<u32>(static_cast<u64>(" + productExpr +
-                                  ") >> 32);");
+                if (lo.has_value())
+                {
+                    emitter.writeLine(*lo + " = static_cast<u32>(" + productExpr + ");");
+                }
+                if (hi.has_value())
+                {
+                    emitter.writeLine(*hi + " = static_cast<u32>(static_cast<u64>(" + productExpr +
+                                      ") >> 32);");
+                }
             }
             else
             {
                 const std::string productExpr =
                     "(static_cast<u64>(" + lhs + ") * static_cast<u64>(" + rhs + "))";
-                emitter.writeLine(lo + " = static_cast<u32>(" + productExpr + ");");
-                emitter.writeLine(hi + " = static_cast<u32>(" + productExpr + " >> 32);");
+                if (lo.has_value())
+                {
+                    emitter.writeLine(*lo + " = static_cast<u32>(" + productExpr + ");");
+                }
+                if (hi.has_value())
+                {
+                    emitter.writeLine(*hi + " = static_cast<u32>(" + productExpr + " >> 32);");
+                }
             }
         }
         break;
@@ -203,28 +297,74 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::DIVU:
         if (instruction.outputs.size() >= 2 && instruction.inputs.size() >= 2)
         {
-            std::string hi = valueToExpr(instruction.outputs[0], context);
-            std::string lo = valueToExpr(instruction.outputs[1], context);
+            const std::optional<std::string> hi = valueToWriteExpr(instruction.outputs[0], context);
+            const std::optional<std::string> lo = valueToWriteExpr(instruction.outputs[1], context);
             std::string lhs = valueToExpr(instruction.inputs[0], context);
             std::string rhs = valueToExpr(instruction.inputs[1], context);
             emitter.openBlock("if (" + rhs + " == 0)");
-            emitter.writeLine(hi + " = 0;");
-            emitter.writeLine(lo + " = 0;");
+            if (instruction.opcode == ir::Opcode::DIV)
+            {
+                emitter.writeLine("const s32 dividend = static_cast<s32>(" + lhs + ");");
+                if (hi.has_value())
+                {
+                    emitter.writeLine(*hi + " = static_cast<u32>(dividend);");
+                }
+                if (lo.has_value())
+                {
+                    emitter.writeLine(*lo + " = (dividend >= 0) ? 0xFFFFFFFFu : 1u;");
+                }
+            }
+            else
+            {
+                if (hi.has_value())
+                {
+                    emitter.writeLine(*hi + " = static_cast<u32>(" + lhs + ");");
+                }
+                if (lo.has_value())
+                {
+                    emitter.writeLine(*lo + " = 0xFFFFFFFFu;");
+                }
+            }
             emitter.closeBlock();
             emitter.openBlock("else");
             if (instruction.opcode == ir::Opcode::DIV)
             {
-                emitter.writeLine(lo + " = static_cast<u32>(static_cast<s32>(" + lhs +
-                                  ") / static_cast<s32>(" + rhs + "));");
-                emitter.writeLine(hi + " = static_cast<u32>(static_cast<s32>(" + lhs +
-                                  ") % static_cast<s32>(" + rhs + "));");
+                emitter.openBlock("if (static_cast<u32>(" + lhs + ") == 0x80000000u && " + rhs +
+                                  " == 0xFFFFFFFFu)");
+                if (lo.has_value())
+                {
+                    emitter.writeLine(*lo + " = 0x80000000u;");
+                }
+                if (hi.has_value())
+                {
+                    emitter.writeLine(*hi + " = 0u;");
+                }
+                emitter.closeBlock();
+                emitter.openBlock("else");
+                if (lo.has_value())
+                {
+                    emitter.writeLine(*lo + " = static_cast<u32>(static_cast<s32>(" + lhs +
+                                      ") / static_cast<s32>(" + rhs + "));");
+                }
+                if (hi.has_value())
+                {
+                    emitter.writeLine(*hi + " = static_cast<u32>(static_cast<s32>(" + lhs +
+                                      ") % static_cast<s32>(" + rhs + "));");
+                }
+                emitter.closeBlock();
             }
             else
             {
-                emitter.writeLine(lo + " = static_cast<u32>(" + lhs + ") / static_cast<u32>(" +
-                                  rhs + ");");
-                emitter.writeLine(hi + " = static_cast<u32>(" + lhs + ") % static_cast<u32>(" +
-                                  rhs + ");");
+                if (lo.has_value())
+                {
+                    emitter.writeLine(*lo + " = static_cast<u32>(" + lhs + ") / static_cast<u32>(" +
+                                      rhs + ");");
+                }
+                if (hi.has_value())
+                {
+                    emitter.writeLine(*hi + " = static_cast<u32>(" + lhs + ") % static_cast<u32>(" +
+                                      rhs + ");");
+                }
             }
             emitter.closeBlock();
         }
@@ -241,13 +381,15 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::COMPARE_LTU:
         if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
         {
-            const std::string dest = valueToExpr(instruction.outputs.front(), context);
-            const std::string lhs = valueToExpr(instruction.inputs[0], context);
-            const std::string rhs = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine(dest + " = static_cast<u32>(static_cast<u32>(" + lhs +
-                              ") < "
-                              "static_cast<u32>(" +
-                              rhs + "));");
+            if (const std::optional<std::string> dest =
+                    valueToWriteExpr(instruction.outputs.front(), context);
+                dest.has_value())
+            {
+                const std::string lhs = valueToExpr(instruction.inputs[0], context);
+                const std::string rhs = valueToExpr(instruction.inputs[1], context);
+                emitter.writeLine(*dest + " = static_cast<u32>(static_cast<u32>(" + lhs +
+                                  ") < static_cast<u32>(" + rhs + "));");
+            }
         }
         break;
     case ir::Opcode::COMPARE_LE:
@@ -259,229 +401,13 @@ void emitInstruction(const ir::Instruction& instruction, const ir::BasicBlock& b
     case ir::Opcode::COMPARE_GE:
         writeCompareOp(">=");
         break;
-    case ir::Opcode::LOAD:
-        if (!instruction.outputs.empty() && !instruction.inputs.empty())
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs.front(), context);
-            std::string sourcePc = "0";
-            if (instruction.sourceAddress.has_value())
-            {
-                std::ostringstream sourceStream;
-                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-                sourcePc = sourceStream.str();
-            }
-            emitter.writeLine(dest + " = readMemory32(context, " + address + ");");
-            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
-                              sourcePc + ");");
-        }
-        break;
-    case ir::Opcode::LOAD8:
-        if (!instruction.outputs.empty() && !instruction.inputs.empty())
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory8s(context, " + address + ");");
-        }
-        break;
-    case ir::Opcode::LOAD8U:
-        if (!instruction.outputs.empty() && !instruction.inputs.empty())
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory8(context, " + address + ");");
-        }
-        break;
-    case ir::Opcode::LOAD16:
-        if (!instruction.outputs.empty() && !instruction.inputs.empty())
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory16s(context, " + address + ");");
-        }
-        break;
-    case ir::Opcode::LOAD16U:
-        if (!instruction.outputs.empty() && !instruction.inputs.empty())
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMemory16(context, " + address + ");");
-        }
-        break;
-    case ir::Opcode::LOAD_LEFT:
-        if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            std::string sourcePc = "0";
-            if (instruction.sourceAddress.has_value())
-            {
-                std::ostringstream sourceStream;
-                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-                sourcePc = sourceStream.str();
-            }
-            emitter.writeLine(dest + " = readMemoryLwl(context, " + address + ", " + value + ");");
-            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
-                              sourcePc + ");");
-        }
-        break;
-    case ir::Opcode::LOAD_RIGHT:
-        if (!instruction.outputs.empty() && instruction.inputs.size() >= 2)
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            std::string sourcePc = "0";
-            if (instruction.sourceAddress.has_value())
-            {
-                std::ostringstream sourceStream;
-                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-                sourcePc = sourceStream.str();
-            }
-            emitter.writeLine(dest + " = readMemoryLwr(context, " + address + ", " + value + ");");
-            emitter.writeLine("traceInterestingLoad(context, " + address + ", " + dest + ", " +
-                              sourcePc + ");");
-        }
-        break;
-    case ir::Opcode::STORE:
-        if (instruction.inputs.size() >= 2)
-        {
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMemory32(context, " + address + ", " + value + ");");
-        }
-        break;
-    case ir::Opcode::STORE8:
-        if (instruction.inputs.size() >= 2)
-        {
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMemory8(context, " + address + ", " + value + ");");
-        }
-        break;
-    case ir::Opcode::STORE16:
-        if (instruction.inputs.size() >= 2)
-        {
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMemory16(context, " + address + ", " + value + ");");
-        }
-        break;
-    case ir::Opcode::STORE_LEFT:
-        if (instruction.inputs.size() >= 2)
-        {
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMemorySwl(context, " + address + ", " + value + ");");
-        }
-        break;
-    case ir::Opcode::STORE_RIGHT:
-        if (instruction.inputs.size() >= 2)
-        {
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMemorySwr(context, " + address + ", " + value + ");");
-        }
-        break;
-    case ir::Opcode::MMIO_LOAD:
-        if (!instruction.outputs.empty() && !instruction.inputs.empty())
-        {
-            std::string dest = valueToExpr(instruction.outputs.front(), context);
-            std::string address = valueToExpr(instruction.inputs.front(), context);
-            emitter.writeLine(dest + " = readMmio32(context, " + address + ");");
-        }
-        break;
-    case ir::Opcode::MMIO_STORE:
-        if (instruction.inputs.size() >= 2)
-        {
-            std::string address = valueToExpr(instruction.inputs[0], context);
-            std::string value = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("writeMmio32(context, " + address + ", " + value + ");");
-        }
-        break;
-    case ir::Opcode::COP0_MFC:
-        if (!instruction.outputs.empty() && !instruction.inputs.empty() &&
-            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
-        {
-            const std::string dest = valueToExpr(instruction.outputs.front(), context);
-            const std::string rd = valueToExpr(instruction.inputs[0], context);
-            emitter.writeLine(dest + " = context.system.cop0().mfc0(static_cast<u8>(" + rd + "));");
-        }
-        break;
-    case ir::Opcode::COP0_MTC:
-        if (instruction.inputs.size() >= 2 &&
-            instruction.inputs[0].kind == ir::ValueKind::IMMEDIATE)
-        {
-            const std::string rd = valueToExpr(instruction.inputs[0], context);
-            const std::string source = valueToExpr(instruction.inputs[1], context);
-            emitter.writeLine("context.system.cop0().mtc0(static_cast<u8>(" + rd + "), " + source +
-                              ");");
-        }
-        break;
-    case ir::Opcode::COP0_RFE:
-        emitter.writeLine("context.system.cop0().rfe();");
-        break;
-    case ir::Opcode::CPU_EXCEPTION:
-    {
-        std::string code =
-            instruction.inputs.empty() ? "0" : valueToExpr(instruction.inputs.front(), context);
-        std::string inDelaySlot = "false";
-        if (instruction.inputs.size() >= 2)
-        {
-            inDelaySlot = "(" + valueToExpr(instruction.inputs[1], context) + " != 0)";
-        }
-        std::string sourcePc = "0";
-        if (instruction.sourceAddress.has_value())
-        {
-            std::ostringstream sourceStream;
-            sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-            sourcePc = sourceStream.str();
-        }
-        emitter.writeLine("raiseCpuException(context, " + code + ", " + sourcePc + ", " +
-                          inDelaySlot + ");");
-        break;
-    }
-    case ir::Opcode::SYSCALL:
-        if (!instruction.inputs.empty())
-        {
-            std::string code = valueToExpr(instruction.inputs.front(), context);
-            std::string sourcePc = "0";
-            if (instruction.sourceAddress.has_value())
-            {
-                std::ostringstream sourceStream;
-                sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-                sourcePc = sourceStream.str();
-            }
-            emitter.writeLine("callSyscall(context, " + code + ", " + sourcePc + ");");
-        }
-        break;
-    case ir::Opcode::TRAP:
-    {
-        std::string code =
-            instruction.inputs.empty() ? "0" : valueToExpr(instruction.inputs.front(), context);
-        std::string sourcePc = "0";
-        if (instruction.sourceAddress.has_value())
-        {
-            std::ostringstream sourceStream;
-            sourceStream << "0x" << std::hex << instruction.sourceAddress.value();
-            sourcePc = sourceStream.str();
-        }
-        emitter.writeLine("triggerTrap(" + code + ", " + sourcePc + ");");
-        break;
-    }
-    case ir::Opcode::RETURN:
-        emitter.writeLine("return true;");
-        break;
     case ir::Opcode::BRANCH:
     case ir::Opcode::JUMP:
     case ir::Opcode::CALL:
         // Control-flow ops are lowered in emitControlFlowInstruction above.
         break;
     default:
-        // GTE ops are handled by emitGteInstruction above; all other unknown
-        // opcodes are silently ignored.
-        break;
+        throwLoweringError(instruction, "Unsupported opcode reached the instruction lowerer");
     }
 }
 

@@ -7,6 +7,12 @@
 namespace
 {
 
+void serviceInterruptsFromTest(psxrecomp::runtime::PsxSystem& system, psxrecomp::u32 pc)
+{
+    system.observeProgramCounter(pc);
+    system.serviceInterrupts();
+}
+
 constexpr size_t REG_V0 = 2;
 constexpr size_t REG_SP = 29;
 constexpr size_t REG_RA = 31;
@@ -129,7 +135,7 @@ void testAutoClearTimerIrqAcknowledgesAndSkipsChains()
         });
 
     // Service interrupts — auto-clear should ack Timer2 and skip chain processing.
-    system.serviceInterrupts();
+    serviceInterruptsFromTest(system, 0x80017C00u);
 
     // Timer2 I_STAT bit should be cleared.
     require((system.interrupts().readStatus() &
@@ -156,7 +162,7 @@ void testNonAutoClearTimerLeavesIrqForNormalHandling()
 
     system.setCallbackInvoker([](psxrecomp::u32) -> psxrecomp::u32 { return 0; });
 
-    system.serviceInterrupts();
+    serviceInterruptsFromTest(system, 0x80017C04u);
 
     // Without auto-clear, the normal IRQ flow should still run and ack the IRQ.
     // (HookEntryInt ack path clears pending bits as fallback.)

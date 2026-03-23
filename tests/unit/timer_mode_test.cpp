@@ -123,6 +123,7 @@ void testToggleModeFlipsBit10()
     mode = tc.readMode(0);
     // After toggle: bit 10 should be 0 (toggled from 1).
     // Note: readMode clears bits 11-12 but bit 10 reflects irqRequest state.
+    assert((mode & MODE_IRQ_REQUEST_BIT) == 0);
 
     // Second target hit: toggle bit 10 back → 1 (no IRQ fires because 1=no IRQ).
     tc.writeTarget(0, 5);

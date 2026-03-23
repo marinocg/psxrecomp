@@ -19,8 +19,12 @@ std::string opcodeToString(Opcode opcode)
         return "phi";
     case Opcode::MOVE:
         return "move";
+    case Opcode::ADD_TRAP:
+        return "add_trap";
     case Opcode::ADD:
         return "add";
+    case Opcode::SUB_TRAP:
+        return "sub_trap";
     case Opcode::SUB:
         return "sub";
     case Opcode::AND:
@@ -81,8 +85,20 @@ std::string opcodeToString(Opcode opcode)
         return "store_left";
     case Opcode::STORE_RIGHT:
         return "store_right";
+    case Opcode::MMIO_LOAD8:
+        return "mmio_load8";
+    case Opcode::MMIO_LOAD8U:
+        return "mmio_load8u";
+    case Opcode::MMIO_LOAD16:
+        return "mmio_load16";
+    case Opcode::MMIO_LOAD16U:
+        return "mmio_load16u";
     case Opcode::MMIO_LOAD:
         return "mmio_load";
+    case Opcode::MMIO_STORE8:
+        return "mmio_store8";
+    case Opcode::MMIO_STORE16:
+        return "mmio_store16";
     case Opcode::MMIO_STORE:
         return "mmio_store";
     case Opcode::BRANCH:

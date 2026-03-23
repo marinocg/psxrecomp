@@ -15,6 +15,19 @@ int main()
     Cop0 cop0;
     cop0.reset();
 
+    psxrecomp::runtime::CpuBootState bootState;
+    bootState.badVaddr = 0x11112222u;
+    bootState.status = 0x33334444u;
+    bootState.cause = 0x55556666u;
+    bootState.epc = 0x77778888u;
+    cop0.applyBootState(bootState);
+    assert(cop0.mfc0(Cop0::RegisterIndex::BadVAddr) == 0x11112222u);
+    assert(cop0.mfc0(Cop0::RegisterIndex::Status) == 0x33334444u);
+    assert(cop0.mfc0(Cop0::RegisterIndex::Cause) == 0x55556666u);
+    assert(cop0.mfc0(Cop0::RegisterIndex::Epc) == 0x77778888u);
+
+    cop0.reset();
+
     // Seed IEc/KUc/IEp/KUp/IEo/KUo as 00_1011.
     cop0.mtc0(Cop0::RegisterIndex::Status, 0x0Bu);
     cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, 0x80012340u, false);
@@ -45,13 +58,13 @@ int main()
     assert(!cop0.cop2Enabled());
 
     // Hardware-pending IP bit should be controlled by runtime wiring.
-    cop0.setHardwareInterruptPending(true);
+    cop0.noteInterruptControllerPending(true);
     assert((cop0.mfc0(Cop0::RegisterIndex::Cause) & CAUSE_IP2_BIT) != 0u);
-    cop0.setHardwareInterruptPending(false);
+    cop0.noteInterruptControllerPending(false);
     assert((cop0.mfc0(Cop0::RegisterIndex::Cause) & CAUSE_IP2_BIT) == 0u);
 
     // MTC0 Cause may only modify software-pending bits (IP0/IP1).
-    cop0.setHardwareInterruptPending(true);
+    cop0.noteInterruptControllerPending(true);
     [[maybe_unused]] const psxrecomp::u32 causeBefore = cop0.mfc0(Cop0::RegisterIndex::Cause);
     cop0.mtc0(Cop0::RegisterIndex::Cause, 0xFFFFFFFFu);
     [[maybe_unused]] const psxrecomp::u32 causeAfter = cop0.mfc0(Cop0::RegisterIndex::Cause);
@@ -62,7 +75,7 @@ int main()
     // IRQ-take gating uses IEc + (Status.IM & Cause.IP) and exception mode.
     cop0.mtc0(Cop0::RegisterIndex::Status, STATUS_IEC_BIT | STATUS_IM2_BIT);
     cop0.mtc0(Cop0::RegisterIndex::Cause, 0u);
-    cop0.setHardwareInterruptPending(true);
+    cop0.noteInterruptControllerPending(true);
     assert(cop0.shouldTakeInterruptException());
     cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, 0x80001000u, false);
     assert(cop0.isInExceptionMode());
@@ -70,7 +83,7 @@ int main()
     cop0.rfe();
     assert(!cop0.isInExceptionMode());
     assert(cop0.shouldTakeInterruptException());
-    cop0.setHardwareInterruptPending(false);
+    cop0.noteInterruptControllerPending(false);
     assert(!cop0.shouldTakeInterruptException());
 
     // Software pending bits (Cause.IP0/IP1) should also trigger interrupts

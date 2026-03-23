@@ -17,6 +17,23 @@ constexpr u32 STATUS_IEC_BIT = 1u << 0;
 constexpr u32 STATUS_IM0_IM1_MASK = 0x00000300u;
 constexpr u32 CAUSE_IP0_IP1_MASK = 0x00000300u;
 
+const char* cpuExecutionPhaseName(PsxSystem::CpuExecutionPhase phase)
+{
+    switch (phase)
+    {
+    case PsxSystem::CpuExecutionPhase::Reset:
+        return "reset";
+    case PsxSystem::CpuExecutionPhase::BootInitializing:
+        return "boot_initializing";
+    case PsxSystem::CpuExecutionPhase::AwaitingExecutableEntry:
+        return "awaiting_entry";
+    case PsxSystem::CpuExecutionPhase::Running:
+        return "running";
+    default:
+        return "unknown";
+    }
+}
+
 class IrqExceptionExitGuard
 {
   public:
@@ -110,7 +127,6 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
         // Chain handlers may have acknowledged interrupts; re-read the mask.
         syncCop0InterruptPending();
         pendingForHook = m_interrupts.readStatus() & m_interrupts.readMask();
-        pendingForKernelEvents = pendingForHook;
     }
 
     // PSX-SPX: the BIOS CD-ROM IRQ handlers live in the priority-0 chain, so
@@ -283,13 +299,15 @@ void PsxSystem::serviceInterrupts()
     const bool swPending = (cop0Status & STATUS_IEC_BIT) != 0u && swPendingMasked != 0u;
     const bool cop0IrqPending = pendingMasked != 0u || swPending;
     const bool irqTakeEligible = m_cop0.shouldTakeInterruptException();
+    const bool executionLive = m_cpuExecutionPhase == CpuExecutionPhase::Running;
 
     // Fresh exception entry: COP0 must be ready to take an interrupt and the
     // machine must not already be inside BIOS exception handling.
     // PSX-SPX explicitly states the kernel does not support nested exceptions,
     // so we never call exceptionEnter() while m_inCallbackInvocation is true.
-    const bool canEnterFreshIrqException =
-        cop0IrqPending && m_criticalSectionDepth == 0 && !m_inCallbackInvocation && irqTakeEligible;
+    const bool canEnterFreshIrqException = cop0IrqPending && executionLive &&
+                                           m_criticalSectionDepth == 0 && !m_inCallbackInvocation &&
+                                           irqTakeEligible;
 
     if (traceIrqFlowEnabled())
     {
@@ -299,8 +317,10 @@ void PsxSystem::serviceInterrupts()
             << m_interrupts.readStatus() << " mask=0x" << m_interrupts.readMask()
             << " critical_depth=" << std::dec << m_criticalSectionDepth
             << " in_callback=" << (m_inCallbackInvocation ? 1 : 0)
+            << " phase=" << cpuExecutionPhaseName(m_cpuExecutionPhase)
             << " cop0_sw_pending=" << (swPending ? 1 : 0)
             << " cop0_irq_take_eligible=" << (irqTakeEligible ? 1 : 0)
+            << " execution_live=" << (executionLive ? 1 : 0)
             << " can_enter_fresh=" << (canEnterFreshIrqException ? 1 : 0);
         m_logger.log(LogLevel::Info, "irq_trace", msg.str());
     }
@@ -332,7 +352,8 @@ void PsxSystem::serviceInterrupts()
         // Keep pending state visible via Cause.IP bits but do not dispatch.
         // PSX-SPX: the kernel does not support nested exceptions.  When we
         // are already inside BIOS exception handling (m_inCallbackInvocation)
-        // or COP0 masks prevent a new entry, we must not call exceptionEnter()
+        // or COP0 masks prevent a new entry, or boot has not yet handed off
+        // to executable code, we must not call exceptionEnter()
         // again.  The IRQ will be serviced on the next call from outside the
         // current exception flow.
         syncCop0InterruptPending();
@@ -341,8 +362,7 @@ void PsxSystem::serviceInterrupts()
 
     // Enter a fresh COP0 interrupt exception and service all pending work.
     // rfe() is issued by IrqExceptionExitGuard when this scope exits.
-    m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, m_debugOverlay.lastProgramCounter(),
-                          false);
+    m_cop0.exceptionEnter(Cop0::ExceptionCode::Interrupt, architecturalProgramCounter(), false);
     IrqExceptionExitGuard irqExitGuard(m_cop0);
     serviceIrqWork(pendingMasked);
 }

@@ -209,6 +209,49 @@ int main()
         }
     }
 
+    {
+        PsxSystem bootGateSystem;
+        if (!bootGateSystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize boot gate test system");
+        }
+
+        assert(bootGateSystem.cpuExecutionPhase() ==
+               PsxSystem::CpuExecutionPhase::AwaitingExecutableEntry);
+        bootGateSystem.interrupts().raise(InterruptLine::VBlank);
+        bootGateSystem.serviceInterrupts();
+        assert(bootGateSystem.cpuExecutionPhase() ==
+               PsxSystem::CpuExecutionPhase::AwaitingExecutableEntry);
+        assert(bootGateSystem.cop0().mfc0(psxrecomp::runtime::Cop0::RegisterIndex::Epc) == 0u);
+        assert(bootGateSystem.cop0().shouldTakeInterruptException());
+
+        bootGateSystem.observeProgramCounter(0x80010000u);
+        assert(bootGateSystem.cpuExecutionPhase() == PsxSystem::CpuExecutionPhase::Running);
+        bootGateSystem.serviceInterrupts();
+        assert(bootGateSystem.cop0().mfc0(psxrecomp::runtime::Cop0::RegisterIndex::Epc) ==
+               0x80010000u);
+    }
+
+    {
+        PsxSystem architecturalPcSystem;
+        if (!architecturalPcSystem.initialize())
+        {
+            throw std::runtime_error("failed to initialize architectural pc test system");
+        }
+
+        architecturalPcSystem.observeProgramCounter(0x80020000u, 0x00020000u, nullptr, 0);
+        assert(architecturalPcSystem.architecturalProgramCounter() == 0x80020000u);
+        assert(architecturalPcSystem.debugOverlay().lastProgramCounter() == 0x00020000u);
+        assert(architecturalPcSystem.debugOverlay().lastObservedProgramCounter() == 0x00020000u);
+        assert(architecturalPcSystem.debugOverlay().lastArchitecturalProgramCounter() ==
+               0x80020000u);
+
+        architecturalPcSystem.interrupts().raise(InterruptLine::VBlank);
+        architecturalPcSystem.serviceInterrupts();
+        assert(architecturalPcSystem.cop0().mfc0(psxrecomp::runtime::Cop0::RegisterIndex::Epc) ==
+               0x80020000u);
+    }
+
     PsxSystem system;
     assert(system.initialize());
 

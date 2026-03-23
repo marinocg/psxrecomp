@@ -271,6 +271,8 @@ uint64_t PsxSystem::stateChecksum() const
 
 void PsxSystem::callBiosSyscall(u32 code, u32* regs, size_t regCount)
 {
+    noteExecutableEntry();
+
     if (regs == nullptr || regCount == 0)
     {
         m_logger.log(LogLevel::Warn, "bios", "BIOS syscall called with empty register file");

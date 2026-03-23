@@ -72,7 +72,7 @@ int main()
     assert(result.errors.empty());
     assert(result.instructions.size() == 9);
     assert(result.instructions[0].opcode == Opcode::ADD);
-    assert(result.instructions[1].opcode == Opcode::ADD);
+    assert(result.instructions[1].opcode == Opcode::ADD_TRAP);
     assert(result.instructions[2].opcode == Opcode::COMPARE_EQ);
     assert(result.instructions[3].opcode == Opcode::NOP);
     assert(result.instructions[4].opcode == Opcode::BRANCH);
@@ -89,6 +89,27 @@ int main()
 
     [[maybe_unused]] const Address branchAddress = result.instructions[2].sourceAddress.value_or(0);
     assert(branchAddress == 0x80010008);
+
+    std::vector<psxrecomp::u8> trapArithmeticBuffer;
+    trapArithmeticBuffer.reserve(24);
+    appendLe32(trapArithmeticBuffer, encodeR(8, 9, 10, 0, 0x20)); // add
+    appendLe32(trapArithmeticBuffer, encodeR(8, 9, 11, 0, 0x21)); // addu
+    appendLe32(trapArithmeticBuffer, encodeR(8, 9, 12, 0, 0x22)); // sub
+    appendLe32(trapArithmeticBuffer, encodeR(8, 9, 13, 0, 0x23)); // subu
+    appendLe32(trapArithmeticBuffer, encodeI(0x08, 8, 14, 4));    // addi
+    appendLe32(trapArithmeticBuffer, encodeI(0x09, 8, 15, 4));    // addiu
+
+    auto trapArithmeticInstructions = MipsDisassembler::disassemble(
+        trapArithmeticBuffer.data(), trapArithmeticBuffer.size(), 0x80018000);
+    auto trapArithmeticResult = buildIrFromMips(trapArithmeticInstructions);
+    assert(trapArithmeticResult.errors.empty());
+    assert(trapArithmeticResult.instructions.size() == 6);
+    assert(trapArithmeticResult.instructions[0].opcode == Opcode::ADD_TRAP);
+    assert(trapArithmeticResult.instructions[1].opcode == Opcode::ADD);
+    assert(trapArithmeticResult.instructions[2].opcode == Opcode::SUB_TRAP);
+    assert(trapArithmeticResult.instructions[3].opcode == Opcode::SUB);
+    assert(trapArithmeticResult.instructions[4].opcode == Opcode::ADD_TRAP);
+    assert(trapArithmeticResult.instructions[5].opcode == Opcode::ADD);
 
     std::vector<psxrecomp::u8> extendedBuffer;
     extendedBuffer.reserve(60);

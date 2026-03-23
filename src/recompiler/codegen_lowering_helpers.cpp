@@ -1,6 +1,7 @@
 #include "codegen_lowering_helpers.h"
 
 #include "codegen_helpers.h"
+#include "codegen_lowering_detail.h"
 
 #include <array>
 #include <set>
@@ -22,6 +23,23 @@ constexpr std::array<const char*, Registers::NUM_REGISTERS> kRegisterNameTable =
 
 std::string registerValueToExpr(Register reg)
 {
+    if (reg == Registers::ZERO)
+    {
+        return "0u";
+    }
+    if (reg < kRegisterNameTable.size())
+    {
+        return "context.regs[Registers::" + std::string(kRegisterNameTable[reg]) + "]";
+    }
+    return "context.regs[" + std::to_string(reg) + "]";
+}
+
+std::optional<std::string> registerValueToWriteExpr(Register reg)
+{
+    if (reg == Registers::ZERO)
+    {
+        return std::nullopt;
+    }
     if (reg < kRegisterNameTable.size())
     {
         return "context.regs[Registers::" + std::string(kRegisterNameTable[reg]) + "]";
@@ -64,6 +82,68 @@ std::string valueToExpr(const ir::Value& value, LoweringContext& context)
     return "0";
 }
 
+std::string valueToLoadMergeExpr(const ir::Value& value, LoweringContext& context)
+{
+    if (value.kind == ir::ValueKind::REGISTER)
+    {
+        return "resolveLoadMergeValue(context, static_cast<Register>(" + std::to_string(value.reg) +
+               "))";
+    }
+    return valueToExpr(value, context);
+}
+
+std::optional<std::string> valueToWriteExpr(const ir::Value& value, LoweringContext& context)
+{
+    switch (value.kind)
+    {
+    case ir::ValueKind::REGISTER:
+        return registerValueToWriteExpr(value.reg);
+    case ir::ValueKind::TEMPORARY:
+    {
+        auto it = context.temporaries.find(value.temporaryId);
+        if (it != context.temporaries.end())
+        {
+            return it->second;
+        }
+        std::string name = "temp" + std::to_string(value.temporaryId);
+        context.temporaries[value.temporaryId] = name;
+        return name;
+    }
+    case ir::ValueKind::SPECIAL:
+        return value.specialReg == ir::SpecialRegister::HI ? "context.hi" : "context.lo";
+    default:
+        return std::nullopt;
+    }
+}
+
+std::optional<Register> valueToLoadDelayRegister(const ir::Value& value)
+{
+    if (value.kind == ir::ValueKind::REGISTER && value.reg != Registers::ZERO)
+    {
+        return value.reg;
+    }
+    return std::nullopt;
+}
+
+void emitLoadResultWrite(const ir::Value& output, const std::string& resultExpr,
+                         LoweringContext& context, CppEmitter& emitter)
+{
+    if (const std::optional<Register> reg = valueToLoadDelayRegister(output); reg.has_value())
+    {
+        emitter.writeLine("stagePendingLoad(context, static_cast<Register>(" +
+                          std::to_string(*reg) + "), " + resultExpr + ");");
+        return;
+    }
+
+    if (const std::optional<std::string> dest = valueToWriteExpr(output, context); dest.has_value())
+    {
+        emitter.writeLine(*dest + " = " + resultExpr + ";");
+        return;
+    }
+
+    emitter.writeLine("(void)(" + resultExpr + ");");
+}
+
 std::string opcodeToComment(ir::Opcode opcode)
 {
     switch (opcode)
@@ -74,8 +154,12 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "phi";
     case ir::Opcode::MOVE:
         return "move";
+    case ir::Opcode::ADD_TRAP:
+        return "add_trap";
     case ir::Opcode::ADD:
         return "add";
+    case ir::Opcode::SUB_TRAP:
+        return "sub_trap";
     case ir::Opcode::SUB:
         return "sub";
     case ir::Opcode::AND:
@@ -136,8 +220,20 @@ std::string opcodeToComment(ir::Opcode opcode)
         return "store_left";
     case ir::Opcode::STORE_RIGHT:
         return "store_right";
+    case ir::Opcode::MMIO_LOAD8:
+        return "mmio_load8";
+    case ir::Opcode::MMIO_LOAD8U:
+        return "mmio_load8u";
+    case ir::Opcode::MMIO_LOAD16:
+        return "mmio_load16";
+    case ir::Opcode::MMIO_LOAD16U:
+        return "mmio_load16u";
     case ir::Opcode::MMIO_LOAD:
         return "mmio_load";
+    case ir::Opcode::MMIO_STORE8:
+        return "mmio_store8";
+    case ir::Opcode::MMIO_STORE16:
+        return "mmio_store16";
     case ir::Opcode::MMIO_STORE:
         return "mmio_store";
     case ir::Opcode::BRANCH:
@@ -267,10 +363,14 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
         }
         if (instruction.outputs.empty() || instruction.inputs.size() != predecessors.size())
         {
-            emitter.writeLine("// TODO: malformed phi node");
+            throwLoweringError(instruction, "Malformed phi node");
+        }
+        const std::optional<std::string> dest =
+            valueToWriteExpr(instruction.outputs.front(), context);
+        if (!dest.has_value())
+        {
             continue;
         }
-        std::string dest = valueToExpr(instruction.outputs.front(), context);
         for (size_t index = 0; index < predecessors.size(); ++index)
         {
             std::string condition =
@@ -283,13 +383,14 @@ void emitPhiAssignments(const ir::BasicBlock& block, const std::vector<std::stri
             {
                 emitter.openBlock("else if (" + condition + ")");
             }
-            emitter.writeLine(dest + " = " + valueToExpr(instruction.inputs[index], context) + ";");
+            emitter.writeLine(*dest + " = " + valueToExpr(instruction.inputs[index], context) +
+                              ";");
             emitter.closeBlock();
         }
         if (!predecessors.empty())
         {
             emitter.openBlock("else");
-            emitter.writeLine(dest + " = " + valueToExpr(instruction.inputs.front(), context) +
+            emitter.writeLine(*dest + " = " + valueToExpr(instruction.inputs.front(), context) +
                               ";");
             emitter.closeBlock();
         }

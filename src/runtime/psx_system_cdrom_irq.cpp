@@ -280,6 +280,8 @@ bool PsxSystem::serviceBiosCdromInterrupt()
 
 void PsxSystem::setCallbackInvoker(CallbackInvoker invoker)
 {
+    noteExecutableEntry();
+
     // Store the raw invoker bridge (calls into the generated module).
     m_callbackInvoker = std::move(invoker);
 

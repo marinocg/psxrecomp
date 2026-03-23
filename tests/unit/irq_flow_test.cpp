@@ -26,6 +26,12 @@ using psxrecomp::runtime::EventMode;
 namespace
 {
 
+void serviceInterruptsFromTest(PsxSystem& system, u32 pc)
+{
+    system.observeProgramCounter(pc);
+    system.serviceInterrupts();
+}
+
 // ---------------------------------------------------------------
 // Test 1: Multi-priority chain RFE aborts lower-priority chains
 //
@@ -84,7 +90,7 @@ static void testMultiPriorityChainRfeAbort()
 
     system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
     system.interrupts().raise(InterruptLine::VBlank);
-    system.serviceInterrupts();
+    serviceInterruptsFromTest(system, 0x80017D00u);
 
     // Only prio 0 handler ran; prio 1 was skipped by RFE abort.
     assert(order.size() == 1);
@@ -147,7 +153,7 @@ static void testChainPriorityOrdering()
 
     system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
     system.interrupts().raise(InterruptLine::VBlank);
-    system.serviceInterrupts();
+    serviceInterruptsFromTest(system, 0x80017D04u);
 
     // Order: prio0 chain → prio1 chain → kernel event
     assert(order.size() == 3);
@@ -208,7 +214,7 @@ static void testKernelEventRfeSkipsHookEntryInt()
 
     system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
     system.interrupts().raise(InterruptLine::VBlank);
-    system.serviceInterrupts();
+    serviceInterruptsFromTest(system, 0x80017D08u);
 
     // Only the event callback ran; HookEntryInt was skipped by RFE.
     assert(order.size() == 1);
@@ -266,7 +272,7 @@ static void testSplitDeliveryBothFire()
                                   static_cast<u32>(InterruptLine::Timer0));
     system.interrupts().raise(InterruptLine::VBlank);
     system.interrupts().raise(InterruptLine::Timer0);
-    system.serviceInterrupts();
+    serviceInterruptsFromTest(system, 0x80017D0Cu);
 
     // Split delivery: HookEntryInt fires twice (once for Timer0, once for VBlank).
     assert(hookInvocations == 2);

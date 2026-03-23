@@ -6,6 +6,15 @@
 #include <cassert>
 #include <iostream>
 
+namespace
+{
+void serviceInterruptsFromTest(psxrecomp::runtime::PsxSystem& system, psxrecomp::u32 pc)
+{
+    system.observeProgramCounter(pc);
+    system.serviceInterrupts();
+}
+} // namespace
+
 void runBiosVectorKernelEventTests()
 {
     using psxrecomp::Address;
@@ -162,7 +171,7 @@ void runBiosVectorKernelEventTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017E00u);
         assert(lastCallback == callbackAddress);
 
         regs[9] = 0x18; // ResetEntryInt
@@ -170,7 +179,7 @@ void runBiosVectorKernelEventTests()
         assert(regs[2] == descriptorAddress);
         lastCallback = 0;
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017E04u);
         assert(lastCallback == 0);
 
         std::cerr << "[PASS] B0 HookEntryInt descriptor dispatches on IRQ service\n";
@@ -219,7 +228,7 @@ void runBiosVectorKernelEventTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017E08u);
 
         assert(lastCallback == 0);
         assert(warningLogged);
@@ -251,7 +260,7 @@ void runBiosVectorKernelEventTests()
 
         system.interrupts().writeMask(static_cast<u32>(InterruptLine::VBlank));
         system.interrupts().raise(InterruptLine::VBlank);
-        system.serviceInterrupts();
+        serviceInterruptsFromTest(system, 0x80017E0Cu);
         assert(lastCallback == 0);
 
         std::cerr << "[PASS] B0 HookEntryInt requires descriptor pointer\n";

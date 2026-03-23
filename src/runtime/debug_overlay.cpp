@@ -98,7 +98,8 @@ void RuntimeDebugOverlay::reset()
     m_lastFrameCycles = 0;
     m_dmaTransfers = 0;
     m_interruptsRaised = 0;
-    m_lastProgramCounter = 0;
+    m_lastObservedProgramCounter = 0;
+    m_lastArchitecturalProgramCounter = 0;
 }
 
 void RuntimeDebugOverlay::setLastFrameCycles(uint64_t cycles)
@@ -139,12 +140,32 @@ uint64_t RuntimeDebugOverlay::lastFrameCycles() const
 
 uint32_t RuntimeDebugOverlay::lastProgramCounter() const
 {
-    return m_lastProgramCounter;
+    return m_lastObservedProgramCounter;
 }
 
 void RuntimeDebugOverlay::setLastProgramCounter(uint32_t pc)
 {
-    m_lastProgramCounter = pc;
+    setLastObservedProgramCounter(pc);
+}
+
+uint32_t RuntimeDebugOverlay::lastObservedProgramCounter() const
+{
+    return m_lastObservedProgramCounter;
+}
+
+uint32_t RuntimeDebugOverlay::lastArchitecturalProgramCounter() const
+{
+    return m_lastArchitecturalProgramCounter;
+}
+
+void RuntimeDebugOverlay::setLastObservedProgramCounter(uint32_t pc)
+{
+    m_lastObservedProgramCounter = pc;
+}
+
+void RuntimeDebugOverlay::setLastArchitecturalProgramCounter(uint32_t pc)
+{
+    m_lastArchitecturalProgramCounter = pc;
 }
 
 std::string RuntimeDebugOverlay::renderText() const
@@ -155,7 +176,7 @@ std::string RuntimeDebugOverlay::renderText() const
     stream << "frame=" << m_frameCounter << " fps=" << std::fixed << std::setprecision(2) << fps
            << " cycles=" << m_lastFrameCycles << " dma=" << m_dmaTransfers
            << " irq=" << m_interruptsRaised << " pc=0x" << std::hex << std::uppercase
-           << m_lastProgramCounter;
+           << m_lastObservedProgramCounter;
     return stream.str();
 }
 

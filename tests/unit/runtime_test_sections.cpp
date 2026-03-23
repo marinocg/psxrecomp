@@ -216,6 +216,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
                                      static_cast<psxrecomp::u32>(InterruptLine::VBlank));
     syscallRegs[4] = 1; // EnterCriticalSection
     system.callBiosSyscall(0, syscallRegs.data(), syscallRegs.size());
+    system.observeProgramCounter(0x80022340u);
     system.serviceInterrupts();
     assert(hookInvocations == 0u);
     syscallRegs[4] = 2; // ExitCriticalSection
@@ -262,7 +263,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
 
     // Enable IEc and IM2 (CPU interrupt line fed by I_STAT&I_MASK).
     system.cop0().mtc0(Cop0::RegisterIndex::Status, 0x040Bu);
-    system.debugOverlay().setLastProgramCounter(0x80023456u);
+    system.observeProgramCounter(0x80023456u);
     system.interrupts().restoreState(static_cast<psxrecomp::u32>(InterruptLine::VBlank),
                                      static_cast<psxrecomp::u32>(InterruptLine::VBlank));
     system.serviceInterrupts();
@@ -294,7 +295,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     constexpr psxrecomp::u32 irqRestoreStatusLow6 = 0x0Bu;
     const psxrecomp::u32 vblankLine = static_cast<psxrecomp::u32>(InterruptLine::VBlank);
     system.cop0().mtc0(Cop0::RegisterIndex::Status, (1u << 10) | irqRestoreStatusLow6);
-    system.debugOverlay().setLastProgramCounter(0x80024444u);
+    system.observeProgramCounter(0x80024444u);
     system.interrupts().restoreState(vblankLine, vblankLine);
     system.serviceInterrupts();
     assert((system.cop0().mfc0(Cop0::RegisterIndex::Status) & 0x3Fu) == irqRestoreStatusLow6);
@@ -306,7 +307,7 @@ void runRuntimeInterruptAndTimerChecks(psxrecomp::runtime::PsxSystem& system)
     system.interrupts().restoreState(0u, 0u);
     system.cop0().mtc0(Cop0::RegisterIndex::Cause, causeIp0Bit);
     system.cop0().mtc0(Cop0::RegisterIndex::Status, causeIp0Bit | irqRestoreStatusLow6);
-    system.debugOverlay().setLastProgramCounter(0x80025555u);
+    system.observeProgramCounter(0x80025555u);
     system.serviceInterrupts();
     assert(system.cop0().mfc0(Cop0::RegisterIndex::Epc) == 0x80025555u);
     assert((system.cop0().mfc0(Cop0::RegisterIndex::Status) & 0x3Fu) == irqRestoreStatusLow6);

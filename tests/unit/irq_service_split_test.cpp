@@ -149,6 +149,7 @@ static void testNormalFirstIrqEntersOnce()
         });
 
     // serviceInterrupts from outside any callback — fresh exception path.
+    system.observeProgramCounter(0x80015004u);
     system.serviceInterrupts();
 
     // The callback must have fired (exception was entered, IRQ dispatched).
