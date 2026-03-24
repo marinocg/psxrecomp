@@ -251,7 +251,6 @@ PointerHarvestResults harvestFunctionPointerSeeds(
         }
         flushClusteredCodePointers();
     }
-
     constexpr size_t kMaxJumpTableEntries = 64;
     for (const auto& jumpTable : jumpTables)
     {
@@ -338,12 +337,13 @@ PointerHarvestResults harvestFunctionPointerSeeds(
             continue;
         }
 
-        if (!referencedWord && !hasNearbyCodePointer &&
-            !looksLikeFunctionEntry(disassembled, instructionIndexMap, target) &&
-            !looksLikeIndirectTargetEntry(disassembled, instructionIndexMap, target) &&
-            !isAddressInRanges(segmentation.codeRanges, target) &&
-            !looksLikeGapAdjacentCallableEntry(disassembled, instructionIndexMap, knownBoundaries,
-                                               target))
+        if (isDataLikeEntryPoint(disassembled, instructionIndexMap, target) ||
+            (!referencedWord && !hasNearbyCodePointer &&
+             !looksLikeFunctionEntry(disassembled, instructionIndexMap, target) &&
+             !looksLikeIndirectTargetEntry(disassembled, instructionIndexMap, target) &&
+             !isAddressInRanges(segmentation.codeRanges, target) &&
+             !looksLikeGapAdjacentCallableEntry(disassembled, instructionIndexMap, knownBoundaries,
+                                                target)))
         {
             continue;
         }

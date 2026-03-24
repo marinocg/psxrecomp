@@ -142,6 +142,15 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
         return layout;
     }
 
+    std::unordered_set<Address> delaySlotAddresses;
+    for (const auto& instr : layout.codeInstructions)
+    {
+        if (instr.hasDelaySlot())
+        {
+            delaySlotAddresses.insert(instr.address + 4);
+        }
+    }
+
     std::vector<Address> additionalStarts = harvestedResults.harvestedPointers;
     additionalStarts.insert(additionalStarts.end(),
                             harvestedResults.jumpTableHarvestedPointers.begin(),
@@ -149,6 +158,11 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     additionalStarts.insert(additionalStarts.end(), harvestedResults.codeHarvestedPointers.begin(),
                             harvestedResults.codeHarvestedPointers.end());
     additionalStarts.push_back(entryAddress);
+    additionalStarts.erase(
+        std::remove_if(additionalStarts.begin(), additionalStarts.end(),
+                       [&delaySlotAddresses](Address a)
+                       { return delaySlotAddresses.count(a) != 0; }),
+        additionalStarts.end());
 
     layout.boundaries = disasm::findFunctionBoundaries(layout.codeInstructions, additionalStarts);
     if (layout.boundaries.empty())
@@ -198,14 +212,25 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
                                    { return instruction.address < target; });
         return it != layout.codeInstructions.end() && it->address <= end;
     };
+    const auto extendIfDelaySlot = [&layout](disasm::FunctionBoundary& b)
+    {
+        const auto it = std::lower_bound(
+            layout.codeInstructions.begin(), layout.codeInstructions.end(), b.end,
+            [](const disasm::Instruction& i, Address a) { return i.address < a; });
+        if (it != layout.codeInstructions.end() && it->address == b.end && it->hasDelaySlot())
+        {
+            b.end = b.end + 4;
+        }
+    };
 
     for (size_t i = 0; i < layout.boundaries.size(); ++i)
     {
         filledBoundaries.push_back(layout.boundaries[i]);
+        extendIfDelaySlot(filledBoundaries.back());
 
         if (i + 1 < layout.boundaries.size())
         {
-            const Address gapStart = layout.boundaries[i].end + 4;
+            const Address gapStart = filledBoundaries.back().end + 4;
             const Address gapEnd = layout.boundaries[i + 1].start - 4;
             if (rangeHasCodeInstruction(gapStart, gapEnd))
             {
@@ -216,6 +241,7 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
 
     if (!filledBoundaries.empty() && !layout.codeInstructions.empty())
     {
+        extendIfDelaySlot(filledBoundaries.back());
         const Address lastEnd = filledBoundaries.back().end;
         const Address codeEnd = layout.codeInstructions.back().address;
         if (rangeHasCodeInstruction(lastEnd + 4, codeEnd))
@@ -225,6 +251,7 @@ PipelineCodeLayout analyzeCodeLayout(const std::vector<disasm::Instruction>& dis
     }
 
     layout.boundaries = std::move(filledBoundaries);
+    layout.speculativeFunctionEntries = harvestedResults.harvestedPointers;
     layout.harvestedFunctionEntries = entrySeeds;
     std::sort(layout.harvestedFunctionEntries.begin(), layout.harvestedFunctionEntries.end());
     layout.harvestedFunctionEntries.erase(

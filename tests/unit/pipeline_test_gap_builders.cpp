@@ -241,3 +241,47 @@ std::vector<psxrecomp::u8> buildExeWithReturnedDispatchTargetStore()
 
     return buffer;
 }
+
+std::vector<psxrecomp::u8> buildExeWithHarvestedDelaySlotSeed()
+{
+    // A JAL at 0x8001000C has its delay slot at 0x80010010. A pointer
+    // table loaded by code stores 0x80010010 twice, making it a
+    // highly-scored speculative harvest seed.  The pipeline must not
+    // treat the delay-slot address as a function entry.
+    auto buffer = buildMinimalExe(0x30);
+    const size_t c = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, c + 0x00, 0x3C088001); // lui t0, 0x8001
+    writeLe32(buffer, c + 0x04, 0x25080020); // addiu t0, t0, 0x20 => ptr table @0x80010020
+    writeLe32(buffer, c + 0x08, 0x8D010000); // lw at, 0(t0)
+    writeLe32(buffer, c + 0x0C, 0x0C00400A); // jal 0x80010028
+    writeLe32(buffer, c + 0x10, 0x00000000); // nop (delay slot of jal -- must NOT be a function)
+    writeLe32(buffer, c + 0x14, 0x03E00008); // jr ra
+    writeLe32(buffer, c + 0x18, 0x00000000); // nop
+    // pointer table at 0x80010020 -- both entries point to the delay-slot address
+    writeLe32(buffer, c + 0x20, 0x80010010); // ptr[0] -> delay-slot address
+    writeLe32(buffer, c + 0x24, 0x80010010); // ptr[1] -> sibling
+    // callee at 0x80010028
+    writeLe32(buffer, c + 0x28, 0x03E00008); // jr ra
+    writeLe32(buffer, c + 0x2C, 0x00000000); // nop
+    return buffer;
+}
+
+std::vector<psxrecomp::u8> buildExeWithBgezalDelaySlotBoundary()
+{
+    // BGEZAL at 0x80010000 has a delay slot at 0x80010004 that matches a
+    // prologue pattern (addiu sp,-32 + sw ra), causing findFunctionBoundaries
+    // to split at 0x80010004.  Without the delay-slot boundary extension the
+    // gap-fill creates a boundary at 0x80010004, omitting the BGEZAL delay slot
+    // from Function A's IR window.
+    auto buffer = buildMinimalExe(0x1C);
+    const size_t c = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, c + 0x00, 0x04110004); // bgezal zero, +4 => target 0x80010014 (funcB)
+    writeLe32(buffer, c + 0x04, 0x27BDFFE0); // addiu sp, sp, -32 (delay slot; prologue match)
+    writeLe32(buffer, c + 0x08, 0xAFBF000C); // sw ra, 12(sp)
+    writeLe32(buffer, c + 0x0C, 0x03E00008); // jr ra
+    writeLe32(buffer, c + 0x10, 0x00000000); // nop
+    // funcB at 0x80010014
+    writeLe32(buffer, c + 0x14, 0x03E00008); // jr ra
+    writeLe32(buffer, c + 0x18, 0x00000000); // nop
+    return buffer;
+}

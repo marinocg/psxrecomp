@@ -27,3 +27,6 @@ std::vector<psxrecomp::u8> buildExeWithGapAdjacentPointerCellTarget();
 std::vector<psxrecomp::u8> buildExeWithStoredGapAdjacentDispatchTarget();
 std::vector<psxrecomp::u8> buildExeWithDelaySlotStoredDispatchTarget();
 std::vector<psxrecomp::u8> buildExeWithReturnedDispatchTargetStore();
+std::vector<psxrecomp::u8> buildExeWithPointerTableToTrapData();
+std::vector<psxrecomp::u8> buildExeWithHarvestedDelaySlotSeed();
+std::vector<psxrecomp::u8> buildExeWithBgezalDelaySlotBoundary();

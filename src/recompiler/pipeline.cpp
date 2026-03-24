@@ -17,6 +17,7 @@
 #include <numeric>
 #include <optional>
 #include <sstream>
+#include <unordered_set>
 
 namespace psxrecomp
 {
@@ -107,6 +108,9 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
         diagnostics.push_back(std::move(segmentationNote));
     }
 
+    const std::unordered_set<Address> speculativeSeeds(
+        codeLayout.speculativeFunctionEntries.begin(),
+        codeLayout.speculativeFunctionEntries.end());
     ir::Program program;
     for (const auto& boundary : codeLayout.boundaries)
     {
@@ -158,6 +162,30 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
 
         if (!irBuild.errors.empty())
         {
+            if (speculativeSeeds.count(adjustedBoundary.start) != 0)
+            {
+                bool hasDelaySlotError = false;
+                for (const auto& err : irBuild.errors)
+                {
+                    if (err.find("Missing delay-slot instruction") != std::string::npos)
+                    {
+                        hasDelaySlotError = true;
+                        break;
+                    }
+                }
+                if (hasDelaySlotError)
+                {
+                    PipelineDiagnostic pruneDiag;
+                    pruneDiag.code = "SpuriousHarvestedSeed";
+                    pruneDiag.severity = "warning";
+                    pruneDiag.message =
+                        "Speculative seed pruned (delay-slot IR error): " + functionName;
+                    pruneDiag.context.file = activeDiscPath;
+                    diagnostics.push_back(std::move(pruneDiag));
+                    warnings.push_back("Speculative seed pruned: " + functionName);
+                    continue;
+                }
+            }
             std::ostringstream stream;
             stream << "IR build failed for " << functionName << ":\n";
             for (const auto& error : irBuild.errors)
@@ -183,6 +211,26 @@ PipelineResult RecompilationPipeline::run(const std::string& inputPath)
                                                        irBuild.instructions);
         if (!flowResult.errors.empty())
         {
+            const bool isSpeculative =
+                speculativeSeeds.count(adjustedBoundary.start) != 0;
+            bool hasEntryNotFound = false;
+            for (const auto& err : flowResult.errors)
+            {
+                if (err.find("Entry address not found") != std::string::npos)
+                    hasEntryNotFound = true;
+            }
+            if (isSpeculative && hasEntryNotFound)
+            {
+                PipelineDiagnostic pruneDiag;
+                pruneDiag.code = "SpuriousHarvestedSeed";
+                pruneDiag.severity = "warning";
+                pruneDiag.message =
+                    "Speculative seed pruned (entry not in IR): " + functionName;
+                pruneDiag.context.file = activeDiscPath;
+                diagnostics.push_back(std::move(pruneDiag));
+                warnings.push_back("Speculative seed pruned: " + functionName);
+                continue;
+            }
             std::ostringstream stream;
             stream << "Control-flow build failed for " << functionName << ":\n";
             for (const auto& error : flowResult.errors)

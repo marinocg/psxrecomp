@@ -32,6 +32,7 @@ struct PipelineCodeLayout
     std::vector<disasm::FunctionBoundary> boundaries;
     disasm::CodeDataSegmentation segmentation;
     std::vector<Address> harvestedFunctionEntries;
+    std::vector<Address> speculativeFunctionEntries;
     std::vector<Address> knownPointerTableWords;
     std::vector<PipelineIndirectCallSite> indirectCallSites;
 };

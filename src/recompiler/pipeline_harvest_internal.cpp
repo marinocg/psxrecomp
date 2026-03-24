@@ -110,7 +110,6 @@ bool looksLikeFunctionEntry(const std::vector<disasm::Instruction>& disassembled
 
     return false;
 }
-
 bool looksLikeIndirectTargetEntry(const std::vector<disasm::Instruction>& disassembled,
                                   const InstructionIndexMap& instructionIndexMap, Address address)
 {
@@ -475,6 +474,17 @@ findReferencedDataWords(const std::vector<disasm::Instruction>& disassembled,
     }
 
     return referencedWords;
+}
+
+bool isDataLikeEntryPoint(const std::vector<disasm::Instruction>& disassembled,
+                           const InstructionIndexMap& instructionIndexMap, Address address)
+{
+    auto it = instructionIndexMap.find(address);
+    if (it == instructionIndexMap.end()) { return false; }
+    const auto op = disassembled[it->second].opcode;
+    return op == disasm::Opcode::TEQ || op == disasm::Opcode::TGE || op == disasm::Opcode::TGEU
+        || op == disasm::Opcode::TLT || op == disasm::Opcode::TLTU || op == disasm::Opcode::TNE
+        || op == disasm::Opcode::TEQI || op == disasm::Opcode::TNEI;
 }
 
 void appendUniqueSorted(std::vector<Address>& values, Address value)

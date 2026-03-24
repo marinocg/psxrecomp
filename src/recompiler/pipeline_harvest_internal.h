@@ -40,6 +40,9 @@ bool looksLikeGapAdjacentCallableEntry(const std::vector<disasm::Instruction>& d
                                        const std::vector<disasm::FunctionBoundary>& knownBoundaries,
                                        Address address);
 
+bool isDataLikeEntryPoint(const std::vector<disasm::Instruction>& disassembled,
+                           const InstructionIndexMap& instructionIndexMap, Address address);
+
 bool writesRegister(const disasm::Instruction& instruction, Register reg);
 
 std::unordered_set<Address>

@@ -480,3 +480,21 @@ std::vector<psxrecomp::u8> buildExeWithCodeBuiltCallbackTargetAfterPrefixLoads()
 
     return buffer;
 }
+
+std::vector<psxrecomp::u8> buildExeWithPointerTableToTrapData()
+{
+    auto buffer = buildMinimalExe(0x40);
+    const size_t c = psxrecomp::iso::PsxExeLoader::kHeaderSize;
+    writeLe32(buffer, c + 0x00, 0x3C088001); // lui t0, 0x8001
+    writeLe32(buffer, c + 0x04, 0x25080018); // addiu t0, t0, 0x18 => 0x80010018
+    writeLe32(buffer, c + 0x08, 0x8D010000); // lw at, 0(t0)
+    writeLe32(buffer, c + 0x0C, 0x08004000); // j 0x80010000
+    writeLe32(buffer, c + 0x10, 0x00000000); // nop
+    writeLe32(buffer, c + 0x18, 0x80010030); // ptr table[0] -> TEQ data
+    writeLe32(buffer, c + 0x1C, 0x80010038); // ptr table[1] -> TEQ data
+    writeLe32(buffer, c + 0x30, 0x00000034); // TEQ $0,$0 (data, not code)
+    writeLe32(buffer, c + 0x34, 0x803C0000); // data struct word
+    writeLe32(buffer, c + 0x38, 0x00000034); // TEQ $0,$0 (data, not code)
+    writeLe32(buffer, c + 0x3C, 0x803C0000); // data struct word
+    return buffer;
+}

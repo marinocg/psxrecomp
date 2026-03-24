@@ -95,5 +95,63 @@ int main()
     assert(returnedPointerResult.success);
     assert(hasFunctionEntry(returnedPointerResult, 0x80010040));
 
+    // Test: pointer table whose entries point into a repeated 8-byte data-struct table
+    // whose words start with MIPS-II trap instructions (TEQ, etc.).  These must NOT
+    // become function seeds even when the table word is referenced by code via
+    // LUI/ADDIU and has a nearby sibling pointer (i.e. scores >= 6 in the old heuristic).
+    const std::filesystem::path trapDataExePath =
+        tempDir / ("psxrecomp_pipeline_trap_data_" + suffix + ".psx");
+    guard.exes.push_back(trapDataExePath);
+    auto trapDataBuffer = buildExeWithPointerTableToTrapData();
+    std::ofstream trapDataFile(trapDataExePath, std::ios::binary);
+    trapDataFile.write(reinterpret_cast<const char*>(trapDataBuffer.data()),
+                       static_cast<std::streamsize>(trapDataBuffer.size()));
+    trapDataFile.close();
+
+    auto trapDataResult = runPipeline(trapDataExePath, outputDir / "trap_data");
+    // Pipeline must not abort (defensive fallback covers any residual speculative seed).
+    assert(trapDataResult.success);
+    // The TEQ-filled data addresses must never appear as function boundaries.
+    assert(!hasFunctionEntry(trapDataResult, 0x80010030));
+    assert(!hasFunctionEntry(trapDataResult, 0x80010038));
+    // The real entry must still be present.
+    assert(hasFunctionEntry(trapDataResult, 0x80010000));
+
+    // Test: JAL delay-slot address must not become a function entry via harvesting.
+    // The pointer table loaded by code references the delay-slot address twice;
+    // the harvester would historically score it >= 6 and emit it as a pinned start,
+    // slicing the calling function and dropping its delay slot from the IR window.
+    const std::filesystem::path delaySlotSeedExePath =
+        tempDir / ("psxrecomp_pipeline_delay_slot_seed_" + suffix + ".psx");
+    guard.exes.push_back(delaySlotSeedExePath);
+    auto delaySlotSeedBuffer = buildExeWithHarvestedDelaySlotSeed();
+    std::ofstream delaySlotSeedFile(delaySlotSeedExePath, std::ios::binary);
+    delaySlotSeedFile.write(reinterpret_cast<const char*>(delaySlotSeedBuffer.data()),
+                            static_cast<std::streamsize>(delaySlotSeedBuffer.size()));
+    delaySlotSeedFile.close();
+
+    auto delaySlotSeedResult =
+        runPipeline(delaySlotSeedExePath, outputDir / "delay_slot_seed");
+    assert(delaySlotSeedResult.success);
+    assert(!hasFunctionEntry(delaySlotSeedResult, 0x80010010));
+    assert(hasFunctionEntry(delaySlotSeedResult, 0x80010000));
+    assert(hasFunctionEntry(delaySlotSeedResult, 0x80010028));
+
+    // Test: BGEZAL delay slot matching a prologue pattern must not cause the
+    // gap-fill to create a boundary at the delay-slot address.
+    const std::filesystem::path bgezalExePath =
+        tempDir / ("psxrecomp_pipeline_bgezal_delay_slot_" + suffix + ".psx");
+    guard.exes.push_back(bgezalExePath);
+    auto bgezalBuffer = buildExeWithBgezalDelaySlotBoundary();
+    std::ofstream bgezalFile(bgezalExePath, std::ios::binary);
+    bgezalFile.write(reinterpret_cast<const char*>(bgezalBuffer.data()),
+                     static_cast<std::streamsize>(bgezalBuffer.size()));
+    bgezalFile.close();
+
+    auto bgezalResult = runPipeline(bgezalExePath, outputDir / "bgezal_delay_slot");
+    assert(bgezalResult.success);
+    assert(hasFunctionEntry(bgezalResult, 0x80010000));
+    assert(hasFunctionEntry(bgezalResult, 0x80010014));
+
     return 0;
 }
