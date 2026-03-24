@@ -130,6 +130,14 @@ class Cdrom
         return m_execution.readActive;
     }
     u32 irqPublishGeneration(u8 irqType) const;
+    /// Monotonic counter incremented each time the CD-ROM request line rises
+    /// (i.e. each call to publishNextInterruptEvent that sets interruptFlags).
+    /// PsxSystem uses this to detect true→false→true pulses that occur within
+    /// a single call frame and would otherwise be missed by boolean edge tracking.
+    u32 irqEdgeGeneration() const
+    {
+        return m_irqEdgeGeneration;
+    }
     u32 currentDrainingInt1Generation() const;
     u32 currentDrainingLba() const;
     void noteIrqCallbackDispatch(u8 irqType, bool callbacksDispatched);
@@ -463,6 +471,9 @@ class Cdrom
 
     static constexpr size_t IRQ_LIFECYCLE_TYPE_COUNT = 5u;
     std::array<IrqLifecycleRecord, IRQ_LIFECYCLE_TYPE_COUNT> m_irqLifecycle{};
+    /// Monotonic counter: incremented once per publishNextInterruptEvent() call
+    /// that actually sets m_interruptFlags (i.e. each time the request line rises).
+    u32 m_irqEdgeGeneration = 0u;
     u8 m_lastCallbackDispatchType = 0;
     u32 m_lastCallbackDispatchGeneration = 0;
     u32 m_int4HclrctlClearCount = 0;

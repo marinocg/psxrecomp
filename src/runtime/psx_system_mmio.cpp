@@ -298,22 +298,66 @@ void PsxSystem::writeMmio32(Address address, u32 value)
     }
     if (address == Mmio::INTERRUPT_STATUS)
     {
+        const u32 before = m_interrupts.readStatus();
         m_interrupts.writeStatus(value);
+        const u32 after = m_interrupts.readStatus();
+        m_cpTimeline.push(CpEventKind::IStatClear, 0, value, before, after);
         syncLevelInterruptSources();
         return;
     }
     if (address == Mmio::INTERRUPT_MASK)
     {
+        const u32 before = m_interrupts.readMask();
         m_interrupts.writeMask(value);
+        const u32 after = m_interrupts.readMask();
+        m_cpTimeline.push(CpEventKind::IMaskWrite, 0, value, before, after);
         syncCop0InterruptPending();
         return;
     }
     if (isInRange(address, Mmio::DMA_BASE, Mmio::DMA_SIZE))
     {
-        auto triggered = m_dma.writeRegister(address, value);
-        if (triggered)
+        // Record control-plane timeline events for key DMA register writes.
+        if (address == DmaController::InterruptReg)
         {
-            handleDmaTransfer(*triggered);
+            const u32 before = m_dma.readRegister(address);
+            auto triggered = m_dma.writeRegister(address, value);
+            const u32 after = m_dma.readRegister(address);
+            m_cpTimeline.push(CpEventKind::DicrWrite, 0, value, before, after);
+            if (triggered)
+            {
+                handleDmaTransfer(*triggered);
+            }
+        }
+        else if (address == DmaController::ControlReg)
+        {
+            const u32 before = m_dma.readRegister(address);
+            auto triggered = m_dma.writeRegister(address, value);
+            const u32 after = m_dma.readRegister(address);
+            m_cpTimeline.push(CpEventKind::DpcrWrite, 0, value, before, after);
+            if (triggered)
+            {
+                handleDmaTransfer(*triggered);
+            }
+        }
+        else
+        {
+            // Channel register write: check if it's a CHCR (offset 0x8 in channel stride).
+            const bool isChcr =
+                (address >= DmaController::ChannelBase) &&
+                ((address - DmaController::ChannelBase) % DmaController::ChannelStride) == 8u;
+            const u32 before = isChcr ? m_dma.readRegister(address) : 0u;
+            auto triggered = m_dma.writeRegister(address, value);
+            if (isChcr)
+            {
+                const u32 after = m_dma.readRegister(address);
+                const u8 portIdx = static_cast<u8>(
+                    (address - DmaController::ChannelBase) / DmaController::ChannelStride);
+                m_cpTimeline.push(CpEventKind::ChcrWrite, portIdx, value, before, after);
+            }
+            if (triggered)
+            {
+                handleDmaTransfer(*triggered);
+            }
         }
         syncLevelInterruptSources();
         return;

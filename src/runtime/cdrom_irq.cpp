@@ -171,6 +171,7 @@ void Cdrom::publishNextInterruptEvent(bool allowBufferedInt1)
     }
 
     m_interruptFlags = static_cast<u8>((m_interruptFlags & 0xF8u) | (event.type & 0x07u));
+    ++m_irqEdgeGeneration;
     IrqLifecycleRecord& lifecycle = m_irqLifecycle[event.type - 1u];
     ++lifecycle.publishedCount;
     ++lifecycle.publishGeneration;

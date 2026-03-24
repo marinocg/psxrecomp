@@ -135,68 +135,6 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
     // serviceBiosCdromInterrupt() already delivered the F0000003 sub-events.
     pendingForKernelEvents = pendingForHook & ~static_cast<u32>(InterruptLine::Cdrom);
 
-    // PSX-accurate interrupt ordering: on real hardware, CDROM sectors arrive
-    // between VBlanks so the CDROM handler fires and processes data before the
-    // next VBlank handler polls for it.  The batched-cycle model in the
-    // recompiler can cause CDROM INT1 and VBlank to become pending in the
-    // same serviceInterrupts() call.  When both are visible in I_STAT, a game
-    // handler that iterates bits from low to high would process VBlank (bit 0)
-    // before CDROM (bit 2), causing decompression polling to miss the data.
-    //
-    // Fix: when VBlank and at least one non-VBlank IRQ are pending together,
-    // deliver the non-VBlank interrupts first in a separate HookEntryInt
-    // invocation.  The game's CDROM handler runs, DMA's sector data, and
-    // updates its ring-buffer status.  Then VBlank is restored and delivered
-    // normally so the VBlank handler finds the data ready.
-    if (pendingForHook != 0u && m_criticalSectionDepth == 0 &&
-        m_hookEntryInt.descriptorAddress != 0 && !m_inHookEntryIntHandler)
-    {
-        constexpr u32 vblankBit = static_cast<u32>(InterruptLine::VBlank);
-        const bool hasVBlank = (pendingForHook & vblankBit) != 0;
-        const bool hasOtherIrqs = (pendingForHook & ~vblankBit) != 0;
-
-        if (traceIrqFlowEnabled())
-        {
-            std::ostringstream msg;
-            msg << "event=split_check pendingForHook=0x" << std::hex << pendingForHook
-                << " hasVBlank=" << hasVBlank << " hasOtherIrqs=" << hasOtherIrqs;
-            m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-        }
-
-        if (hasVBlank && hasOtherIrqs)
-        {
-            // Phase 1: deliver non-VBlank interrupts only.
-            m_interrupts.writeStatus(~vblankBit);
-            syncCop0InterruptPending();
-
-            if (traceIrqFlowEnabled())
-            {
-                std::ostringstream msg;
-                msg << "event=hook_entry_int_invoke_split phase=non_vblank descriptor=0x"
-                    << std::hex << m_hookEntryInt.descriptorAddress << " pending=0x"
-                    << (m_interrupts.readStatus() & m_interrupts.readMask());
-                m_logger.log(LogLevel::Info, "irq_trace", msg.str());
-            }
-
-            try
-            {
-                invokeHookEntryIntHandler();
-            }
-            catch (const ReturnFromExceptionSignal&)
-            {
-                // First callback completed via ReturnFromException.
-                // COP0 is still in exception mode; the caller's
-                // IrqExceptionExitGuard (or the in-flight depth guard) handles
-                // cleanup.
-            }
-
-            // Phase 2: restore VBlank for normal delivery below.
-            m_interrupts.raise(InterruptLine::VBlank);
-            syncCop0InterruptPending();
-            pendingForHook = m_interrupts.readStatus() & m_interrupts.readMask();
-        }
-    }
-
     const u32 pendingAfterChains = m_interrupts.readStatus() & m_interrupts.readMask();
 
     if (pendingAfterChains != 0 && traceIrqFlowEnabled())
@@ -212,6 +150,8 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
     // handler which dispatches kernel events prior to calling HookEntryInt.
     // A callback may execute ReturnFromException to abort further handling.
     // COP0 Status restore is handled by the caller's epilogue.
+    m_cpTimeline.push(CpEventKind::DispatcherEnter, 0, pendingForKernelEvents,
+                      m_interrupts.readStatus(), m_interrupts.readMask());
     try
     {
         m_dispatcher.servicePendingMask(m_interrupts, m_events, m_criticalSectionDepth,
@@ -224,9 +164,18 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
             m_logger.log(LogLevel::Info, "irq_trace",
                          "event=return_from_exception source=dispatcher_pending");
         }
+        m_cpTimeline.push(CpEventKind::DispatcherExit, 1, m_dispatcher.callbacksDispatched(),
+                          m_interrupts.readStatus(), 0);
         syncCop0InterruptPending();
         return;
     }
+    if (m_dispatcher.callbacksDispatched() > 0)
+    {
+        m_cpTimeline.push(CpEventKind::DispatcherAck, 0, m_dispatcher.callbacksDispatched(),
+                          pendingForKernelEvents, m_interrupts.readStatus());
+    }
+    m_cpTimeline.push(CpEventKind::DispatcherExit, 0, m_dispatcher.callbacksDispatched(),
+                      m_interrupts.readStatus(), 0);
 
     // HookEntryInt runs after kernel events. Demo SDKs use it as their primary
     // hardware IRQ fan-out path. IRQ status bits must still be visible here
@@ -252,33 +201,19 @@ void PsxSystem::serviceIrqWork(u32 pendingMasked)
                 m_logger.log(LogLevel::Info, "irq_trace",
                              "event=return_from_exception source=hook_entry_int");
             }
-            // Kernel events were already delivered above; no re-delivery needed.
-            // Acknowledge any IRQ bits that were pending when this exception
-            // entered — the BIOS RFE path effectively drains them.
-            for (u32 bit = 1; bit < (1u << 11); bit <<= 1)
-            {
-                if ((pendingForHook & bit) != 0)
-                {
-                    m_interrupts.writeStatus(~bit);
-                }
-            }
+            // PSX-SPX: RFE from HookEntryInt is the handler's explicit exit.
+            // The handler is responsible for clearing I_STAT bits it processed.
+            // Do NOT blanket-clear here — doing so would mask IRQs that the
+            // handler deliberately left pending for re-delivery.
             syncCop0InterruptPending();
             return;
         }
     }
 
-    // Acknowledge remaining IRQ bits that were pending when this exception
-    // started.  On real hardware the chain handlers and HookEntryInt code
-    // would have written I_STAT to clear them; in the recompiled environment
-    // the game's MMIO writes may not reach our interrupt controller model,
-    // so we clean up here to prevent infinite re-delivery.
-    for (u32 bit = 1; bit < (1u << 11); bit <<= 1)
-    {
-        if ((pendingForHook & bit) != 0)
-        {
-            m_interrupts.writeStatus(~bit);
-        }
-    }
+    // PSX-SPX: do not blanket-clear I_STAT after service.  Chain handlers,
+    // kernel events, and HookEntryInt each write I_STAT themselves when they
+    // acknowledge an interrupt.  Clearing bits here would incorrectly suppress
+    // IRQs that the game's handlers left pending for re-delivery.
     syncCop0InterruptPending();
 }
 
@@ -328,6 +263,8 @@ void PsxSystem::serviceInterrupts()
     if (!cop0IrqPending)
     {
         // Still allow the event dispatcher to flush deferred callbacks.
+        m_cpTimeline.push(CpEventKind::DispatcherEnter, 0, 0,
+                          m_interrupts.readStatus(), m_interrupts.readMask());
         try
         {
             m_dispatcher.serviceInterrupts(m_interrupts, m_events, m_criticalSectionDepth,
@@ -340,9 +277,13 @@ void PsxSystem::serviceInterrupts()
                 m_logger.log(LogLevel::Info, "irq_trace",
                              "event=return_from_exception source=dispatcher_empty_pending");
             }
+            m_cpTimeline.push(CpEventKind::DispatcherExit, 1, m_dispatcher.callbacksDispatched(),
+                              m_interrupts.readStatus(), 0);
             syncCop0InterruptPending();
             return;
         }
+        m_cpTimeline.push(CpEventKind::DispatcherExit, 0, m_dispatcher.callbacksDispatched(),
+                          m_interrupts.readStatus(), 0);
         syncCop0InterruptPending();
         return;
     }
@@ -392,6 +333,11 @@ PsxSystem::consumePendingCallbackRegisters(std::array<u32, 32>& regsInOut)
 u32 PsxSystem::callbackContextCommitGeneration() const
 {
     return m_callbackContextCommitGeneration;
+}
+
+const RuntimeControlPlaneTimeline& PsxSystem::cpTimeline() const
+{
+    return m_cpTimeline;
 }
 
 } // namespace runtime

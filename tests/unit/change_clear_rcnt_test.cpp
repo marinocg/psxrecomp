@@ -31,7 +31,7 @@ void testChangeClearRCntReturnsOldFlag()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     // First call: old flag should be 0 (initial state).
     std::array<psxrecomp::u32, 32> regs{};
@@ -65,7 +65,7 @@ void testChangeClearRCntPerSourceIndependence()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     // Set Timer0 auto-clear.
     std::array<psxrecomp::u32, 32> regs{};
@@ -107,7 +107,7 @@ void testAutoClearTimerIrqAcknowledgesAndSkipsChains()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     // Enable auto-clear for Timer2 (index 2).
     std::array<psxrecomp::u32, 32> regs{};
@@ -152,7 +152,7 @@ void testNonAutoClearTimerLeavesIrqForNormalHandling()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     // Do NOT set auto-clear for Timer2.
     // Enable Timer2 in mask.
@@ -164,13 +164,15 @@ void testNonAutoClearTimerLeavesIrqForNormalHandling()
 
     serviceInterruptsFromTest(system, 0x80017C04u);
 
-    // Without auto-clear, the normal IRQ flow should still run and ack the IRQ.
-    // (HookEntryInt ack path clears pending bits as fallback.)
+    // Without auto-clear and without an explicit handler, the IRQ remains pending.
+    // PSX-SPX: handlers are responsible for clearing I_STAT; there is no
+    // blanket-clear fallback.  The normal flow ran (chains, kernel events,
+    // HookEntryInt were all checked) but nothing cleared the bit.
     require((system.interrupts().readStatus() &
-             static_cast<psxrecomp::u32>(InterruptLine::Timer2)) == 0u,
-            "Timer2 IRQ should eventually be acknowledged even without auto-clear");
+             static_cast<psxrecomp::u32>(InterruptLine::Timer2)) != 0u,
+            "Timer2 IRQ should remain pending when no handler acknowledges it");
 
-    std::cerr << "[PASS] non-auto-clear Timer IRQ proceeds through normal handling\n";
+    std::cerr << "[PASS] non-auto-clear Timer IRQ stays pending without a handler\n";
 }
 
 } // namespace

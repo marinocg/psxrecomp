@@ -2,6 +2,7 @@
 
 #include "irq_trace_utils.h"
 
+#include <cassert>
 #include <sstream>
 #include <utility>
 
@@ -17,7 +18,6 @@ constexpr u32 GPU_FIFO_DRAIN_CYCLES_PER_FRAME = 64u * 2u;
 constexpr u32 DISPLAY_LINES_PER_FRAME = 263u;
 constexpr u32 DISPLAY_LINE_CYCLES = CYCLES_PER_FRAME / DISPLAY_LINES_PER_FRAME;
 constexpr u32 DISPLAY_LINE_CYCLE_REMAINDER = CYCLES_PER_FRAME % DISPLAY_LINES_PER_FRAME;
-constexpr u32 BIOS_VECTOR_TABLE_POINTER_OFFSET = 24u;
 constexpr std::array<u16, 5> BIOS_CDROM_EVENT_SPECS = {
     0x0010u, // PSX-SPX: BIOS _96_init opens F0000003 specs 10h,20h,40h,80h,8000h
     0x0020u, 0x0040u, 0x0080u, 0x8000u,
@@ -40,27 +40,6 @@ const char* interruptTraceKindName(InterruptController::TraceEvent::Kind kind)
     default:
         return "unknown";
     }
-}
-
-CpuBootState makeDefaultCpuBootState()
-{
-    constexpr u32 statusIEcBit = 1u << 0;
-    constexpr u32 statusKUcBit = 1u << 1;
-    constexpr u32 statusIM2Bit = 1u << 10;
-
-    CpuBootState state;
-    state.badVaddr = 0u;
-    state.status = statusIEcBit | statusIM2Bit;
-    state.status &= ~statusKUcBit;
-    state.cause = 0u;
-    state.epc = 0u;
-    state.interruptMask =
-        static_cast<u32>(InterruptLine::VBlank) | static_cast<u32>(InterruptLine::Timer0) |
-        static_cast<u32>(InterruptLine::Timer1) | static_cast<u32>(InterruptLine::Timer2) |
-        static_cast<u32>(InterruptLine::Dma);
-    state.architecturalPc = 0u;
-    state.interruptDispatchArmed = false;
-    return state;
 }
 
 } // namespace
@@ -168,6 +147,13 @@ void PsxSystem::reset()
     m_frameCount = 0;
     m_pendingSpuDmaCompletionCycles = 0;
     m_pendingSpuDmaCompletion = false;
+    m_pendingCdromDmaDeferred = false;
+    m_prevGpuIrq = false;
+    m_prevCdromIrq = false;
+    m_prevSpuIrq = false;
+    m_prevDmaIrq = false;
+    m_cdromIrqEdgeGeneration = 0u;
+    m_cpTimeline.reset();
     m_cpuCycles = 0;
     m_gpuDrainCarry = 0;
     m_videoSchedulePrimed = false;
@@ -245,73 +231,6 @@ void PsxSystem::bindGteRuntimeHooks()
         });
 }
 
-void PsxSystem::boot()
-{
-    setCpuExecutionPhase(CpuExecutionPhase::BootInitializing);
-
-    // PSX-SPX: the kernel initialises DPCR to 0x07654321 which enables all
-    // seven DMA channels with ascending priority.  DICR is initialised with
-    // the master-enable flag (bit 23) and all seven per-channel enable bits
-    // (bits 16-22) so that DMA completion on any channel raises I_STAT.DMA.
-    // Real BIOS progressively enables channels via library init functions but
-    // the runtime pre-enables them since it does not replicate every init path.
-    writeMmio32(DmaController::ControlReg, 0x07654321u);
-    writeMmio32(DmaController::InterruptReg, 0x00FF0000u);
-
-    // PSX-SPX: GetC0Table/GetB0Table expose BIOS-owned writable table roots in
-    // kernel RAM. Games such as Crash patch the C0 handler table during boot.
-    // Keep the layout minimal but non-null so those installs target kernel
-    // workspace instead of clobbering address 0.
-    for (u32 address = BIOS_C0_TABLE_ADDRESS; address < BIOS_B0_HANDLER_TABLE_ADDRESS + 0x40u;
-         address += sizeof(u32))
-    {
-        write<u32>(address, 0u);
-    }
-    write<u32>(BIOS_C0_TABLE_ADDRESS + BIOS_VECTOR_TABLE_POINTER_OFFSET,
-               BIOS_C0_HANDLER_TABLE_ADDRESS);
-    write<u32>(BIOS_B0_TABLE_ADDRESS + BIOS_VECTOR_TABLE_POINTER_OFFSET,
-               BIOS_B0_HANDLER_TABLE_ADDRESS);
-
-    m_cdrom.primeBootState(m_disc != nullptr);
-    m_spu.primeBootState();
-
-    initializeBiosCdromState(0u);
-
-    applyCpuBootState(makeDefaultCpuBootState());
-
-    m_logger.log(LogLevel::Info, "system", "Runtime boot sequence initialized");
-
-    // Diagnostic: dump the game's interrupt handler table if it resides in
-    // the loaded EXE region. Helps verify CDROM handler registration.
-    constexpr u32 HandlerTableBase = 0x801654EC;
-    constexpr u32 HandlerEntries = 11;
-    const Address htPhysical = normalizeAddress(HandlerTableBase);
-    if (isMainRamAddress(htPhysical, HandlerEntries * sizeof(u32)))
-    {
-        std::ostringstream msg;
-        msg << "handler_table_dump base=0x" << std::hex << HandlerTableBase;
-        for (u32 i = 0; i < HandlerEntries; ++i)
-        {
-            const u32 addr = HandlerTableBase + i * 4;
-            const u32 val = read<u32>(addr);
-            msg << " [" << std::dec << i << "]=0x" << std::hex << val;
-        }
-        m_logger.log(LogLevel::Info, "boot_diag", msg.str());
-    }
-
-    // Diagnostic: dump CD driver hardware pointers from EXE data section
-    {
-        constexpr u32 addrs[] = {0x80163CEC, 0x80163CF0, 0x80163CF4, 0x80163D18, 0x8016531C};
-        const char* names[] = {"D3_MADR_ptr", "D3_BCR_ptr", "D3_CHCR_ptr", "DICR_ptr",
-                               "CD_STATUS_ptr"};
-        std::ostringstream msg;
-        msg << "cd_hw_ptrs";
-        for (int i = 0; i < 5; ++i)
-            msg << " " << names[i] << "=0x" << std::hex << read<u32>(addrs[i]);
-        m_logger.log(LogLevel::Info, "boot_diag", msg.str());
-    }
-}
-
 void PsxSystem::runFrame()
 {
     tickCpuCycles(CYCLES_PER_FRAME);
@@ -369,50 +288,6 @@ void PsxSystem::tickCpuCycles(u32 cpuCycles)
     m_scheduler.tick(cpuCycles);
 }
 
-void PsxSystem::syncLevelInterruptSources()
-{
-    const auto raiseIfRequested = [this](bool requested, InterruptLine line)
-    {
-        if (!requested)
-        {
-            return;
-        }
-
-        const u32 lineBit = static_cast<u32>(line);
-        if ((m_interrupts.readStatus() & lineBit) == 0)
-        {
-            m_interrupts.raise(line);
-            m_debugOverlay.incrementInterruptsRaised();
-        }
-    };
-
-    raiseIfRequested(m_gpu.irqPending(), InterruptLine::Gpu);
-    const bool cdromIrq = m_cdrom.hasIrqRequest();
-    raiseIfRequested(cdromIrq, InterruptLine::Cdrom);
-    raiseIfRequested(m_spu.hasIrqRequest(), InterruptLine::Spu);
-    const bool dmaIrq = m_dma.irqRequested();
-    if (dmaIrq)
-    {
-        static bool loggedOnce = false;
-        if (!loggedOnce)
-        {
-            const u32 dicr = m_dma.readRegister(DmaController::InterruptReg);
-            std::ostringstream msg;
-            msg << "DMA IRQ requested! DICR=0x" << std::hex << dicr;
-            m_logger.log(LogLevel::Info, "dma_irq", msg.str());
-            loggedOnce = true;
-        }
-    }
-    raiseIfRequested(dmaIrq, InterruptLine::Dma);
-    syncCop0InterruptPending();
-}
-
-void PsxSystem::syncCop0InterruptPending()
-{
-    // PSX interrupt controller output is routed to CPU interrupt line IP2.
-    // Mirror I_STAT&I_MASK aggregate state into Cause.IP2.
-    m_cop0.noteInterruptControllerPending(m_interrupts.isInterruptPending());
-}
 
 void PsxSystem::applyCpuBootState(const CpuBootState& state)
 {

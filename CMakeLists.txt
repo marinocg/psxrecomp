@@ -173,6 +173,8 @@ set(RUNTIME_SOURCES
     src/runtime/logger.cpp
     src/runtime/mdec.cpp
     src/runtime/psx_system.cpp
+    src/runtime/psx_system_boot.cpp
+    src/runtime/psx_system_sync.cpp
     src/runtime/psx_system_accessors.cpp
     src/runtime/psx_system_callbacks.cpp
     src/runtime/psx_system_cd_callback_trace.cpp
@@ -201,6 +203,7 @@ set(RUNTIME_SOURCES
     src/runtime/spu_transfer.cpp
     src/runtime/spu_audio.cpp
     src/runtime/stall_classifier.cpp
+    src/runtime/stall_classifier_format.cpp
     src/runtime/stall_heap_debug.cpp
     src/runtime/stall_write_watch.cpp
     src/runtime/diag_profile.cpp
@@ -216,6 +219,7 @@ set(RUNTIME_SOURCES
     src/runtime/diag_rev2_decoder_handoff_tracker_summary.cpp
     src/runtime/json_helpers.cpp
     src/runtime/semantic_audit.cpp
+    src/runtime/control_plane_timeline.cpp
     src/runtime/timers.cpp
 )
 
@@ -758,6 +762,41 @@ if(BUILD_TESTS)
         tests/unit/irq_flow_test.cpp
     )
     target_link_libraries(irq_flow_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(irq_edge_latching_test
+        tests/unit/irq_edge_latching_test.cpp
+    )
+    target_link_libraries(irq_edge_latching_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(dma_dicr_semantics_test
+        tests/unit/dma_dicr_semantics_test.cpp
+    )
+    target_link_libraries(dma_dicr_semantics_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(dma_chcr_semantics_test
+        tests/unit/dma_chcr_semantics_test.cpp
+    )
+    target_link_libraries(dma_chcr_semantics_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(gpu_linked_list_dma_regression_test
+        tests/unit/gpu_linked_list_dma_regression_test.cpp
+    )
+    target_link_libraries(gpu_linked_list_dma_regression_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(cdrom_irq_edge_propagation_test
+        tests/unit/cdrom_irq_edge_propagation_test.cpp
+    )
+    target_link_libraries(cdrom_irq_edge_propagation_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(dma_cdrom_deferred_test
+        tests/unit/dma_cdrom_deferred_test.cpp
+    )
+    target_link_libraries(dma_cdrom_deferred_test PRIVATE psxrecomp_runtime)
+
+    add_psxrecomp_unit_test(dispatcher_no_callback_irq_test
+        tests/unit/dispatcher_no_callback_irq_test.cpp
+    )
+    target_link_libraries(dispatcher_no_callback_irq_test PRIVATE psxrecomp_runtime)
 
     add_psxrecomp_unit_test(mdec_test
         tests/unit/mdec_test.cpp

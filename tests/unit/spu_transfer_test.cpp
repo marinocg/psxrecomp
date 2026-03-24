@@ -77,14 +77,16 @@ int main()
     system.tickCpuCycles(kHandshakeDelayCycles);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x0, 0x00014000u);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x4, 0x00000001u);
-    system.writeMmioExplicit<u32>(spuDmaBase + 0x8, 0x01000001u);
+    system.writeMmioExplicit<u32>(spuDmaBase + 0x8,
+                                  0x11000001u); // SyncMode=0 + bit28 trigger, RAM→SPU
     require(system.spu().ramWords()[4] == 0u, "DMA write ran while SPU transfer mode was stop");
 
     system.writeMmioExplicit<u16>(controlReg, 0x0020u);
     system.tickCpuCycles(kHandshakeDelayCycles);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x0, 0x00014000u);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x4, 0x00000001u);
-    system.writeMmioExplicit<u32>(spuDmaBase + 0x8, 0x01000001u);
+    system.writeMmioExplicit<u32>(spuDmaBase + 0x8,
+                                  0x11000001u); // SyncMode=0 + bit28 trigger, RAM→SPU
     require(system.spu().ramWords()[4] == 0xAABBCCDDu,
             "DMA write did not use modeled SPU transfer engine");
     require(system.readMmioExplicit<u16>(transferAddrReg) == 0x0002u,
@@ -103,7 +105,8 @@ int main()
     system.write<psxrecomp::u32>(0x00014010u, 0u);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x0, 0x00014010u);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x4, 0x00000001u);
-    system.writeMmioExplicit<u32>(spuDmaBase + 0x8, 0x01000000u);
+    system.writeMmioExplicit<u32>(spuDmaBase + 0x8,
+                                  0x11000000u); // SyncMode=0 + bit28 trigger, SPU→RAM
     const u32 dmaReadBack = system.read<psxrecomp::u32>(0x00014010u);
     if (dmaReadBack != 0xAABBCCDDu)
     {

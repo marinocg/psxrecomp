@@ -44,11 +44,14 @@ const char* dmaPortName(DmaPort port)
 
 u32 normalTransferWordCount(const DmaChannel& channel, u32 syncMode)
 {
-    const u32 wordsPerBlock = channel.blockControl & 0xFFFF;
+    // PSX-SPX: a block-size or block-count field of 0 is treated as 0x10000.
+    const u32 rawBs = channel.blockControl & 0xFFFF;
+    const u32 wordsPerBlock = (rawBs == 0u) ? 0x10000u : rawBs;
     uint64_t totalWords = wordsPerBlock;
     if (syncMode == DMA_REQUEST_MODE)
     {
-        const u32 blockCount = (channel.blockControl >> 16) & 0xFFFF;
+        const u32 rawBa = (channel.blockControl >> 16) & 0xFFFF;
+        const u32 blockCount = (rawBa == 0u) ? 0x10000u : rawBa;
         totalWords = static_cast<uint64_t>(wordsPerBlock) * blockCount;
     }
 
@@ -79,6 +82,24 @@ struct ScopedDmaTransferFlag
 void PsxSystem::handleDmaTransfer(DmaPort port)
 {
     ScopedDmaTransferFlag dmaTransferFlag(m_inDmaTransfer);
+
+    // Record DMA start in control-plane timeline.
+    {
+        const auto& ch = m_dma.channel(port);
+        const u8 portIdx = static_cast<u8>(port);
+        m_cpTimeline.push(CpEventKind::DmaTransferStart, portIdx,
+                          ch.baseAddress, ch.channelControl, ch.blockControl);
+    }
+
+    // PSX-SPX CHCR bit 28 (Start/Trigger) clears when the transfer begins.
+    {
+        const u32 chcrBefore = m_dma.channel(port).channelControl;
+        m_dma.clearStartTrigger(port);
+        const u32 chcrAfter = m_dma.channel(port).channelControl;
+        m_cpTimeline.push(CpEventKind::ChcrTriggerClear, static_cast<u8>(port),
+                          0, chcrBefore, chcrAfter);
+    }
+
     const auto& channel = m_dma.channel(port);
     const bool fromRam = (channel.channelControl & DMA_DIRECTION_FROM_RAM) != 0;
 
@@ -101,7 +122,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             const u32 wordCount = normalTransferWordCount(channel, syncMode);
             if (wordCount == 0)
             {
-                m_dma.clearTrigger(port);
+                m_dma.clearBusy(port);
                 return;
             }
 
@@ -116,7 +137,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 current = (current - sizeof(u32)) & 0x1FFFFC;
             }
 
-            m_dma.clearTrigger(port);
+            m_dma.clearBusy(port);
             m_dma.notifyTransferComplete(port);
             m_debugOverlay.incrementDmaTransfers();
             return;
@@ -124,14 +145,14 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
 
         if (syncMode == DMA_LINKED_LIST_MODE)
         {
-            m_dma.clearTrigger(port);
+            m_dma.clearBusy(port);
             return;
         }
 
         const u32 wordCount = normalTransferWordCount(channel, syncMode);
         if (wordCount == 0)
         {
-            m_dma.clearTrigger(port);
+            m_dma.clearBusy(port);
             return;
         }
         if (port == DmaPort::Spu && !m_spu.canTransferDma(false))
@@ -164,9 +185,17 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 // the FIFO, and the interrupt will fire only after a real transfer.
                 if ((m_cdrom.readStatus() & 0x40u) == 0u)
                 {
-                    m_dma.clearTrigger(port);
+                    // DRQSTS not set: device is not ready.  Leave CHCR bit 24
+                    // (Start/Busy) asserted so the game's polling loop sees the
+                    // channel as still busy.  Mark as deferred and complete when
+                    // DRQSTS rises (checked in syncLevelInterruptSources).
+                    m_pendingCdromDmaDeferred = true;
+                    m_cpTimeline.push(CpEventKind::DmaTransferDeferred,
+                                      static_cast<u8>(port),
+                                      m_dma.channel(port).baseAddress,
+                                      m_dma.channel(port).channelControl, 0);
                     m_debugOverlay.incrementDmaTransfers();
-                    return; // no data moved; no DICR
+                    return; // no data moved; no DICR; bit 24 stays set
                 }
             }
             else
@@ -211,7 +240,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
                 value = m_spu.readDma();
                 break;
             default:
-                m_dma.clearTrigger(port);
+                m_dma.clearBusy(port);
                 return;
             }
 
@@ -303,7 +332,7 @@ void PsxSystem::handleDmaTransfer(DmaPort port)
             const u32 wordCount = normalTransferWordCount(channel, syncMode);
             if (wordCount == 0)
             {
-                m_dma.clearTrigger(port);
+                m_dma.clearBusy(port);
                 return;
             }
             if (port == DmaPort::Spu && !m_spu.canTransferDma(true))
@@ -356,8 +385,27 @@ dma_transfer_complete:
         m_diagCdromLateBufferTracker.endCdromDma(transferredWords * sizeof(u32));
         m_cdrom.endInt1DmaTransfer();
     }
-    m_dma.clearTrigger(port);
-    m_dma.notifyTransferComplete(port);
+    // PSX-SPX: bit 24 (Start/Busy) clears when the transfer completes.
+    // Bit 28 (Start/Trigger) was already cleared at transfer begin.
+    {
+        const u32 chcrBefore = m_dma.channel(port).channelControl;
+        m_dma.clearBusy(port);
+        const u32 chcrAfter = m_dma.channel(port).channelControl;
+        m_cpTimeline.push(CpEventKind::ChcrBusyClear, static_cast<u8>(port),
+                          transferredWords, chcrBefore, chcrAfter);
+    }
+    {
+        const u32 dicrBefore = m_dma.readRegister(DmaController::InterruptReg);
+        m_dma.notifyTransferComplete(port);
+        const u32 dicrAfter = m_dma.readRegister(DmaController::InterruptReg);
+        if (dicrBefore != dicrAfter)
+        {
+            m_cpTimeline.push(CpEventKind::DicrFlagSet, static_cast<u8>(port),
+                              dicrAfter, dicrBefore, dicrAfter);
+        }
+        m_cpTimeline.push(CpEventKind::DmaTransferDone, static_cast<u8>(port),
+                          transferredWords, dicrBefore, dicrAfter);
+    }
     m_debugOverlay.incrementDmaTransfers();
 
     if (port == DmaPort::Spu)

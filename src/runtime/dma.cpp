@@ -7,7 +7,12 @@ namespace runtime
 
 namespace
 {
-constexpr u32 START_TRIGGER = 0x01000000;
+// CHCR bit 24: Start/Busy - software sets to 1 to start; hardware clears when complete.
+constexpr u32 CHCR_BUSY = 0x01000000u;
+// CHCR bit 28: Start/Trigger - software sets to request start; hardware clears when begun.
+constexpr u32 CHCR_START_TRIGGER = 0x10000000u;
+// Legacy alias used by detection logic.
+constexpr u32 START_TRIGGER = CHCR_BUSY;
 constexpr u32 DICR_FORCE_IRQ = 0x00008000u;
 constexpr u32 DICR_CHANNEL_ENABLE_MASK = 0x007F0000u;
 constexpr u32 DICR_MASTER_ENABLE = 0x00800000u;
@@ -39,7 +44,11 @@ void DmaController::reset()
     {
         channel = {};
     }
-    m_control = 0;
+    // PSX-SPX reset value is 0x07654321 (all enables=0, priorities 1-7).
+    // The real BIOS enables all channels during startup. Since the synthetic
+    // BIOS does not write DPCR, initialise to the post-BIOS state so that
+    // game DMA transfers are not silently gated by the enable bits.
+    m_control = 0x0FEDCBA9u; // 0x07654321 | 0x08888888 — all channels enabled
     m_interrupt = 0;
 }
 
@@ -112,9 +121,21 @@ std::optional<DmaPort> DmaController::writeRegister(Address address, u32 value)
         break;
     case 0x8:
         channel.channelControl = value;
-        if ((value & START_TRIGGER) != 0)
+        // Trigger a transfer when bit 24 (Start/Busy) is set and the
+        // DPCR master-enable for this channel is active.
+        // PSX-SPX SyncMode semantics:
+        //   SyncMode=0 (manual)      — requires bit 28 (Start/Trigger) too.
+        //   SyncMode=1 (request)     — bit 24 alone is sufficient; no bit 28 needed.
+        //   SyncMode=2 (linked-list) — bit 24 alone is sufficient; do NOT require bit 28.
+        //   SyncMode=3               — reject safely; do not start regardless of bit 28.
+        if ((value & CHCR_BUSY) != 0 && channelEnabled(*port))
         {
-            return port;
+            const u32 syncMode = (value >> 9u) & 3u;
+            if ((syncMode == 1u || syncMode == 2u) ||
+                (syncMode == 0u && (value & CHCR_START_TRIGGER) != 0))
+            {
+                return port;
+            }
         }
         break;
     default:
@@ -129,17 +150,45 @@ const DmaChannel& DmaController::channel(DmaPort port) const
     return m_channels[channelIndex(port)];
 }
 
+void DmaController::clearStartTrigger(DmaPort port)
+{
+    // Bit 28 (Start/Trigger) clears when the transfer begins.
+    m_channels[channelIndex(port)].channelControl &= ~CHCR_START_TRIGGER;
+}
+
+void DmaController::clearBusy(DmaPort port)
+{
+    // Bit 24 (Start/Busy) clears when the transfer completes.
+    m_channels[channelIndex(port)].channelControl &= ~CHCR_BUSY;
+}
+
 void DmaController::clearTrigger(DmaPort port)
 {
-    auto& channel = m_channels[channelIndex(port)];
-    channel.channelControl &= ~START_TRIGGER;
+    // Legacy helper: clear both busy and start-trigger bits.
+    auto& ch = m_channels[channelIndex(port)];
+    ch.channelControl &= ~(CHCR_BUSY | CHCR_START_TRIGGER);
 }
 
 void DmaController::notifyTransferComplete(DmaPort port)
 {
-    const u32 channelBit = 1u << (24u + static_cast<u32>(port));
-    m_interrupt |= channelBit;
+    // PSX-SPX: per-channel completion flag latches only when the
+    // corresponding enable bit (DICR[16+n]) is set.
+    const u32 n = static_cast<u32>(port);
+    const u32 enableBit = 1u << (16u + n);
+    if ((m_interrupt & enableBit) != 0u)
+    {
+        const u32 flagBit = 1u << (24u + n);
+        m_interrupt |= flagBit;
+    }
     updateMasterFlag(m_interrupt);
+}
+
+bool DmaController::channelEnabled(DmaPort port) const
+{
+    // DPCR layout: 4 bits per channel; bit 3 of each nibble is master enable.
+    // Channel N enable bit = DPCR[3 + 4*N].
+    const u32 shift = 3u + 4u * static_cast<u32>(port);
+    return ((m_control >> shift) & 1u) != 0u;
 }
 
 bool DmaController::irqRequested() const

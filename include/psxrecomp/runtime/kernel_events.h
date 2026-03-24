@@ -168,8 +168,13 @@ class KernelEventTable
      * This is the primary path used by the interrupt dispatcher when a
      * hardware IRQ fires. Returns the list of callback addresses that
      * need invocation.
+     *
+     * @param outDeliveredCount  If non-null, incremented by the total number
+     *                           of events delivered, including NoCallback ones.
+     *                           Callers can use this to decide whether to ack
+     *                           a hardware IRQ line even when callbacks is empty.
      */
-    std::vector<u32> deliverByClassSpec(u32 classId, u16 spec);
+    std::vector<u32> deliverByClassSpec(u32 classId, u16 spec, u32* outDeliveredCount = nullptr);
 
     /**
      * @brief Check if any event matching class+spec is already Delivered.

@@ -75,6 +75,10 @@ void installSyntheticCallbackBridge(psxrecomp::runtime::PsxSystem& system, Callb
                     context.lo = 0xFACE1234u;
                     system.write<psxrecomp::u32>(0x80015000u, 0x12345678u);
 
+                    // Acknowledge VBlank: PSX-SPX — the handler owns the I_STAT ack.
+                    system.interrupts().writeStatus(
+                        ~static_cast<psxrecomp::u32>(psxrecomp::runtime::InterruptLine::VBlank));
+
                     std::array<psxrecomp::u32, 32> biosRegs{};
                     biosRegs[9] = 0x17; // B0:ReturnFromException
                     system.callBiosVector(0xB0, biosRegs.data(), biosRegs.size());
@@ -159,7 +163,7 @@ void testHookEntryIntDoesNotLeakIntoInterruptedContext()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     constexpr psxrecomp::u32 descriptorAddress = 0x80014000u;
     constexpr psxrecomp::u32 resumeAddress = 0x80012340u;

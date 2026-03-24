@@ -6,7 +6,7 @@
  *  - Multi-priority chain RFE aborts lower-priority chains
  *  - Chain priority ordering (0 before 1)
  *  - Kernel event RFE prevents HookEntryInt from running
- *  - Split delivery: VBlank + non-VBlank correctly delivered
+ *  - No split delivery: VBlank + non-VBlank both delivered in one HookEntryInt call
  */
 #include "psxrecomp/runtime/cop0.h"
 #include "psxrecomp/runtime/psx_system.h"
@@ -224,11 +224,10 @@ static void testKernelEventRfeSkipsHookEntryInt()
 }
 
 // ---------------------------------------------------------------
-// Test 4: Split delivery: VBlank + Timer0 both fire via HookEntryInt
+// Test 4: VBlank + Timer0 both pending → single HookEntryInt invocation
 //
-// When VBlank and a non-VBlank IRQ are both pending, the split-delivery
-// path delivers non-VBlank first, then restores VBlank for the second
-// HookEntryInt invocation.
+// When VBlank and a non-VBlank IRQ are both pending, HookEntryInt fires
+// once with both bits visible in I_STAT.  There is no split-delivery.
 // ---------------------------------------------------------------
 static void testSplitDeliveryBothFire()
 {
@@ -259,6 +258,11 @@ static void testSplitDeliveryBothFire()
             if (address == hookCallback)
             {
                 ++hookInvocations;
+                // Acknowledge all pending I_STAT bits, as a real game handler
+                // would before calling ReturnFromException.  Without this,
+                // I_STAT bits remain set after service since the blanket
+                // cleanup was removed (PSX-SPX: handlers own their ack).
+                system.interrupts().writeStatus(0u);
                 // Call ReturnFromException to complete each invocation.
                 u32 rfeRegs[32] = {};
                 rfeRegs[9] = 0x17;
@@ -274,14 +278,14 @@ static void testSplitDeliveryBothFire()
     system.interrupts().raise(InterruptLine::Timer0);
     serviceInterruptsFromTest(system, 0x80017D0Cu);
 
-    // Split delivery: HookEntryInt fires twice (once for Timer0, once for VBlank).
-    assert(hookInvocations == 2);
+    // No split delivery: HookEntryInt fires once for all pending IRQs together.
+    assert(hookInvocations == 1);
 
     // Both IRQs should be acknowledged.
     assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::VBlank)) == 0u);
     assert((system.interrupts().readStatus() & static_cast<u32>(InterruptLine::Timer0)) == 0u);
 
-    std::cerr << "[PASS] Split delivery: VBlank + Timer0 both fire via HookEntryInt\n";
+    std::cerr << "[PASS] VBlank + Timer0 both pending: single HookEntryInt invocation\n";
 }
 
 } // namespace

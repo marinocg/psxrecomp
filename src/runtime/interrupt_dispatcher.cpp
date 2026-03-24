@@ -214,15 +214,17 @@ u32 InterruptDispatcher::dispatchLine(InterruptLine line, InterruptController& i
     }
 
     // Deliver events for the "Interrupted" spec (most common for HW IRQs).
-    auto callbacks = events.deliverByClassSpec(eventClass, EventSpec::Interrupted);
+    // Count total deliveries (including NoCallback) so we know whether to ack.
+    u32 totalDelivered = 0;
+    auto callbacks = events.deliverByClassSpec(eventClass, EventSpec::Interrupted, &totalDelivered);
 
     // Some BIOS/libetc code registers VBlank callbacks through the alternate
     // class 0xF2000002 instead of the canonical 0xF0000001 event family.
     // On hardware these callbacks are still driven by the VBlank IRQ.
     if (line == InterruptLine::VBlank)
     {
-        auto alternateCallbacks =
-            events.deliverByClassSpec(EventClass::VBlankAlt, EventSpec::Interrupted);
+        auto alternateCallbacks = events.deliverByClassSpec(
+            EventClass::VBlankAlt, EventSpec::Interrupted, &totalDelivered);
         callbacks.insert(callbacks.end(), alternateCallbacks.begin(), alternateCallbacks.end());
     }
 
@@ -231,11 +233,12 @@ u32 InterruptDispatcher::dispatchLine(InterruptLine line, InterruptController& i
     if (line == InterruptLine::VBlank || line == InterruptLine::Timer0 ||
         line == InterruptLine::Timer1 || line == InterruptLine::Timer2)
     {
-        auto counterCallbacks = events.deliverByClassSpec(eventClass, EventSpec::Counter);
+        auto counterCallbacks =
+            events.deliverByClassSpec(eventClass, EventSpec::Counter, &totalDelivered);
         callbacks.insert(callbacks.end(), counterCallbacks.begin(), counterCallbacks.end());
     }
 
-    if (callbacks.empty())
+    if (totalDelivered == 0)
     {
         // No kernel events registered for this line.  On real hardware this
         // means no SysEnqIntRP chain handler claimed the IRQ, so I_STAT
@@ -244,9 +247,9 @@ u32 InterruptDispatcher::dispatchLine(InterruptLine line, InterruptController& i
     }
 
     // Acknowledge the hardware IRQ line — equivalent to the chain handler
-    // that claimed this IRQ.  Only lines with registered kernel events are
-    // acknowledged; unclaimed lines remain visible in I_STAT for
-    // HookEntryInt.
+    // that claimed this IRQ.  Lines with registered kernel events (including
+    // NoCallback polling events) are acknowledged; unclaimed lines remain
+    // visible in I_STAT for HookEntryInt.
     interrupts.writeStatus(~static_cast<u32>(line));
 
     if (traceIrqFlowEnabled() && logger)

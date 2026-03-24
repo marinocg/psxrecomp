@@ -118,7 +118,7 @@ void KernelEventTable::deliverEvent(u32 handle)
     }
 }
 
-std::vector<u32> KernelEventTable::deliverByClassSpec(u32 classId, u16 spec)
+std::vector<u32> KernelEventTable::deliverByClassSpec(u32 classId, u16 spec, u32* outDeliveredCount)
 {
     std::vector<u32> callbacks;
     for (auto& event : m_events)
@@ -134,12 +134,20 @@ std::vector<u32> KernelEventTable::deliverByClassSpec(u32 classId, u16 spec)
         if (event.mode == EventMode::NoCallback)
         {
             event.status = EventStatus::Delivered;
+            if (outDeliveredCount != nullptr)
+            {
+                ++(*outDeliveredCount);
+            }
             continue;
         }
 
         if (event.callbackAddress != 0)
         {
             callbacks.push_back(event.callbackAddress);
+            if (outDeliveredCount != nullptr)
+            {
+                ++(*outDeliveredCount);
+            }
         }
     }
     return callbacks;

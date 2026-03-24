@@ -158,7 +158,7 @@ void testRegularCallbackReturnRestoresCallerRegs()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     CallbackContext context = makeSeededContext();
     const CallbackContext original = context;
@@ -203,7 +203,7 @@ void testHookEntryIntResumeCommitsRestoredRegs()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     constexpr u32 descriptorAddress = 0x80014000u;
     constexpr u32 resumeAddress = 0x80012340u;
@@ -261,7 +261,7 @@ void testConsumePendingCallbackRegistersAppliedExactlyOnce()
     using psxrecomp::runtime::PsxSystem;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     constexpr u32 descriptorAddress = 0x80014100u;
     constexpr u32 resumeAddress = 0x80012400u;
@@ -324,7 +324,7 @@ void testPendingCallbackRegsSurviveExceptionResumePath()
     };
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     constexpr u32 descriptorAddress = 0x80014200u;
     constexpr u32 resumeAddress = 0x80012600u;
@@ -391,7 +391,7 @@ void testB017AbortsFurtherCallbackHandling()
     namespace EventSpec = psxrecomp::runtime::EventSpec;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     constexpr u32 callback1 = 0x80012A00u;
     constexpr u32 callback2 = 0x80012A10u;
@@ -445,7 +445,7 @@ void testKernelEventsBeforeHookEntryInt()
     namespace EventSpec = psxrecomp::runtime::EventSpec;
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
 
     constexpr u32 descriptorAddress = 0x80014400u;
     constexpr u32 resumeAddress = 0x80012800u;
@@ -543,7 +543,7 @@ void testHookEntryIntFastHeapValidationTripsNearMutation()
             "failed to enable PSXRECOMP_HEAP_VALIDATE");
 
     PsxSystem system;
-    assert(system.initialize());
+    require(system.initialize(), "Failed to initialize system");
     installValidAllocatorHeap(system);
 
     // Configure a test validator so heap validation is profile-driven.

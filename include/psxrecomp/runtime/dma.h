@@ -42,9 +42,17 @@ class DmaController
     std::optional<DmaPort> writeRegister(Address address, u32 value);
 
     const DmaChannel& channel(DmaPort port) const;
+    /// Clear CHCR bit 28 (Start/Trigger) when a transfer begins.
+    void clearStartTrigger(DmaPort port);
+    /// Clear CHCR bit 24 (Start/Busy) when a transfer completes.
+    void clearBusy(DmaPort port);
+    /// @deprecated Use clearStartTrigger + clearBusy. Clears both bits.
     void clearTrigger(DmaPort port);
+    /// Latch the per-channel completion flag only if the enable bit is set.
     void notifyTransferComplete(DmaPort port);
     bool irqRequested() const;
+    /// Returns true if DPCR has the master-enable bit set for this channel.
+    bool channelEnabled(DmaPort port) const;
 
   private:
     DmaChannel m_channels[ChannelCount] = {};

@@ -123,7 +123,8 @@ int main()
     system.writeMmioExplicit<u16>(transferAddrReg, 0u);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x0, 0x00012000u);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x4, 0x00000001u);
-    system.writeMmioExplicit<u32>(spuDmaBase + 0x8, 0x01000000u);
+    system.writeMmioExplicit<u32>(spuDmaBase + 0x8,
+                                  0x11000000u); // SyncMode=0 + bit28 trigger, SPU→RAM
     require(system.read<u32>(0x00012000u) == 0x11223344u, "SPU DMA-read did not reach RAM");
     require((system.readMmioExplicit<u16>(statusReg) & kStatusBusy) != 0u,
             "busy should assert after SPU DMA transfer");

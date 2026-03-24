@@ -275,8 +275,8 @@ int main()
     system.write<psxrecomp::u32>(0x00010000, 0x11111111);
     system.write<psxrecomp::u32>(0x00010004, 0x22222222);
     system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00010000);
-    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000002);
-    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000001);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00010002); // BCR: BS=2, BA=1 (SyncMode=1: 2 words)
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000201); // CHCR: SyncMode=1 (request), fromRam
 
     assert(system.gpu().fifoDepth() == 2);
     assert(system.gpu().peekFifo() == 0x11111111);
@@ -291,11 +291,12 @@ int main()
     assert((system.interrupts().readStatus() & dmaLine) == 0u);
     system.write<psxrecomp::u32>(0x00010008, 0x33333333);
     system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00010008);
-    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000001);
-    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000001);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00010001); // BCR: BS=1, BA=1 (SyncMode=1: 1 word)
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000201); // CHCR: SyncMode=1 (request), fromRam
     assert((system.interrupts().readStatus() & dmaLine) != 0u);
+    // PSX-SPX edge-triggered: clearing I_STAT while DICR master flag stays high must NOT reassert.
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS, ~dmaLine);
-    assert((system.interrupts().readStatus() & dmaLine) != 0u);
+    assert((system.interrupts().readStatus() & dmaLine) == 0u);
     system.writeMmioExplicit<psxrecomp::u32>(DmaController::InterruptReg,
                                              dmaGpuEnable | (1u << 26));
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS, ~dmaLine);
@@ -307,8 +308,8 @@ int main()
     system.write<psxrecomp::u32>(0x00013FFC, 0xBBBBBBBBu);
     system.write<psxrecomp::u32>(0x00014000, 0xAAAAAAAAu);
     system.write<psxrecomp::u32>(gpuBase + 0x0, 0x00014000);
-    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000002);
-    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000003);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00010002); // BCR: BS=2, BA=1 (SyncMode=1: 2 words)
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000203); // CHCR: SyncMode=1, decrement, fromRam
 
     assert(system.gpu().fifoDepth() == 2);
     assert(system.gpu().peekFifo() == 0xAAAAAAAAu);
@@ -364,8 +365,8 @@ int main()
 
     const Address gpuReadDmaBase = 0x00013000;
     system.write<psxrecomp::u32>(gpuBase + 0x0, gpuReadDmaBase);
-    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00000001);
-    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000000);
+    system.write<psxrecomp::u32>(gpuBase + 0x4, 0x00010001); // BCR: BS=1, BA=1 (SyncMode=1: 1 word)
+    system.write<psxrecomp::u32>(gpuBase + 0x8, 0x01000200); // CHCR: SyncMode=1 (request), toRam
     assert(system.read<psxrecomp::u32>(gpuReadDmaBase) == 0x22221111u);
 
     // GPU DMA RAM<-GPU linked-list sync mode is invalid and should be ignored.
@@ -393,10 +394,10 @@ int main()
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP0, 0x1F000000u);
     assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) !=
            0u);
-    // Acknowledging I_STAT while GPU source is still active should reassert.
+    // PSX-SPX edge-triggered: clearing I_STAT while GPU source is still active must NOT reassert.
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::INTERRUPT_STATUS,
                                              ~static_cast<psxrecomp::u32>(InterruptLine::Gpu));
-    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) !=
+    assert((system.interrupts().readStatus() & static_cast<psxrecomp::u32>(InterruptLine::Gpu)) ==
            0u);
     // GP1 acknowledge + I_STAT acknowledge should clear and keep it cleared.
     system.writeMmioExplicit<psxrecomp::u32>(psxrecomp::runtime::Mmio::GPU_GP1, 0x02000000u);

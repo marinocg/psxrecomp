@@ -77,12 +77,14 @@ int main()
     require((system.interrupts().readStatus() & spuLine) != 0u,
             "manual transfer did not assert SPU interrupt line");
 
-    // Clearing I_STAT alone should not suppress a still-latched SPU IRQ.
+    // PSX-SPX edge semantics: clearing I_STAT while the source stays asserted
+    // must NOT recreate the bit.  A new edge (source drop then rise) is required.
     system.interrupts().writeStatus(~spuLine);
     require((system.interrupts().readStatus() & spuLine) == 0u, "failed to clear I_STAT SPU bit");
     system.serviceInterrupts();
-    require((system.interrupts().readStatus() & spuLine) != 0u,
-            "latched SPU IRQ did not reassert through the system interrupt path");
+    require(
+        (system.interrupts().readStatus() & spuLine) == 0u,
+        "I_STAT.SPU was incorrectly re-raised while source remained asserted (level-sensitive)");
 
     // SPUCNT bit6 acknowledge should clear SPUSTAT.6 and stop re-assertion.
     system.writeMmioExplicit<u16>(controlReg, kSpuControlStopNoIrq);
@@ -101,7 +103,8 @@ int main()
     system.tickCpuCycles(kHandshakeDelayCycles);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x0, 0x00014000u);
     system.writeMmioExplicit<u32>(spuDmaBase + 0x4, 0x00000001u);
-    system.writeMmioExplicit<u32>(spuDmaBase + 0x8, 0x01000001u);
+    system.writeMmioExplicit<u32>(spuDmaBase + 0x8,
+                                  0x11000001u); // SyncMode=0 + bit28 trigger, RAM→SPU
     system.serviceInterrupts();
     require((system.readMmioExplicit<u16>(statusReg) & kStatusIrqFlag) != 0u,
             "DMA write did not latch SPUSTAT IRQ flag");
